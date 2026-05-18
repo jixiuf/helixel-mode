@@ -6029,6 +6029,77 @@ past the match-end to actually skip zero-length matches."
       (helixel-repeat-edit)
       (should (string= (buffer-string) "line onefoo\nline twofoo\nline threefoo")))))
 
+;; ── ^ (beginning-of-line) zero-length anchor + backward search ──
+
+(ert-deftest helixel-test-repeat-search-insert-bol-zero-length-backward-dot ()
+  "Scenario: ?^<RET> i foo <ESC> . — backward search for ^, insert at bol.
+\=`^' is a zero-length anchor.  After inserting at bol, point moves past
+the match so `looking-at' fails, and the backward-search proximity check
+must detect we're still on the same line as the ^ match."
+  :tags '(repeat search)
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "line one\nline two\nline three"
+      ;; ?^<RET> — backward search for beginning-of-line
+      (goto-char (point-max))
+      (re-search-backward "^")
+      ;; Match at bol of line 3
+      (let ((isearch-success t)
+            (isearch-string "^")
+            (isearch-regexp t)
+            (isearch-forward nil)
+            (isearch-other-end (match-end 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--repeat-sel-ctx
+            (helixel-sel-create
+             'search '(:pattern "^" :dir backward)
+             #'helixel--recreate-search "?^"))
+      ;; i — insert at match-beginning (bol of line 3)
+      (setq last-command nil this-command 'helixel-insert)
+      (helixel-insert)
+      (insert "foo")
+      (helixel-insert-exit)
+      ;; i at bol of "line three" inserts at beginning:
+      ;; "line one\nline two\nfooline three"
+      (should (string= (buffer-string) "line one\nline two\nfooline three"))
+      ;; . — backward: should insert "foo" at bol of line 2
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "line one\nfooline two\nfooline three"))
+      ;; . again — backward: should insert "foo" at bol of line 1
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "fooline one\nfooline two\nfooline three")))))
+
+(ert-deftest helixel-test-repeat-search-append-bol-zero-length-backward-dot ()
+  "Scenario: ?^<RET> a foo <ESC> . — backward search for ^, append at bol."
+  :tags '(repeat search)
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "line one\nline two\nline three"
+      (goto-char (point-max))
+      (re-search-backward "^")
+      (let ((isearch-success t)
+            (isearch-string "^")
+            (isearch-regexp t)
+            (isearch-forward nil)
+            (isearch-other-end (match-end 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--repeat-sel-ctx
+            (helixel-sel-create
+             'search '(:pattern "^" :dir backward)
+             #'helixel--recreate-search "?^"))
+      ;; a — append at match-end (also bol for ^, since it's zero-length)
+      (setq last-command nil this-command 'helixel-insert-after)
+      (helixel-insert-after)
+      (insert "foo")
+      (helixel-insert-exit)
+      ;; a at bol of "line three" appends AFTER region-end = bol:
+      ;; "line one\nline two\nfooline three" (same as insert for zero-length)
+      (should (string= (buffer-string) "line one\nline two\nfooline three"))
+      ;; . — backward: should insert "foo" at bol of line 2
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "line one\nfooline two\nfooline three"))
+      ;; . again — backward: should insert "foo" at bol of line 1
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "fooline one\nfooline two\nfooline three")))))
+
 ;; ── 0. prefix: repeat-all in stored direction ──
 
 (ert-deftest helixel-test-repeat-all-dir-forward-change ()

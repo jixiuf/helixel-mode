@@ -121,8 +121,14 @@ sits on the pattern start so chained `.` advances correctly."
                            (progn
                              (helixel-search--search
                               pat 'backward)
-                             (<= (- orig (match-end 0))
-                                 (length pat)))
+                             (let ((m-end (match-end 0))
+                                   (m-beg (match-beginning 0)))
+                               (if (= m-beg m-end)
+                                   ;; Zero-length anchor ($,^,\b):
+                                   ;; check same-line proximity
+                                   (= (line-number-at-pos orig)
+                                      (line-number-at-pos m-end))
+                                 (<= (- orig m-end) (length pat)))))
                          (search-failed nil))))))
       (if (eq dir 'backward)
           ;; Backward: go before match-beginning to skip this match.

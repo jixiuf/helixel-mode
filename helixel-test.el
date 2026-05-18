@@ -6351,6 +6351,60 @@ entry-kind=insert means insert at match-beginning, not match-end."
       (should (string= (buffer-string)
                        "helloXXX A helloXXX B helloXXX C")))))
 
+;; ── 0. with zero-length anchors: must not hang ──
+
+(ert-deftest helixel-test-repeat-all-dir-eol-forward-no-hang ()
+  "0. after /$ aX<ESC> terminates at end-of-buffer without hanging."
+  :tags '(repeat search)
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "line one\nline two\nline three"
+      (goto-char 1)
+      (re-search-forward "$")
+      (let ((isearch-success t)
+            (isearch-string "$")
+            (isearch-regexp t)
+            (isearch-forward t)
+            (isearch-other-end (match-beginning 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--repeat-sel-ctx
+            (helixel-sel-create
+             'search '(:pattern "$" :dir forward)
+             #'helixel--recreate-search "/$/"))
+      (setq last-command nil this-command 'helixel-insert-after)
+      (helixel-insert-after)
+      (insert "X")
+      (helixel-insert-exit)
+      (should (string= (buffer-string) "line oneX\nline two\nline three"))
+      ;; 0. -> append "X" at remaining eols, must terminate
+      (helixel-repeat-edit 0)
+      (should (string= (buffer-string) "line oneX\nline twoX\nline threeX")))))
+
+(ert-deftest helixel-test-repeat-all-dir-bol-backward-no-hang ()
+  "0. after ?^ iX<ESC> terminates at beginning-of-buffer without hanging."
+  :tags '(repeat search)
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "line one\nline two\nline three"
+      (goto-char (point-max))
+      (re-search-backward "^")
+      (let ((isearch-success t)
+            (isearch-string "^")
+            (isearch-regexp t)
+            (isearch-forward nil)
+            (isearch-other-end (match-end 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--repeat-sel-ctx
+            (helixel-sel-create
+             'search '(:pattern "^" :dir backward)
+             #'helixel--recreate-search "?^"))
+      (setq last-command nil this-command 'helixel-insert)
+      (helixel-insert)
+      (insert "X")
+      (helixel-insert-exit)
+      (should (string= (buffer-string) "line one\nline two\nXline three"))
+      ;; 0. -> insert "X" at remaining bols backward, must terminate
+      (helixel-repeat-edit 0)
+      (should (string= (buffer-string) "Xline one\nXline two\nXline three")))))
+
 ;; ── C-u -N . prefix: reverse direction ──
 
 (ert-deftest helixel-test-repeat-reverse-forward-to-backward ()

@@ -101,7 +101,8 @@ at the appropriate offset within the match for insert-text ops.
 For insert operations, skips past a current match if point
 sits on the pattern start so chained `.` advances correctly."
   (let* ((pat (helixel-sel-search-pattern ctx))
-         (dir (helixel-sel-search-dir ctx)))
+         (dir (helixel-sel-search-dir ctx))
+         (pre-skip-pos (point)))
     (unless pat
       (user-error "No search pattern to repeat"))
     ;; For insert ops, skip past the current match if point sits on
@@ -131,16 +132,24 @@ sits on the pattern start so chained `.` advances correctly."
                                  (<= (- orig m-end) (length pat)))))
                          (search-failed nil))))))
       (if (eq dir 'backward)
-          ;; Backward: go before match-beginning to skip this match.
-          (goto-char (max (point-min)
-                          (1- (match-beginning 0))))
-        ;; Forward: go to match-end to skip this match.
-        ;; For zero-length anchors (e.g. $, ^) advance one
-        ;; extra char so the subsequent search doesn't re-find
-        ;; the same position.
-        (goto-char (if (= (match-beginning 0) (match-end 0))
-                        (min (point-max) (1+ (match-end 0)))
-                      (match-end 0)))))
+            ;; Backward: go before match-beginning to skip this match.
+            (goto-char (max (point-min)
+                            (1- (match-beginning 0))))
+          ;; Forward: go to match-end to skip this match.
+          ;; For zero-length anchors (e.g. $, ^) advance one
+          ;; extra char so the subsequent search doesn't re-find
+          ;; the same position.
+          (goto-char (if (= (match-beginning 0) (match-end 0))
+                          (min (point-max) (1+ (match-end 0)))
+                        (match-end 0))))
+        ;; If the skip didn't actually move point (stuck at
+        ;; buffer boundary like $ at eob or ^ at bob), or if
+        ;; we're at a terminal boundary in the search
+        ;; direction, there are no more matches.
+        (when (or (= (point) pre-skip-pos)
+                  (and (eq dir 'forward) (= (point) (point-max)))
+                  (and (eq dir 'backward) (= (point) (point-min))))
+          (user-error "No more matches for %s" pat)))
     (condition-case nil
         (helixel-search--search pat dir)
       (search-failed

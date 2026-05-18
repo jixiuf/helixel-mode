@@ -409,32 +409,53 @@ Failure during replay is reported but does not discard the stored edit."
                                    (plist-get
                                     (helixel-edit-payload tx)
                                     :text)
-                                   "")))
+                                   ""))
+                          (last-pos nil))
+                      (catch 'done
+                        (while (helixel-search--search
+                                pat 'forward nil 'noerror)
+                          (let ((mpos (match-beginning 0)))
+                            (when (equal mpos last-pos)
+                              (setq cnt (1- cnt))
+                              (throw 'done nil))
+                            (setq last-pos mpos))
+                          (setq cnt (1+ cnt))
+                          (let* ((is-insert (eq entry-kind 'insert))
+                                 (pos (if is-insert
+                                          (match-beginning 0)
+                                        (match-end 0)))
+                                 (zlen (= (match-beginning 0)
+                                          (match-end 0)))
+                                 (guard-pos (if zlen
+                                                (- pos (length txt))
+                                              (if is-insert
+                                                  (- pos (length txt))
+                                                pos))))
+                            (unless (save-excursion
+                                      (goto-char guard-pos)
+                                      (looking-at
+                                       (regexp-quote txt)))
+                              (goto-char pos)
+                              (insert txt)
+                              (when is-insert
+                                (goto-char (match-end 0))))
+                            (when zlen
+                              (unless (eobp)
+                                (forward-char 1)))))))
+                  (let ((last-pos nil))
+                    (catch 'done
                       (while (helixel-search--search
                               pat 'forward nil 'noerror)
+                        (let ((mpos (match-beginning 0)))
+                          (when (equal mpos last-pos)
+                            (setq cnt (1- cnt))
+                            (throw 'done nil))
+                          (setq last-pos mpos))
                         (setq cnt (1+ cnt))
-                        (let* ((is-insert (eq entry-kind 'insert))
-                               (pos (if is-insert
-                                        (match-beginning 0)
-                                      (match-end 0)))
-                               (guard-pos (if is-insert
-                                              (- pos (length txt))
-                                            pos)))
-                          (unless (save-excursion
-                                    (goto-char guard-pos)
-                                    (looking-at
-                                     (regexp-quote txt)))
-                            (goto-char pos)
-                            (insert txt)
-                            (when is-insert
-                              (goto-char (match-end 0)))))))
-                  (while (helixel-search--search
-                          pat 'forward nil 'noerror)
-                    (setq cnt (1+ cnt))
-                    (push-mark (match-beginning 0) t t)
-                    (goto-char (match-end 0))
-                    (setq helixel--selection-type 'char)
-                    (helixel--execute-edit tx)))
+                        (push-mark (match-beginning 0) t t)
+                        (goto-char (match-end 0))
+                        (setq helixel--selection-type 'char)
+                        (helixel--execute-edit tx)))))
                 (helixel--repeat-echo cnt))))
            ;; --- Entire buffer: all lines from recorded position ---
            ;; C-u . = 0. (forward) + -. (backward) from the recorded
@@ -628,27 +649,41 @@ Failure during replay is reported but does not discard the stored edit."
                     (let ((txt (or (plist-get (helixel-edit-payload tx)
                                               :inserted-text)
                                    (plist-get (helixel-edit-payload tx) :text)
-                                   "")))
+                                   ""))
+                          (last-pos nil))
+                      (catch 'done
+                        (while (helixel-search--search pat 'backward nil
+                                                       'noerror)
+                          (let ((mpos (match-beginning 0)))
+                            (when (equal mpos last-pos)
+                              (setq cnt (1- cnt))
+                              (throw 'done nil))
+                            (setq last-pos mpos))
+                          (setq cnt (1+ cnt))
+                          (let ((pos (if (eq entry-kind 'insert)
+                                         (match-beginning 0)
+                                       (match-end 0))))
+                            (unless (save-excursion
+                                      (goto-char pos)
+                                      (looking-at (regexp-quote txt)))
+                              (goto-char pos)
+                              (insert txt)
+                              (when (eq entry-kind 'insert)
+                                (goto-char (match-beginning 0))))))))
+                  (let ((last-pos nil))
+                    (catch 'done
                       (while (helixel-search--search pat 'backward nil
                                                      'noerror)
+                        (let ((mpos (match-beginning 0)))
+                          (when (equal mpos last-pos)
+                            (setq cnt (1- cnt))
+                            (throw 'done nil))
+                          (setq last-pos mpos))
                         (setq cnt (1+ cnt))
-                        (let ((pos (if (eq entry-kind 'insert)
-                                       (match-beginning 0)
-                                     (match-end 0))))
-                          (unless (save-excursion
-                                    (goto-char pos)
-                                    (looking-at (regexp-quote txt)))
-                            (goto-char pos)
-                            (insert txt)
-                            (when (eq entry-kind 'insert)
-                              (goto-char (match-beginning 0)))))))
-                  (while (helixel-search--search pat 'backward nil
-                                                 'noerror)
-                    (setq cnt (1+ cnt))
-                    (push-mark (match-beginning 0) t t)
-                    (goto-char (match-end 0))
-                    (setq helixel--selection-type 'char)
-                    (helixel--execute-edit tx)))
+                        (push-mark (match-beginning 0) t t)
+                        (goto-char (match-end 0))
+                        (setq helixel--selection-type 'char)
+                        (helixel--execute-edit tx)))))
                 (helixel--repeat-echo cnt))))
            ((and all-buffer-p reverse-p line-sel-p)
             ;; C-u - . = -. (backward) + 0. (forward) from recorded

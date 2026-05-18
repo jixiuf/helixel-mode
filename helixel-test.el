@@ -6405,6 +6405,34 @@ entry-kind=insert means insert at match-beginning, not match-end."
       (helixel-repeat-edit 0)
       (should (string= (buffer-string) "Xline one\nXline two\nXline three")))))
 
+;; ── C-u . with zero-length anchors: must not hang ──
+
+(ert-deftest helixel-test-repeat-all-buffer-eol-forward-no-hang ()
+  "C-u . after /$ aX<ESC> terminates at end-of-buffer without hanging."
+  :tags '(repeat search)
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "line one\nline two\nline three"
+      (goto-char 1)
+      (re-search-forward "$")
+      (let ((isearch-success t)
+            (isearch-string "$")
+            (isearch-regexp t)
+            (isearch-forward t)
+            (isearch-other-end (match-beginning 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--repeat-sel-ctx
+            (helixel-sel-create
+             'search '(:pattern "$" :dir forward)
+             #'helixel--recreate-search "/$/"))
+      (setq last-command nil this-command 'helixel-insert-after)
+      (helixel-insert-after)
+      (insert "X")
+      (helixel-insert-exit)
+      (should (string= (buffer-string) "line oneX\nline two\nline three"))
+      ;; C-u . -> append "X" at ALL eols, must terminate
+      (helixel-repeat-edit '(4))
+      (should (string= (buffer-string) "line oneX\nline twoX\nline threeX")))))
+
 ;; ── C-u -N . prefix: reverse direction ──
 
 (ert-deftest helixel-test-repeat-reverse-forward-to-backward ()

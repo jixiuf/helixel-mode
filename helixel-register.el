@@ -69,6 +69,36 @@ register.  Pressing \\\"\\\" in normal mode selects this register."
   :type 'character
   :group 'helixel)
 
+(defcustom helixel-register-yank-char ?0
+  "Register character for the last yank (copy) operation.
+Set by `helixel--kill-new' with :copy kind.  Users can paste
+from it with \"0p."
+  :type 'character
+  :group 'helixel)
+
+(defcustom helixel-register-small-delete-char ?-
+  "Register character for small deletes (no newline).
+Set by `helixel--kill-new' when the deleted text does not
+contain a newline."
+  :type 'character
+  :group 'helixel)
+
+(defcustom helixel-register-numbered-delete-start ?1
+  "First character of the numbered delete register range.
+Together with `helixel-register-numbered-delete-count', defines
+a rotating ring of registers that store recent deletes.
+The default range is ?1 through ?9."
+  :type 'character
+  :group 'helixel)
+
+(defcustom helixel-register-numbered-delete-count 9
+  "Number of numbered delete registers to rotate.
+Defines how many consecutive characters starting from
+`helixel-register-numbered-delete-start' are used for
+the delete register ring.  Default is 9 (registers 1-9)."
+  :type 'natnum
+  :group 'helixel)
+
 (defvar helixel--current-register nil
   "Character identifying the register for the next operator.
 Set by `helixel-select-register' (bound to `\\\"' in normal mode).
@@ -156,12 +186,17 @@ is non-nil and not equal to `helixel-default-register'."
 
 
 (defun helixel-register-rotate-delete (text)
-  "Rotate delete registers 1-9 and store TEXT in register 1.
-Old register 8 shifts to 9, 7 to 8, ..., 1 to 2."
-  (dotimes (i 8)
-    (let ((src (+ ?1 (- 7 i))))
-      (set-register (+ src 1) (get-register src))))
-  (set-register ?1 text))
+  "Rotate numbered delete registers and store TEXT in the first slot.
+Uses `helixel-register-numbered-delete-start' and
+`helixel-register-numbered-delete-count' to define the range.
+Old registers shift: slot N-1 → N, ..., slot 1 → 2."
+  (let ((start helixel-register-numbered-delete-start)
+        (count helixel-register-numbered-delete-count))
+    (when (> count 1)
+      (cl-loop for i from (- count 2) downto 0
+               for src = (+ start i)
+               do (set-register (1+ src) (get-register src)))
+    (set-register start text))))
 
 (defun helixel--kill-new (text &optional kind)
   "Like `kill-new', but also populates numbered registers.
@@ -175,13 +210,13 @@ Does NOT clear the register -- callers should call
   (kill-new text)
   ;; Numbered / special registers.
   (if (eq kind :copy)
-      ;; Register 0 -- last yank (copy).
-      (set-register ?0 text)
-    ;; Rotate delete registers 1-9, new text goes to 1.
+      ;; Last yank (copy) register.
+      (set-register helixel-register-yank-char text)
+    ;; Rotate numbered delete registers.
     (helixel-register-rotate-delete text)
-    ;; Register - (small delete, no newline).
+    ;; Small delete register (no newline).
     (when (and text (not (string-match-p "\n" text)))
-      (set-register ?- text)))
+      (set-register helixel-register-small-delete-char text)))
   ;; Named register selected by user (e.g. "a).
   (when (helixel--register-active-p)
     (helixel-register-set helixel--current-register text)))

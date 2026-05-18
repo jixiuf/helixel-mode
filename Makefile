@@ -3,6 +3,8 @@ EMACS ?= emacs
 FILES = helixel-action.el helixel-edit.el helixel-repeat.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-delimiter.el helixel-textobj-engine.el helixel-surround.el helixel-textobj.el helixel.el
 ELS := helixel-action.elc helixel-edit.elc helixel-repeat.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-delimiter.elc helixel-textobj-engine.elc helixel-surround.elc helixel-textobj.elc helixel.elc
 
+TEST_FILES = $(wildcard test/helixel-test-*.el)
+
 DEPS = package-lint
 
 INIT_PACKAGES="(progn \
@@ -20,6 +22,7 @@ INIT_PACKAGES="(progn \
 
 EMACS_BATCH=${EMACS} -Q -batch -L . --eval ${INIT_PACKAGES}
 
+.PHONY: all  test  lint compile clean
 all: clean-elc compile lint test
 
 compile: $(ELS)
@@ -39,7 +42,7 @@ test:
 	@echo "---- Run unit tests"
 	@${EMACS_BATCH} \
 		$(addprefix -l ,$(FILES)) \
-		-l helixel-test.el \
+		$(addprefix -l ,$(TEST_FILES)) \
 		--eval "(progn (setq load-prefer-newer t) (ert-run-tests-batch-and-exit '${TEST_SELECTOR}))" \
 		&& echo "OK"
 

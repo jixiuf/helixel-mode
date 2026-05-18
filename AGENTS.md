@@ -18,7 +18,19 @@
 | `helixel-textobj.el` | Text object command macros + concretions + keymaps + recreate. Depends on textobj-engine. |
 | `helixel-delimiter.el` | Delimiter protocol for surround/textobj. |
 | `helixel-surround.el` | Surround add/delete/replace. |
-| `helixel-test.el` | ERT tests (~512). |
+| `test/helixel-test-move.el` | Movement/word/symbol/find-char tests. |
+| `test/helixel-test-keymap.el` | Keymap and define-key tests. |
+| `test/helixel-test-line.el` | Line-wise editing tests. |
+| `test/helixel-test-rect.el` | Rectangle selection and editing tests. |
+| `test/helixel-test-operator.el` | Operator tests (case, comment, fill, join). |
+| `test/helixel-test-swap.el` | Swap tests. |
+| `test/helixel-test-textobj.el` | Text object and regex block tests. |
+| `test/helixel-test-search.el` | Search and search history tests. |
+| `test/helixel-test-action.el` | Action tracking and command execution tests. |
+| `test/helixel-test-edit.el` | Edit transactions, sel struct, dot-repeat tests. |
+| `test/helixel-test-jump.el` | Jump navigation tests. |
+| `test/helixel-test-repeat.el` | Line selection auto-advance repeat tests. |
+| `test/helixel-test-register.el` | Register tests. |
 
 ## Deps (one-way)
 

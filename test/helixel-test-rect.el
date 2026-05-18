@@ -1,0 +1,329 @@
+;;; helixel-test-rect.el --- Tests for Helixel: rectangle selection and editing  -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2025  jixiuf
+
+;; Author: jixiuf
+;; Keywords: tests
+;; Version: 0
+;; URL: https://github.com/jixiuf/helixel-mode
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;; Helixel tests.
+
+;;; Code:
+
+(require 'ert)
+(require 'helixel)
+
+
+(require 'ert)
+(require 'helixel)
+
+;;; Rect selection tests
+
+(ert-deftest helixel-test-select-rectangle-starts-rect ()
+  "Test `helixel-select-rectangle' starts rectangle-mark-mode."
+  (helixel-test-with-buffer "first line\nsecond line\nthird line"
+    (call-interactively #'helixel-select-rectangle)
+    (should rectangle-mark-mode)
+    (should (eq helixel--selection-type 'rect))
+    (should (region-active-p))))
+
+(ert-deftest helixel-test-select-rectangle-extends ()
+  "Test `helixel-select-rectangle' extends rectangle downward."
+  (helixel-test-with-buffer "first line\nsecond line\nthird line"
+    (call-interactively #'helixel-select-rectangle)
+    (setq last-command 'helixel-select-rectangle)
+    (let ((mark-pos (mark)))
+      (call-interactively #'helixel-select-rectangle)
+      (should (> (point) mark-pos))
+      (should rectangle-mark-mode))))
+
+;;; helixel--selection-type rect tests
+
+(ert-deftest helixel-test-selection-type-rect ()
+  "Test `helixel--selection-type' returns `rect' for rectangle selection."
+  (helixel-test-with-buffer "first line\nsecond line\nthird line"
+    (setq helixel--selection-type 'rect)
+    (push-mark (point) t t)
+    (goto-char 8)
+    (rectangle-mark-mode 1)
+    (should (eq (helixel--selection-type) 'rect))
+    (rectangle-mark-mode -1)))
+
+(ert-deftest helixel-test-selection-type-rect-without-mode ()
+  "Test `helixel--selection-type' returns nil when rect type but mode off."
+  (helixel-test-with-buffer "first line\nsecond line"
+    (setq helixel--selection-type 'rect)
+    (push-mark (point) t t)
+    (goto-char 8)
+    ;; rectangle-mark-mode not active
+    (should-not (helixel--selection-type))))
+
+;;; helixel--clear-data clears rect mode
+
+(ert-deftest helixel-test-clear-data-clears-rect ()
+  "Test `helixel--clear-data' disables rectangle-mark-mode."
+  (helixel-test-with-buffer "first line\nsecond line"
+    (helixel-select-rectangle)
+    (helixel--clear-data)
+    (should-not rectangle-mark-mode)
+    (should-not helixel--selection-type)))
+
+;;; helixel--rect-wise-text and helixel--rect-wise-kill-p tests
+
+(ert-deftest helixel-test-rect-wise-text-propertizes ()
+  "Test `helixel--rect-wise-text' propertizes text with rect handler."
+  (let* ((lines '("hel" "wor"))
+         (text (helixel--rect-wise-text lines)))
+    (should (string= text "hel\nwor"))
+    (should (eq (car (get-text-property 0 'yank-handler text))
+                'helixel--yank-handler-rect-wise))
+    (should (equal (nth 1 (get-text-property 0 'yank-handler text))
+                   lines))))
+
+(ert-deftest helixel-test-rect-wise-kill-p-positive ()
+  "Test `helixel--rect-wise-kill-p' detects rect text."
+  (let ((text (helixel--rect-wise-text '("AAA" "BBB"))))
+    (should (helixel--rect-wise-kill-p text))))
+
+(ert-deftest helixel-test-rect-wise-kill-p-negative ()
+  "Test `helixel--rect-wise-kill-p' returns nil for plain text."
+  (should-not (helixel--rect-wise-kill-p "plain")))
+
+(ert-deftest helixel-test-rect-wise-kill-p-nil-kill-ring ()
+  "Test `helixel--rect-wise-kill-p' returns nil when no kill ring."
+  (let ((kill-ring nil))
+    (should-not (helixel--rect-wise-kill-p))))
+
+;;; helixel-kill-thing-at-point (d) rect tests
+
+(ert-deftest helixel-test-kill-thing-rect ()
+  "Test killing a rectangle selection."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (let ((kill-ring nil))
+      (goto-char 1)
+      (push-mark (point) t t)
+      (goto-char 14) ;; col 3 on line 2 (space after "DEF")
+      (rectangle-mark-mode 1)
+      (setq helixel--selection-type 'rect)
+      (helixel-kill-thing-at-point)
+      (should (helixel--rect-wise-kill-p (car kill-ring)))
+      ;; After killing first 3 chars of first two lines:
+      (should (string= (buffer-string) " line1\n line2\nGHI line3"))
+      (should-not rectangle-mark-mode))))
+
+(ert-deftest helixel-test-kill-thing-rect-single-line ()
+  "Test killing a single-line rectangle (like one char)."
+  (helixel-test-with-buffer "ABCDE"
+    (let ((kill-ring nil))
+      (push-mark (point) t t)
+      (goto-char 2)
+      (rectangle-mark-mode 1)
+      (setq helixel--selection-type 'rect)
+      (helixel-kill-thing-at-point)
+      (should (helixel--rect-wise-kill-p (car kill-ring)))
+      (should (string= (buffer-string) "BCDE"))
+      (should-not rectangle-mark-mode))))
+
+;;; helixel-kill-ring-save (y) rect tests
+
+(ert-deftest helixel-test-kill-ring-save-rect ()
+  "Test copying a rectangle to kill ring without deleting."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (let ((kill-ring nil))
+      (goto-char 1)
+      (push-mark (point) t t)
+      (goto-char 14) ;; col 3 on line 2 (space after "DEF")
+      (rectangle-mark-mode 1)
+      (setq helixel--selection-type 'rect)
+      (helixel-kill-ring-save)
+      (should (helixel--rect-wise-kill-p (car kill-ring)))
+      ;; Buffer content unchanged
+      (should (string= (buffer-string) "ABC line1\nDEF line2\nGHI line3"))
+      (should-not rectangle-mark-mode))))
+
+;;; helixel-replace (R) rect tests
+
+(ert-deftest helixel-test-replace-yanked-rect-with-rect ()
+  "Test replacing a rectangle selection with a rect kill."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (kill-new (helixel--rect-wise-text '("???" "XXX")))
+    (goto-char 1)
+    (push-mark (point) t t)
+    (goto-char 14) ;; col 3 on line 2
+    (rectangle-mark-mode 1)
+    (setq helixel--selection-type 'rect)
+    (helixel-replace)
+    (should (string= (buffer-string) "??? line1\nXXX line2\nGHI line3"))))
+
+(ert-deftest helixel-test-replace-yanked-rect-with-charwise ()
+  "Test replacing a rect selection with a charwise kill."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (kill-new "!!")
+    (goto-char 1)
+    (push-mark (point) t t)
+    (goto-char 14) ;; col 3 on line 2
+    (rectangle-mark-mode 1)
+    (setq helixel--selection-type 'rect)
+    (helixel-replace)
+    ;; "!!" inserted at top-left of rectangle area
+    (should (string= (buffer-string) "!! line1\n line2\nGHI line3"))))
+;;; helixel-yank (p) rect tests
+
+(ert-deftest helixel-test-yank-rect ()
+  "Test pasting a rect kill at point."
+  (helixel-test-with-buffer "line1\nline2\nline3"
+    (kill-new (helixel--rect-wise-text '("<<<" ">>>")))
+    (goto-char 1)
+    (helixel-yank)
+    (should (string= (buffer-string) "<<<line1\n>>>line2\nline3"))))
+
+(ert-deftest helixel-test-yank-rect-after ()
+  "Test pasting a rect kill after point."
+  (helixel-test-with-buffer "AAline1\nBBline2\nCCline3"
+    (kill-new (helixel--rect-wise-text '("--" "++")))
+    (goto-char 3) ;; after "AA"
+    (helixel-yank)
+    (should (string= (buffer-string) "AA--line1\nBB++line2\nCCline3"))))
+
+;;; helixel-yank-before (P) rect tests
+
+(ert-deftest helixel-test-yank-before-rect ()
+  "Test pasting a rect kill before point."
+  (helixel-test-with-buffer "line1\nline2\nline3"
+    (kill-new (helixel--rect-wise-text '("<<<" ">>>")))
+    (goto-char 1)
+    (helixel-yank-before)
+    (should (string= (buffer-string) "<<<line1\n>>>line2\nline3"))))
+
+;;; helixel-begin-selection exits rect
+
+(ert-deftest helixel-test-begin-selection-clears-rect ()
+  "Test that `helixel-begin-selection' disables rectangle-mark-mode."
+  (helixel-test-with-buffer "hello\nworld"
+    (helixel-select-rectangle)
+    (should rectangle-mark-mode)
+    (helixel-begin-selection)
+    (should-not rectangle-mark-mode)
+    (should-not helixel--selection-type)))
+
+;;; Interaction: rect kill doesn't affect line-wise detection
+
+(ert-deftest helixel-test-rect-kill-not-line-wise ()
+  "Test that rect-killed text is not detected as line-wise."
+  (let ((text (helixel--rect-wise-text '("AAA" "BBB"))))
+    (should-not (helixel--linewise-kill-p text))))
+
+(ert-deftest helixel-test-line-kill-not-rect-wise ()
+  "Test that line-killed text is not detected as rect-wise."
+  (let ((text (helixel--linewise-text "hello\n")))
+    (should-not (helixel--rect-wise-kill-p text))))
+
+;;; Round-trip: rect select -> kill -> yank
+
+(ert-deftest helixel-test-rect-round-trip ()
+  "Test full round-trip: select rect, kill, then yank elsewhere."
+  (helixel-test-with-buffer "AAA line1\nBBB line2\nCCC line3"
+    (let ((kill-ring nil))
+      (goto-char 1)
+      (push-mark (point) t t)
+      (goto-char 14) ;; col 3 on line 2 (space after "BBB")
+      (rectangle-mark-mode 1)
+      (setq helixel--selection-type 'rect)
+      (helixel-kill-thing-at-point)
+      (should (string= (buffer-string) " line1\n line2\nCCC line3"))
+      ;; Now yank at beginning
+      (goto-char 1)
+      (helixel-yank)
+      (should (string= (buffer-string) "AAA line1\nBBB line2\nCCC line3")))))
+
+;;; Movement preserves rectangle selection
+
+(ert-deftest helixel-test-movement-preserves-rect ()
+  "Test that h/l/j/k movement preserves rectangle-mark-mode."
+  (helixel-test-with-buffer "first line\nsecond line\nthird line"
+    (goto-char 4) ;; avoid beginning-of-buffer on backward-char
+    (call-interactively #'helixel-select-rectangle)
+    (should rectangle-mark-mode)
+    (helixel-backward-char)
+    (should rectangle-mark-mode)
+    (helixel-forward-char)
+    (should rectangle-mark-mode)
+    (helixel-next-line)
+    (should rectangle-mark-mode)
+    (helixel-previous-line)
+    (should rectangle-mark-mode)))
+
+;;; Rect change (c) with replay
+
+(ert-deftest helixel-test-rect-change-multi-line ()
+  "Test `c` on rect replays inserted text on all rect lines."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (goto-char 1)
+    (push-mark (point) t t)
+    (goto-char 14) ;; col 3 on line 2
+    (rectangle-mark-mode 1)
+    (setq helixel--selection-type 'rect)
+    (helixel-change-thing-at-point)
+    ;; Rect deleted, now type text in insert mode
+    (insert "XXX")
+    (helixel-insert-exit)
+    (should (string= (buffer-string) "XXX line1\nXXX line2\nGHI line3"))))
+
+(ert-deftest helixel-test-rect-change-empty-input ()
+  "Test `c` on rect with empty input just deletes the rect."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (goto-char 1)
+    (push-mark (point) t t)
+    (goto-char 14)
+    (rectangle-mark-mode 1)
+    (setq helixel--selection-type 'rect)
+    (helixel-change-thing-at-point)
+    ;; Exit immediately without typing anything
+    (helixel-insert-exit)
+    (should (string= (buffer-string) " line1\n line2\nGHI line3"))))
+
+(ert-deftest helixel-test-rect-change-single-line ()
+  "Test `c` on single-line rect (no replay needed)."
+  (helixel-test-with-buffer "ABC line1\nDEF line2"
+    (goto-char 1)
+    (push-mark (point) t t)
+    (goto-char 3) ;; col 2 on same line
+    (rectangle-mark-mode 1)
+    (setq helixel--selection-type 'rect)
+    (helixel-change-thing-at-point)
+    (insert "XXX")
+    (helixel-insert-exit)
+    ;; Only line 1 changed; line-count=1 → no replay
+    (should (string= (buffer-string) "XXXC line1\nDEF line2"))))
+
+(ert-deftest helixel-test-rect-change-clears-replay-data ()
+  "Test that rect replay data is cleared after exit."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (goto-char 1)
+    (push-mark (point) t t)
+    (goto-char 14)
+    (rectangle-mark-mode 1)
+    (setq helixel--selection-type 'rect)
+    (helixel-change-thing-at-point)
+    (insert "XXX")
+    (helixel-insert-exit)
+    (should-not helixel--rect-replay-data)
+    (should-not helixel--rect-replay-marker)))
+
+;;; helixel-test-rect.el ends here

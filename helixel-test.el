@@ -5958,6 +5958,77 @@ With kmacro recording, keys capture the full sequence."
       (should (string= (buffer-string)
                        "aahellobb world aabbhello")))))
 
+;; ── $ (end-of-line) zero-length anchor + a (append) ──
+
+(ert-deftest helixel-test-repeat-search-append-eol-zero-length-dot ()
+  "Scenario: /$<RET> a foo <ESC> . — append at eol with $ anchor.
+\=`$' is a zero-length regex anchor.  The skip logic in
+`helixel--recreate-search' must advance one extra character
+past the match-end to actually skip zero-length matches."
+  :tags '(repeat search)
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "line one\nline two\nline three"
+      ;; /$<RET> — search for end-of-line
+      (goto-char 1)
+      (re-search-forward "$")
+      ;; Match should be at end of line 1
+      (let ((isearch-success t)
+            (isearch-string "$")
+            (isearch-regexp t)
+            (isearch-forward t)
+            (isearch-other-end (match-beginning 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--repeat-sel-ctx
+            (helixel-sel-create
+             'search '(:pattern "$" :dir forward)
+             #'helixel--recreate-search "/$/"))
+      ;; a — insert-after at match-end
+      (setq last-command nil this-command 'helixel-insert-after)
+      (helixel-insert-after)
+      (insert "foo")
+      (helixel-insert-exit)
+      ;; Buffer after edit: "line onefoo\nline two\nline three"
+      (should (string= (buffer-string) "line onefoo\nline two\nline three"))
+      ;; . — should append "foo" at end of line 2
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "line onefoo\nline twofoo\nline three"))
+      ;; . again — should append "foo" at end of line 3
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "line onefoo\nline twofoo\nline threefoo")))))
+
+;; ── $ (end-of-line) zero-length anchor + i (insert) ──
+
+(ert-deftest helixel-test-repeat-search-insert-eol-zero-length-dot ()
+  "Scenario: /$<RET> i foo <ESC> . — insert before eol with $ anchor."
+  :tags '(repeat search)
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "line one\nline two\nline three"
+      (goto-char 1)
+      (re-search-forward "$")
+      (let ((isearch-success t)
+            (isearch-string "$")
+            (isearch-regexp t)
+            (isearch-forward t)
+            (isearch-other-end (match-beginning 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--repeat-sel-ctx
+            (helixel-sel-create
+             'search '(:pattern "$" :dir forward)
+             #'helixel--recreate-search "/$/"))
+      ;; i — insert at match-beginning
+      (setq last-command nil this-command 'helixel-insert)
+      (helixel-insert)
+      (insert "foo")
+      (helixel-insert-exit)
+      ;; Buffer after edit: "line onefoo\nline two\nline three"
+      (should (string= (buffer-string) "line onefoo\nline two\nline three"))
+      ;; . — should insert "foo" before eol of line 2
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "line onefoo\nline twofoo\nline three"))
+      ;; . again — should insert "foo" before eol of line 3
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "line onefoo\nline twofoo\nline threefoo")))))
+
 ;; ── 0. prefix: repeat-all in stored direction ──
 
 (ert-deftest helixel-test-repeat-all-dir-forward-change ()

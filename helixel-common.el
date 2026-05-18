@@ -129,7 +129,12 @@ sits on the pattern start so chained `.` advances correctly."
           (goto-char (max (point-min)
                           (1- (match-beginning 0))))
         ;; Forward: go to match-end to skip this match.
-        (goto-char (match-end 0))))
+        ;; For zero-length anchors (e.g. $, ^) advance one
+        ;; extra char so the subsequent search doesn't re-find
+        ;; the same position.
+        (goto-char (if (= (match-beginning 0) (match-end 0))
+                        (min (point-max) (1+ (match-end 0)))
+                      (match-end 0)))))
     (condition-case nil
         (helixel-search--search pat dir)
       (search-failed

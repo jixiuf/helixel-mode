@@ -573,7 +573,7 @@ Returns nil if no valid swap-source property is found."
        (if (helixel--register-active-p)
            "Register \"%c has no swap source"
          "No swap source — use `y' to copy first")
-       (or helixel--current-register ?\")))
+       (or helixel--current-register helixel-default-register)))
     (let* ((beg (plist-get source :beg))
            (end (plist-get source :end))
            (source-buf (plist-get source :buffer))

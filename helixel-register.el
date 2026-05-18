@@ -31,19 +31,50 @@
 ;;   \"ar  — replace with register a
 ;;   \"\"y  — copy to default register (kill-ring, same as y)
 ;;
-;; Register names: a-z (Emacs `register-alist'), \" (kill-ring),
-;; + (system clipboard), * (primary selection).
+;; Register names: any character can be mapped to a storage backend.
+;; By default: a-z → Emacs `register-alist', \" → kill-ring,
+;; + → system clipboard, * → primary selection.
+;; Customize `helixel-register-backends' to change these mappings.
 ;;
 ;; This module is required by `helixel-state' so the wrappers are
 ;; available everywhere in the helixel dependency tree.
 
 ;;; Code:
 
+(require 'cl-lib)
+
+(defcustom helixel-register-backends
+  '((?\" . kill-ring)
+    (?+ . clipboard)
+    (?* . primary))
+  "Alist mapping register characters to storage backends.
+Each entry is (CHAR . BACKEND) where BACKEND is a keyword:
+- `kill-ring': Emacs kill ring (default for \\=\").
+- `clipboard': System clipboard (`CLIPBOARD' selection).
+- `primary': Primary selection (`PRIMARY' selection).
+Characters not listed here use Emacs `register-alist' (via
+`get-register'/`set-register'), which supports a-z, 0-9, and
+any other character Emacs registers accept."
+  :type '(alist :key-type character
+                :value-type (choice (const :tag "Kill Ring" kill-ring)
+                                    (const :tag "Clipboard" clipboard)
+                                    (const :tag "Primary Selection" primary)))
+  :group 'helixel)
+
+(defcustom helixel-default-register ?\"
+  "Character for the default (unnamed) register.
+When `helixel--current-register' is nil or this character,
+operators use the kill ring directly rather than a named
+register.  Pressing \\\"\\\" in normal mode selects this register."
+  :type 'character
+  :group 'helixel)
+
 (defvar helixel--current-register nil
   "Character identifying the register for the next operator.
-Set by `helixel-select-register' (bound to `\"' in normal mode).
+Set by `helixel-select-register' (bound to `\\\"' in normal mode).
 Consumed and cleared by each operator that uses it.
-When nil or `?\"', the default kill-ring is used.")
+When nil or equal to `helixel-default-register', the `kill-ring'
+is used directly.")
 
 ;; ── Register selection (bound to `\"' in normal mode) ──
 
@@ -51,6 +82,7 @@ When nil or `?\"', the default kill-ring is used.")
   "Read a register name for the next operator.
 Valid register names: a-z (named), \" (unnamed/`kill-ring'),
 + (system clipboard), * (primary selection).
+Users can customize these via `helixel-register-backends'.
 Press \\[keyboard-quit] to cancel."
   (interactive)
   (let ((char (read-char "Register: ")))
@@ -63,53 +95,59 @@ Press \\[keyboard-quit] to cancel."
       ;; it's pending (e.g. \"a).
       (message "\"%c" char))))
 
+;; ── Backend lookup ──
+
+(defun helixel-register-backend (char)
+  "Return the storage backend keyword for register CHAR.
+Looks up CHAR in `helixel-register-backends'.  Returns nil when
+CHAR is not in the alist (meaning it uses `register-alist')."
+  (cdr (assq char helixel-register-backends)))
+
 ;; ── Register I/O ──
 
 (defun helixel-register-get (char)
   "Return text contents of register CHAR, or nil if empty.
-CHAR: a-z (Emacs `register-alist'), \" (kill-ring top),
-+ (clipboard), * (primary selection)."
-  (cond
-   ((and (>= char ?a) (<= char ?z))
-    (get-register char))
-   ((= char ?\")
-    (and kill-ring (current-kill 0 t)))
-   ((= char ?+)
-    (and (display-graphic-p)
-         (gui-get-selection 'CLIPBOARD)))
-   ((= char ?*)
-    (and (display-graphic-p)
-         (gui-get-selection 'PRIMARY)))
-   (t (get-register char))))
+Dispatch is determined by `helixel-register-backends':
+- `kill-ring' → top of `kill-ring'.
+- `clipboard' → system clipboard (CLIPBOARD selection).
+- `primary' → primary selection.
+- nil (unlisted) → Emacs `register-alist' via `get-register'."
+  (cl-case (helixel-register-backend char)
+    (kill-ring (and kill-ring (current-kill 0 t)))
+    (clipboard (and (display-graphic-p)
+                    (gui-get-selection 'CLIPBOARD)))
+    (primary   (and (display-graphic-p)
+                    (gui-get-selection 'PRIMARY)))
+    (t (get-register char))))
 
 (defun helixel-register-set (char text)
   "Store TEXT in register CHAR.
-CHAR: a-z (Emacs `register-alist'), \" (push to `kill-ring'),
-+ (clipboard), * (primary selection).
+Dispatch is determined by `helixel-register-backends':
+- `kill-ring' → push to `kill-ring' via `kill-new'.
+- `clipboard' → system clipboard via `gui-set-selection'.
+- `primary' → primary selection via `gui-set-selection'.
+- nil (unlisted) → Emacs `register-alist' via `set-register'.
 TEXT is a string preserving any yank-handler properties."
-  (cond
-   ((and (>= char ?a) (<= char ?z))
-    (set-register char text))
-   ((= char ?\")
-    (kill-new text))
-   ((= char ?+)
-    (gui-set-selection 'CLIPBOARD text))
-   ((= char ?*)
-    (gui-set-selection 'PRIMARY text))
-   (t (set-register char text))))
+  (cl-case (helixel-register-backend char)
+    (kill-ring (kill-new text))
+    (clipboard (gui-set-selection 'CLIPBOARD text))
+    (primary   (gui-set-selection 'PRIMARY text))
+    (t (set-register char text))))
 
 ;; ── Register-aware kill-ring wrappers ──
 ;;
 ;; These replace direct `kill-new' / `current-kill' / `yank' calls
 ;; throughout the codebase.  When `helixel--current-register' is a
-;; non-default register (not nil and not `?\"'), they redirect
-;; to `register-alist'.  When nil or `?\"', they use the real
-;; kill-ring.
+;; non-default register (not nil and not `helixel-default-register'),
+;; they redirect to the configured backend.  When nil or the default
+;; register, they use the real kill-ring.
 
 (defun helixel--register-active-p ()
-  "Return non-nil when a non-default named register is selected."
+  "Return non-nil when a non-default named register is selected.
+A register is considered active when `helixel--current-register'
+is non-nil and not equal to `helixel-default-register'."
   (and helixel--current-register
-       (not (eq helixel--current-register ?\"))))
+       (not (eq helixel--current-register helixel-default-register))))
 
 (defun helixel--register-consume ()
   "Return and clear `helixel--current-register'."

@@ -80,6 +80,17 @@ at point (t) or simply insert without deleting (nil)."
   :type 'boolean
   :group 'helixel)
 
+(defcustom helixel-motion-parent-excluded-modes
+  '(special-mode Custom-mode)
+  "List of major modes excluded from motion-state keymap parent patching.
+
+When a buffer enters motion state and its `major-mode' is not in
+this list, the mode's keymap parent is extended with
+`helixel-normal-map', giving fallback access to normal-state
+commands (scroll, `;' action cycle, etc.)."
+  :type '(repeat symbol)
+  :group 'helixel)
+
 
 (defvar-local helixel--current-state 'normal
   "Current modal state, one of normal, insert, or motion.")
@@ -739,6 +750,43 @@ Safe for use in hooks and `:after' advice."
 (defun helixel-visual-state-p ()
   "Return non-nil if the current Helixel state is visual."
   (eq helixel--current-state 'visual))
+
+;; ── Motion-state keymap parent patching ──
+;; Extend major-mode keymaps with `helixel-normal-map' as fallback
+;; parent so that normal-state commands (scroll, `;' action cycle,
+;; etc.) are available in motion state.
+
+(defvar helixel--motion-parent-patched (make-hash-table :test #'eq)
+  "Set of major modes whose keymap parent has been patched.
+Used by `helixel--motion-patch-keymap-parent' to avoid repeated
+patching.")
+
+(defun helixel--motion-patch-keymap-parent ()
+  "Extend the current major-mode keymap parent for motion state.
+Composes the mode's original keymap parent with
+`helixel-normal-map' so normal-state fallbacks are available.
+Skips modes listed in `helixel-motion-parent-excluded-modes'.
+
+Runs on `helixel-motion-state-hook'."
+  (unless (memq major-mode helixel-motion-parent-excluded-modes)
+    (when (and (helixel-motion-state-p)
+               (not (gethash major-mode
+                             helixel--motion-parent-patched)))
+      (puthash major-mode t helixel--motion-parent-patched)
+      (let ((map (if (keymapp major-mode)
+                     major-mode
+                   (when-let* ((name (intern (concat (symbol-name major-mode)
+                                                     "-map")))
+                               ((boundp name)))
+                     (symbol-value name)))))
+        (when (keymapp map)
+          (set-keymap-parent
+           map
+           (make-composed-keymap (keymap-parent map)
+                                 helixel-normal-map)))))))
+
+(add-hook 'helixel-motion-state-hook
+          #'helixel--motion-patch-keymap-parent)
 
 ;; ── Mode activation ──
 

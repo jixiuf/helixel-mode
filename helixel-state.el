@@ -110,17 +110,34 @@ nil means charwise, `line' means linewise, `rect' means rectangle.")
 ;; captures a real keymap object.  `helixel-keymap' fills them with
 ;; `define-key' (same object — reference never breaks).
 
-(defvar helixel-insert-map (define-keymap))
-(defvar helixel-normal-map (define-keymap :full t))
 (defvar helixel-visual-map (define-keymap))
-(defvar helixel-motion-map (define-keymap :full t))
+(defvar helixel-insert-map (define-keymap))
+(defvar helixel-view-map (make-sparse-keymap))
+(suppress-keymap helixel-view-map)
+
+(defvar helixel-goto-map (make-sparse-keymap))
+(suppress-keymap helixel-goto-map)
+(set-keymap-parent helixel-goto-map goto-map)
+
+(defvar helixel-window-map (make-sparse-keymap))
+(suppress-keymap helixel-window-map)
+
+(defvar helixel-space-map (make-sparse-keymap))
+(suppress-keymap helixel-space-map)
+
+(defvar helixel-normal-map (make-sparse-keymap))
+(suppress-keymap helixel-normal-map)
+
+(defvar helixel-motion-map (make-sparse-keymap))
+(suppress-keymap helixel-motion-map)
+
 (defvar helixel-textobj-map (define-keymap))
-(defvar helixel-textobj-inner-map (define-keymap :full t))
-(defvar helixel-textobj-outer-map (define-keymap :full t))
-(defvar helixel-view-map (define-keymap :full t))
-(defvar helixel-goto-map (define-keymap :full t))
-(defvar helixel-window-map (define-keymap :full t))
-(defvar helixel-space-map (define-keymap :full t))
+
+(defvar helixel-textobj-inner-map (make-sparse-keymap))
+(suppress-keymap helixel-textobj-inner-map)
+
+(defvar helixel-textobj-outer-map (make-sparse-keymap))
+(suppress-keymap helixel-textobj-outer-map)
 
 (defvar helixel-state-map-alist nil
   "Alist mapping a state symbol to a Helixel keymap.

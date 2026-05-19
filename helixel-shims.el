@@ -101,11 +101,5 @@ Called at top-level when this file is loaded."
 
 (helixel-shims--register-deferred)
 
-;;;###autoload
-(defun helixel-shims-setup ()
-  "Enable all helixel integration shims for built-in modes.
-Call once after `helixel-mode' is activated."
-  (interactive))
-
 (provide 'helixel-shims)
 ;;; helixel-shims.el ends here

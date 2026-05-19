@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-action.el helixel-edit.el helixel-repeat.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-delimiter.el helixel-textobj-engine.el helixel-surround.el helixel-textobj.el helixel.el
-ELS := helixel-action.elc helixel-edit.elc helixel-repeat.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-delimiter.elc helixel-textobj-engine.elc helixel-surround.elc helixel-textobj.elc helixel.elc
+FILES = helixel-action.el helixel-edit.el helixel-repeat.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-delimiter.el helixel-textobj-engine.el helixel-surround.el helixel-textobj.el helixel-shims.el helixel.el
+ELS := helixel-action.elc helixel-edit.elc helixel-repeat.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-delimiter.elc helixel-textobj-engine.elc helixel-surround.elc helixel-textobj.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
@@ -75,7 +75,8 @@ package-lint:
 		--eval "(require 'package-lint)" \
 		--eval "(setq package-lint-main-file \"helixel.el\")" \
 		-f package-lint-batch-and-exit \
-		${FILES}
+		${FILES} 2>&1; rc=$$?; \
+	  if [ $$rc -gt 1 ]; then exit $$rc; fi
 
 
 COLWIDTH ?= 80

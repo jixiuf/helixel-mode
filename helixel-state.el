@@ -682,7 +682,9 @@ Use `helixel-define-key' to add major-mode specific bindings."
 
 ;;;###autoload
 (define-minor-mode helixel-normal-state
-  "Helixel NORMAL state minor mode."
+  "Helixel NORMAL state minor mode.
+This is the internal minor mode; prefer \[helixel-enter-normal-state]
+for state transitions."
   :lighter " helixel[N]"
   :init-value nil
   :interactive t
@@ -693,6 +695,50 @@ Use `helixel-define-key' to add major-mode specific bindings."
         (setq-local helixel--current-state 'normal)
         (setq cursor-type 'box)
         (helixel--refresh-overriding-maps))))
+
+;; ── Public state API ──
+;; Safe wrappers around `helixel--switch-state' for hooks, advice,
+;; and interactive use.  These properly unload the current state
+;; before entering the new one.
+
+;;;###autoload
+(defun helixel-enter-normal-state (&rest _)
+  "Enter normal state, properly unloading the current state.
+Safe for use in hooks and `:after' advice."
+  (interactive)
+  (helixel--switch-state 'normal))
+
+;;;###autoload
+(defun helixel-enter-motion-state (&rest _)
+  "Enter motion state, properly unloading the current state.
+Safe for use in hooks and `:after' advice."
+  (interactive)
+  (helixel--switch-state 'motion))
+
+;;;###autoload
+(defun helixel-enter-insert-state (&rest _)
+  "Enter insert state, properly unloading the current state.
+Safe for use in hooks and `:after' advice."
+  (interactive)
+  (helixel--switch-state 'insert))
+
+;; Predicates — check the current state.
+
+(defun helixel-normal-state-p ()
+  "Return non-nil if the current Helixel state is normal."
+  (eq helixel--current-state 'normal))
+
+(defun helixel-motion-state-p ()
+  "Return non-nil if the current Helixel state is motion."
+  (eq helixel--current-state 'motion))
+
+(defun helixel-insert-state-p ()
+  "Return non-nil if the current Helixel state is insert."
+  (eq helixel--current-state 'insert))
+
+(defun helixel-visual-state-p ()
+  "Return non-nil if the current Helixel state is visual."
+  (eq helixel--current-state 'visual))
 
 ;; ── Mode activation ──
 

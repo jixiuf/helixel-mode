@@ -116,30 +116,28 @@ Tests reading it cross-buffer fail. Use `let` or set it in the target buffer.
 ### Never trust match-data in helixel-insert / helixel-insert-after
 Search hooks invalidate `match-data`. Use `(region-beginning)` / `(region-end)` instead.
 
-### Don't guard against delete-selection-mode
-Helixel never enables it. `insert-char` is always safe. Don't add `deactivate-mark` to protect against it.
-
 ### insert-text runner must NOT deactivate-mark
 Selection is recreated before execute. `deactivate-mark` destroys it → invisible after `.`/`,`.
 
 ### helixel--recreate-line: use region-beginning/region-end, not line-beginning-position
 After `helixel-select-line`, point is on the LAST selected line. `line-beginning-position` targets the wrong line for count≥2.
 
-### inhibit-message around start/end-kbd-macro
-They print "Defining kbd macro…" / "Keyboard macro defined". Bind `inhibit-message` to t.
-
-### Strip trailing ESC from kmacro
-Some Emacs builds include `?\e` in `last-kbd-macro`. Strip in `helixel--insert-finish`.
-
-### Keymap shells for Emacs 31+
-`define-minor-mode` with `:keymap VAR` captures value at expansion time. Create keymap shells BEFORE minor-mode definitions, populate with `define-key` (not `setq`).
+### Never set `defining-kbd-macro` to t in long-lived insert recording
+`defining-kbd-macro` being non-nil causes `sit-for` (subr.el ~line 3877) to
+skip its `read-event` wait entirely — it returns immediately without
+actually sleeping.  This breaks eglot's LSP completion pipeline and any
+other code that relies on `sit-for` for timing.  Use manual key collection
+via hooks instead of `start-kbd-macro` / `end-kbd-macro` for insert-mode
+recording that spans more than a single atomic command.
 
 ### sed line numbers shift
 Use `git checkout` + pattern-based scripts instead of `sed -i 'N,Md'`.
 
 ### Design notes
 - `:repeat-advance` tag on ops gates auto-advance. `helixel-repeat-advance-alist` maps kind→advance fn.
-- Insert replay: kmacro-only (no change hooks). `:keys` primary, `:text` fallback. `pre-command-hook` captures commands for keymap-independent replay.
+- Insert replay: `pre-command-hook` captures both `this-command` (keymap-independent replay) and
+  `this-single-command-keys` (key-based fallback).  `:commands` is primary, `:keys` fallback,
+  `:text` last resort.  No `start-kbd-macro` used — avoids `defining-kbd-macro` t side-effect.
 - Movement `.` replays move sequence, not absolute positions (matches Helix/Vim).
 - Swap-source stored as text property on kill-ring string (not overlay).
 - `executing-kbd-macro` inhibits `helixel--record-edit`.

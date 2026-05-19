@@ -125,59 +125,66 @@ Also bound in compound commands (e.g. `helixel-replace' calling
 ;; ---------------------------------------------------------------------------
 ;; Kmacro-based insert recorder
 ;;
-;; Records insert-mode keystrokes via `start-kbd-macro' /
-;; `end-kbd-macro'.  Also records the *commands* executed for each
-;; key via `pre-command-hook', so replay can call the exact same
-;; commands regardless of keymap differences (normal vs insert mode).
+;; Insert-mode recorder (no kmacro — avoids `defining-kbd-macro')
+;;
+;; Records both the executed command and its key sequence via
+;; `pre-command-hook', so replay can call either the exact same
+;; commands (keymap-independent) or the raw key sequence.
+;;
+;; Uses `pre-command-hook' (not `post-command-hook') because the
+;; hook is added *during* the insert-entry command (e.g. helixel-insert),
+;; so `pre-command-hook' won't fire for that first command — it only
+;; captures subsequent user keystrokes.  `post-command-hook' would
+;; fire for the insert-entry command itself, causing `.` to re-enter
+;; insert mode and triggering infinite recursion.
+;;
+;; Does NOT use `start-kbd-macro' / `end-kbd-macro': setting
+;; `defining-kbd-macro' to t breaks Emacs' `sit-for' (subr.el line
+;; ~3877 skips the read-event wait), which in turn breaks eglot's LSP
+;; completion pipeline and any other code that relies on `sit-for'.
 
 (defvar-local helixel--insert-commands nil
   "List of commands executed during insert-mode recording.
 Recorded by `helixel--on-insert-command' via `pre-command-hook'.
 Cleared and returned by `helixel--insert-finish'.")
 
+(defvar-local helixel--insert-keys nil
+  "List of key vectors collected during insert-mode recording.
+Each element is the return value of `this-single-command-keys'
+from one command execution.  Collected by
+`helixel--on-insert-command' via `pre-command-hook'.
+Cleared and vconcat'd by `helixel--insert-finish'.")
+
 (defun helixel--on-insert-command ()
-  "Pre-command-hook: record `this-command' during insert recording.
+  "Pre-command-hook: record command and key sequence.
+Captures `this-command' for command-based replay and
+`this-single-command-keys' for key-based fallback replay.
 Skips `helixel-insert-exit' (the exit command itself)."
   (unless (eq this-command 'helixel-insert-exit)
-    (push this-command helixel--insert-commands)))
+    (push this-command helixel--insert-commands)
+    (push (this-single-command-keys) helixel--insert-keys)))
 
 (defun helixel--insert-begin ()
-  "Start insert-mode recording via kmacro.
-Caller must also switch state to insert.
+  "Start insert-mode recording (no kmacro).
+Records commands and key sequences via a single `pre-command-hook'.
 
 Does NOT call `helixel--switch-state' — that stays in helixel-common.el
 because helixel-repeat.el does not depend on helixel-common.el."
-  (unless (or defining-kbd-macro executing-kbd-macro)
-    (let ((inhibit-message t))
-      (start-kbd-macro nil)))
   (setq helixel--insert-commands nil)
+  (setq helixel--insert-keys nil)
   (add-hook 'pre-command-hook #'helixel--on-insert-command nil t))
 
 (defun helixel--insert-finish ()
-  "End insert-mode kmacro recording.
-Returns (KEYS . COMMANDS).  KEYS is the captured key sequence vector
+  "End insert-mode recording.
+Returns (KEYS . COMMANDS).  KEYS is the apply'd-vconcat of key vectors
 or nil.  COMMANDS is the list of executed commands (oldest first),
-or nil.  Strips trailing ESC from keys on Emacs versions that include it."
+or nil."
   (remove-hook 'pre-command-hook #'helixel--on-insert-command t)
-  (let ((keys (if defining-kbd-macro
-                  (let ((inhibit-message t))
-                    (end-kbd-macro nil)
-                    (let ((raw last-kbd-macro))
-                      (prog1 (cond ((= (length raw) 0) nil)
-                                   ((and (characterp
-                                          (aref raw
-                                                (1- (length raw))))
-                                         (= (aref raw
-                                                 (1- (length raw)))
-                                            ?\e))
-                                    (if (> (length raw) 1)
-                                        (substring raw 0 -1)
-                                      nil))
-                                   (t raw))
-                        (setq last-kbd-macro nil))))
-                nil))
+  (let ((keys (when helixel--insert-keys
+                (apply #'vconcat (nreverse helixel--insert-keys))))
         (cmds (nreverse helixel--insert-commands)))
     (setq helixel--insert-commands nil)
+    (setq helixel--insert-keys nil)
     (cons keys cmds)))
 
 ;; ---------------------------------------------------------------------------

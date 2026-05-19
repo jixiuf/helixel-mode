@@ -21,21 +21,47 @@
 ;;; Commentary:
 ;;
 ;; Integration shims so helixel-mode plays well with built-in Emacs
-;; modes that have their own editable sub-modes.
+;; modes.
 ;;
-;; Pattern:
-;;   Enter editable sub-mode → normal state (full modal editing)
-;;   Exit back to parent mode → motion state (read-only navigation)
+;; Two categories:
 ;;
-;; Supported modes:
-;;   - wdired
-;;   - grep-edit (Emacs 29+)
-;;   - occur-edit (Emacs 29+)
-;;   - wgrep  (third-party, same pattern)
+;; 1. Editable sub-modes — enter → normal, exit → motion
+;;    wdired, grep-edit, occur-edit, wgrep
+;;
+;; 2. Read-only modes — motion-state keybindings
+;;    help-mode, info-mode, apropos-mode
+;;    (Mode's own keys fall through from the suppressed motion map;
+;;     we add g-prefix shortcuts for common commands.)
 
 ;;; Code:
 
 (require 'helixel-state)
+
+;; ── Declare external functions (byte-compiler) ──
+
+(defvar help-mode-map)
+
+(declare-function Info-next "info")
+(declare-function Info-prev "info")
+(declare-function Info-up "info")
+(declare-function Info-top-node "info")
+(declare-function Info-directory "info")
+(declare-function Info-menu "info")
+(declare-function Info-follow-reference "info")
+(declare-function Info-search "info")
+(declare-function Info-index "info")
+(declare-function Info-virtual-index "info")
+(declare-function Info-history "info")
+(declare-function Info-index-next "info")
+(declare-function Info-summary "info")
+
+(declare-function help-go-back "help-mode")
+(declare-function help-go-forward "help-mode")
+(declare-function help-goto-next-page "help-mode")
+(declare-function help-goto-previous-page "help-mode")
+(declare-function help-view-source "help-mode")
+(declare-function help-goto-info "help-mode")
+(declare-function help-customize "help-mode")
 
 ;; ── wdired ──
 
@@ -84,6 +110,49 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
     (when (fboundp 'wgrep-exit)
       (advice-add 'wgrep-exit :after #'helixel-enter-motion-state))))
 
+;; ── Read-only mode keybindings ──
+;; These modes default to motion state.  Their own keybindings fall
+;; through from the suppressed motion map.  We add g-prefix shortcuts.
+
+(defun helixel-shims--setup-help-mode ()
+  "Setup `help-mode' keybindings in motion state.
+Unset `l' from `help-mode-map' so it falls through to the
+`helixel-normal-map' parent (`l' → `helixel-forward-char').
+`h' is not bound in `help-mode-map', falls through to
+`helixel-backward-char' automatically."
+  (keymap-unset help-mode-map "l" t)
+  (helixel-define-key 'motion "g b" #'help-go-back 'help-mode)
+  (helixel-define-key 'motion "g f" #'help-go-forward 'help-mode)
+  (helixel-define-key 'motion "g n" #'help-goto-next-page 'help-mode)
+  (helixel-define-key 'motion "g p" #'help-goto-previous-page 'help-mode)
+  (helixel-define-key 'motion "g t" #'forward-button 'help-mode)
+  (helixel-define-key 'motion "g T" #'backward-button 'help-mode)
+  (helixel-define-key 'motion "g r" #'revert-buffer 'help-mode)
+  (helixel-define-key 'motion "g s" #'help-view-source 'help-mode)
+  (helixel-define-key 'motion "g i" #'help-goto-info 'help-mode)
+  (helixel-define-key 'motion "g c" #'help-customize 'help-mode))
+
+(defun helixel-shims--setup-info-mode ()
+  "Setup info-mode keybindings in motion state."
+  (helixel-define-key 'motion "g n" #'Info-next 'Info-mode)
+  (helixel-define-key 'motion "g p" #'Info-prev 'Info-mode)
+  (helixel-define-key 'motion "g u" #'Info-up 'Info-mode)
+  (helixel-define-key 'motion "g t" #'Info-top-node 'Info-mode)
+  (helixel-define-key 'motion "g d" #'Info-directory 'Info-mode)
+  (helixel-define-key 'motion "g m" #'Info-menu 'Info-mode)
+  (helixel-define-key 'motion "g f" #'Info-follow-reference 'Info-mode)
+  (helixel-define-key 'motion "g s" #'Info-search 'Info-mode)
+  (helixel-define-key 'motion "g i" #'Info-index 'Info-mode)
+  (helixel-define-key 'motion "g I" #'Info-virtual-index 'Info-mode)
+  (helixel-define-key 'motion "g l" #'Info-history 'Info-mode)
+  (helixel-define-key 'motion "g ," #'Info-index-next 'Info-mode)
+  (helixel-define-key 'motion "g ?" #'Info-summary 'Info-mode)
+  (helixel-define-key 'motion "g r" #'revert-buffer 'Info-mode))
+
+(defun helixel-shims--setup-apropos-mode ()
+  "Setup apropos-mode keybindings in motion state."
+  (helixel-define-key 'motion "g r" #'revert-buffer 'apropos-mode))
+
 ;; ── Deferred registration ──
 ;; We defer calling the setup functions until the target library is
 ;; loaded because `advice-add' requires the function to exist.
@@ -94,10 +163,15 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
 (defun helixel-shims--register-deferred ()
   "Register deferred shim setups via `with-eval-after-load'.
 Called at top-level when this file is loaded."
+  ;; State-transition shims
   (with-eval-after-load 'wdired  (helixel-shims--setup-wdired))
   (with-eval-after-load 'grep    (helixel-shims--setup-grep-edit))
   (with-eval-after-load 'replace (helixel-shims--setup-occur-edit))
-  (with-eval-after-load 'wgrep   (helixel-shims--setup-wgrep)))
+  (with-eval-after-load 'wgrep   (helixel-shims--setup-wgrep))
+  ;; Keybinding shims
+  (with-eval-after-load 'help-mode (helixel-shims--setup-help-mode))
+  (with-eval-after-load 'info     (helixel-shims--setup-info-mode))
+  (with-eval-after-load 'apropos  (helixel-shims--setup-apropos-mode)))
 
 (helixel-shims--register-deferred)
 

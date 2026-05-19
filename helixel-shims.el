@@ -63,6 +63,16 @@
 (declare-function help-goto-info "help-mode")
 (declare-function help-customize "help-mode")
 
+(declare-function shortdoc-next-section "shortdoc")
+(declare-function shortdoc-previous-section "shortdoc")
+(declare-function Man-next-manpage "man")
+(declare-function Man-previous-manpage "man")
+(declare-function WoMan-next-manpage "woman")
+(declare-function WoMan-previous-manpage "woman")
+(declare-function eww-back-url "eww")
+(declare-function eww-forward-url "eww")
+(declare-function eww-reload "eww")
+
 ;; ── wdired ──
 
 (defun helixel-shims--setup-wdired ()
@@ -153,6 +163,29 @@ Unset `l' from `help-mode-map' so it falls through to the
   "Setup apropos-mode keybindings in motion state."
   (helixel-define-key 'motion "g r" #'revert-buffer 'apropos-mode))
 
+(defun helixel-shims--setup-shortdoc-mode ()
+  "Setup `shortdoc-mode' keybindings in motion state."
+  (helixel-define-key 'motion "g n" #'shortdoc-next-section
+                       'shortdoc-mode)
+  (helixel-define-key 'motion "g p" #'shortdoc-previous-section
+                       'shortdoc-mode))
+
+(defun helixel-shims--setup-man-mode ()
+  "Setup `Man-mode' keybindings in motion state."
+  (helixel-define-key 'motion "g n" #'Man-next-manpage 'Man-mode)
+  (helixel-define-key 'motion "g p" #'Man-previous-manpage 'Man-mode))
+
+(defun helixel-shims--setup-woman-mode ()
+  "Setup `woman-mode' keybindings in motion state."
+  (helixel-define-key 'motion "g n" #'WoMan-next-manpage 'woman-mode)
+  (helixel-define-key 'motion "g p" #'WoMan-previous-manpage 'woman-mode))
+
+(defun helixel-shims--setup-eww-mode ()
+  "Setup `eww-mode' keybindings in motion state."
+  (helixel-define-key 'motion "g b" #'eww-back-url 'eww-mode)
+  (helixel-define-key 'motion "g f" #'eww-forward-url 'eww-mode)
+  (helixel-define-key 'motion "g r" #'eww-reload 'eww-mode))
+
 ;; ── Deferred registration ──
 ;; We defer calling the setup functions until the target library is
 ;; loaded because `advice-add' requires the function to exist.
@@ -171,7 +204,11 @@ Called at top-level when this file is loaded."
   ;; Keybinding shims
   (with-eval-after-load 'help-mode (helixel-shims--setup-help-mode))
   (with-eval-after-load 'info     (helixel-shims--setup-info-mode))
-  (with-eval-after-load 'apropos  (helixel-shims--setup-apropos-mode)))
+  (with-eval-after-load 'apropos  (helixel-shims--setup-apropos-mode))
+  (with-eval-after-load 'shortdoc (helixel-shims--setup-shortdoc-mode))
+  (with-eval-after-load 'man      (helixel-shims--setup-man-mode))
+  (with-eval-after-load 'woman    (helixel-shims--setup-woman-mode))
+  (with-eval-after-load 'eww      (helixel-shims--setup-eww-mode)))
 
 (helixel-shims--register-deferred)
 

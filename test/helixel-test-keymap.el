@@ -74,6 +74,17 @@
       (should (eq (lookup-key (cdr normal-entry) "j") #'next-line))
       (should (eq (lookup-key (cdr insert-entry) "j") #'self-insert-command)))))
 
+(ert-deftest helixel-test-define-key-with-multiple-modes ()
+  "Test that multiple modes create separate entries."
+  (let ((helixel--mode-keybindings nil))
+    (helixel-define-key 'normal "j" #'next-line 'dired-mode 'prog-mode)
+    (let ((de (assoc (cons 'dired-mode 'normal) helixel--mode-keybindings))
+          (pe (assoc (cons 'prog-mode 'normal) helixel--mode-keybindings)))
+      (should de)
+      (should pe)
+      (should (eq (lookup-key (cdr de) "j") #'next-line))
+      (should (eq (lookup-key (cdr pe) "j") #'next-line)))))
+
 (ert-deftest helixel-test-define-key-invalid-state ()
   "Test that invalid state signals an error."
   (should-error (helixel-define-key 'invalid-state "t" #'ignore)))

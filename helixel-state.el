@@ -540,13 +540,13 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
 
 ;; ── Keymap management ──
 
-(defun helixel-define-key (state key def &optional mode)
+(defun helixel-define-key (state key def &rest modes)
   "Define a Helixel keybinding for KEY to DEF.
 
-When MODE is nil, bind to the keymap associated with STATE from
-`helixel-state-map-alist'.  When MODE is provided (e.g.,
-\\='dired-mode), store the binding so it takes precedence via
-`minor-mode-overriding-map-alist' when that mode is active.
+When MODES is nil, bind to the keymap associated with STATE from
+`helixel-state-map-alist'.  When MODES is provided, each argument
+is a major or minor mode symbol for which the binding takes
+precedence via `minor-mode-overriding-map-alist'.
 
 Argument STATE must be one of: insert, normal, motion, visual, view,
 goto, window, space, textobj (m prefix), textobj-inner (mi prefix),
@@ -554,8 +554,7 @@ textobj-outer (ma prefix).
 
 Argument KEY and DEF follow the same conventions as `define-key'.
 
-Optional argument MODE is a major or minor mode symbol for which to
-create mode-specific bindings that override helixel defaults.
+Any arguments after DEF are treated as mode symbols.
 
 Example:
   ;; Standard: bind to Helix's normal state keymap
@@ -575,17 +574,24 @@ Example:
   (helixel-define-key \\='textobj-inner \"o\"
     #\\='helixel-mark-inner-org-block \\='org-mode)
   (helixel-define-key \\='textobj-outer \"o\"
-    #\\='helixel-mark-a-org-block \\='org-mode)"
+    #\\='helixel-mark-a-org-block \\='org-mode)
+
+  ;; Bind to multiple modes at once
+  (helixel-define-key \\='normal \"j\" #\\='next-line
+    \\='prog-mode \\='text-mode)
+  (helixel-define-key \\='normal (kbd \"C-i\") nil
+    \\='org-mode \\='markdown-mode)"
   (unless (alist-get state helixel-state-map-alist)
     (error "Invalid state %s" state))
-  (if mode
+  (if modes
       ;; Store binding in helixel--mode-keybindings
-      (let* ((alist-key (cons mode state))
-             (entry (assoc alist-key helixel--mode-keybindings)))
-        (unless entry
-          (setq entry (cons alist-key (make-sparse-keymap)))
-          (push entry helixel--mode-keybindings))
-        (define-key (cdr entry) key def))
+      (dolist (m modes)
+        (let* ((alist-key (cons m state))
+               (entry (assoc alist-key helixel--mode-keybindings)))
+          (unless entry
+            (setq entry (cons alist-key (make-sparse-keymap)))
+            (push entry helixel--mode-keybindings))
+          (define-key (cdr entry) key def)))
     ;; Bind to global state keymap
     (let ((state-keymap (alist-get state helixel-state-map-alist)))
       (define-key state-keymap key def))))

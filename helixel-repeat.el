@@ -618,33 +618,31 @@ Failure during replay is reported but does not discard the stored edit."
            ;; --- Reverse direction |N| times ---
            ((and reverse-p (not all-buffer-p) (not all-dir-p)
                  search-sel-p)
-            (save-excursion
-              (let* ((orig-dir (helixel-sel-search-dir sel))
-                     (flipped-dir (if (eq orig-dir 'forward)
-                                      'backward 'forward))
-                     (flipped (helixel-sel-update-ctx sel
-                                :dir flipped-dir)))
-                (condition-case nil
-                    (dotimes (_ n)
-                      (helixel--recreate-selection flipped)
-                      (helixel--execute-edit tx))
-                  (user-error nil)
-                  (search-failed nil))
-                (helixel--repeat-echo n))))
+            (let* ((orig-dir (helixel-sel-search-dir sel))
+                   (flipped-dir (if (eq orig-dir 'forward)
+                                    'backward 'forward))
+                   (flipped (helixel-sel-update-ctx sel
+                              :dir flipped-dir)))
+              (condition-case nil
+                  (dotimes (_ n)
+                    (helixel--recreate-selection flipped)
+                    (helixel--execute-edit tx))
+                (user-error nil)
+                (search-failed nil))
+              (helixel--repeat-echo n)))
            ((and reverse-p (not all-buffer-p) (not all-dir-p)
                  line-sel-p)
-            (save-excursion
-              (let ((line-dir (if (eq (helixel-sel-line-dir sel)
-                                      'forward)
-                                  -1 1)))
-                (condition-case nil
-                    (dotimes (_ n)
-                      (when (/= (forward-line line-dir) 0)
-                        (signal 'user-error nil))
-                      (helixel--recreate-selection sel)
-                      (helixel--execute-edit tx))
-                  (user-error nil))
-                (helixel--repeat-echo n))))
+            (let ((line-dir (if (eq (helixel-sel-line-dir sel)
+                                    'forward)
+                                -1 1)))
+              (condition-case nil
+                  (dotimes (_ n)
+                    (when (/= (forward-line line-dir) 0)
+                      (signal 'user-error nil))
+                    (helixel--recreate-selection sel)
+                    (helixel--execute-edit tx))
+                (user-error nil))
+              (helixel--repeat-echo n)))
            ;; --- Entire buffer + reverse: point-max -> backward ---
            ((and all-buffer-p reverse-p search-sel-p)
             (save-excursion

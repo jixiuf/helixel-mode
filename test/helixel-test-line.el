@@ -420,7 +420,7 @@ Buffer starts with point at position 1."
       (setq last-command 'self-insert-command)
       (cl-letf (((symbol-function 'completing-read)
                  (lambda (_prompt collection &rest _)
-                   (car collection))))
+                   (car (all-completions "" collection)))))
         (helixel-replace-pop)
         (should (string= (buffer-string) "BBBello"))
         ;; Subsequent calls should cycle

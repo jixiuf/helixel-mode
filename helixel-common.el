@@ -779,7 +779,7 @@ Used to support cycling through the kill ring after a replace.")
   (if (and (not (helixel--register-active-p))
            (= 0 (length kill-ring)))
       (message "nothing to yank")
-    (let* ((text (or (helixel--current-kill 0 t) (current-kill 0 t)))
+    (let* ((text (or (helixel--current-kill 0) (current-kill 0)))
            (linewise-p (helixel--linewise-kill-p text))
            (rectwise-p (helixel--rect-wise-kill-p text))
            (bare (string-trim-right (substring-no-properties text) "\n"))
@@ -863,8 +863,15 @@ Used to support cycling through the kill ring after a replace.")
     ;; ── Direct call: browse kill-ring and replace ──
     (let* ((candidates
             (mapcar #'substring-no-properties kill-ring))
+           (collection
+            (lambda (s p a)
+              (if (eq a 'metadata)
+                  '(metadata (category . helixel-replace-pop)
+                             (cycle-sort-function . identity)
+                             (display-sort-function . identity))
+                (complete-with-action a candidates s p))))
            (selected
-            (completing-read "Replace with: " candidates nil t))
+            (completing-read "Replace with: " collection nil t))
            (idx (cl-position selected candidates :test #'string=))
            (text (nth idx kill-ring))
            (linewise-p (helixel--linewise-kill-p text))
@@ -874,6 +881,7 @@ Used to support cycling through the kill ring after a replace.")
            (pop-start nil))
       (unless text
         (user-error "No kill-ring entry selected"))
+      (setq kill-ring-yank-pointer (nthcdr idx kill-ring))
       (setq this-command 'helixel-replace-pop)
       (cond
        ;; Rect selection — no pop tracking

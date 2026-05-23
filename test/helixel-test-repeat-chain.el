@@ -142,10 +142,9 @@
     (setq last-kbd-macro (kbd "x"))
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
-    (let ((adv (plist-get (helixel-edit-payload helixel--last-tx)
-                          :chain-advance)))
-      (should adv)
-      (should (eq (plist-get adv :entry-kind) 'insert)))))
+    (let ((sel (helixel-edit-sel helixel--last-tx)))
+      (should sel)
+      (should (eq (helixel-sel-search-entry-kind sel) 'insert)))))
 
 (ert-deftest helixel-test-chain-in-edit-ring ()
   "Chain tx is pushed onto the edit ring."
@@ -164,84 +163,6 @@
   (should (helixel-edit-op-runner 'chain)))
 
 ;; ── Chain advance: helper functions tested directly ──
-
-(ert-deftest helixel-test-chain-do-advance-line ()
-  "Execute line advance from advance data."
-  (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
-    (goto-char 1)
-    (should (helixel--chain-do-advance '(:kind line :dir forward :count 1)))
-    (should (= (line-number-at-pos) 2))))
-
-(ert-deftest helixel-test-chain-do-advance-search ()
-  "Search advance finds match and positions point after it."
-  (helixel-chain-test-with-buffer "aaa xxx foo yyy\n"
-    (goto-char 1)
-    (should (helixel--chain-do-advance
-             '(:kind search :pattern "foo" :dir forward)))
-    (should (> (point) 1))
-    (save-excursion
-      (search-backward "foo" nil t))
-    (should t)))
-
-(ert-deftest helixel-test-chain-do-advance-search-skip-match ()
-  "Search advance with entry-kind skips current match."
-  (helixel-chain-test-with-buffer "foo bar foo baz\n"
-    (goto-char 1)
-    (should (looking-at "foo"))
-    (should (helixel--chain-do-advance
-             '(:kind search :pattern "foo" :dir forward :entry-kind insert)))
-    (should (= (point) 12)))
-  ;; Backward skip
-  (helixel-chain-test-with-buffer "foo bar foo baz\n"
-    (search-forward "foo bar ")
-    (should (looking-at "foo"))
-    (should (helixel--chain-do-advance
-             '(:kind search :pattern "foo" :dir backward :entry-kind insert)))
-    (should (= (point) 4))))
-
-(ert-deftest helixel-test-chain-do-advance-search-no-more ()
-  "Search advance returns nil when no more matches."
-  (helixel-chain-test-with-buffer "only text here\n"
-    (goto-char 1)
-    (should-not (helixel--chain-do-advance
-                 '(:kind search :pattern "xyz" :dir forward)))))
-
-(ert-deftest helixel-test-chain-do-advance-search-skip-edge ()
-  "Search advance with skip returns nil when at last match."
-  (helixel-chain-test-with-buffer "foo bar\n"
-    (goto-char 1)
-    (should (looking-at "foo"))
-    (should-not (helixel--chain-do-advance
-                 '(:kind search :pattern "foo" :dir forward :entry-kind insert)))))
-
-(ert-deftest helixel-test-chain-advance-edge-stops ()
-  "Line advance at buffer edge returns nil."
-  (helixel-chain-test-with-buffer "aaa\n"
-    (goto-char (point-max))
-    (should-not (helixel--chain-do-advance '(:kind line :dir forward :count 1)))))
-
-(ert-deftest helixel-test-chain-do-advance-skip-blank ()
-  "Line advance skips blank lines."
-  (helixel-chain-test-with-buffer "aaa\n   \nbbb\n"
-    (goto-char (point-min))
-    (should (helixel--chain-do-advance '(:kind line :dir forward :count 1)))
-    (should (= (line-number-at-pos) 3))
-    (should (string-match-p "bbb" (buffer-substring (line-beginning-position)
-                                                    (line-end-position))))
-    ;; Backward should also skip blank lines
-    (goto-char (point-min))
-    (search-forward "bbb")
-    (should (helixel--chain-do-advance '(:kind line :dir backward :count 1)))
-    (should (= (line-number-at-pos) 1))))
-
-(ert-deftest helixel-test-chain-do-advance-count-skip-blank ()
-  "Line advance with count > 1 skips blank lines."
-  (helixel-chain-test-with-buffer "aaa\n   \nbbb\n\nccc\n"
-    (goto-char (point-min))
-    (should (helixel--chain-do-advance '(:kind line :dir forward :count 2)))
-    (should (= (line-number-at-pos) 5))
-    (should (string-match-p "ccc" (buffer-substring (line-beginning-position)
-                                                    (line-end-position))))))
 
 (ert-deftest helixel-test-blank-line-p ()
   "Detect blank lines correctly."
@@ -268,45 +189,6 @@
   (helixel-chain-test-with-buffer "test\n"
     (should (helixel--chain-cursor-touches-p nil))))
 
-(ert-deftest helixel-test-chain-advance-data-line ()
-  "Advance data from line ctx."
-  (helixel-chain-test-with-buffer "aaa\nbbb\n"
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 2)
-                                    #'ignore "l"))
-           (data (helixel--chain-advance-data ctx)))
-      (should data)
-      (should (eq (plist-get data :kind) 'line))
-      (should (eq (plist-get data :dir) 'forward))
-      (should (eq (plist-get data :count) 2)))))
-
-(ert-deftest helixel-test-chain-advance-data-search ()
-  "Advance data from search ctx includes entry-kind."
-  (helixel-chain-test-with-buffer "test\n"
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir backward :entry-kind insert)
-                  #'ignore "s"))
-           (data (helixel--chain-advance-data ctx)))
-      (should data)
-      (should (eq (plist-get data :kind) 'search))
-      (should (string= (plist-get data :pattern) "foo"))
-      (should (eq (plist-get data :dir) 'backward))
-      (should (eq (plist-get data :entry-kind) 'insert)))))
-
-(ert-deftest helixel-test-chain-advance-data-nil-ctx ()
-  "Advance data from nil ctx returns nil."
-  (helixel-chain-test-with-buffer "test\n"
-    (should-not (helixel--chain-advance-data nil))))
-
-(ert-deftest helixel-test-chain-advance-data-non-line ()
-  "Non-line/search kinds (movement, textobj) return nil."
-  (helixel-chain-test-with-buffer "test\n"
-     (let* ((ctx (helixel-sel-create 'movement '(:moves ((forward-word . 1)))
-                                    #'ignore "m"))
-           (data (helixel--chain-advance-data ctx)))
-      (should-not data))))
-
-;; ── defining-kbd-macro guard ──
-
 (ert-deftest helixel-test-chain-no-record-during-kmacro ()
   "helixel--record-edit is inhibited during defining-kbd-macro."
   (helixel-chain-test-with-buffer "test\n"
@@ -317,14 +199,13 @@
 
 ;; ── End-to-end: chain advance failure in . and , ──
 
-(defun helixel-chain--make-test-tx (adv-data &optional sel-ctx)
-  "Create a minimal chain TX with ADV-DATA for testing ./, flows."
+(defun helixel-chain--make-test-tx (&optional sel-ctx)
+  "Create a minimal chain TX with SEL-CTX for testing ./, flows."
   (helixel-edit-make 'chain (or sel-ctx nil)
     :runner #'helixel--repeat-chain-runner
     :display "chain(test)"
     :kmacro (vconcat (kbd "x"))
     :chain-move-keys nil
-    :chain-advance adv-data
     :chain-init-ctx sel-ctx))
 
 (ert-deftest helixel-test-chain-dot-search-no-more ()
@@ -334,8 +215,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)
                   #'ignore "s"))
-           (tx (helixel-chain--make-test-tx
-                (helixel--chain-advance-data ctx) ctx))
+           (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (should (string-match-p "aborted"
@@ -347,8 +227,7 @@
     (goto-char (point-max))
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-chain--make-test-tx
-                (helixel--chain-advance-data ctx) ctx))
+           (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (should (string-match-p "aborted"
@@ -361,8 +240,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)
                   #'ignore "s"))
-           (tx (helixel-chain--make-test-tx
-                (helixel--chain-advance-data ctx) ctx))
+           (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (should-error (helixel-repeat-selection)))))
@@ -374,8 +252,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)
                   #'ignore "s"))
-           (tx (helixel-chain--make-test-tx
-                (helixel--chain-advance-data ctx) ctx))
+           (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t)
            (helixel--repeat-has-preview nil))
@@ -389,8 +266,7 @@
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-chain--make-test-tx
-                (helixel--chain-advance-data ctx) ctx))
+           (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t)
            (helixel--repeat-has-preview nil))
@@ -403,8 +279,7 @@
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'movement '(:moves ((forward-word . 1)))
                    #'ignore "m"))
-            (tx (helixel-chain--make-test-tx
-                 nil ctx))
+            (tx (helixel-chain--make-test-tx ctx))
             (helixel--last-tx tx)
             (helixel--inhibit-action-track t))
       ;; No advance data → should not error
@@ -430,8 +305,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
@@ -448,8 +322,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
@@ -467,8 +340,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -3)
@@ -484,8 +356,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
@@ -502,8 +373,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
@@ -520,8 +390,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -2)
@@ -543,8 +412,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection 0)
@@ -562,8 +430,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection -3)
@@ -581,8 +448,7 @@
            (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))
-                 :chain-advance (helixel--chain-advance-data ctx)))
+                 :kmacro (vconcat (kbd "x"))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection '(4))

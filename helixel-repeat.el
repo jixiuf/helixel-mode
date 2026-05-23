@@ -782,41 +782,19 @@ All modes use strategy + preview loops."
           (helixel--repeat-preview action prefix)))))))
 
 (defun helixel--repeat-selection-chain (tx prefix _chain-adv chain-move)
-  "Chain `,` preview: advance + movement-key replay."
+  "Chain `,` preview: wrap strategy with movement replay."
   (setq helixel--repeat-has-preview nil)
   (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
-         (mode (helixel-repeat-prefix-mode prefix))
-         (sel (helixel-edit-sel tx))
-         (kind (helixel-sel-get-kind sel)))
-    ;; Line all-buffer: first target at start needs movement
-    ;; replay before the loop advances.
-    (if (and (eq mode :all-buffer) (eq kind 'line))
-        (let* ((use-dir (if reverse-p 'backward 'forward))
-               (start (if (eq use-dir 'forward) (point-min) (point-max))))
-          (goto-char start)
-          (when chain-move (execute-kbd-macro chain-move))
-          (let ((chain-action
-                 (make-helixel-repeat-action
-                  :position-fn
-                  (lambda ()
-                    (when (helixel--chain-do-advance
-                           `(:kind line :dir ,use-dir :count ,(or (helixel-sel-line-count sel) 1)))
-                      (when chain-move (execute-kbd-macro chain-move))
-                      t))
-                  :execute-fn (lambda () nil))))
-            (helixel--repeat-all-remaining-preview chain-action)))
-      ;; All other chain cases: wrap strategy with movement replay.
-      (let* ((action (helixel--repeat-strategy tx reverse-p))
-             (wrapped-action
-              (make-helixel-repeat-action
-               :position-fn
-               (lambda ()
-                 (when (funcall
-                        (helixel-repeat-action-position-fn action))
-                   (when chain-move (execute-kbd-macro chain-move))
-                   t))
-               :execute-fn (lambda () nil))))
-        (helixel--repeat-preview wrapped-action prefix))))
+         (action (helixel--repeat-strategy tx reverse-p))
+         (wrapped-action
+          (make-helixel-repeat-action
+           :position-fn
+           (lambda ()
+             (when (funcall (helixel-repeat-action-position-fn action))
+               (when chain-move (execute-kbd-macro chain-move))
+               t))
+           :execute-fn (lambda () nil))))
+    (helixel--repeat-preview wrapped-action prefix))
   (setq helixel--repeat-chain-preview t)
   (setq helixel--repeat-has-preview t))
 
@@ -923,72 +901,6 @@ When BOUNDS is nil (no initial selection) always returns t."
                (and (>= cl sl) (<= cl el)))))
     t))
 
-(defun helixel--chain-advance-data (ctx)
-  "Return advance plist from init CTX, or nil if CTX is nil.
-Only produces advance data for `search' and `line' selection kinds;
-other kinds (movement, textobj, etc.) return nil for no auto-advance."
-  (when ctx
-    (let ((kind (helixel-sel-get-kind ctx)))
-      (cond ((eq kind 'search)
-             `(:kind search
-               :pattern ,(helixel-sel-search-pattern ctx)
-               :dir ,(helixel-sel-search-dir ctx)
-               :entry-kind ,(helixel-sel-search-entry-kind ctx)))
-            ((eq kind 'line)
-             `(:kind line
-               :dir ,(or (plist-get (helixel-sel--ctx-ensure ctx)
-                                    :dir)
-                         'forward)
-               :count ,(or (plist-get (helixel-sel--ctx-ensure ctx)
-                                      :count)
-                           1)))))))
-
-(defun helixel--chain-do-advance (adv-data)
-  "Execute advance using ADV-DATA plist, skipping blank lines for line kind.
-Return t on success, nil on edge or when search finds no more matches.
-For search with :entry-kind, skips the current match so `.` advances
-to the next match instead of re-finding the same one."
-  (let ((kind (plist-get adv-data :kind))
-        (dir (plist-get adv-data :dir))
-        (count (or (plist-get adv-data :count) 1))
-        (pat (plist-get adv-data :pattern))
-        (entry-kind (plist-get adv-data :entry-kind)))
-    (if (eq kind 'search)
-        (progn
-          (when entry-kind
-            (when (or (looking-at pat)
-                      (save-excursion
-                        (condition-case nil
-                            (progn
-                              (helixel-search--search pat 'backward)
-                              (let ((m-end (match-end 0))
-                                    (m-beg (match-beginning 0)))
-                                (if (= m-beg m-end)
-                                    (= (line-number-at-pos)
-                                       (line-number-at-pos m-end))
-                                  (<= (- (point) m-end) (length pat)))))
-                          (search-failed nil))))
-              (if (eq dir 'backward)
-                  (goto-char (max (point-min)
-                                  (1- (match-beginning 0))))
-                (goto-char (if (= (match-beginning 0) (match-end 0))
-                               (min (point-max)
-                                    (1+ (match-end 0)))
-                             (match-end 0))))))
-          (condition-case nil
-              (progn (helixel-search--search pat dir)
-                     (push-mark (match-beginning 0) t t)
-                     (goto-char (match-end 0))
-                     t)
-            (search-failed nil)))
-      (let ((inc (if (eq dir 'backward) -1 1))
-            (lines-left count))
-        (while (and (> lines-left 0) (= (forward-line inc) 0))
-          (unless (helixel--blank-line-p)
-            (setq lines-left (1- lines-left))))
-        (when (= lines-left 0)
-          (end-of-line)
-          t)))))
 
 ;; ── Chain lifecycle commands ──
 
@@ -1061,15 +973,11 @@ the original target range."
                (edit-keys (if move-len
                               (substring macro move-len)
                             macro))
-               (touching-p (helixel--chain-cursor-touches-p init-bounds))
-               (advance-data (when touching-p
-                               (helixel--chain-advance-data init-ctx)))
                (tx (helixel-edit-make 'chain init-ctx
                      :runner #'helixel--repeat-chain-runner
                      :display (format "chain(%d)" (length edit-keys))
                      :kmacro edit-keys
                      :chain-move-keys move-keys
-                     :chain-advance advance-data
                      :chain-init-ctx init-ctx)))
           ;; Now clean up markers
           (when init-bounds
@@ -1085,10 +993,9 @@ the original target range."
           (helixel-action-start 'edit 'chain)
           (helixel--live-edit-set tx)
           (helixel-action-commit)
-          (message "Chain recorded (%d keys, move=%d) %s"
+          (message "Chain recorded (%d keys, move=%d)"
                    (length edit-keys)
-                   (if move-keys (length move-keys) 0)
-                   (if advance-data "• . to advance" "• . to repeat")))
+                   (if move-keys (length move-keys) 0)))
       ;; Clean up markers even when recording empty
       (when helixel--repeat-chain-init-bounds
         (let ((mb (car helixel--repeat-chain-init-bounds))

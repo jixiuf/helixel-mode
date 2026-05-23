@@ -290,15 +290,14 @@ Errors propagate to caller's condition-case."
 
 (defun helixel--repeat-all-buffer-preview (action prefix)
   "Preview ACTION over entire buffer."
-  (save-excursion
-    (goto-char (if (helixel-repeat-prefix-reverse-p prefix)
-                   (point-max)
-                 (point-min)))
-    (let ((cnt 0)
-          (pos-fn (helixel-repeat-action-position-fn action)))
-      (while (funcall pos-fn)
-        (cl-incf cnt))
-      (helixel--repeat-echo cnt))))
+  (goto-char (if (helixel-repeat-prefix-reverse-p prefix)
+                 (point-max)
+               (point-min)))
+  (let ((cnt 0)
+        (pos-fn (helixel-repeat-action-position-fn action)))
+    (while (funcall pos-fn)
+      (cl-incf cnt))
+    (helixel--repeat-echo cnt)))
 
 (defun helixel--repeat-n-preview (action n)
   "Preview ACTION N times.

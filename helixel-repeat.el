@@ -427,6 +427,36 @@ For `insert-search-offset' and `insert-selection-*' entry-kinds."
             (when zlen (unless (eobp) (forward-char 1))))))
       (helixel--repeat-echo cnt))))
 
+(defun helixel--repeat-line-pass (tx sel advance start-pos dir cnt)
+  "Process one line for each step in direction DIR (1=forward,
+-1=backward).  Execute TX on the current line (via
+`helixel--recreate-selection' + `helixel--execute-edit'), advance
+according to ADVANCE (`line' or another mode).  Return updated CNT."
+  (save-excursion
+    (goto-char start-pos)
+    (forward-line dir)
+    (condition-case nil
+        (while t
+          (when (if (eq dir -1) (bobp) (eobp))
+            (signal 'user-error nil))
+          (setq cnt (1+ cnt))
+          (helixel--recreate-selection sel)
+          (helixel--execute-edit tx)
+          (if (eq advance 'line)
+              (progn
+                (when (/= (forward-line dir) 0)
+                  (signal 'user-error nil))
+                (when (if (eq dir -1) (bobp) (eobp))
+                  (signal 'user-error nil)))
+            (if (if (eq dir -1) (bobp) (eobp))
+                (signal 'user-error nil)
+              (unless (if (eq dir -1) (eolp) (bolp))
+                (forward-line dir))
+              (when (if (eq dir -1) (bobp) (eobp))
+                (signal 'user-error nil)))))
+      (user-error nil)))
+  cnt)
+
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
 
@@ -501,58 +531,14 @@ Failure during replay is reported but does not discard the stored edit."
                 (goto-char start-pos)
                 (beginning-of-line)
                 (setq start-pos (point)))
-              ;; Forward pass — like 0.
-              (save-excursion
-                (when start-pos (goto-char start-pos))
-                (forward-line line-dir)
-                (condition-case nil
-                    (while t
-                      (when (if (= line-dir -1) (bobp) (eobp))
-                        (signal 'user-error nil))
-                      (setq cnt (1+ cnt))
-                      (helixel--recreate-selection sel)
-                      (helixel--execute-edit tx)
-                      (if (eq advance 'line)
-                          (progn
-                            (when (/= (forward-line line-dir) 0)
-                              (signal 'user-error nil))
-                            (when (if (= line-dir -1)
-                                      (bobp) (eobp))
-                              (signal 'user-error nil)))
-                        (if (if (= line-dir -1) (bobp) (eobp))
-                            (signal 'user-error nil)
-                          (unless (if (= line-dir -1)
-                                      (eolp) (bolp))
-                            (forward-line line-dir))
-                          (when (if (= line-dir -1)
-                                    (bobp) (eobp))
-                            (signal 'user-error nil)))))
-                  (user-error nil)))
-              ;; Backward pass — like -.
-              (save-excursion
-                (when start-pos (goto-char start-pos))
-                (let ((rev-dir (- line-dir)))
-                  (forward-line rev-dir)
-                  (unless (= (point) start-pos)
-                    (condition-case nil
-                      (while t
-                        (setq cnt (1+ cnt))
-                        (helixel--recreate-selection sel)
-                        (helixel--execute-edit tx)
-                        (if (eq advance 'line)
-                            (when (/= (forward-line rev-dir) 0)
-                              (signal 'user-error nil))
-                          (if (if (= rev-dir -1) (bobp) (eobp))
-                              (signal 'user-error nil)
-                            (unless (if (= rev-dir -1)
-                                        (eolp) (bolp))
-                              (forward-line rev-dir))
-                            (when (if (= rev-dir -1)
-                                      (bobp) (eobp))
-                              (signal 'user-error nil)))))
-                    (user-error nil)))))
+              ;; Forward pass, then backward pass.
+              (setq cnt (helixel--repeat-line-pass
+                         tx sel advance start-pos line-dir cnt))
+              (setq cnt (helixel--repeat-line-pass
+                         tx sel advance start-pos (- line-dir) cnt))
               (helixel--repeat-echo cnt)))
-            ;; --- All remaining in reverse direction (- .) ---
+            
+;; --- All remaining in reverse direction (- .) ---
             ((and all-dir-p reverse-p (or search-sel-p line-sel-p))
              (helixel--repeat-all-remaining-action
               (helixel--repeat-strategy tx t)))
@@ -583,7 +569,6 @@ Failure during replay is reported but does not discard the stored edit."
             (let* ((marker (helixel-edit-marker tx))
                    (advance (helixel-edit-op-advance
                              (helixel-edit-op tx)))
-                   (line-dir -1)  ; start backward
                    (cnt 0)
                    (start-pos (and marker
                                    (marker-position marker))))
@@ -591,58 +576,11 @@ Failure during replay is reported but does not discard the stored edit."
                 (goto-char start-pos)
                 (beginning-of-line)
                 (setq start-pos (point)))
-              ;; Backward pass — like -.
-              (save-excursion
-                (when start-pos (goto-char start-pos))
-                (forward-line line-dir)
-                (condition-case nil
-                    (while t
-                      (when (if (= line-dir -1) (bobp) (eobp))
-                        (signal 'user-error nil))
-                      (setq cnt (1+ cnt))
-                      (helixel--recreate-selection sel)
-                      (helixel--execute-edit tx)
-                      (if (eq advance 'line)
-                          (progn
-                            (when (/= (forward-line line-dir) 0)
-                              (signal 'user-error nil))
-                            (when (if (= line-dir -1)
-                                      (bobp) (eobp))
-                              (signal 'user-error nil)))
-                        (if (if (= line-dir -1) (bobp) (eobp))
-                            (signal 'user-error nil)
-                          (unless (if (= line-dir -1)
-                                      (eolp) (bolp))
-                            (forward-line line-dir))
-                          (when (if (= line-dir -1)
-                                    (bobp) (eobp))
-                            (signal 'user-error nil)))))
-                  (user-error nil)))
-              ;; Forward pass — like 0.
-              (save-excursion
-                (when start-pos (goto-char start-pos))
-                (let ((fwd-dir 1))
-                  (forward-line fwd-dir)
-                  (condition-case nil
-                      (while t
-                        (when (eobp)
-                          (signal 'user-error nil))
-                        (setq cnt (1+ cnt))
-                        (helixel--recreate-selection sel)
-                        (helixel--execute-edit tx)
-                        (if (eq advance 'line)
-                            (progn
-                              (when (/= (forward-line fwd-dir) 0)
-                                (signal 'user-error nil))
-                              (when (eobp)
-                                (signal 'user-error nil)))
-                          (if (eobp)
-                              (signal 'user-error nil)
-                            (unless (bolp)
-                              (forward-line fwd-dir))
-                            (when (eobp)
-                              (signal 'user-error nil)))))
-                    (user-error nil))))
+              ;; Backward pass, then forward pass.
+              (setq cnt (helixel--repeat-line-pass
+                         tx sel advance start-pos -1 cnt))
+              (setq cnt (helixel--repeat-line-pass
+                         tx sel advance start-pos 1 cnt))
               (helixel--repeat-echo cnt)))
             ;; --- Chain all-buffer: use strategy
             ((and all-buffer-p (eq (helixel-edit-op tx) 'chain)

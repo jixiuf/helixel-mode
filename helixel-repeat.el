@@ -717,7 +717,15 @@ The chosen entry's :edit becomes the new `helixel--last-tx'."
                            collect (cons (format "%3d  %s" i
                                                  (helixel-edit-display tx))
                                          tx)))
-           (choice (completing-read "Repeat edit: " items nil t))
+           (collection
+            (lambda (s p a)
+              (if (eq a 'metadata)
+                  '(metadata
+                    (category . helixel-repeat-edit)
+                    (cycle-sort-function . identity)
+                    (display-sort-function . identity))
+                (complete-with-action a items s p))))
+           (choice (completing-read "Repeat edit: " collection nil t))
            (tx (cdr (assoc choice items))))
       (when tx
         (setq helixel--last-tx tx)

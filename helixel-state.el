@@ -39,11 +39,7 @@
 (require 'helixel-repeat)
 (require 'helixel-register)
 (require 'helixel-textobj)
-
-(declare-function helixel-surround-add "helixel-surround")
-(declare-function helixel-surround-add-tag "helixel-surround")
-(declare-function helixel-surround-delete "helixel-surround")
-(declare-function helixel-surround-replace "helixel-surround")
+(require 'helixel-surround)
 (declare-function helixel-search--search "helixel-search")
 (declare-function helixel--recreate-movement "helixel-common")
 (declare-function helixel--recreate-insert-selection-start "helixel-common")
@@ -106,11 +102,24 @@ commands (scroll, `;' action cycle, etc.)."
   "Current selection type.
 nil means charwise, `line' means linewise, `rect' means rectangle.")
 
-(defvar-local helixel--rect-replay-data nil
-  "Plist for rect change replay: (:col N :line-count N).")
+(defvar-local helixel--rect-replay-info nil
+  "Plist for rect change replay: (:col N :line-count N :marker M).
+Set by `helixel--rect-change', consumed by `helixel-insert-exit'
+via `helixel--rect-replay-get' and `helixel--rect-replay-clear'.")
 
-(defvar-local helixel--rect-replay-marker nil
-  "Marker at insertion point before entering insert for rect change.")
+(defun helixel--rect-replay-get ()
+  "Return the rect-replay info plist, or nil."
+  helixel--rect-replay-info)
+
+(defun helixel--rect-replay-set (info)
+  "Set rect-replay info to INFO plist."
+  (setq helixel--rect-replay-info info))
+
+(defun helixel--rect-replay-clear ()
+  "Clear rect-replay info, releasing the marker."
+  (when-let* ((m (plist-get helixel--rect-replay-info :marker)))
+    (set-marker m nil))
+  (setq helixel--rect-replay-info nil))
 
 (defvar helixel-global-mode nil
   "Enable Helixel mode in all buffers.")
@@ -319,7 +328,8 @@ No-op during dot-repeat replay, or when no region is active."
                              (lambda (c)
                                (let ((ms (helixel-sel-movement-moves c)))
                                  (let ((n (apply #'+ (mapcar #'cdr ms))))
-                                   (format "v%d" n)))))))))))
+                                   (format "v%d" n))))
+                             :advance #'helixel--repeat-advance-movement)))))))
 
 (defun helixel--enter-insert ()
   "Enter insert mode, recording buffer changes via the change hooks.
@@ -369,39 +379,29 @@ Sets up change-hook recording and switches to insert state."
                        helixel--change-track-marker (point))))))
     (unless executing-kbd-macro
       (when helixel--last-tx
-        ;; Store kmacro keys as primary replay mechanism.
-        ;; Skip empty vectors — they are truthy but useless,
-        ;; and cause nil-key errors in `helixel--execute-keys'.
-        (when (and keys (> (length keys) 0))
-          (setq helixel--last-tx
-                (helixel-edit-with-payload helixel--last-tx :keys keys)))
-        ;; Store executed commands (keymap-independent replay)
-        (when commands
-          (setq helixel--last-tx
-                (helixel-edit-with-payload helixel--last-tx :commands
-                                           commands)))
-        ;; Store text as replay fallback (tests, programmatic use)
-        (when text
-          (setq helixel--last-tx
-                (helixel-edit-with-payload helixel--last-tx :text text))
-          ;; For change operations, same text as :inserted-text
-          (when (eq (helixel-edit-op helixel--last-tx) 'change)
-            (setq helixel--last-tx
-                  (helixel-edit-with-payload helixel--last-tx
-                                             :inserted-text text))))
-        ;; The action ring entry's :edit is the same object as
-        ;; helixel--last-tx, so updating helixel--last-tx also
-        ;; updates the ring entry (same reference).
-        ;; Sync action ring front to point to the updated tx.
-        (let ((front (car helixel--action-ring)))
-          (when front
-            (plist-put front :edit helixel--last-tx)))))
+        (let ((tx helixel--last-tx))
+          ;; Store kmacro keys as primary replay mechanism.
+          ;; Skip empty vectors — they are truthy but useless,
+          ;; and cause nil-key errors in `helixel--execute-keys'.
+          (when (and keys (> (length keys) 0))
+            (setq tx (helixel-edit-with-payload tx :keys keys)))
+          ;; Store executed commands (keymap-independent replay)
+          (when commands
+            (setq tx (helixel-edit-with-payload tx :commands commands)))
+          ;; Store text as replay fallback (tests, programmatic use)
+          (when text
+            (setq tx (helixel-edit-with-payload tx :text text))
+            ;; For change operations, same text as :inserted-text
+            (when (eq (helixel-edit-op tx) 'change)
+              (setq tx (helixel-edit-with-payload tx
+                                                  :inserted-text text))))
+          (helixel--update-last-tx tx))))
     ;; Cleanup
     (when helixel--change-track-marker
       (set-marker helixel--change-track-marker nil)
       (setq helixel--change-track-marker nil))
     ;; Rect replay
-    (when helixel--rect-replay-data
+    (when (helixel--rect-replay-get)
       (helixel--rect-replay))
     ;; Switch state
     (let ((state (helixel--default-state-for-buffer)))

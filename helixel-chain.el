@@ -60,6 +60,12 @@ Cleared and vconcat'd by `helixel-repeat-chain-end'.")
 Set by `helixel--chain-post-cmd'.  Before this, keys go into
 `helixel--chain-move-keys'; after, into `helixel--chain-edit-keys'.")
 
+(defvar-local helixel--chain-last-tx-snapshot nil
+  "Snapshot of `helixel--last-tx' at chain-start.
+Used by `helixel--chain-post-cmd' to detect the first edit
+command by checking whether `helixel--last-tx' changed.
+More reliable than checking `:category' on `helixel--action'.")
+
 
 ;; ── Key recording (pre-command-hook, no kmacro) ──
 
@@ -80,12 +86,12 @@ Skips chain start/end/cancel commands."
 
 (defun helixel--chain-post-cmd ()
   "Post-command-hook: detect first edit, switch from move to edit phase.
-Once an edit command executes, all subsequent keys go to edit-keys.
-The transition point is the first command whose action category is `edit'."
+Once `helixel--last-tx' changes (meaning `helixel--record-edit' was
+called), all subsequent keys go to edit-keys."
   (when (and helixel--repeat-chaining
              (not helixel--chain-in-edit-phase)
-             helixel--action
-             (eq (plist-get helixel--action :category) 'edit))
+             helixel--last-tx
+             (not (eq helixel--last-tx helixel--chain-last-tx-snapshot)))
     ;; Move the edit command's own key from move-keys to edit-keys.
     (when helixel--chain-move-keys
       (push (car helixel--chain-move-keys) helixel--chain-edit-keys)
@@ -135,6 +141,7 @@ transaction, or `helixel-repeat-chain-cancel' to discard."
     (user-error "Already chaining or macro replay in progress"))
   (setq helixel--repeat-chaining t)
   (setq helixel--chain-in-edit-phase nil)
+  (setq helixel--chain-last-tx-snapshot helixel--last-tx)
   (setq helixel--chain-move-keys nil)
   (setq helixel--chain-edit-keys nil)
   (setq helixel--repeat-chain-init-ctx helixel--repeat-sel-ctx)
@@ -202,7 +209,7 @@ Determines advance behavior from the initial selection context
           (setq helixel--chain-in-edit-phase nil)
           (setq helixel--chain-move-keys nil)
           (setq helixel--chain-edit-keys nil)
-          (setq helixel--last-tx tx)
+          (helixel--update-last-tx tx)
           (helixel-action-start 'edit 'chain)
           (helixel--live-edit-set tx)
           (helixel-action-commit)

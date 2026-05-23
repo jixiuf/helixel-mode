@@ -44,13 +44,8 @@
 (require 'helixel-state)
 (require 'helixel-move)
 (require 'helixel-common)
-
-(declare-function helixel-repeat-chain-start "helixel-chain")
-(declare-function helixel-repeat-chain-end "helixel-chain")
-(declare-function helixel-surround-add "helixel-surround")
-(declare-function helixel-surround-add-tag "helixel-surround")
-(declare-function helixel-surround-delete "helixel-surround")
-(declare-function helixel-surround-replace "helixel-surround")
+(require 'helixel-chain)
+(require 'helixel-surround)
 
 ;; ── Prefix keymaps ──
 

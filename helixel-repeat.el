@@ -240,6 +240,16 @@ The `helixel-define-command' macro handles this automatically."
       (helixel--live-edit-set tx)
       (helixel-action-commit))))
 
+(defun helixel--update-last-tx (new-tx)
+  "Replace `helixel--last-tx' with NEW-TX and sync all references.
+Updates the action ring front's :edit entry so that \=`;\=` jumping
+and dot-repeat always see the same transaction object.
+All mutation of `helixel--last-tx' must go through this function."
+  (setq helixel--last-tx new-tx)
+  (let ((front (car helixel--action-ring)))
+    (when front
+      (plist-put front :edit new-tx))))
+
 ;; ---------------------------------------------------------------------------
 ;; Selection Replay
 
@@ -318,7 +328,11 @@ When only COMMANDS are available, call each interactively."
 Each function receives (TX ADVANCE-TAG), moves point to the next
 target, creates the selection region, and returns t on success or nil
 when no more targets exist.
-Third-party selection kinds add entries here."
+
+DEPRECATED for built-in kinds — advance functions are now embedded in
+`helixel-sel' structs via the :advance slot at sel-create time.
+Third-party selection kinds should either embed :advance in the struct
+or add entries here as a compatibility fallback."
   :type '(alist :key-type symbol
                 :value-type (choice (const nil) function))
   :group 'helixel)
@@ -522,20 +536,28 @@ TX is executed on each line.  Advance according to ADVANCE (e.g.
       (user-error nil)))
   cnt)
 
-(defun helixel--repeat-flip-tx-dir (tx)
-  "Permanently flip :dir in TX's sel ctx for line and search selections.
-Modifies TX in-place (same object as `helixel--last-tx').
-Like `N' for search, `-.' permanently reverses dot-repeat direction.
-No-op for movement, textobj, or nil selections."
-  (let* ((sel (helixel-edit-sel tx))
-         (kind (and sel (helixel-sel-get-kind sel))))
+(defun helixel--repeat-flip-tx-dir ()
+  "Permanently flip :dir in `helixel--last-tx' sel ctx.
+Like \=`N\=` for search, \=`-.\=` permanently reverses dot-repeat direction.
+No-op for movement, textobj, or nil selections.
+Uses `helixel--update-last-tx' to sync ring references.
+Returns the new tx on success, nil otherwise."
+  (when-let* ((tx helixel--last-tx)
+              (sel (helixel-edit-sel tx))
+              (kind (helixel-sel-get-kind sel)))
     (when (memq kind '(line search))
-      (let ((current-dir (if (eq kind 'search)
-                             (helixel-sel-search-dir sel)
-                           (helixel-sel-line-dir sel))))
-        (setf (helixel-edit-sel tx)
-              (helixel-sel-update-ctx sel :dir
-                                      (helixel--flip-dir current-dir)))))))
+      (let* ((current-dir (if (eq kind 'search)
+                              (helixel-sel-search-dir sel)
+                            (helixel-sel-line-dir sel)))
+             (new-tx (apply #'helixel-edit-make
+                            (helixel-edit-op tx)
+                            (helixel-sel-update-ctx
+                             sel :dir (helixel--flip-dir current-dir))
+                            :runner (helixel-edit-runner tx)
+                            :display (helixel-edit-display-field tx)
+                            (helixel-edit-payload tx))))
+        (helixel--update-last-tx new-tx)
+        new-tx))))
 
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
@@ -580,120 +602,101 @@ Failure during replay is reported but does not discard the stored edit."
          (sel (helixel-edit-sel tx))
          (op (helixel-edit-op tx))
          (sel-kind (and sel (helixel-sel-get-kind sel))))
-    (when flip-dir-p (helixel--repeat-flip-tx-dir tx))
+    (when flip-dir-p (setq tx (or (helixel--repeat-flip-tx-dir) tx)))
     (setq helixel--repeat-has-preview nil)
     (setq helixel--search-advance-done nil)
     (condition-case err
         (undo-amalgamate-change-group
           (cond
-           ;; ═══════════════════════════════════════════════════════
-           ;; Special all-buffer paths (unique per-kind logic)
-           ;; ═══════════════════════════════════════════════════════
+           ;; ═══════════════════════════════════════════════
+           ;; All-buffer (C-u .): special paths then generic
+           ;; ═══════════════════════════════════════════════
 
-           ;; Chain search: entire buffer via strategy
-           ((and all-buffer-p (eq op 'chain)
-                 (eq sel-kind 'search))
-            (helixel--repeat-all-buffer-action
-             (helixel--repeat-strategy tx reverse-p)
-             prefix))
+           ;; Search with entry-kind inserts text at every match
+           ((and all-buffer-p (eq sel-kind 'search)
+                 (helixel-sel-search-entry-kind sel))
+            (helixel--allbuffer-search-insert
+             tx sel
+             (if reverse-p (point-max) (point-min))
+             (if reverse-p 'backward 'forward)))
 
-           ;; Chain line: entire buffer with forced direction
-           ((and all-buffer-p (eq op 'chain)
-                 (eq sel-kind 'line))
-            (let* ((dir (if reverse-p 'backward 'forward))
-                   (forced-tx (helixel--force-direction tx dir))
-                   (start (if (eq dir 'forward)
-                              (point-min)
-                            (point-max))))
-              (save-excursion
-                (goto-char start)
-                (unless (helixel--blank-line-p)
-                  (helixel--execute-edit forced-tx)))
+           ;; Search all-buffer without entry-kind: force forward dir
+           ((and all-buffer-p (eq sel-kind 'search))
+            (let* ((forced-sel (helixel-sel-update-ctx
+                                sel :dir
+                                (if reverse-p 'backward 'forward)))
+                   (forced-tx (copy-helixel-edit tx)))
+              (setf (helixel-edit-sel forced-tx) forced-sel)
               (helixel--repeat-all-buffer-action
                (helixel--repeat-strategy forced-tx)
                prefix)))
 
-           ;; Non-chain search: insert path or strategy
-           ((and all-buffer-p (eq sel-kind 'search))
-            (let ((dir (if reverse-p 'backward 'forward))
-                  (start (if reverse-p (point-max) (point-min))))
-              (if (helixel-sel-search-entry-kind sel)
-                  (helixel--allbuffer-search-insert tx sel start dir)
-                (let* ((forced-sel (helixel-sel-update-ctx sel :dir dir))
-                       (forced-tx (copy-helixel-edit tx)))
-                  (setf (helixel-edit-sel forced-tx) forced-sel)
+           ;; Line all-buffer: forward + backward pass from marker
+           ((and all-buffer-p (eq sel-kind 'line))
+            ;; Chain: do first edit at buffer edge, then strategy
+            (if (eq op 'chain)
+                (let* ((dir (if reverse-p 'backward 'forward))
+                       (forced-tx (helixel--force-direction tx dir))
+                       (start (if (eq dir 'forward) (point-min) (point-max))))
+                  (save-excursion
+                    (goto-char start)
+                    (unless (helixel--blank-line-p)
+                      (helixel--execute-edit forced-tx)))
                   (helixel--repeat-all-buffer-action
                    (helixel--repeat-strategy forced-tx)
-                   prefix)))))
+                   prefix))
+              ;; Non-chain: forward + backward pass from marker
+              (let* ((marker (helixel-edit-marker tx))
+                     (first-dir
+                      (if reverse-p -1
+                        (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
+                     (cnt 0)
+                     (start-pos (and marker (marker-position marker))))
+                (when start-pos
+                  (goto-char start-pos)
+                  (beginning-of-line)
+                  (setq start-pos (point)))
+                (setq cnt (helixel--repeat-line-pass
+                           tx sel (helixel-edit-op-advance op)
+                           start-pos first-dir cnt))
+                (setq cnt (helixel--repeat-line-pass
+                           tx sel (helixel-edit-op-advance op)
+                           start-pos (- first-dir) cnt))
+                (helixel--repeat-echo cnt))))
 
-           ;; Non-chain line: forward + backward pass from recorded pos
-           ((and all-buffer-p (eq sel-kind 'line))
-            (let* ((marker (helixel-edit-marker tx))
-                   (advance (helixel-edit-op-advance op))
-                   (first-dir
-                    (if reverse-p -1
-                      (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
-                   (cnt 0)
-                   (start-pos (and marker
-                                   (marker-position marker))))
-              (when start-pos
-                (goto-char start-pos)
-                (beginning-of-line)
-                (setq start-pos (point)))
-              (setq cnt (helixel--repeat-line-pass
-                         tx sel advance start-pos first-dir cnt))
-              (setq cnt (helixel--repeat-line-pass
-                         tx sel advance start-pos (- first-dir) cnt))
-              (helixel--repeat-echo cnt)))
-
-           ;; ═══════════════════════════════════════════════════════
-           ;; Generic all-buffer / all-dir / reverse (strategy-driven)
-           ;; ═══════════════════════════════════════════════════════
-
-           ;; All-buffer: any other sel kind via strategy
+           ;; All-buffer generic: strategy handles chain + non-chain
            ((and all-buffer-p sel)
             (helixel--repeat-all-buffer-action
              (helixel--repeat-strategy tx reverse-p)
              prefix))
 
-           ;; All remaining direction (0.) — any sel kind
+           ;; ═══════════════════════════════════════════════
+           ;; All-remaining (0.) / reverse / normal
+           ;; ═══════════════════════════════════════════════
+
+           ;; All remaining (0.)
            ((and all-dir-p sel)
             (helixel--repeat-all-remaining-action
              (helixel--repeat-strategy tx reverse-p)))
 
-           ;; Reverse |N| times — any sel kind
-           ((and reverse-p (not all-buffer-p) (not all-dir-p) sel)
+           ;; Reverse |N| times
+           ((and reverse-p (not all-buffer-p) sel)
             (helixel--repeat-n-action
              (helixel--repeat-strategy tx t) n))
 
-           ;; Chain all-dir / reverse-n
-           ((and (or all-dir-p (and reverse-p (not all-buffer-p)))
-                 (eq op 'chain))
-            (if all-dir-p
-                (helixel--repeat-all-remaining-action
-                 (helixel--repeat-strategy tx reverse-p))
-              (helixel--repeat-n-action
-               (helixel--repeat-strategy tx t)
-               n)))
-
-           ;; All-buffer / all-dir without selection: single execution
+           ;; All-buffer / all-dir without selection: one-shot
            ((and (or all-dir-p all-buffer-p) (not sel))
             (helixel--execute-edit tx))
 
-           ;; ═══════════════════════════════════════════════════════
-           ;; Preview & normal paths
-           ;; ═══════════════════════════════════════════════════════
-
-           ;; Normal N times (preview path)
+           ;; Preview path (after ,)
            (use-preview
             (dotimes (_ n)
               (helixel--execute-edit tx)))
 
-           ;; Normal N times: use strategy + repeat-n
+           ;; Normal N times: strategy-driven
            (t
             (let* ((action (helixel--repeat-strategy tx))
-                   (orig-pos-fn (helixel-repeat-action-position-fn
-                                 action))
+                   (orig-pos-fn (helixel-repeat-action-position-fn action))
                    (wrapped-fn
                     (lambda ()
                       (when sel (deactivate-mark))
@@ -736,7 +739,7 @@ subsequent `.` uses this position directly."
                               (< raw-prefix 0))))
          (prefix (helixel--decode-repeat-prefix raw-prefix))
          (chain-p (eq (helixel-edit-op tx) 'chain)))
-    (when flip-dir-p (helixel--repeat-flip-tx-dir tx))
+    (when flip-dir-p (setq tx (or (helixel--repeat-flip-tx-dir) tx)))
     (unless (or (helixel-edit-sel tx) chain-p)
       (user-error (concat "Previous edit has no selection to repeat."
                           "  Use a textobj (e.g. ciw)"
@@ -783,7 +786,7 @@ The chosen entry's :edit becomes the new `helixel--last-tx'."
            (choice (completing-read "Repeat edit: " collection nil t))
            (tx (cdr (assoc choice items))))
       (when tx
-        (setq helixel--last-tx tx)
+        (helixel--update-last-tx tx)
         (helixel-repeat-edit)))))
 
 (defun helixel-repeat-debug ()

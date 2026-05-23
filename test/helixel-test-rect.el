@@ -323,7 +323,6 @@
     (helixel-change-thing-at-point)
     (insert "XXX")
     (helixel-insert-exit)
-    (should-not helixel--rect-replay-data)
-    (should-not helixel--rect-replay-marker)))
-
+    (should-not (helixel--rect-replay-get)))
+)
 ;;; helixel-test-rect.el ends here

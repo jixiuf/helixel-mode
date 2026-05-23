@@ -241,8 +241,6 @@ rectangle line via `helixel--rect-replay' — no state-switching side
                             ""))))))
 
 
-(declare-function helixel--selection-type "helixel-state")
-
 ;; ── Kill & Change ──
 
 (helixel-define-operator helixel-kill-thing-at-point
@@ -531,9 +529,8 @@ Set by the op runner from the transaction's :multiplier payload.")
           (indent-rigidly (region-beginning) (region-end) (- 1))
           (let* ((payload (helixel-edit-payload tx))
                  (mult (or (plist-get payload :multiplier) 1)))
-            (setf (helixel-edit-payload tx)
-                  (plist-put (copy-sequence payload)
-                             :multiplier (1+ mult))))
+            (helixel--update-last-tx
+             (helixel-edit-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p
@@ -572,9 +569,8 @@ Set by the op runner from the transaction's :multiplier payload.")
           (indent-rigidly (region-beginning) (region-end) 1)
           (let* ((payload (helixel-edit-payload tx))
                  (mult (or (plist-get payload :multiplier) 1)))
-            (setf (helixel-edit-payload tx)
-                  (plist-put (copy-sequence payload)
-                             :multiplier (1+ mult))))
+            (helixel--update-last-tx
+             (helixel-edit-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p

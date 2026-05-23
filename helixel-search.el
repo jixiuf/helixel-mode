@@ -163,7 +163,8 @@ So the next edit command (c/d/y) records it for `.` and `,` repeat."
            #'helixel--recreate-search
            ;; display closure
            (lambda (c)
-             (concat "/" (or (helixel-sel-search-pattern c) "?")))))))
+             (concat "/" (or (helixel-sel-search-pattern c) "?")))
+           :advance #'helixel--repeat-advance-search))))
 
 (defun helixel-search--done-hook ()
   "Hook called at the end of isearch to mark the match."
@@ -316,7 +317,8 @@ so that `isearch-repeat-forward' / `isearch-repeat-backward' find it."
          :dir ,(if forwardp 'forward 'backward)
          :inline-advance t)
        #'helixel--recreate-find-char
-       (format "f%c" char)))
+       (format "f%c" char)
+       :advance #'helixel--repeat-advance-movement))
     (helixel--live-find-char-set type char
                                  (if forwardp 'forward 'backward))
     (helixel-action-commit)

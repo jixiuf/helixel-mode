@@ -37,23 +37,14 @@
 ;; `helixel--repeat-strategy', which dispatches on the operator
 ;; (chain vs non-chain) and selection kind (line, search, etc.).
 ;;
-;; Modules defining new selection kinds add entries to
-;; `helixel-repeat-advance-alist' (for non-chain) or provide
-;; chain-advance data in the tx payload (for chain).
+;; Modules defining new selection kinds embed :advance in the
+;; `helixel-sel' struct at sel-create time, or add entries to
+;; `helixel-repeat-advance-alist' as a compatibility fallback.
 
 ;;; Code:
 
 (require 'helixel-data)
 (require 'helixel-repeat)
-
-(declare-function helixel--recreate-selection "helixel-repeat")
-(declare-function helixel--execute-edit "helixel-repeat")
-(declare-function helixel--repeat-echo "helixel-repeat")
-(declare-function helixel--repeat-chain-runner "helixel-chain")
-(declare-function helixel--repeat-advance-search "helixel-repeat")
-(declare-function helixel--repeat-advance-line "helixel-repeat")
-(declare-function helixel--flip-dir "helixel-repeat")
-(declare-function helixel--allbuffer-search-insert "helixel-repeat")
 
 ;; ═══════════════════════════════════════════════════════════════════════
 ;; Prefix parsing
@@ -122,8 +113,8 @@ REVERSE-P flips the direction for search/line selections."
          (kind (and sel (helixel-sel-get-kind sel)))
          (entry-kind (and sel (eq kind 'search)
                          (helixel-sel-search-entry-kind sel)))
-         ;; Read advance from sel struct (Phase 1); fall back to
-         ;; alist for backward-compat with third-party kinds.
+         ;; Read advance from sel struct (embedded at sel-create time).
+         ;; Fall back to alist for backward-compat (tests, third-party).
          (adv-fn (when sel
                    (or (helixel-sel-advance sel)
                        (cdr (assq kind helixel-repeat-advance-alist)))))

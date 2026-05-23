@@ -260,7 +260,8 @@ automatically, so this macro only does `push-mark' + activate."
                                 #'helixel--recreate-line
                                 (if (> new-count 1)
                                     (format "Lx%d" new-count)
-                                  "L"))))))
+                                  "L")
+                                :advance #'helixel--repeat-advance-line)))))
 
 (helixel-define-command helixel-select-line-up
     (:category movement :subcat lineselect :dir backward
@@ -287,7 +288,8 @@ automatically, so this macro only does `push-mark' + activate."
                                 #'helixel--recreate-line
                                 (if (> new-count 1)
                                     (format "L^x%d" new-count)
-                                  "L^"))))))
+                                  "L^")
+                                :advance #'helixel--repeat-advance-line)))))
 
 (helixel-define-command helixel-select-rectangle
     (:category movement :subcat rectselect
@@ -318,7 +320,8 @@ automatically, so this macro only does `push-mark' + activate."
                                 #'helixel--recreate-rect
                                 (if (> new-count 1)
                                     (format "rx%d" new-count)
-                                  "r"))))))
+                                  "r")
+                                :advance #'helixel--repeat-advance-line)))))
 
 ;;; Line-wise helpers
 
@@ -410,25 +413,24 @@ Replay typed text on all rectangle lines."
     (delete-rectangle beg end)
     (helixel--kill-new (helixel--rect-wise-text lines))
     (goto-char beg)
-    (setq helixel--rect-replay-marker (point-marker))
-    (setq helixel--rect-replay-data `(:col ,col :line-count ,line-count))
+    (setq helixel--rect-replay-info
+          `(:col ,col :line-count ,line-count :marker ,(point-marker)))
     (helixel--enter-insert)))
 
 (defun helixel--rect-replay ()
   "Replay inserted text from rect change on remaining rectangle lines."
-  (when (and helixel--rect-replay-data helixel--rect-replay-marker)
-    (let* ((col (plist-get helixel--rect-replay-data :col))
-           (line-count (plist-get helixel--rect-replay-data :line-count))
-           (text (buffer-substring helixel--rect-replay-marker (point))))
+  (when-let* ((info (helixel--rect-replay-get))
+              (col (plist-get info :col))
+              (line-count (plist-get info :line-count))
+              (marker (plist-get info :marker))
+              ((marker-position marker)))
+    (let ((text (buffer-substring marker (point))))
       (save-excursion
         (dotimes (_ (1- line-count))
           (forward-line 1)
           (move-to-column col t)
-          (insert text)))
-      (setq helixel--rect-replay-data nil)
-      (when helixel--rect-replay-marker
-        (set-marker helixel--rect-replay-marker nil)
-        (setq helixel--rect-replay-marker nil)))))
+          (insert text))))
+    (helixel--rect-replay-clear)))
 
 ;; ── Region replace / replace-char ──
 

@@ -96,6 +96,17 @@ DISPLAY is a string or a function (CTX) → string."
 
 ;; ── Builder ──
 
+(defsubst helixel-sel--extras-advance (extras)
+  "Extract :advance function from EXTRAS plist."
+  (plist-get extras :advance))
+
+(defun helixel-sel--extras-strip-advance (extras)
+  "Return EXTRAS with any :advance key-value pair removed.
+EXTRAS is a keyword plist."
+  (cl-loop for (k v) on extras by #'cddr
+           unless (eq k :advance)
+           append (list k v)))
+
 (defun helixel-sel-create (kind ctx recreate &optional display &rest extras)
   "Create a `helixel-sel' struct for selection KIND.
 CTX is a plist of extra data.
@@ -103,15 +114,15 @@ RECREATE is a function (CTX) that recreates the selection at point.
 DISPLAY is an optional string or function (CTX) → string.
 EXTRAS is an optional plist with keys:
   :advance — function (TX TAG) → boolean, positions cursor at next target."
-  (let ((adv (plist-get extras :advance)))
+  (let* ((adv (helixel-sel--extras-advance extras))
+         (rest (helixel-sel--extras-strip-advance extras)))
     (apply #'helixel-sel--internal
            :kind kind
            :ctx ctx
            :recreate recreate
            :display (or display (symbol-name kind))
            :advance adv
-           ;; Strip :advance from extras to avoid duplicate key.
-           (cl-remove-if (lambda (k) (eq k :advance)) extras :key #'car))))
+           rest)))
 
 ;; ── Core accessors ──
 

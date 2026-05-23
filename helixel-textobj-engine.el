@@ -28,9 +28,9 @@
 (require 'cl-lib)
 (require 'thingatpt)
 (require 'helixel-data)
+(require 'helixel-repeat)
 
 (declare-function helixel--recreate-textobj "helixel-textobj")
-(declare-function helixel--repeat-sel-set "helixel-repeat")
 
 (defvar helixel--selection-type)
 (defvar helixel--repeat-sel-ctx)
@@ -1196,7 +1196,8 @@ the same multiplier."
                (if-let* ((command (helixel-sel-textobj-command c)))
                    (replace-regexp-in-string "^helixel-mark-" ""
                                             (symbol-name command))
-                 "textobj"))))
+                 "textobj"))
+             :advance #'helixel--repeat-advance-textobj))
       (run-hook-with-args 'helixel-textobj-after-select-functions))))
 
 

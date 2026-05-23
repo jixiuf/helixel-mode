@@ -53,13 +53,7 @@
 
 (defvar helixel--surround-pairs)
 (defvar helixel--repeat-sel-ctx)
-(declare-function helixel--repeat-sel-get "helixel-repeat")
-(declare-function helixel--repeat-sel-set "helixel-repeat")
 (declare-function helixel-up-paren "helixel-textobj-engine")
-(declare-function helixel--record-edit "helixel-repeat")
-(declare-function helixel-action-start "helixel-action")
-(declare-function helixel-textobj-after-select-functions
-                  "helixel-textobj-engine")
 (defvar helixel-textobj-after-select-functions)
 (defvar helixel-textobj-inner-map)
 (defvar helixel-textobj-outer-map)

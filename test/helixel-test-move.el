@@ -85,7 +85,8 @@
     (should (= (- (region-end) (region-beginning)) 6))))
 
 (ert-deftest helixel-test-forward-WORD-start-multiple-lines ()
-  "Test forward movement across multiple lines."
+  "Test forward movement across multiple lines.
+When a WORD ends at end of line, stop at end of word (exclude newline)."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "first line\nsecond line\nthird")
@@ -93,22 +94,30 @@
     (helixel-forward-WORD-start)
     (should (= (point) 7))
     (should (= (- (region-end) (region-beginning)) 6))
+    ;; "line" ends at \n (position 11); region excludes the newline
+    (helixel-forward-WORD-start)
+    (should (= (point) 11))
+    (should (= (- (region-end) (region-beginning)) 4))
+    ;; From \n, jump to next WORD on next line
     (helixel-forward-WORD-start)
     (should (= (point) 12))
-    (should (= (- (region-end) (region-beginning)) 5))
+    (should (= (- (region-end) (region-beginning)) 1))
+    ;; Then to the next WORD
     (helixel-forward-WORD-start)
     (should (= (point) 19))
     (should (= (- (region-end) (region-beginning)) 7))))
 
 (ert-deftest helixel-test-forward-WORD-start-empty-lines ()
-  "Test forward movement with empty lines."
+  "Test forward movement with empty lines.
+When a WORD ends at end of line, stop at end of word (exclude newline)."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "first\n\n\nsecond")
-    (goto-char 5) ; before end of first line
+    (goto-char 5) ; before end of first line ('t' of "first")
     (helixel-forward-WORD-start)
-    (should (= (point) 7))
-    (should (= (- (region-end) (region-beginning)) 2))))
+    ;; "first" ends at \n (pos 6); region is just "t" without \n
+    (should (= (point) 6))
+    (should (= (- (region-end) (region-beginning)) 1))))
 
 (ert-deftest helixel-test-forward-WORD-start-at-end-of-buffer ()
   "Test that forward movement at end of buffer wraps back to last WORD."

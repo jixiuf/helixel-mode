@@ -546,8 +546,6 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
           (helixel--kill-new (helixel--linewise-text text))
           (delete-region (car bounds) (cdr bounds)))))
    (t
-    (when (and (eolp) (<= (region-beginning) (pos-bol)))
-      (forward-visible-line 1))
     (helixel--kill-new
      (filter-buffer-substring (region-beginning) (region-end)))
     (delete-region (region-beginning) (region-end)))))

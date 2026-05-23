@@ -227,24 +227,29 @@ WORD is a sequence of non-whitespace characters
 
 (defun helixel--forward-beginning (thing &optional count)
   "Move forward to beginning of THING.
-The motion is repeated COUNT times."
+The motion is repeated COUNT times.
+When the current THING ends at end of line (but not end of buffer),
+do not cross the newline; stop at the end of the current THING instead."
   (setq count (or count 1))
   (if (< count 0)
       (let ((pt (point)))
         (forward-thing thing count)
         (when (< (point) pt) (point)))
     (let ((bnd (bounds-of-thing-at-point thing))
-          (pt (point)))
+          (pt (point))
+          (inside-word nil))
       (when (and bnd (< (point) (cdr bnd)))
+        (setq inside-word t)
         (goto-char (cdr bnd)))
-      (ignore-errors
-        (forward-thing thing count)
-        (setq bnd (bounds-of-thing-at-point thing))
-        (when (and bnd (not (bobp))
-                   (not (and (bolp) (eobp))))
-          (backward-char))
-        (when bnd (beginning-of-thing thing))
-        (when (> (point) pt) pt)))))
+      (unless (and inside-word (eolp) (not (eobp)))
+        (ignore-errors
+          (forward-thing thing count)
+          (setq bnd (bounds-of-thing-at-point thing))
+          (when (and bnd (not (bobp))
+                     (not (and (bolp) (eobp))))
+            (backward-char))
+          (when bnd (beginning-of-thing thing))
+          (when (> (point) pt) pt))))))
 
 (defun helixel--forward-end (thing &optional count backward-char-p)
   "Move forward to end of THING.

@@ -67,6 +67,51 @@
     (helixel-repeat-edit 3)
     (should (string= (buffer-string) "e f"))))
 
+(ert-deftest helixel-test-movement-wd-single-word-line ()
+  "wd on a single-word line should NOT delete the trailing newline."
+  (helixel-test-with-buffer "hello\nworld"
+    (setq helixel--current-state 'normal)
+    (goto-char 2) ; on 'e' of "hello"
+    (helixel-forward-word-start)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "ello"))
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    ;; Should keep the newline: "h\nworld" not "hworld"
+    (should (string= (buffer-string) "h\nworld"))))
+
+(ert-deftest helixel-test-movement-wc-single-word-line ()
+  "wc on a single-word line should NOT delete the trailing newline."
+  (helixel-test-with-buffer "hello\nworld"
+    (setq helixel--current-state 'normal)
+    (goto-char 2) ; on 'e' of "hello"
+    (helixel-forward-word-start)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "ello"))
+    (setq last-command nil this-command 'helixel-change-thing-at-point)
+    (helixel-change-thing-at-point)
+    (insert "XXX")
+    (helixel-insert-exit)
+    ;; Should keep the newline: "hXXX\nworld" not "hXXXworld"
+    (should (string= (buffer-string) "hXXX\nworld"))))
+
+(ert-deftest helixel-test-movement-wd-single-word-line-dot ()
+  "wd then . on single-word lines should not delete newlines."
+  (helixel-test-with-buffer "aaa\nbbb\nccc"
+    (setq helixel--current-state 'normal)
+    (goto-char 2) ; on 'a' of "aaa"
+    (helixel-forward-word-start)
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    ;; First wd: delete "aa" (suffix of "aaa"), keep newline
+    (should (string= (buffer-string) "a\nbbb\nccc"))
+    ;; Manually advance past the newline into the next word
+    (forward-char) ; skip \n to 'b' of "bbb"
+    (helixel-repeat-edit)
+    ;; Dot-repeat: w from 'b' in "bbb" selects "bbb" (suffix),
+    ;; d deletes it; newlines are preserved
+    (should (string= (buffer-string) "a\n\nccc"))))
+
 
 ;; ── Textobj dot-repeat ──
 

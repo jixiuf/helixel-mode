@@ -900,7 +900,7 @@ the edit part (movement keys were already executed by ,)."
 
 (helixel-register-op chain
   :display "chain"
-  :repeat-advance nil    ; chain uses its own :chain-advance in payload
+  :repeat-advance nil    ; chain uses sel-driven advance via unified strategy
   :runner #'helixel--repeat-chain-runner)
 
 ;; ── Chain advance helpers ──

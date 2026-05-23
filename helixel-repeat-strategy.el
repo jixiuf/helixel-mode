@@ -49,7 +49,6 @@
 (declare-function helixel--recreate-selection "helixel-repeat")
 (declare-function helixel--execute-edit "helixel-repeat")
 (declare-function helixel--repeat-echo "helixel-repeat")
-(declare-function helixel--chain-do-advance "helixel-repeat")
 (declare-function helixel--repeat-chain-runner "helixel-repeat")
 (declare-function helixel--repeat-advance-search "helixel-repeat")
 (declare-function helixel--repeat-advance-line "helixel-repeat")

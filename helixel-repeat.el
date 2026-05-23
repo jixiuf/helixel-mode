@@ -629,27 +629,17 @@ subsequent `.` uses this position directly."
                           " or line/rect selection first")))
     (let* ((sel (helixel-edit-sel tx))
            (reverse-p (helixel-repeat-prefix-reverse-p prefix))
-           (mode (helixel-repeat-prefix-mode prefix))
-           (chain-move (and chain-p
-                            (plist-get (helixel-edit-payload tx)
-                                       :chain-move-keys))))
+           (mode (helixel-repeat-prefix-mode prefix)))
       (if (and sel (not chain-p)
                (not (memq (helixel-sel-get-kind sel) '(search line))))
           (helixel--recreate-selection sel)
-        (let* ((action (helixel--repeat-strategy tx reverse-p))
-               (wrapped-action
-                (make-helixel-repeat-action
-                 :position-fn
-                 (lambda ()
-                   (when (funcall
-                          (helixel-repeat-action-position-fn action))
-                     (when chain-move (execute-kbd-macro chain-move))
-                     t))
-                 :execute-fn (lambda () nil))))
+        (let* ((action (helixel--repeat-strategy tx reverse-p)))
+          ;; Strategy position-fn already handles chain-move-keys
+          ;; and advance for both chain and non-chain.
           (if (and (eq mode :n-times) (> (helixel-repeat-prefix-n prefix) 1))
               (helixel--repeat-n-preview
-               wrapped-action (helixel-repeat-prefix-n prefix))
-            (helixel--repeat-preview wrapped-action prefix)))))
+               action (helixel-repeat-prefix-n prefix))
+            (helixel--repeat-preview action prefix)))))
     (when chain-p (setq helixel--repeat-chain-preview t))
     (setq helixel--repeat-has-preview t)))
 

@@ -151,6 +151,15 @@ REVERSE-P flips the direction for search/line selections."
              (setf (helixel-edit-sel tmp-tx) sel)
              (when (funcall adv-fn tmp-tx adv-tag)
                (unless chain-p (helixel--recreate-selection sel))
+               (when chain-p
+                 ;; After line advance to BOL, go to EOL to match
+                 ;; where the chain recording started (cursor is
+                 ;; at region-end = EOL after select-line).
+                 (when (eq kind 'line)
+                   (end-of-line))
+                 (when-let* ((move-keys (plist-get (helixel-edit-payload tx)
+                                                    :chain-move-keys)))
+                   (execute-kbd-macro move-keys)))
                t)))
           ;; Cases 2+3: search selection
           ;; Chain: advance only (kmacro handles recreate).
@@ -160,7 +169,11 @@ REVERSE-P flips the direction for search/line selections."
                (when adv-fn
                  (let ((tmp-tx (copy-helixel-edit tx)))
                    (setf (helixel-edit-sel tmp-tx) sel)
-                   (funcall adv-fn tmp-tx adv-tag)))
+                   (when (funcall adv-fn tmp-tx adv-tag)
+                     (when-let* ((move-keys (plist-get (helixel-edit-payload tx)
+                                                        :chain-move-keys)))
+                       (execute-kbd-macro move-keys))
+                     t)))
              (progn (helixel--recreate-selection sel) t)))
           ;; Case 4: non-search, no adv-tag
           (sel
@@ -181,10 +194,14 @@ REVERSE-P flips the direction for search/line selections."
                  t))))
           ;; Case 5: no selection.
           ;; Chain with nil sel: one-shot (no advance data).
+          ;; Execute move-keys so cursor is positioned correctly.
           ;; Char-wise ops (~, r): each iteration self-contained.
           (t (if (eq (helixel-edit-op tx) 'chain)
                  (unless called
                    (setq called t)
+                   (when-let* ((move-keys (plist-get (helixel-edit-payload tx)
+                                                       :chain-move-keys)))
+                     (execute-kbd-macro move-keys))
                    t)
                t)))))
      :execute-fn

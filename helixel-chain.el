@@ -54,6 +54,30 @@ Nil until the first edit command is detected.")
   "Counter for commands executed during chain recording.
 Incremented by `helixel--chain-post-cmd'.")
 
+(defvar-local helixel--chain-keys nil
+  "List of key vectors collected during chain recording via pre-command-hook.
+Each element is the return value of `this-single-command-keys'
+from one command execution.  Collected by `helixel--chain-pre-cmd'.
+Vconcat'd by `helixel-repeat-chain-end' into the full kmacro.
+
+Does NOT use `start-kbd-macro'/`end-kbd-macro' because
+`start-kbd-macro' prepends `this-command-keys' (the chain-start
+key) into `last-kbd-macro', shifting all move-len indices.
+Manual collection avoids this offset entirely.")
+
+
+;; ── Key recording (pre-command-hook, no kmacro) ──
+
+(defun helixel--chain-pre-cmd ()
+  "Pre-command-hook: record each command's key sequence.
+Captures `this-single-command-keys' for key-based replay.
+Skips `helixel-repeat-chain-start' and `helixel-repeat-chain-end'
+so the start/end keys are never recorded."
+  (unless (memq this-command
+                '(helixel-repeat-chain-start
+                  helixel-repeat-chain-end
+                  helixel-repeat-chain-cancel))
+    (push (this-single-command-keys) helixel--chain-keys)))
 
 ;; ── Runner ──
 
@@ -92,9 +116,9 @@ the edit part (movement keys were already executed by `,')."
 
 ;;;###autoload
 (defun helixel-repeat-chain-start ()
-  "Start recording a kmacro for compound dot-repeat.
+  "Start recording keystrokes for compound dot-repeat.
 Snapshots the current selection context for advance decisions.
-While recording, all keystrokes are captured by kmacro.
+Keystrokes are collected via pre-command-hook (no kmacro).
 Call `helixel-repeat-chain-end' to finish and create a repeatable
 transaction, or `helixel-repeat-chain-cancel' to discard."
   (interactive)
@@ -103,57 +127,64 @@ transaction, or `helixel-repeat-chain-cancel' to discard."
   (setq helixel--repeat-chaining t)
   (setq helixel--chain-move-len nil)
   (setq helixel--chain-cmd-count 0)
+  (setq helixel--chain-keys nil)
   (setq helixel--repeat-chain-init-ctx helixel--repeat-sel-ctx)
   (setq helixel--repeat-chain-init-bounds
         (when (use-region-p)
           (cons (copy-marker (region-beginning))
                 (copy-marker (region-end)))))
   (deactivate-mark)
+  (add-hook 'pre-command-hook #'helixel--chain-pre-cmd nil t)
   (add-hook 'post-command-hook #'helixel--chain-post-cmd nil t)
-  (start-kbd-macro nil)
   (message "Chain rec • Q to finish"))
 
 ;;;###autoload
 (defun helixel-repeat-chain-end ()
-  "Stop kmacro recording and create a compound chain transaction.
+  "Stop keystroke recording and create a compound chain transaction.
+Collects the recorded keys from `helixel--chain-keys', splits them
+into move-keys (before first edit) and edit-keys (including edit),
+and stores a chain transaction in `helixel--last-tx'.
+
 Determines advance behavior from the initial selection context
-\(snapshotted at chain-start) and whether the cursor still touches
-the original target range."
+\(snapshotted at chain-start)."
   (interactive)
   (unless helixel--repeat-chaining
     (user-error "Not chaining"))
-  (when defining-kbd-macro
-    (end-kbd-macro))
   (setq helixel--repeat-chaining nil)
+  (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
   (remove-hook 'post-command-hook #'helixel--chain-post-cmd t)
-  (let ((macro (copy-sequence last-kbd-macro)))
+  ;; Build the macro from collected key vectors (no kmacro — no
+  ;; start-kbd-macro prepend).
+  (let* ((keys (nreverse helixel--chain-keys))
+         (macro (when keys (apply #'vconcat keys)))
+         (init-ctx helixel--repeat-chain-init-ctx)
+         ;; Merge entry-kind from live ctx (i/a updates it after snapshot)
+         (live-ctx helixel--repeat-sel-ctx)
+         (init-ctx (if (and init-ctx live-ctx
+                            (eq (helixel-sel-get-kind init-ctx)
+                                'search)
+                            (not (helixel-sel-search-entry-kind
+                                  init-ctx))
+                            (helixel-sel-search-entry-kind
+                             live-ctx))
+                       (helixel-sel-update-ctx
+                        init-ctx
+                        :entry-kind
+                        (helixel-sel-search-entry-kind live-ctx))
+                     init-ctx))
+         (init-bounds helixel--repeat-chain-init-bounds)
+         (move-len (and helixel--chain-move-len
+                        (> helixel--chain-move-len 0)
+                        (<= helixel--chain-move-len
+                            (length macro))
+                        helixel--chain-move-len))
+         (move-keys (when move-len
+                      (substring macro 0 move-len)))
+         (edit-keys (if move-len
+                        (substring macro move-len)
+                      macro)))
     (if (and macro (> (length macro) 0))
-        (let* ((init-ctx helixel--repeat-chain-init-ctx)
-               ;; Merge entry-kind from live ctx (i/a updates it after snapshot)
-               (live-ctx helixel--repeat-sel-ctx)
-               (init-ctx (if (and init-ctx live-ctx
-                                  (eq (helixel-sel-get-kind init-ctx)
-                                      'search)
-                                  (not (helixel-sel-search-entry-kind
-                                        init-ctx))
-                                  (helixel-sel-search-entry-kind
-                                   live-ctx))
-                             (helixel-sel-update-ctx
-                              init-ctx
-                              :entry-kind
-                              (helixel-sel-search-entry-kind live-ctx))
-                           init-ctx))
-               (init-bounds helixel--repeat-chain-init-bounds)
-               (move-len (and helixel--chain-move-len
-                              (> helixel--chain-move-len 0)
-                              (<= helixel--chain-move-len (length macro))
-                              helixel--chain-move-len))
-               (move-keys (when move-len
-                            (substring macro 0 move-len)))
-               (edit-keys (if move-len
-                              (substring macro move-len)
-                            macro))
-               (tx (helixel-edit-make 'chain init-ctx
+        (let* ((tx (helixel-edit-make 'chain init-ctx
                      :runner #'helixel--repeat-chain-runner
                      :display (format "chain(%d)" (length edit-keys))
                      :kmacro edit-keys
@@ -188,7 +219,6 @@ the original target range."
 (defun helixel-repeat-chain-cancel ()
   "Discard the current chain without recording."
   (interactive)
-  (when defining-kbd-macro (end-kbd-macro))
   (when helixel--repeat-chain-init-bounds
     (let ((mb (car helixel--repeat-chain-init-bounds))
           (me (cdr helixel--repeat-chain-init-bounds)))
@@ -198,6 +228,8 @@ the original target range."
   (setq helixel--repeat-chain-init-ctx nil)
   (setq helixel--repeat-chain-init-bounds nil)
   (setq helixel--chain-move-len nil)
+  (setq helixel--chain-keys nil)
+  (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
   (remove-hook 'post-command-hook #'helixel--chain-post-cmd t)
   (message "Chain cancelled"))
 

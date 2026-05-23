@@ -427,7 +427,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -445,7 +445,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -464,7 +464,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -481,7 +481,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -499,7 +499,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -517,7 +517,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -540,7 +540,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -559,7 +559,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))
@@ -569,8 +569,8 @@
       (helixel-repeat-selection -3)
       ;; -3, reverse: each advance skips current and goes backward
       ;; "foo d" (19) → "foo c" (13) → "foo b" (7) → "foo a" (1)
-      ;; Point ends at match-end of "foo a" = 4
-      (should (= 4 (point))))))
+      ;; Point ends at match-beginning of "foo a" = 1
+      (should (= 1 (point))))))
 
 (ert-deftest helixel-test-chain-comma-all-buffer-line ()
   "C-u , on chain line previews all lines from point-min."
@@ -578,7 +578,7 @@
     (goto-char 10)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain nil
+           (tx (helixel-edit-make 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))

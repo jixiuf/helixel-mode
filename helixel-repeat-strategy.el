@@ -101,39 +101,28 @@ Semantics:
 ;; Strategy lookup
 ;; ══════════════════════════════════════════════════════════════════════════════
 ;;
-;; Returns (ADVANCE-FN . EXECUTE-FN) for the given transaction.
-;; For chain txs, advance uses :chain-advance data and execute replays kmacro.
-;; For non-chain txs, advance uses `helixel-repeat-advance-alist'
-;; and execute calls the op runner.
+;; Returns a `helixel-repeat-action' for the given transaction.
+;; The same strategy builder works for both chain and non-chain ops:
+;; - Non-chain: reads sel from `helixel-edit-sel', advance tag from op registry
+;; - Chain: reads sel from `helixel-edit-sel' (set from init-ctx at record time),
+;;          advance tag derived from sel kind (op registry has nil for chain)
 
 (defun helixel--repeat-strategy (tx &optional reverse-p)
   "Return a `helixel-repeat-action' for TX.
-POSITION-FN: () → (BEG . END) or nil.  Find next target bounds.
-EXECUTE-FN:  () → nil.  Apply edit at current position.
-If REVERSE-P is non-nil, flip the advance direction."
-  (if (eq (helixel-edit-op tx) 'chain)
-      (helixel--chain-strategy tx reverse-p)
-    (helixel--nonchain-strategy tx reverse-p)))
-
-(defun helixel--chain-strategy (tx &optional reverse-p)
-  "Return a `helixel-repeat-action' for chain TX."
-  (let ((adv-data (plist-get (helixel-edit-payload tx) :chain-advance)))
-    (when (and reverse-p adv-data)
-      (setq adv-data (plist-put (copy-sequence adv-data) :dir
-                                (helixel--flip-dir (plist-get adv-data :dir)))))
-    (make-helixel-repeat-action
-     :position-fn (lambda () (and adv-data (helixel--chain-do-advance adv-data)))
-     :execute-fn  (lambda () (helixel--execute-edit tx)))))
+Works for both chain and non-chain transactions."
+  (helixel--nonchain-strategy tx reverse-p))
 
 (defun helixel--nonchain-strategy (tx &optional reverse-p)
-  "Return a `helixel-repeat-action' for non-chain TX."
+  "Return a `helixel-repeat-action' for TX (chain or non-chain)."
   (let* ((sel (helixel-edit-sel tx))
+         (chain-p (eq (helixel-edit-op tx) 'chain))
          (kind (and sel (helixel-sel-get-kind sel)))
          (entry-kind (and sel (eq kind 'search)
                          (helixel-sel-search-entry-kind sel)))
          (adv-fn (when kind
                    (cdr (assq kind helixel-repeat-advance-alist))))
-         (adv-tag (helixel-edit-op-advance (helixel-edit-op tx))))
+         (adv-tag (or (helixel-edit-op-advance (helixel-edit-op tx))
+                      (and chain-p (and sel (helixel-sel-get-kind sel))))))
     ;; For reverse: flip the direction in the sel ctx for search/line
     (when (and reverse-p sel (memq kind '(search line)))
       (let ((current-dir (if (eq kind 'search)
@@ -160,12 +149,18 @@ If REVERSE-P is non-nil, flip the advance direction."
            (let ((tmp-tx (copy-helixel-edit tx)))
              (setf (helixel-edit-sel tmp-tx) sel)
              (when (funcall adv-fn tmp-tx adv-tag)
-               (helixel--recreate-selection sel)
+               (unless chain-p (helixel--recreate-selection sel))
                t)))
           ;; Cases 2+3: search selection
+          ;; Chain: advance only (kmacro handles recreate).
+          ;; Non-chain: recreate handles advance+recreate together.
           ((and sel (eq kind 'search))
-           (helixel--recreate-selection sel)
-           t)
+           (if chain-p
+               (when adv-fn
+                 (let ((tmp-tx (copy-helixel-edit tx)))
+                   (setf (helixel-edit-sel tmp-tx) sel)
+                   (funcall adv-fn tmp-tx adv-tag)))
+             (progn (helixel--recreate-selection sel) t)))
           ;; Case 4: non-search, no adv-tag
           (sel
            (let ((k (helixel-sel-get-kind sel)))
@@ -183,9 +178,14 @@ If REVERSE-P is non-nil, flip the advance direction."
                  (setq called t)
                  (helixel--recreate-selection sel)
                  t))))
-          ;; Case 5: no selection (char-wise ops: ~, r)
-          ;; No advance; each iteration is self-contained
-          (t t))))
+          ;; Case 5: no selection.
+          ;; Chain with nil sel: one-shot (no advance data).
+          ;; Char-wise ops (~, r): each iteration self-contained.
+          (t (if (eq (helixel-edit-op tx) 'chain)
+                 (unless called
+                   (setq called t)
+                   t)
+               t)))))
      :execute-fn
      (lambda ()
        (helixel--execute-edit tx)))))

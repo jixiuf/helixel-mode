@@ -337,11 +337,15 @@ reuse it without re-searching.  Returns nil if no more matches."
     (looking-at-p "[ \t]*$")))
 
 (defun helixel--repeat-advance-line (tx _advance-tag)
-  "Advance TX past `count' non-blank lines in selection's direction.
+  "Advance TX past the current line target in selection's direction.
+For append entry-kind (cursor at region-end after op), advance 1 line.
+Otherwise advance by the selection count.
 Returns nil at buffer edge."
   (let* ((sel (helixel-edit-sel tx))
          (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
-         (count (helixel-sel-line-count sel))
+         (entry-kind (plist-get (helixel-sel-get-ctx sel) :entry-kind))
+         (count (if (eq entry-kind 'append) 1
+                  (helixel-sel-line-count sel)))
          (lines-left count))
     (while (and (> lines-left 0) (= (forward-line dir) 0))
       (unless (helixel--blank-line-p)

@@ -215,6 +215,55 @@ Second `. ` advances from line 3 to line 5."
                      (concat "line1\nline2\nhelloline3\n"
                              "line4\nhelloline5\nline6\nline7\n")))))
 
+(ert-deftest helixel-test-repeat-line-advance-append-count2 ()
+  "`. ` after xxafoo<ESC> (2-line sel, append) advances exactly 2 lines.
+Cursor at region-end (append) should advance 1 line past selection,
+not count lines — bug where advancing by count from last selected
+line's EOL overshoots and selects lines 4-5 instead of 3-4."
+  (helixel-test-with-buffer
+      "line1\nline2\nline3\nline4\nline5\n"
+    (goto-char (point-min))
+    ;; Simulate xx: select 2 lines forward, point ends at EOL of line 2
+    ;; Simulate afoo<ESC>: entry-kind append, point stays at EOL of line 2
+    (end-of-line)                       ; line 1
+    (forward-line 1)                    ; line 2
+    (end-of-line)                       ; EOL of line 2 (where a leaves point)
+    (let ((helixel--repeat-sel-ctx
+           (helixel-sel-create 'line
+               '(:dir forward :count 2 :entry-kind append)
+               #'helixel--recreate-line "L")))
+      (helixel--record-edit 'insert-text))
+    (setq helixel--last-tx
+          (helixel-edit-with-payload helixel--last-tx :text "foo"))
+    ;; Point at EOL of line 2 before dot-repeat (where a leaves it).
+    (should (= (line-number-at-pos) 2))
+    (helixel-repeat-edit)
+    ;; Should append "foo" at EOL of line 4 (the 2nd line of the
+    ;; 2-line target starting at line 3), NOT line 5.
+    (should (string= (buffer-string)
+                     "line1\nline2\nline3\nline4foo\nline5\n")))
+  ;; Second dot-repeat: advance by 2 more → lines 5-6 target
+  (helixel-test-with-buffer
+      "line1\nline2\nline3\nline4\nline5\nline6\nline7\n"
+    (goto-char (point-min))
+    (end-of-line)                       ; line 1
+    (forward-line 1)                    ; line 2
+    (end-of-line)                       ; EOL of line 2
+    (let ((helixel--repeat-sel-ctx
+           (helixel-sel-create 'line
+               '(:dir forward :count 2 :entry-kind append)
+               #'helixel--recreate-line "L")))
+      (helixel--record-edit 'insert-text))
+    (setq helixel--last-tx
+          (helixel-edit-with-payload helixel--last-tx :text "foo"))
+    (helixel-repeat-edit)               ; append on line 4 (lines 3-4 target)
+    (should (string= (buffer-string)
+                     "line1\nline2\nline3\nline4foo\nline5\nline6\nline7\n"))
+    (helixel-repeat-edit)               ; advance 1 more → lines 5-6 target
+    (should (string= (buffer-string)
+                     (concat "line1\nline2\nline3\nline4foo\n"
+                             "line5\nline6foo\nline7\n")))))
+
 (ert-deftest helixel-test-repeat-line-insert-move-forward-dot ()
   "`. ` after xi<M-f>foo<ESC> replays cursor-movement via kmacro keys.
 M-f (meta key) is a non-character integer — must go through

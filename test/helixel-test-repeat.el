@@ -510,4 +510,23 @@ After `-,' a plain `.` uses the preview position (helixel--repeat-has-preview)."
     (should (string= (buffer-string)
                      "line1X\nline2\nline3\nline4\n"))))
 
+(ert-deftest helixel-test-repeat-keys-mode-remap ()
+  "`. ` replays insert keys when self-insert-command is remapped.
+In org-mode self-insert-command is remapped to org-self-insert-command.
+Key replay must detect remapped commands and use insert-char rather
+than call-interactively (which triggers mode-specific side effects)."
+  (helixel-test-with-buffer "hello world hello"
+    (goto-char 1)
+    (delay-mode-hooks (org-mode))
+    ;; Simulate keys recorded in org-mode (self-insert is remapped)
+    (setq helixel--last-tx
+          (helixel-edit-make 'insert-text nil
+            :keys (kbd "foo")
+            :commands '(org-self-insert-command
+                        org-self-insert-command
+                        org-self-insert-command)
+            :text "foo"))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "foohello world hello"))))
+
 ;;; helixel-test-repeat.el ends here

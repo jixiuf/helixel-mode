@@ -362,8 +362,10 @@ Sets up change-hook recording and switches to insert state."
                       (buffer-substring
                        helixel--change-track-marker (point))))))
     (when helixel--last-tx
-      ;; Store kmacro keys as primary replay mechanism
-      (when keys
+      ;; Store kmacro keys as primary replay mechanism.
+      ;; Skip empty vectors — they are truthy but useless,
+      ;; and cause nil-key errors in `helixel--execute-keys'.
+      (when (and keys (> (length keys) 0))
         (setq helixel--last-tx
               (helixel-edit-with-payload helixel--last-tx :keys keys)))
       ;; Store executed commands (keymap-independent replay)

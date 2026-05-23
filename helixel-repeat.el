@@ -244,24 +244,39 @@ dispatches on struct closures."
 
 (defun helixel--execute-keys (keys &optional commands)
   "Execute recorded KEYS with optional COMMANDS.
-When COMMANDS are available (from `pre-command-hook' recording),
-call each recorded command directly — keymap-independent.
-`self-insert-command' is handled specially via `insert-char' with
-the corresponding key (avoids `last-command-event' dependency).
-When COMMANDS are nil, fall back to key-based replay."
+When both KEYS and COMMANDS are available, use command-based replay:
+`self-insert-command' (and its -*self-insert-command variants) use
+`insert-char' with the corresponding key; other commands use
+`call-interactively'.  This avoids `last-command-event' dependency
+and mode-specific side effects from remapped self-insert commands.
+When only KEYS are available, use key-based replay.
+When only COMMANDS are available, call each interactively."
   (let ((helixel--inhibit-repeat-record t)
-        (helixel--inhibit-action-track t))
-    (if commands
-        ;; Command-based replay: call recorded commands directly
-        (cl-loop for cmd in commands
-                 for key in (append keys nil)
-                 do (if (eq cmd 'self-insert-command)
-                        (insert-char key 1 t)
-                      (call-interactively cmd)))
-      ;; Key-based fallback: insert-char for printable
-      ;; characters, execute-kbd-macro for control/special
-      ;; keys (e.g. C-d, backspace, C-a).
-      (dolist (key (append keys nil))
+        (helixel--inhibit-action-track t)
+        (key-list (when (and keys (> (length keys) 0))
+                    (append keys nil))))
+    (cond
+     ;; Both keys and commands: use commands with key-based
+     ;; insert-char for self-insert commands.  Detect self-insert
+     ;; commands by naming convention (avoids command-remapping which
+     ;; returns `undefined' in suppressed keymaps).
+     ((and commands key-list)
+      (cl-loop for cmd in commands
+               for key = (pop key-list)
+               do (if (and key
+                           (or (eq cmd 'self-insert-command)
+                               (let ((name (symbol-name cmd)))
+                                 (string-match
+                                  "-self-insert-command\\'" name))))
+                      (insert-char key 1 t)
+                    (call-interactively cmd))))
+     ;; Only commands (no keys): call each interactively.
+     (commands
+      (dolist (cmd commands)
+        (call-interactively cmd)))
+     ;; Only keys (no commands): fall back to key-based replay.
+     (key-list
+      (dolist (key key-list)
         (if (and (characterp key) (>= key 32) (/= key 127))
             (insert-char key 1 t)
           (let ((win (selected-window)))
@@ -273,7 +288,7 @@ When COMMANDS are nil, fall back to key-based replay."
                         (set-window-buffer win (current-buffer))
                         (execute-kbd-macro (vector key) 1))
                     (set-window-buffer win prev-buf)))
-              (execute-kbd-macro (vector key) 1))))))))
+              (execute-kbd-macro (vector key) 1)))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Auto-advance — per-selection-kind advance for `.` replay

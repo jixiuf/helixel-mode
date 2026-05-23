@@ -135,77 +135,64 @@ REVERSE-P flips the direction for search/line selections."
                                           (helixel--flip-dir current-dir)))))
     (make-helixel-repeat-action
      :position-fn
-     ;; Advance: handles 4 cases —
-     ;; 1. adv-tag + non-entry-kind: call explicit advance, then recreate
-     ;; 2. search + entry-kind (insert ops): let recreate-search handle
-     ;;    everything (includes guard against zero-length anchor loops)
-     ;; 3. search without entry-kind: recreate handles loop via errors
-     ;; 4. non-search, no adv-tag: recreate at current position.
-     ;; Line/rect: edge detection for natural loop termination.
-     ;; Others (movement, textobj): one-shot.
+     ;; Unified advance: 3 branches, kind-agnostic.
+     ;; Branch 1: has advance-fn + advance-tag (non-entry-kind).
+     ;;   The advance fn does everything — positions cursor AND
+     ;;   creates the selection region.
+     ;; Branch 2: any sel kind, no separate advance → recreate
+     ;;   function handles both positioning and region creation.
+     ;;   Catches errors to stop iteration at buffer edge.
+     ;; Branch 3: no sel → one-shot (chain kmacro or no-op).
      (let ((called nil))
        (lambda ()
          (cond
-          ;; Case 1: explicit advance (but NOT for insert ops).
-          ;; Advance function reads from TX; use tmp-tx with flipped sel.
-          ((and adv-fn adv-tag (not entry-kind))
+          ;; Branch 1: non-chain, explicit advance function.
+          ;; "Separate" adv-fns (line, search) only position cursor;
+          ;; "Inline" adv-fns (movement, textobj) position & recreate
+          ;; in one step (the movement/textobj commands inherently
+          ;; create the region).  Skip the extra recreate for inline
+          ;; adv-fns to avoid double-moving.
+          ((and adv-fn adv-tag (not chain-p) (not entry-kind))
            (let ((tmp-tx (copy-helixel-edit tx)))
              (setf (helixel-edit-sel tmp-tx) sel)
              (when (funcall adv-fn tmp-tx adv-tag)
-               (unless chain-p (helixel--recreate-selection sel))
-               (when chain-p
-                 ;; After line advance to BOL, go to EOL to match
-                 ;; where the chain recording started (cursor is
-                 ;; at region-end = EOL after select-line).
-                 (when (eq kind 'line)
-                   (end-of-line))
-                 (when-let* ((move-keys (plist-get (helixel-edit-payload tx)
-                                                    :chain-move-keys)))
-                   (execute-kbd-macro move-keys)))
+               (unless (memq kind '(movement textobj))
+                 (helixel--recreate-selection sel))
                t)))
-          ;; Cases 2+3: search selection
-          ;; Chain: advance only (kmacro handles recreate).
-          ;; Non-chain: recreate handles advance+recreate together.
-          ((and sel (eq kind 'search))
+
+          ;; Branch 2: any sel → recreate handles everything.
+          ;; Covers search (chain + non-chain), line, rect,
+          ;; movement, textobj, insert-*, etc.
+          (sel
            (if chain-p
+               ;; Chain: use adv-fn for cursor positioning,
+               ;; then replay kmacro keys.
                (when adv-fn
                  (let ((tmp-tx (copy-helixel-edit tx)))
                    (setf (helixel-edit-sel tmp-tx) sel)
                    (when (funcall adv-fn tmp-tx adv-tag)
-                     (when-let* ((move-keys (plist-get (helixel-edit-payload tx)
-                                                        :chain-move-keys)))
+                     (when (eq kind 'line) (end-of-line))
+                     (when-let* ((move-keys (plist-get
+                                              (helixel-edit-payload tx)
+                                              :chain-move-keys)))
                        (execute-kbd-macro move-keys))
                      t)))
-             (progn (helixel--recreate-selection sel) t)))
-          ;; Case 4: non-search, no adv-tag
-          (sel
-           (let ((k (helixel-sel-get-kind sel)))
-             (if (memq k '(line rect))
-                 ;; Line/rect: check buffer edge, then recreate
-                 (let ((dir (if (eq k 'line)
-                                (helixel-sel-line-dir sel)
-                              'forward)))
-                   (when (if (eq dir 'backward) (bobp) (eobp))
-                     (user-error "No more targets"))
-                   (helixel--recreate-selection sel)
-                   t)
-               ;; Movement/textobj: one-shot
+             ;; Non-chain: call recreate; error = no more targets.
+             (condition-case nil
+                 (progn (helixel--recreate-selection sel) t)
+               (error nil))))
+
+          ;; Branch 3: no sel — one-shot (chain kmacro or no-op).
+          (t
+           (if (eq (helixel-edit-op tx) 'chain)
                (unless called
                  (setq called t)
-                 (helixel--recreate-selection sel)
-                 t))))
-          ;; Case 5: no selection.
-          ;; Chain with nil sel: one-shot (no advance data).
-          ;; Execute move-keys so cursor is positioned correctly.
-          ;; Char-wise ops (~, r): each iteration self-contained.
-          (t (if (eq (helixel-edit-op tx) 'chain)
-                 (unless called
-                   (setq called t)
-                   (when-let* ((move-keys (plist-get (helixel-edit-payload tx)
-                                                       :chain-move-keys)))
-                     (execute-kbd-macro move-keys))
-                   t)
-               t)))))
+                 (when-let* ((move-keys (plist-get
+                                          (helixel-edit-payload tx)
+                                          :chain-move-keys)))
+                   (execute-kbd-macro move-keys))
+                 t)
+             t)))))
      :execute-fn
      (lambda ()
        (helixel--execute-edit tx)))))

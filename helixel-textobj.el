@@ -331,10 +331,23 @@ Example:
 
 (defun helixel--recreate-textobj (ctx)
   "Replay a textobj selection from CTX.
-Skips forward over whitespace when not in region mode."
+Skips past the current target (if cursor is inside one), then
+skips whitespace, then re-executes the textobj command.
+Signals errors when no more targets exist."
   (when-let* ((command (helixel-sel-textobj-command ctx))
               (cnt (helixel-sel-textobj-count ctx)))
     (unless (region-active-p)
+      ;; Skip past the current target if cursor is inside one.
+      ;; This handles ciw→. where the inserted text becomes
+      ;; the new current target.
+      (condition-case nil
+          (save-excursion
+            (funcall command 1)
+            (when (and (use-region-p)
+                       (<= (region-beginning) (point))
+                       (< (point) (region-end)))
+              (goto-char (region-end))))
+        (error nil))
       (when (looking-at-p "[ \t\n\r\f]")
         (skip-chars-forward " \t\n\r\f")))
     (condition-case nil

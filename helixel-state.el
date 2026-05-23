@@ -197,8 +197,7 @@ BODY is the command's business logic."
          (params (plist-get metadata :params))
          (track-visual
           (when (eq cat 'movement)
-            `((when (eq helixel--current-state 'visual)
-                (helixel--track-visual-move ',name))))))
+            `((helixel--track-visual-move ',name)))))
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
@@ -291,29 +290,36 @@ the edit for `.` replay."
   (deactivate-mark))
 
 (defun helixel--track-visual-move (cmd)
-  "Append movement CMD to `helixel--repeat-sel-ctx' for visual-mode moves.
-Creates/updates a `helixel-sel' struct of kind `movement'.
-No-op during dot-repeat replay."
-  (when (and (eq helixel--current-state 'visual)
-             (not helixel--inhibit-repeat-record))
-    (let ((ctx helixel--repeat-sel-ctx)
-          (entry (cons cmd 1)))
-      (if (and ctx (eq (helixel-sel-get-kind ctx) 'movement))
-          (let* ((moves (helixel-sel-movement-moves ctx))
-                 (last (car moves)))
-            (if (and last (eq (car last) cmd))
-                (setcdr last (1+ (cdr last)))
-               (helixel--repeat-sel-set
-                    (helixel-sel-update-ctx ctx :moves
-                                            (cons entry moves)))))
-         (helixel--repeat-sel-set
-              (helixel-sel-create 'movement
-                                  `(:moves (,entry))
-                                  #'helixel--recreate-movement
-                                  (lambda (c)
-                                    (let ((ms (helixel-sel-movement-moves c)))
-                                      (let ((n (apply #'+ (mapcar #'cdr ms))))
-                                        (format "v%d" n))))))))))
+  "Append movement CMD to `helixel--repeat-sel-ctx'.
+Creates/updates a `helixel-sel' struct of kind `movement' whenever
+a region is active — from visual mode or normal-mode movements that
+created a selection (e.g. w, e, b).
+No-op during dot-repeat replay, or when no region is active."
+  (when (and (not helixel--inhibit-repeat-record)
+             (use-region-p))
+    (let* ((ctx helixel--repeat-sel-ctx)
+           (entry (cons cmd 1)))
+      (cond
+       ;; Update: extend existing movement sel.
+       ((and ctx (eq (helixel-sel-get-kind ctx) 'movement))
+        (let* ((moves (helixel-sel-movement-moves ctx))
+               (last (car moves)))
+          (if (and last (eq (car last) cmd))
+              (setcdr last (1+ (cdr last)))
+            (helixel--repeat-sel-set
+             (helixel-sel-update-ctx ctx :moves
+                                     (cons entry moves))))))
+       ;; Create: first movement that made a region.
+       ;; Only when no sel exists — never clobber line/rect/textobj.
+       ((null ctx)
+        (helixel--repeat-sel-set
+         (helixel-sel-create 'movement
+                             `(:moves (,entry))
+                             #'helixel--recreate-movement
+                             (lambda (c)
+                               (let ((ms (helixel-sel-movement-moves c)))
+                                 (let ((n (apply #'+ (mapcar #'cdr ms))))
+                                   (format "v%d" n)))))))))))
 
 (defun helixel--enter-insert ()
   "Enter insert mode, recording buffer changes via the change hooks.

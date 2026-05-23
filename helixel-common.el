@@ -56,6 +56,10 @@ at the appropriate offset on the selected line:
     (if (eq (helixel-sel-line-dir ctx) 'backward)
         (helixel-select-line-up n)
       (helixel-select-line n))
+    ;; Signal error when buffer is empty (nothing to select).
+    ;; The strategy catches this to stop iteration.
+    (when (and (bobp) (eobp))
+      (user-error "No more targets"))
     (when entry-kind
       ;; Position cursor for key/text insertion.
       ;; Use region-beginning/region-end because helixel-select-line
@@ -87,11 +91,16 @@ at the appropriate offset on the selected line:
     (setq helixel--selection-type 'rect)))
 
 (defun helixel--recreate-movement (ctx)
-  "Replay movement selection from CTX."
-  (let ((helixel--current-state 'visual))
+  "Replay movement selection from CTX.
+Signals `user-error' when point does not move (no more targets)."
+  (let ((helixel--current-state 'visual)
+        (saved-pos (point)))
     (dolist (m (reverse (helixel-sel-movement-moves ctx)))
       (dotimes (_ (cdr m))
-        (funcall (car m))))))
+        (funcall (car m))))
+    ;; Signal error when movement commands produced no displacement.
+    (when (= (point) saved-pos)
+      (user-error "No more targets"))))
 
 (defun helixel--recreate-search (ctx)
   "Replay search selection from CTX.

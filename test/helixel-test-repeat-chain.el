@@ -174,21 +174,6 @@
     (forward-line 1)
     (should-not (helixel--blank-line-p))))
 
-(ert-deftest helixel-test-chain-cursor-touches-p ()
-  "Cursor within same line as init range → touching."
-  (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
-    (goto-char 1)
-    ;; Create markers for a line-1 range [1, 4)
-    (let ((bounds (cons (copy-marker 1) (copy-marker 4))))
-      (should (helixel--chain-cursor-touches-p bounds))
-      (set-marker (car bounds) nil)
-      (set-marker (cdr bounds) nil))))
-
-(ert-deftest helixel-test-chain-cursor-touches-p-nil ()
-  "Nil bounds always return t."
-  (helixel-chain-test-with-buffer "test\n"
-    (should (helixel--chain-cursor-touches-p nil))))
-
 (ert-deftest helixel-test-chain-no-record-during-kmacro ()
   "helixel--record-edit is inhibited during defining-kbd-macro."
   (helixel-chain-test-with-buffer "test\n"

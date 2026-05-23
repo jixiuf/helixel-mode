@@ -43,6 +43,7 @@
 (require 'helixel-surround)
 (require 'helixel-swap)
 (require 'helixel-repeat-strategy)
+(require 'helixel-chain)
 (require 'helixel-shims)
 
 (provide 'helixel)

@@ -9,7 +9,9 @@
 | `helixel-data.el` | **Unified data layer**: `helixel-sel` struct, `helixel-edit` struct, delimiter protocol accessors + operations, op registry. Zero helixel deps. |
 | `helixel-edit.el` | Backward-compat shim — `(require 'helixel-data)`. |
 | `helixel-action.el` | Action ring, `;` jumping. Depends on helixel-edit (→ helixel-data). |
-| `helixel-repeat.el` | Dot-repeat (`.`): record, replay, insert recording, chain. Depends on helixel-action+edit+delimiter. |
+| `helixel-repeat.el` | Dot-repeat (`.`): record, replay, insert recording. Chain lifecycle in `helixel-chain.el`, strategy in `helixel-repeat-strategy.el`. Depends on helixel-action. |
+| `helixel-repeat-strategy.el` | Strategy builders: return `helixel-repeat-action` from txs for both chain and non-chain. Search, line, rect, movement, textobj, surround dispatch. |
+| `helixel-chain.el` | Chain lifecycle: start/end/cancel, post-command hook runner, chain op registration. No circular deps. |
 | `helixel-state.el` | Modal state machine, minor modes, `helixel-define-command`/`helixel-define-operator` macros, insert entry/exit. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
 | `helixel-common.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate + op runners. |
@@ -36,8 +38,9 @@
 ## Deps (one-way)
 
 ```
-helixel-data → helixel-action → helixel-repeat → helixel-state
+helixel-data → helixel-action → helixel-repeat → helixel-repeat-strategy → helixel-state
             → helixel-move → helixel-common → helixel-keymap → helixel-search
+            → helixel-chain (via helixel-keymap)
 
 helixel-data → helixel-delimiter → helixel-textobj-engine → helixel-textobj → helixel-surround
 ```
@@ -90,6 +93,10 @@ helixel-data → helixel-delimiter → helixel-textobj-engine → helixel-textob
 (helixel--record-edit op &rest extra)  ; stores tx + ring
 (helixel--execute-edit tx)             ; calls :runner
 (helixel-repeat-edit &optional count)  ; bound to .
+;; Repeat Strategy (chain + non-chain unified)
+(helixel--repeat-strategy tx &optional reverse-p)  → helixel-repeat-action struct
+;; Chain lifecycle
+(helixel-repeat-chain-start/end/cancel)  ; interactive commands
 ```
 
 ## Build & Test
@@ -144,3 +151,7 @@ Use `git checkout` + pattern-based scripts instead of `sed -i 'N,Md'`.
 - Movement `.` replays move sequence, not absolute positions (matches Helix/Vim).
 - Swap-source stored as text property on kill-ring string (not overlay).
 - `executing-kbd-macro` inhibits `helixel--record-edit`.
+- Chain and non-chain share the same repeat-strategy architecture. The only difference
+  is the execute-fn in `helixel-repeat-action`: kmacro replay for chain, op runner for non-chain.
+- Chain ops store `init-ctx` as `helixel-sel` in tx (no `:chain-advance` payload).
+- `helixel-repeat-selection` (`,`) uses the same strategy + preview path for both chain and non-chain.

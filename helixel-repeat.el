@@ -677,9 +677,15 @@ Failure during replay is reported but does not discard the stored edit."
                   (eq (helixel-edit-op tx) 'chain)
                   (eq (helixel-sel-get-kind (helixel-edit-sel tx)) 'line))
              (let* ((dir (if reverse-p 'backward 'forward))
-                    (forced-tx (helixel--force-direction tx dir)))
-               ;; Execute once at start (position-fn skips to next line).
-               (helixel--execute-edit forced-tx)
+                    (forced-tx (helixel--force-direction tx dir))
+                    (start (if (eq dir 'forward)
+                               (point-min)
+                             (point-max))))
+               ;; Process first line at start (position-fn advance skips it).
+               (save-excursion
+                 (goto-char start)
+                 (unless (helixel--blank-line-p)
+                   (helixel--execute-edit forced-tx)))
                (helixel--repeat-all-buffer-action
                 (helixel--repeat-strategy forced-tx)
                 prefix)))

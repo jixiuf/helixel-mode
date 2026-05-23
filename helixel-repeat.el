@@ -42,9 +42,7 @@
 
 (require 'cl-lib)
 (require 'helixel-action)
-(require 'helixel-edit)
-(require 'helixel-delimiter)
-
+(require 'helixel-data)
 (defvar helixel--inhibit-action-track)
 (defvar helixel--selection-type)
 (declare-function helixel-search--search "helixel-search"
@@ -57,11 +55,13 @@
 (declare-function helixel--repeat-all-remaining "helixel-repeat-strategy")
 (declare-function helixel--repeat-all-buffer "helixel-repeat-strategy")
 (declare-function helixel--repeat-n "helixel-repeat-strategy")
-(declare-function helixel--repeat-all-remaining-action "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-remaining-action
+              "helixel-repeat-strategy")
 (declare-function helixel--repeat-all-buffer-action "helixel-repeat-strategy")
 (declare-function helixel--repeat-n-action "helixel-repeat-strategy")
 (declare-function helixel--repeat-preview "helixel-repeat-strategy")
-(declare-function helixel--repeat-all-remaining-preview "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-remaining-preview
+              "helixel-repeat-strategy")
 (declare-function helixel--repeat-all-buffer-preview "helixel-repeat-strategy")
 (declare-function helixel--repeat-n-preview "helixel-repeat-strategy")
 (declare-function helixel-repeat-action-position-fn "helixel-repeat-strategy")
@@ -428,10 +428,10 @@ For `insert-search-offset' and `insert-selection-*' entry-kinds."
       (helixel--repeat-echo cnt))))
 
 (defun helixel--repeat-line-pass (tx sel advance start-pos dir cnt)
-  "Process one line for each step in direction DIR (1=forward,
--1=backward).  Execute TX on the current line (via
-`helixel--recreate-selection' + `helixel--execute-edit'), advance
-according to ADVANCE (`line' or another mode).  Return updated CNT."
+  "Process one line per step from START-POS in direction DIR.
+DIR is 1 for forward, -1 for backward.  SEL is recreated, then
+TX is executed on each line.  Advance according to ADVANCE (e.g.
+`line' or another operator mode).  Return the updated CNT."
   (save-excursion
     (goto-char start-pos)
     (forward-line dir)
@@ -503,7 +503,8 @@ Failure during replay is reported but does not discard the stored edit."
           (cond
             ;; --- Entire buffer: all matches (search) ---
             ;; C-u .  = point-min  → forward;  C-u - .  = point-max → backward.
-            ((and all-buffer-p search-sel-p (not (eq (helixel-edit-op tx) 'chain)))
+            ((and all-buffer-p search-sel-p
+                   (not (eq (helixel-edit-op tx) 'chain)))
              (let ((dir (if reverse-p 'backward 'forward))
                    (start (if reverse-p (point-max) (point-min))))
                (if (helixel-sel-search-entry-kind sel)

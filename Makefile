@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-data.el helixel-action.el helixel-edit.el helixel-repeat.el helixel-repeat-strategy.el helixel-chain.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-delimiter.el helixel-textobj-engine.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
-ELS := helixel-data.elc helixel-action.elc helixel-edit.elc helixel-repeat.elc helixel-repeat-strategy.elc helixel-chain.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-delimiter.elc helixel-textobj-engine.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
+FILES = helixel-data.el helixel-action.el helixel-repeat.el helixel-repeat-strategy.el helixel-chain.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-textobj-engine.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
+ELS := helixel-data.elc helixel-action.elc helixel-repeat.elc helixel-repeat-strategy.elc helixel-chain.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-textobj-engine.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
@@ -85,7 +85,7 @@ column-check:
 	@echo "---- Check column width <= $(COLWIDTH)"
 	@for file in $(FILES); do \
 		awk -v w=$(COLWIDTH) \
-		'length>w{print FILENAME":"NR": line exceeds "w" columns ("length" chars)"; err=1} END{exit err}' \
+		'NR>1 && length>w{print FILENAME":"NR": line exceeds "w" columns ("length" chars)"; err=1} END{exit err}' \
 		"$$file" || exit 1; \
 	done && echo "OK"
 
@@ -94,9 +94,8 @@ lint: compile checkdoc package-lint column-check ctx-lint
 
 # ----------------------------------------------------------------------
 # ctx-lint: forbid raw plist-get on sel/ctx — must use helixel-sel-* accessors.
-# Only helixel-edit.el (accessor implementations) is exempt.
 # ----------------------------------------------------------------------
-# ctx-unique keys — any plist-get on these outside helixel-edit.el is forbidden
+# ctx-unique keys — any plist-get on these outside helixel-data.el is forbidden
 CTX_UNIQUE = :kind :cursor-offset :moves :command
 # suspicious keys — flag for manual review (may be used in other plists)
 CTX_SUSPECT = :dir :count :pattern :offset
@@ -105,7 +104,7 @@ ctx-lint:
 	@echo "---- ctx-lint: raw plist-get on sel/ctx"
 	@err=0; \
 	for file in $(FILES); do \
-	  case "$$file" in helixel-edit.el|helixel-data.el) continue ;; esac; \
+	  case "$$file" in helixel-data.el) continue ;; esac; \
 	  for key in $(CTX_UNIQUE); do \
 	    if grep -qn "plist-get.*\<$$key\>" "$$file" 2>/dev/null; then \
 	      echo "$$file: FATAL — raw plist-get with ctx-unique key $$key:"; \

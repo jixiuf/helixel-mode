@@ -48,8 +48,8 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-delimiter)
-(require 'helixel-edit)
+(require 'helixel-textobj-engine)
+(require 'helixel-data)
 
 (defvar helixel--surround-pairs)
 (defvar helixel--repeat-sel-ctx)

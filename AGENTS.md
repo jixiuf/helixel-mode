@@ -7,8 +7,7 @@
 | File | Role |
 |------|------|
 | `helixel-data.el` | **Unified data layer**: `helixel-sel` struct, `helixel-edit` struct, delimiter protocol accessors + operations, op registry. Zero helixel deps. |
-| `helixel-edit.el` | Backward-compat shim — `(require 'helixel-data)`. |
-| `helixel-action.el` | Action ring, `;` jumping. Depends on helixel-edit (→ helixel-data). |
+| `helixel-action.el` | Action ring, `;` jumping. Depends on helixel-data. |
 | `helixel-repeat.el` | Dot-repeat (`.`): record, replay, insert recording. Chain lifecycle in `helixel-chain.el`, strategy in `helixel-repeat-strategy.el`. Depends on helixel-action. |
 | `helixel-repeat-strategy.el` | Strategy builders: return `helixel-repeat-action` from txs for both chain and non-chain. Search, line, rect, movement, textobj, surround dispatch. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel, post-command hook runner, chain op registration. No circular deps. |
@@ -17,9 +16,9 @@
 | `helixel-common.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate + op runners. |
 | `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. |
 | `helixel-search.el` | Search/find-char + `n`/`N` repeat. |
-| `helixel-textobj-engine.el` | Selection engine: motion-loop, select-block, up-paren, up-block, regex-block, word/symbol/sentence/paragraph forward. No helixel-state deps. |
+| `helixel-textobj-engine.el` | Selection engine: motion-loop, select-block, up-paren, up-block, regex-block, word/symbol/sentence/paragraph forward. Delimiter builders included. |
 | `helixel-textobj.el` | Text object command macros + concretions + keymaps + recreate. Depends on textobj-engine. |
-| `helixel-delimiter.el` | Delimiter builder functions (creates plists conforming to helixel-data protocol). Requires helixel-data. |
+| `helixel-textobj.el` | Text object command macros + concretions + keymaps + recreate. Depends on textobj-engine. |
 | `helixel-surround.el` | Surround add/delete/replace. |
 | `test/helixel-test-move.el` | Movement/word/symbol/find-char tests. |
 | `test/helixel-test-keymap.el` | Keymap and define-key tests. |
@@ -42,10 +41,8 @@ helixel-data → helixel-action → helixel-repeat → helixel-repeat-strategy �
             → helixel-move → helixel-common → helixel-keymap → helixel-search
             → helixel-chain (via helixel-keymap)
 
-helixel-data → helixel-delimiter → helixel-textobj-engine → helixel-textobj → helixel-surround
+helixel-data → helixel-textobj-engine → helixel-textobj → helixel-surround
 ```
-
-(helixel-edit.el is a backward-compat shim for helixel-data.el.)
 
 ## Key Structs
 

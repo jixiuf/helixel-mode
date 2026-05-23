@@ -27,8 +27,7 @@
 
 (require 'cl-lib)
 (require 'thingatpt)
-(require 'helixel-delimiter)
-(require 'helixel-edit)
+(require 'helixel-data)
 
 (defvar helixel--surround-pairs nil
   "Alist mapping a delimiter char to (open . close) for surround.

@@ -46,7 +46,7 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-edit)
+(require 'helixel-data)
 
 (defvar helixel--inhibit-action-track)
 (defvar helixel--selection-type)

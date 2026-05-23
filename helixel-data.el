@@ -31,7 +31,7 @@
 ;;   Part 3 — helixel-edit  : edit transaction (cl-struct)
 ;;   Part 4 — Operator registry : symbol-property based op registration
 ;;
-;; Consumed by: helixel-action, helixel-repeat, helixel-delimiter,
+;; Consumed by: helixel-action, helixel-repeat,
 ;;              helixel-textobj, helixel-surround, helixel-common, etc.
 ;;
 ;; helixel-edit.el is now a backward-compat shim that requires this file.
@@ -40,9 +40,9 @@
 
 (require 'cl-lib)
 
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 ;; Part 1 — helixel-sel: Selection Descriptor
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 
 (cl-defstruct (helixel-sel (:conc-name helixel-sel--)
                            (:constructor helixel-sel--internal))
@@ -249,9 +249,9 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
   (plist-get (helixel-sel--ctx-ensure obj) :cursor-offset))
 
 
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 ;; Part 2 — Delimiter Protocol
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 ;;
 ;; A delimiter plist describes a delimited region (pair of brackets,
 ;; a quoted string, XML tags, mode-specific blocks, or regex-defined
@@ -265,7 +265,7 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
 ;;    :finder  function      ;; (fn dir) → 0|N, moves point, sets match-data
 ;;    :nl-p    boolean)      ;; t → add/delete handles adjacent newlines
 ;;
-;; Builder functions live in helixel-delimiter.el (they reference
+;; Builder functions live in helixel-textobj-engine.el (they reference
 ;; textobj-engine functions via closures).
 
 ;; ── Accessors ──
@@ -335,9 +335,9 @@ Returns (OPEN-END . CLOSE-BEG)."
         (if (eq (char-before close-beg) ?\n) (1- close-beg) close-beg)))
 
 
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 ;; Part 3 — helixel-edit: Edit Transaction
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 
 (cl-defstruct (helixel-edit (:conc-name helixel-edit-))
   "An immutable editing operation for dot-repeat.
@@ -428,9 +428,9 @@ Does not mutate TX."
     new-tx))
 
 
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 ;; Part 4 — Operator Registry
-;; ══════════════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
 ;;
 ;; Operators are registered in a module-private hash table — no symbol
 ;; property pollution, no accidental clobbering, discoverable via
@@ -479,7 +479,7 @@ Falls back to `symbol-name'."
   (plist-get (gethash op helixel--op-registry) :repeat-advance))
 
 (defun helixel-op-set-runner (op runner)
-  "Override the :runner for OP in the operator registry.
+  "Override the :runner for OP in the operator registry to RUNNER.
 Preserves existing :display and :repeat-advance."
   (let ((entry (gethash op helixel--op-registry)))
     (when entry

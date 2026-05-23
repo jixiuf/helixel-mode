@@ -38,7 +38,6 @@
 (require 'helixel-common)
 (require 'helixel-keymap)
 (require 'helixel-search)
-(require 'helixel-delimiter)
 (require 'helixel-textobj)
 (require 'helixel-surround)
 (require 'helixel-swap)

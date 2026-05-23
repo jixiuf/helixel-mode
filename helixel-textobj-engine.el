@@ -27,14 +27,7 @@
 
 (require 'cl-lib)
 (require 'thingatpt)
-(require 'helixel-delimiter)
-(require 'helixel-edit)
-
-
-(require 'cl-lib)
-(require 'thingatpt)
-(require 'helixel-delimiter)
-(require 'helixel-edit)
+(require 'helixel-data)
 
 (declare-function helixel--recreate-textobj "helixel-textobj")
 (declare-function helixel--repeat-sel-set "helixel-repeat")
@@ -1691,6 +1684,41 @@ See `helixel-up-block-at-point' for supported modes."
                             beg end type count inclusive)
     (setq helixel--block-chosen-spec nil)))
 
+
+(defun helixel--make-pair-delimiter (open close)
+  "Create a pair delimiter for OPEN and CLOSE characters."
+  (let ((equal-p (= open close)))
+    (list :type (if equal-p 'quote 'pair)
+          :open open :close close
+          :finder (if equal-p
+                      `(lambda (dir) (helixel--find-equal-char ,open dir))
+                    `(lambda (dir) (helixel-up-paren ,open ,close dir)))
+          :nl-p nil)))
+
+(defun helixel--make-tag-delimiter ()
+  "Create a tag delimiter."
+  (list :type 'tag
+        :finder (lambda (dir) (helixel-up-xml-tag dir))
+        :nl-p t))
+
+(defun helixel--make-block-delimiter (&optional open close)
+  "Create a block delimiter for OPEN and CLOSE strings.
+If OPEN/CLOSE are nil, the finder resolves the spec at runtime."
+  (list :type 'block
+        :open open :close close
+        :finder (lambda (dir) (helixel-up-block-at-point dir))
+        :nl-p t))
+
+(defun helixel--make-regex-delimiter (begin-re end-re &optional name-group)
+  "Create a regex delimiter for BEGIN-RE and END-RE.
+Optional NAME-GROUP specifies the match group index for the name."
+  (list :type 'regex
+        :open begin-re :close end-re
+        :begin-re begin-re :end-re end-re
+        :name-group name-group
+        :finder `(lambda (dir)
+                   (helixel-up-regex-block ,begin-re ,end-re dir ,name-group))
+        :nl-p t))
 
 (provide 'helixel-textobj-engine)
 ;;; helixel-textobj-engine.el ends here

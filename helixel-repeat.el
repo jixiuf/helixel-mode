@@ -721,62 +721,39 @@ subsequent `.` uses this position directly."
   (unless helixel--last-tx
     (user-error "No previous edit"))
   (let* ((tx helixel--last-tx)
-         (sel-ctx (helixel-edit-sel tx))
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t)
          (prefix (helixel--decode-repeat-prefix raw-prefix))
-         (chain-p (eq (helixel-edit-op tx) 'chain))
-         (chain-move (and chain-p
-                          (plist-get (helixel-edit-payload tx)
-                                     :chain-move-keys))))
-    (unless (or sel-ctx chain-p)
+         (chain-p (eq (helixel-edit-op tx) 'chain)))
+    (unless (or (helixel-edit-sel tx) chain-p)
       (user-error (concat "Previous edit has no selection to repeat."
                           "  Use a textobj (e.g. ciw)"
                           " or line/rect selection first")))
-    (if chain-p
-        (helixel--repeat-selection-chain tx prefix nil chain-move)
-      ;; Non-chain: use strategy + preview loops.
-      (helixel--repeat-selection-nonchain tx prefix)))
-  (setq helixel--repeat-has-preview t))
-
-(defun helixel--repeat-selection-nonchain (tx prefix)
-  "Non-chain `,` preview.
-All modes use strategy + preview loops."
-  (let ((mode (helixel-repeat-prefix-mode prefix)))
-    (if (eq mode :n-times)
-        ;; N-times: advance + recreate (matches old code exactly).
-        (helixel--repeat-n-preview
-         (helixel--repeat-strategy
-          tx (helixel-repeat-prefix-reverse-p prefix))
-         (helixel-repeat-prefix-n prefix))
-      ;; All-buffer / all-dir: use strategy + preview loops.
-      ;; Non-search non-line ops fall through to one-shot recreate
-      ;; (matches old behavior: all-dir for movement/textobj
-      ;; executes once, not in a loop).
-      (let ((sel (helixel-edit-sel tx)))
-        (if (and sel
-                 (not (memq (helixel-sel-get-kind sel) '(search line))))
-            (helixel--recreate-selection sel)
-        (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
-               (action (helixel--repeat-strategy tx reverse-p)))
-          (helixel--repeat-preview action prefix)))))))
-
-(defun helixel--repeat-selection-chain (tx prefix _chain-adv chain-move)
-  "Chain `,` preview: wrap strategy with movement replay."
-  (setq helixel--repeat-has-preview nil)
-  (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
-         (action (helixel--repeat-strategy tx reverse-p))
-         (wrapped-action
-          (make-helixel-repeat-action
-           :position-fn
-           (lambda ()
-             (when (funcall (helixel-repeat-action-position-fn action))
-               (when chain-move (execute-kbd-macro chain-move))
-               t))
-           :execute-fn (lambda () nil))))
-    (helixel--repeat-preview wrapped-action prefix))
-  (setq helixel--repeat-chain-preview t)
-  (setq helixel--repeat-has-preview t))
+    (let* ((sel (helixel-edit-sel tx))
+           (reverse-p (helixel-repeat-prefix-reverse-p prefix))
+           (mode (helixel-repeat-prefix-mode prefix))
+           (chain-move (and chain-p
+                            (plist-get (helixel-edit-payload tx)
+                                       :chain-move-keys))))
+      (if (and sel (not chain-p)
+               (not (memq (helixel-sel-get-kind sel) '(search line))))
+          (helixel--recreate-selection sel)
+        (let* ((action (helixel--repeat-strategy tx reverse-p))
+               (wrapped-action
+                (make-helixel-repeat-action
+                 :position-fn
+                 (lambda ()
+                   (when (funcall
+                          (helixel-repeat-action-position-fn action))
+                     (when chain-move (execute-kbd-macro chain-move))
+                     t))
+                 :execute-fn (lambda () nil))))
+          (if (and (eq mode :n-times) (> (helixel-repeat-prefix-n prefix) 1))
+              (helixel--repeat-n-preview
+               wrapped-action (helixel-repeat-prefix-n prefix))
+            (helixel--repeat-preview wrapped-action prefix)))))
+    (when chain-p (setq helixel--repeat-chain-preview t))
+    (setq helixel--repeat-has-preview t)))
 
 (defun helixel-repeat-edit-pick ()
   "Choose a past edit from the action ring and replay it.

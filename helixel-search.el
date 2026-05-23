@@ -307,6 +307,16 @@ so that `isearch-repeat-forward' / `isearch-repeat-backward' find it."
       (when (eq type 'till) (forward-char)))
     (unless (use-region-p)
       (push-mark current t 'activate))
+    ;; Push find-char sel onto pending-selection stack.
+    ;; The action command that follows (d, c, y) will pop it.
+    (require 'helixel-repeat)
+    (helixel--sel-push
+     (helixel-sel-create 'find-char
+       `(:char ,char :type ,type
+         :dir ,(if forwardp 'forward 'backward)
+         :inline-advance t)
+       #'helixel--recreate-find-char
+       (format "f%c" char)))
     (helixel--live-find-char-set type char
                                  (if forwardp 'forward 'backward))
     (helixel-action-commit)
@@ -370,6 +380,17 @@ If DIR is nil, uses `helixel-repeat-dir'."
   (interactive "c")
   (helixel-action-start 'find-char 'till)
   (helixel-search--find-char-exec char 'till -1))
+
+(defun helixel--recreate-find-char (_ctx)
+  "Recreate a find-char selection at point for dot-repeat.
+Uses `helixel-search--find-char-core' which reads the character
+and type from the action ring, searches for the next match from
+the current cursor position, and creates the region.
+The search IS the advance (inline — no separate advance fn needed)."
+  (let ((helixel--inhibit-repeat-record t)
+        (helixel--inhibit-action-track t))
+    (helixel-search--find-char-core nil (helixel-repeat-dir))
+    t))
 
 (defun helixel-find-repeat ()
   "Repeat the last find-char in the current direction.

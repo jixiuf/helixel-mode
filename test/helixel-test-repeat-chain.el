@@ -42,7 +42,9 @@
      (setq helixel--repeat-chain-init-bounds nil)
      (setq helixel--repeat-sel-ctx nil)
      (setq helixel--inhibit-action-track nil)
-     (setq helixel--chain-keys nil)
+     (setq helixel--chain-in-edit-phase nil)
+     (setq helixel--chain-move-keys nil)
+     (setq helixel--chain-edit-keys nil)
      (unwind-protect
          (progn ,@body)
        (setq helixel--repeat-chaining nil)
@@ -52,7 +54,9 @@
          (ignore-errors (set-marker (cdr helixel--repeat-chain-init-bounds) nil))
          (setq helixel--repeat-chain-init-bounds nil))
        (setq helixel--inhibit-action-track nil)
-       (setq helixel--chain-keys nil)
+       (setq helixel--chain-in-edit-phase nil)
+       (setq helixel--chain-move-keys nil)
+       (setq helixel--chain-edit-keys nil)
        (ignore-errors (helixel-normal-state -1)))))
 
 ;; ── Chain lifecycle tests ──
@@ -104,9 +108,9 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (kbd "x") helixel--chain-keys)
-    (push (kbd "x") helixel--chain-keys)
-    (setq helixel--chain-move-len 0)
+    ;; Push keys directly to edit-keys accumulator (no move phase).
+    (push (kbd "x") helixel--chain-edit-keys)
+    (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
     (should (eq (helixel-edit-op helixel--last-tx) 'chain))
@@ -120,8 +124,7 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (kbd "x") helixel--chain-keys)
-    (setq helixel--chain-move-len 0)
+    (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
     (should (eq (helixel-edit-op helixel--last-tx) 'chain))))
 
@@ -138,8 +141,7 @@
     (setq helixel--repeat-sel-ctx
           (helixel-sel-update-ctx helixel--repeat-sel-ctx
                                   :entry-kind 'insert))
-    (push (kbd "x") helixel--chain-keys)
-    (setq helixel--chain-move-len 0)
+    (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
     (let ((sel (helixel-edit-sel helixel--last-tx)))
@@ -151,8 +153,7 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (kbd "x") helixel--chain-keys)
-    (setq helixel--chain-move-len 0)
+    (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
     (should helixel--action-ring)
     (should (eq (helixel-edit-op (plist-get (car helixel--action-ring) :edit))

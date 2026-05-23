@@ -50,10 +50,13 @@
 KIND is a symbol identifying the selection type.
 CTX is a plist of mutable extra data (:count, :dir, :moves, ...).
 RECREATE is a function (CTX) that recreates the selection at point.
+ADVANCE is nil or a function (TX TAG) that positions cursor at the
+next target, returning t on success, nil at buffer edge.
 DISPLAY is a string or a function (CTX) → string."
   kind
   ctx
   recreate
+  advance
   display)
 
 ;; ── CTX schema ──
@@ -68,30 +71,47 @@ DISPLAY is a string or a function (CTX) → string."
 ;;                           :count  (integer ≥ 1)         same
 ;; rect                      :count  (integer ≥ 1)         movement cmd
 ;; movement                  :moves  ((CMD . COUNT) ...)   visual move fns
+;;                           :inline-advance  t             same
 ;; textobj                   :command  (symbol)            textobj fns
 ;;                           :count    (integer)            same
 ;;                           :delimiter (plist)             same
+;;                           :inline-advance  t             same
 ;; search                    :pattern  (string)            search fns
 ;;                           :dir      (forward|backward)   same
+;; find-char                 :char     (character)          find-char fns
+;;                           :type     (next|till)           same
+;;                           :dir      (forward|backward)    same
+;;                           :inline-advance  t              same
 ;; surround                  :delimiter (plist)            surround fns
 ;; insert-selection-start    :cursor-offset (int|nil)      insert-exit
 ;; insert-selection-end      :cursor-offset (int|nil)      insert-exit
 ;; insert-beginning-line     (none)                        —
 ;; insert-end-line           (none)                        —
 ;; insert-search-offset      :offset (integer)             insert cmd
+;;
+;; All kinds accept an optional :inline-advance flag.
+;; When t, the advance function creates the region as part
+;; of its positioning (movement, textobj, find-char).
+;; The strategy reads this flag to avoid double-recreating.
 
 ;; ── Builder ──
 
-(defun helixel-sel-create (kind ctx recreate &optional display)
+(defun helixel-sel-create (kind ctx recreate &optional display &rest extras)
   "Create a `helixel-sel' struct for selection KIND.
 CTX is a plist of extra data.
 RECREATE is a function (CTX) that recreates the selection at point.
-DISPLAY is an optional string or function (CTX) → string."
-  (helixel-sel--internal
-   :kind kind
-   :ctx ctx
-   :recreate recreate
-   :display (or display (symbol-name kind))))
+DISPLAY is an optional string or function (CTX) → string.
+EXTRAS is an optional plist with keys:
+  :advance — function (TX TAG) → boolean, positions cursor at next target."
+  (let ((adv (plist-get extras :advance)))
+    (apply #'helixel-sel--internal
+           :kind kind
+           :ctx ctx
+           :recreate recreate
+           :display (or display (symbol-name kind))
+           :advance adv
+           ;; Strip :advance from extras to avoid duplicate key.
+           (cl-remove-if (lambda (k) (eq k :advance)) extras :key #'car))))
 
 ;; ── Core accessors ──
 
@@ -112,6 +132,11 @@ Evaluates the DISPLAY field (string or function)."
   "Return the :kind from `helixel-sel' struct SEL."
   (when (helixel-sel-p sel)
     (helixel-sel--kind sel)))
+
+(defun helixel-sel-advance (sel)
+  "Return the :advance closure from `helixel-sel' struct SEL, or nil."
+  (when (helixel-sel-p sel)
+    (helixel-sel--advance sel)))
 
 (defun helixel-sel-get-ctx (sel)
   "Return the CTX (data plist) from `helixel-sel' struct SEL."

@@ -35,7 +35,7 @@ Requires Emacs >= 29.1.
 | `C-o` `C-i` | Jump to older / newer position (global, cross-buffer) |
 | `M-.` | Repeat last find-char |
 | `n` `N` | Repeat / reverse direction repeat (`C-u n` pick from history) |
-| `.` | Repeat last edit.  Prefixes: `3.` = 3 times in stored direction; `0.` = all remaining matches in stored direction; `C-u - 3 .` = 3 times in opposite direction; `C-u .` = all matches in entire buffer.  Non-search selections fall back to single execution for 0/C-u.  `M-x helixel-repeat-edit-pick` chooses from the per-buffer ring. |
+| `.` | Repeat last edit.  Prefixes: `3.` = 3 times; `0.` = all remaining; `C-u .` = entire buffer; `C-u - 3 .` = 3 times reversed.  Works for all selection kinds (line, search, movement w/e/b, textobj, find-char).  `M-x helixel-repeat-edit-pick` chooses from the per-buffer ring. |
 | `,` | Repeat last selection without editing (same prefix behavior as `.`). |
 | `i` `a` `I` `A` `o` `O` | Enter insert mode |
 | `v` | Enter visual mode |
@@ -275,13 +275,13 @@ C-u n       pick a past search/find-char from history
 
 ### Chain Recording (`.` Advance)
 
-`q` / `Q` record a compound editing sequence as a kmacro and create
+`q` / `Q` record a compound editing sequence and create
 a repeatable transaction.  `.` advances to the next target and replays
 the entire sequence.
 
 | Key | Action |
 |-----|--------|
-| `q` | Start chain recording (snapshots selection context, starts kmacro) |
+| `q` | Start chain recording (snapshots selection context, starts key recording) |
 | `Q` | End chain, create repeatable compound transaction |
 | `.` | Advance to next target and replay the recorded sequence |
 | `,` | Preview the next target without editing |
@@ -290,9 +290,9 @@ the entire sequence.
 
 1. Select a target (line with `x`, search match with `/`) — this
    establishes the *advance context*.
-2. Press `q` — starts kmacro recording, snapshots the selection.
+2. Press `q` — starts key recording, snapshots the selection.
 3. Perform any editing operations (insert, normal-mode commands, etc.)
-   — all keystrokes are captured by kmacro.
+   — all keystrokes are captured.
 4. Press `Q` — stops recording, creates a chain transaction.
 5. `.` advances to the **next** target and replays the recorded sequence.
 6. `.` again — advance further, replay again.
@@ -314,7 +314,7 @@ and `.` replays in-place.
 ```
 x             select line (advance by line)
 q             start chain
-bb            select 2 words backward
+vbb           select 2 words backward (v enters visual, bb extends)
 d             kill
 Q             end chain
 .             next line: select 2 words backward, kill
@@ -322,32 +322,38 @@ Q             end chain
 
 /foo<RET>     search for "foo" (advance by search match)
 q             start chain
-ciwbar<ESC>   change inner word to "bar"
+cbar<ESC>     change to "bar" (selection from search)
 Q             end chain
-.             next "foo" match: change inner word to "bar"
+.             next "foo" match: change to "bar"
 .             next "foo" match, repeat
+
+f x           find-char to next "x"
+q             start chain
+d             delete up to "x"
+Q             end chain
+.             next "x" match: delete up to it
 ```
 
-### Dot-Repeat (`.`) Prefixes
+### Dot-Repeat (`.`) and Repeat-Selection (`,`)
 
-After a search-initiated edit (e.g. `/hello<RET> cXXX<ESC>`),
-`.` supports extended prefixes:
+After an edit, `.` repeats the edit at the next target.
+`,` repeats the selection only (preview, no edit) — same prefixes.
 
 | Prefix | Behavior |
 |--------|----------|
-| `.` | Repeat once in stored direction |
-| `3.` | Repeat 3 times in stored direction |
-| `0.` | Repeat all remaining matches in stored direction |
-| `C-u .` | Repeat all matches in entire buffer (point-min → forward) |
-| `C-u - 3 .` | Repeat 3 times in opposite direction |
+| `.` `,` | Repeat once in stored direction |
+| `3.` `3,` | Repeat 3 times in stored direction |
+| `0.` `0,` | Repeat all remaining targets in stored direction |
+| `C-u .` `C-u ,` | Repeat all targets, entire buffer (point-min → forward) |
+| `-.` `-,` | **Permanently** reverse direction, then 1 repeat |
+| `-3.` `-3,` | **Permanently** reverse direction, then 3 repeats |
+| `C-u - 3 .` | 3 times in opposite direction (one-time, C-u) |
 
-- `0.` stops silently when no more matches are found in the stored direction.
-- `C-u .` starts from `point-min` and processes every match forward,
-  regardless of the original search direction.
-- `C-u - N .` temporarily reverses the stored direction; subsequent
-  `.` still uses the original direction.
-- Non-search selections (textobj/line/rect) with `0.` or `C-u .`
-  fall back to a single execution.
+- `0.`/`0,` stop silently when no more targets are found.
+- `C-u .`/`C-u ,` start from `point-min` and process every target forward.
+- `-.`/`-N.` **permanently** flip direction (like `N` for search).  `-.` again flips back.
+- `C-u - N .` is a one-time reverse (does NOT permanently flip).
+- All selection kinds support all prefix modes (line, search, movement, textobj, find-char).
 
 #### Examples
 
@@ -380,6 +386,36 @@ x             select line
 d             kill line (point moves to next line's bol)
 .             kill next line (already at point)
 .             kill next line
+```
+
+Movement-based repeat (w/e/b — selects next word each time):
+```
+w             select forward word
+d             delete
+.             delete next word
+.             delete next word
+vww           visual + w + w: select 2 forward words
+d             delete both
+.             delete next 2 words
+```
+
+Textobj-based repeat (iw/aw — selects next textobj each time):
+```
+miw           select inner word
+cXXX<ESC>     change to "XXX"
+.             change next inner word to "XXX"
+.             change next inner word to "XXX"
+```
+
+Find-char repeat (f/t — finds next char each time):
+```
+fx            find-char to next "x"
+d             delete up to "x"
+.             delete up to next "x"
+.             delete up to next "x"
+tx            find-till-char up to "x" (exclusive)
+d             delete up to (not including) "x"
+.             repeat same operation
 ```
 
 Prefixes:

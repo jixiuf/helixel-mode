@@ -292,7 +292,7 @@ the edit for `.` replay."
 (defun helixel--track-visual-move (cmd)
   "Append movement CMD to `helixel--repeat-sel-ctx'.
 Creates/updates a `helixel-sel' struct of kind `movement' whenever
-a region is active — from visual mode or normal-mode movements that
+a region is active — from visual mode or `normal-mode' movements that
 created a selection (e.g. w, e, b).
 No-op during dot-repeat replay, or when no region is active."
   (when (and (not helixel--inhibit-repeat-record)
@@ -314,7 +314,7 @@ No-op during dot-repeat replay, or when no region is active."
        ((null ctx)
         (helixel--repeat-sel-set
          (helixel-sel-create 'movement
-                             `(:moves (,entry))
+                             `(:moves (,entry) :inline-advance t)
                              #'helixel--recreate-movement
                              (lambda (c)
                                (let ((ms (helixel-sel-movement-moves c)))

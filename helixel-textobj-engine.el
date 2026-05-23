@@ -1188,7 +1188,8 @@ the same multiplier."
       (setq helixel--selection-type 'textobj)
       (helixel--repeat-sel-set
        (helixel-sel-create
-        'textobj `(:command ,cmd :count ,n :delimiter ,delim)
+        'textobj `(:command ,cmd :count ,n :delimiter ,delim
+                    :inline-advance t)
              #'helixel--recreate-textobj
              ;; display closure
              (lambda (c)

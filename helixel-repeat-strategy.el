@@ -122,8 +122,11 @@ REVERSE-P flips the direction for search/line selections."
          (kind (and sel (helixel-sel-get-kind sel)))
          (entry-kind (and sel (eq kind 'search)
                          (helixel-sel-search-entry-kind sel)))
-         (adv-fn (when kind
-                   (cdr (assq kind helixel-repeat-advance-alist))))
+         ;; Read advance from sel struct (Phase 1); fall back to
+         ;; alist for backward-compat with third-party kinds.
+         (adv-fn (when sel
+                   (or (helixel-sel-advance sel)
+                       (cdr (assq kind helixel-repeat-advance-alist)))))
          (adv-tag (or (helixel-edit-op-advance (helixel-edit-op tx))
                       (and chain-p (and sel (helixel-sel-get-kind sel))))))
     ;; For reverse: flip the direction in the sel ctx for search/line
@@ -148,15 +151,18 @@ REVERSE-P flips the direction for search/line selections."
          (cond
           ;; Branch 1: non-chain, explicit advance function.
           ;; "Separate" adv-fns (line, search) only position cursor;
-          ;; "Inline" adv-fns (movement, textobj) position & recreate
-          ;; in one step (the movement/textobj commands inherently
-          ;; create the region).  Skip the extra recreate for inline
-          ;; adv-fns to avoid double-moving.
+          ;; the strategy calls recreate to create the region.
+          ;; "Inline" adv-fns (movement, textobj, find-char)
+          ;; inherently create the region as part of their
+          ;; positioning — skip the extra recreate to avoid
+          ;; double-moving.  The :inline-advance flag in ctx
+          ;; drives this distinction.
           ((and adv-fn adv-tag (not chain-p) (not entry-kind))
            (let ((tmp-tx (copy-helixel-edit tx)))
              (setf (helixel-edit-sel tmp-tx) sel)
              (when (funcall adv-fn tmp-tx adv-tag)
-               (unless (memq kind '(movement textobj))
+               (unless (plist-get (helixel-sel-get-ctx sel)
+                                  :inline-advance)
                  (helixel--recreate-selection sel))
                t)))
 

@@ -6,10 +6,10 @@
 
 | File | Role |
 |------|------|
-| `helixel-data.el` | **Unified data layer**: `helixel-sel` struct, `helixel-edit` struct, delimiter protocol accessors + operations, op registry. Zero helixel deps. |
+| `helixel-data.el` | **Unified data layer**: `helixel-sel` struct (with `advance` slot), `helixel-edit` struct, delimiter protocol, op registry. Zero helixel deps. |
 | `helixel-action.el` | Action ring, `;` jumping. Depends on helixel-data. |
-| `helixel-repeat.el` | Dot-repeat (`.`): record, replay, insert recording. Chain lifecycle in `helixel-chain.el`, strategy in `helixel-repeat-strategy.el`. Depends on helixel-action. |
-| `helixel-repeat-strategy.el` | Strategy builders: return `helixel-repeat-action` from txs for both chain and non-chain. Search, line, rect, movement, textobj, surround dispatch. |
+| `helixel-repeat.el` | Dot-repeat (`.`): record, replay, insert recording, advance functions (line/search/movement/textobj/find-char). Push/pop sel API. Chain lifecycle in `helixel-chain.el`, strategy in `helixel-repeat-strategy.el`. |
+| `helixel-repeat-strategy.el` | Strategy builder: kind-agnostic 3-branch dispatch. Returns `helixel-repeat-action` from txs for both chain and non-chain. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel, post-command hook runner, chain op registration. No circular deps. |
 | `helixel-state.el` | Modal state machine, minor modes, `helixel-define-command`/`helixel-define-operator` macros, insert entry/exit. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
@@ -32,6 +32,7 @@
 | `test/helixel-test-edit.el` | Edit transactions, sel struct, dot-repeat tests. |
 | `test/helixel-test-jump.el` | Jump navigation tests. |
 | `test/helixel-test-repeat.el` | Line selection auto-advance repeat tests. |
+| `test/helixel-test-repeat-new.el` | Tests for movement (w/e/b), textobj, find-char, chain dot-repeat. |
 | `test/helixel-test-register.el` | Register tests. |
 
 ## Deps (one-way)
@@ -42,22 +43,30 @@ helixel-data → helixel-action → helixel-repeat → helixel-repeat-strategy �
             → helixel-chain (via helixel-keymap)
 
 helixel-data → helixel-textobj-engine → helixel-textobj → helixel-surround
+
+;; helixel-search pushes find-char sel via helixel-repeat.helixel--sel-push
+;; (runtime require, no compile dep)
 ```
 
 ## Key Structs
 
 ### helixel-sel (selection descriptor)
 ```elisp
-(cl-defstruct helixel-sel kind ctx recreate display)
+(cl-defstruct helixel-sel kind ctx recreate advance display)
 ;; CTX keys per kind:
 ;;   line          :dir (forward|backward) :count (int≥1)
 ;;   rect          :count (int≥1)
-;;   movement      :moves ((CMD . COUNT)…)
-;;   textobj       :command :count :delimiter
+;;   movement      :moves ((CMD . COUNT)…) :inline-advance t
+;;   textobj       :command :count :delimiter :inline-advance t
 ;;   search        :pattern :dir
+;;   find-char     :char :type (next|till) :dir :inline-advance t
 ;;   surround      :delimiter
 ;;   insert-selection-*  :cursor-offset
 ;;   insert-search-offset :offset
+;;
+;; :inline-advance — when t, the advance fn creates the region
+;;   as part of its positioning (movement, textobj, find-char).
+;;   The strategy skips the extra recreate to avoid double-moving.
 ```
 
 ### helixel-edit tx (plist)
@@ -69,8 +78,10 @@ helixel-data → helixel-textobj-engine → helixel-textobj → helixel-surround
 
 ```elisp
 ;; Selection
-(helixel-sel-create kind ctx recreate &optional display) → struct
+(helixel-sel-create kind ctx recreate &optional display &rest extras) → struct
+  ;; extras may include :advance fn
 (helixel-sel-get-kind sel)          → symbol
+(helixel-sel-advance sel)           → fn|nil  (advance closure)
 (helixel-sel-call-recreate sel)     → recreates region
 (helixel-sel-update-ctx sel k v)    → new sel
 (helixel-sel-count sel)             → :count or 0
@@ -79,6 +90,10 @@ helixel-data → helixel-textobj-engine → helixel-textobj → helixel-surround
 (helixel-sel-line-count obj)        → :count, default 1
 (helixel-sel-search-pattern obj)
 (helixel-sel-search-dir obj)        → :dir, default 'forward
+
+;; Pending-selection push/pop API
+(helixel--sel-push sel)             ; selection cmds push
+(helixel--sel-pop)                  → sel|nil  ; action cmds pop
 
 ;; Edit Transaction
 (helixel-edit-make op sel &rest kv) → struct

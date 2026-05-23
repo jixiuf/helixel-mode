@@ -49,6 +49,24 @@
 (defvar helixel--selection-type)
 (declare-function helixel-search--search "helixel-search"
                   (pattern dir &optional bound noerror))
+(declare-function helixel--decode-repeat-prefix "helixel-repeat-strategy")
+(declare-function helixel-repeat-prefix-mode "helixel-repeat-strategy")
+(declare-function helixel-repeat-prefix-n "helixel-repeat-strategy")
+(declare-function helixel-repeat-prefix-reverse-p "helixel-repeat-strategy")
+(declare-function helixel--repeat-strategy "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-remaining "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-buffer "helixel-repeat-strategy")
+(declare-function helixel--repeat-n "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-remaining-action "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-buffer-action "helixel-repeat-strategy")
+(declare-function helixel--repeat-n-action "helixel-repeat-strategy")
+(declare-function helixel--repeat-preview "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-remaining-preview "helixel-repeat-strategy")
+(declare-function helixel--repeat-all-buffer-preview "helixel-repeat-strategy")
+(declare-function helixel--repeat-n-preview "helixel-repeat-strategy")
+(declare-function helixel-repeat-action-position-fn "helixel-repeat-strategy")
+(declare-function helixel-repeat-action-execute-fn "helixel-repeat-strategy")
+(declare-function make-helixel-repeat-action "helixel-repeat-strategy")
 
 ;; ---------------------------------------------------------------------------
 ;; Selection Context (helixel--repeat-sel-ctx)
@@ -82,33 +100,18 @@ helixel-edit.el for the set of recognised :kind values.")
 (defvar helixel--last-tx nil
   "The most recent edit transaction (see `helixel-edit-make').
 Cross-buffer: `.` replays the last edit regardless of which buffer
-it was recorded in.  Is `eq' to `(car helixel--edit-ring)' within
-the recording buffer, but may differ after a buffer switch.
-May be re-pointed by `helixel-repeat-edit-pick' to replay an older entry.")
+it was recorded in.  May be re-pointed by `helixel-repeat-edit-pick'
+to replay an older entry.
 
-(defcustom helixel-edit-ring-max 64
-  "Maximum number of past edit transactions retained in the ring.
-Older entries are discarded.  Set to 0 or nil to disable the ring
-\(`helixel--last-tx' still works)."
-  :type 'integer
-  :group 'helixel)
+The unified action ring (`helixel--action-ring') stores all actions;
+edit transactions are accessible as `:edit' plist entries.
+`helixel-repeat-edit-pick' scans the action ring for entries with
+`:edit' data.")
 
-(defvar-local helixel--edit-ring nil
-  "List of recent edit transactions, newest first.
-`helixel--last-tx' is always `eq' to `(car helixel--edit-ring)'
-while both are non-nil.  Maintained by `helixel--edit-ring-push'.")
-
-(defun helixel--edit-ring-push (tx)
-  "Push TX onto the edit ring, deduplicating against the current head.
-Trims to `helixel-edit-ring-max'."
-  (when tx
-    (unless (and helixel--edit-ring
-                 (helixel-edit-equal-p tx (car helixel--edit-ring)))
-      (push tx helixel--edit-ring)
-      (when (and helixel-edit-ring-max
-                 (> (length helixel--edit-ring) helixel-edit-ring-max))
-        (setcdr (nthcdr (1- helixel-edit-ring-max) helixel--edit-ring)
-                nil)))))
+;; Edit transactions are stored in the unified action ring
+;; (`helixel--action-ring') as `:edit' entries.  No separate edit ring.
+;; `helixel-repeat-edit-pick' filters the action ring for entries
+;; that carry `:edit' data.
 
 
 (defvar-local helixel--change-track-marker nil
@@ -121,6 +124,31 @@ to extract :change-text.")
 Bound during `helixel-repeat-edit' to prevent re-recording.
 Also bound in compound commands (e.g. `helixel-replace' calling
 `helixel-yank') to avoid double-recording.")
+
+(defvar-local helixel--repeat-chaining nil
+  "Non-nil when kmacro is being recorded for a compound chain.
+Set by `helixel-repeat-chain-start', cleared by `helixel-repeat-chain-end'
+or `helixel-repeat-chain-cancel'.")
+
+(defvar-local helixel--repeat-chain-init-ctx nil
+  "The `helixel-sel' at chain-start time.
+Snapshotted by `helixel-repeat-chain-start', used by chain-end
+to determine advance behavior.")
+
+(defvar-local helixel--repeat-chain-init-bounds nil
+  "Initial region bounds at chain-start, as (BEG . END) markers, or nil.
+Checked at chain-end to decide whether cursor still touches the
+original target range.")
+
+(defvar-local helixel--chain-move-len nil
+  "Number of movement keys before the first edit in the chain.
+Counted by `helixel--chain-post-cmd' via `post-command-hook'.
+Nil until the first edit command is detected.")
+
+(defvar-local helixel--repeat-chain-preview nil
+  "Non-nil when , was used to preview movement; . should skip it.
+Set by `helixel-repeat-selection' for chain txs, cleared by the runner.")
+
 
 ;; ---------------------------------------------------------------------------
 ;; Kmacro-based insert recorder
@@ -196,12 +224,13 @@ Consumes `helixel--repeat-sel-ctx'.  Looks up the runner and display
 from the operator registry and stores them in the transaction so
 `helixel--execute-edit' can dispatch without registry lookups.
 Builds a transaction via `helixel-edit-make', pushes it onto
-`helixel--edit-ring', and stores it as `helixel--last-tx'.
+the action ring, and stores it as `helixel--last-tx'.
 Also notifies the action ring so `;' jumping picks up the new edit.
 
 NOTE: Caller is responsible for calling `helixel-action-start' first.
 The `helixel-define-command' macro handles this automatically."
-  (unless (or helixel--inhibit-repeat-record executing-kbd-macro)
+  (unless (or helixel--inhibit-repeat-record executing-kbd-macro
+              defining-kbd-macro)
     (let* ((runner (helixel-edit-op-runner operator))
            (tx (apply #'helixel-edit-make operator
                       helixel--repeat-sel-ctx
@@ -213,7 +242,6 @@ The `helixel-define-command' macro handles this automatically."
         (setq tx new-tx))
       (helixel--repeat-sel-clear)
       (setq helixel--last-tx tx)
-      (helixel--edit-ring-push tx)
       (helixel--live-edit-set tx)
       (helixel-action-commit))))
 
@@ -272,50 +300,73 @@ When COMMANDS are nil, fall back to key-based replay."
 
 (defcustom helixel-repeat-advance-alist
   '((line      . helixel--repeat-advance-line)
-    (rect      . helixel--repeat-advance-line))
+    (rect      . helixel--repeat-advance-line)
+    (search    . helixel--repeat-advance-search))
   "Alist mapping selection kind to auto-advance function.
 Each function receives (TX ADVANCE-TAG) and should position
 point at the next target.  Return nil to stop iteration.
-Omitted kinds (search, textobj, movement, ...) get no advance —
-their `helixel--recreate-*' functions already handle positioning.
-
 Third-party selection kinds add entries here."
   :type '(alist :key-type symbol
                 :value-type (choice (const nil) function))
   :group 'helixel)
 
+(defvar helixel--search-advance-done nil
+  "Bound to t when `helixel--repeat-advance-search' has positioned point.
+Read by `helixel--recreate-search' to skip its internal search.")
+
 (defun helixel--repeat-advance-search (tx _advance-tag)
-  "Find next search match for TX.  Returns nil if no more matches."
+  "Find next search match for TX, skipping current match for insert ops.
+Positions point and sets `match-data' so `helixel--recreate-search' can
+reuse it without re-searching.  Returns nil if no more matches."
   (let* ((sel (helixel-edit-sel tx))
          (pat (helixel-sel-search-pattern sel))
-         (dir (helixel-sel-search-dir sel)))
+         (dir (helixel-sel-search-dir sel))
+         (entry-kind (helixel-sel-search-entry-kind sel)))
+    ;; Skip past current match (same logic as `helixel--recreate-search')
+    (when entry-kind
+      (when (or (looking-at pat)
+                  (save-excursion
+                    (condition-case nil
+                        (progn
+                          (helixel-search--search pat 'backward)
+                          (let ((m-end (match-end 0))
+                                (m-beg (match-beginning 0)))
+                            (if (= m-beg m-end)
+                                (= (line-number-at-pos)
+                                   (line-number-at-pos m-end))
+                              (<= (- (point) m-end) (length pat)))))
+                      (search-failed nil))))
+          (if (eq dir 'backward)
+              (goto-char (max (point-min)
+                              (1- (match-beginning 0))))
+            (goto-char (if (= (match-beginning 0) (match-end 0))
+                           (min (point-max) (1+ (match-end 0)))
+                         (match-end 0))))))
+    ;; Find next match; set flag so recreate-search reuses match-data
     (condition-case nil
-        (progn (helixel-search--search pat dir nil 'noerror) t)
+        (progn
+          (helixel-search--search pat dir)
+          (setq helixel--search-advance-done t)
+          t)
       (search-failed nil))))
 
+(defun helixel--blank-line-p ()
+  "Return non-nil if the current line is blank (empty or whitespace only)."
+  (save-excursion
+    (goto-char (line-beginning-position))
+    (looking-at-p "[ \t]*$")))
+
 (defun helixel--repeat-advance-line (tx _advance-tag)
-  "Advance TX past the selection's line count.
+  "Advance TX past `count' non-blank lines in selection's direction.
 Returns nil at buffer edge."
   (let* ((sel (helixel-edit-sel tx))
          (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
-         (count (helixel-sel-line-count sel)))
-    (= (forward-line (* dir count)) 0)))
-
-(defun helixel--repeat-advance-none (_tx _advance-tag)
-  "No auto-advance — target stays at point.  Always returns t."
-  t)
-
-(defun helixel--repeat-do-advance (tx)
-  "Execute auto-advance for TX before recreating selection.
-Looks up advance function from `helixel-repeat-advance-alist'
-by selection kind.  If the operator's `:repeat-advance' tag
-is nil, no advance happens."
-  (let* ((sel (helixel-edit-sel tx))
-         (kind (and sel (helixel-sel-get-kind sel)))
-         (fn (cdr (assq kind helixel-repeat-advance-alist)))
-         (tag (helixel-edit-op-advance (helixel-edit-op tx))))
-    (when (and fn tag)
-      (funcall fn tx tag))))
+         (count (helixel-sel-line-count sel))
+         (lines-left count))
+    (while (and (> lines-left 0) (= (forward-line dir) 0))
+      (unless (helixel--blank-line-p)
+        (setq lines-left (1- lines-left))))
+    (= lines-left 0)))
 
 ;; ---------------------------------------------------------------------------
 ;; Execution dispatcher — single entry point for replay
@@ -347,6 +398,62 @@ instead of recreating the selection, so the preview is honoured.")
     (message "Repeated %d time%s" count (if (> count 1) "s" "")))
   nil)
 
+(defun helixel--flip-dir (dir)
+  "Return the opposite direction of DIR.  `forward' <-> `backward'."
+  (if (eq dir 'forward) 'backward 'forward))
+
+(defun helixel--chain-edit-loop (tx adv-data)
+  "Repeat chain TX for all targets found by ADV-DATA.
+Each iteration: advance via `helixel--chain-do-advance', then execute TX.
+Returns nil after echo."
+  (let ((cnt 0)
+        (helixel--inhibit-repeat-record t)
+        (helixel--inhibit-action-track t))
+    (condition-case nil
+        (while t
+          (unless (helixel--chain-do-advance adv-data)
+            (signal 'user-error nil))
+          (setq cnt (1+ cnt))
+          (helixel--execute-edit tx))
+      (user-error nil)
+      (search-failed nil))
+    (helixel--repeat-echo cnt)))
+
+(defun helixel--allbuffer-search-insert (tx sel start-pos dir)
+  "Insert TX payload text at every SEL match from START-POS in DIR.
+For `insert-search-offset' and `insert-selection-*' entry-kinds."
+  (save-excursion
+    (goto-char start-pos)
+    (let* ((pat (helixel-sel-search-pattern sel))
+           (entry-kind (helixel-sel-search-entry-kind sel))
+           (txt (or (plist-get (helixel-edit-payload tx) :inserted-text)
+                    (plist-get (helixel-edit-payload tx) :text)
+                    ""))
+           (last-pos nil)
+           (cnt 0))
+      (catch 'done
+        (while (helixel-search--search pat dir nil 'noerror)
+          (let ((mpos (match-beginning 0)))
+            (when (equal mpos last-pos)
+              (setq cnt (1- cnt))
+              (throw 'done nil))
+            (setq last-pos mpos))
+          (setq cnt (1+ cnt))
+          (let* ((is-insert (eq entry-kind 'insert))
+                 (pos (if is-insert (match-beginning 0)
+                        (match-end 0)))
+                 (zlen (= (match-beginning 0) (match-end 0)))
+                 (guard-pos (if zlen (- pos (length txt))
+                              (if is-insert (- pos (length txt)) pos))))
+            (unless (save-excursion
+                      (goto-char guard-pos)
+                      (looking-at (regexp-quote txt)))
+              (goto-char pos)
+              (insert txt)
+              (when is-insert (goto-char (match-end 0))))
+            (when zlen (unless (eobp) (forward-char 1))))))
+      (helixel--repeat-echo cnt))))
+
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
 
@@ -375,95 +482,33 @@ Failure during replay is reported but does not discard the stored edit."
   (let* ((tx helixel--last-tx)
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t)
-         (all-buffer-p (consp raw-prefix))        ; C-u . -> (4)
-         (all-dir-p    (or (and (integerp raw-prefix)
-                            (eql raw-prefix 0))  ; 0. -> 0
-                           (eq raw-prefix '-)))  ; - . -> reverse all
-         (n            (cond ((not raw-prefix) 1)
-                             ((consp raw-prefix)
-                              (abs (prefix-numeric-value raw-prefix)))
-                             ((integerp raw-prefix)
-                             (abs raw-prefix))
-                             (t 1)))
+         (prefix (helixel--decode-repeat-prefix raw-prefix))
+         (all-buffer-p (eq (helixel-repeat-prefix-mode prefix) :all-buffer))
+         (all-dir-p    (eq (helixel-repeat-prefix-mode prefix) :all-dir))
+         (n            (helixel-repeat-prefix-n prefix))
+         (reverse-p    (helixel-repeat-prefix-reverse-p prefix))
          (use-preview helixel--repeat-has-preview)
          (sel (helixel-edit-sel tx))
          (search-sel-p (and sel
                             (eq (helixel-sel-get-kind sel) 'search)))
          (line-sel-p   (and sel
-                            (eq (helixel-sel-get-kind sel) 'line)))
-         ;; Detect reverse: C-u -3 . or C-u - .
-         (reverse-p    (or (and (integerp raw-prefix)
-                                (< raw-prefix 0))
-                           (and (consp raw-prefix)
-                                (< (prefix-numeric-value raw-prefix)
-                                   0))
-                           (eq raw-prefix '-))))
+                            (eq (helixel-sel-get-kind sel) 'line))))
     (setq helixel--repeat-has-preview nil)
     (condition-case err
         (undo-amalgamate-change-group
           (cond
-           ;; --- Entire buffer: point-min -> forward, all matches ---
-           ((and all-buffer-p search-sel-p)
-            (save-excursion
-              (goto-char (point-min))
-              (let ((pat (helixel-sel-search-pattern sel))
-                    (entry-kind (helixel-sel-search-entry-kind sel))
-                    (cnt 0))
-                (if entry-kind
-                    (let ((txt (or (plist-get
-                                    (helixel-edit-payload tx)
-                                    :inserted-text)
-                                   (plist-get
-                                    (helixel-edit-payload tx)
-                                    :text)
-                                   ""))
-                          (last-pos nil))
-                      (catch 'done
-                        (while (helixel-search--search
-                                pat 'forward nil 'noerror)
-                          (let ((mpos (match-beginning 0)))
-                            (when (equal mpos last-pos)
-                              (setq cnt (1- cnt))
-                              (throw 'done nil))
-                            (setq last-pos mpos))
-                          (setq cnt (1+ cnt))
-                          (let* ((is-insert (eq entry-kind 'insert))
-                                 (pos (if is-insert
-                                          (match-beginning 0)
-                                        (match-end 0)))
-                                 (zlen (= (match-beginning 0)
-                                          (match-end 0)))
-                                 (guard-pos (if zlen
-                                                (- pos (length txt))
-                                              (if is-insert
-                                                  (- pos (length txt))
-                                                pos))))
-                            (unless (save-excursion
-                                      (goto-char guard-pos)
-                                      (looking-at
-                                       (regexp-quote txt)))
-                              (goto-char pos)
-                              (insert txt)
-                              (when is-insert
-                                (goto-char (match-end 0))))
-                            (when zlen
-                              (unless (eobp)
-                                (forward-char 1)))))))
-                  (let ((last-pos nil))
-                    (catch 'done
-                      (while (helixel-search--search
-                              pat 'forward nil 'noerror)
-                        (let ((mpos (match-beginning 0)))
-                          (when (equal mpos last-pos)
-                            (setq cnt (1- cnt))
-                            (throw 'done nil))
-                          (setq last-pos mpos))
-                        (setq cnt (1+ cnt))
-                        (push-mark (match-beginning 0) t t)
-                        (goto-char (match-end 0))
-                        (setq helixel--selection-type 'char)
-                        (helixel--execute-edit tx)))))
-                (helixel--repeat-echo cnt))))
+            ;; --- Entire buffer: point-min -> forward, all matches ---
+            ((and all-buffer-p search-sel-p)
+             (if (helixel-sel-search-entry-kind sel)
+                 (helixel--allbuffer-search-insert tx sel
+                   (point-min) 'forward)
+               ;; Force forward direction: C-u . always scans buffer forward
+               (let* ((fwd-sel (helixel-sel-update-ctx sel :dir 'forward))
+                      (fwd-tx (copy-helixel-edit tx)))
+                 (setf (helixel-edit-sel fwd-tx) fwd-sel)
+                 (helixel--repeat-all-buffer-action
+                  (helixel--repeat-strategy fwd-tx)
+                  prefix))))
            ;; --- Entire buffer: all lines from recorded position ---
            ;; C-u . = 0. (forward) + -. (backward) from the recorded
            ;; marker, so every line is processed exactly once and the
@@ -533,163 +578,42 @@ Failure during replay is reported but does not discard the stored edit."
                               (signal 'user-error nil)))))
                     (user-error nil)))))
               (helixel--repeat-echo cnt)))
-           ;; --- All remaining in reverse direction (- .) ---
-           ((and all-dir-p reverse-p search-sel-p)
-            (save-excursion
-              (let* ((orig-dir (helixel-sel-search-dir sel))
-                     (flipped (helixel-sel-update-ctx sel
-                                :dir (if (eq orig-dir 'forward)
-                                         'backward 'forward)))
-                     (cnt 0))
-                (condition-case nil
-                    (while t
-                      (setq cnt (1+ cnt))
-                      (helixel--recreate-selection flipped)
-                      (helixel--execute-edit tx))
-                  (user-error nil)
-                  (search-failed nil))
-                (helixel--repeat-echo cnt))))
-           ((and all-dir-p reverse-p line-sel-p)
-            (save-excursion
-              (let ((line-dir (if (eq (helixel-sel-line-dir sel)
-                                      'forward)
-                                  -1 1))
-                    (cnt 0))
-                ;; Skip the first (already-edited) line.
-                (forward-line line-dir)
-                (condition-case nil
-                    (while t
-                      (setq cnt (1+ cnt))
-                      (helixel--recreate-selection sel)
-                      (helixel--execute-edit tx)
-                      ;; Advance: stop at buffer edge.
-                      (when (/= (forward-line line-dir) 0)
-                        (signal 'user-error nil)))
-                  (user-error nil))
-                (helixel--repeat-echo cnt))))
-           ;; --- All remaining matches in stored direction ---
-           ((and all-dir-p search-sel-p)
-            (save-excursion
-              (let ((cnt 0))
-                (condition-case nil
-                    (while t
-                      (setq cnt (1+ cnt))
-                      (helixel--recreate-selection sel)
-                      (helixel--execute-edit tx))
-                  (user-error nil)
-                  (search-failed nil))
-                (helixel--repeat-echo cnt))))
-           ;; --- All remaining lines in stored direction ---
+            ;; --- All remaining in reverse direction (- .) ---
+            ((and all-dir-p reverse-p search-sel-p)
+             (helixel--repeat-all-remaining-action
+              (helixel--repeat-strategy tx t)))
+            ((and all-dir-p reverse-p line-sel-p)
+             (helixel--repeat-all-remaining-action
+              (helixel--repeat-strategy tx t)))
+            ;; --- All remaining matches in stored direction ---
+            ((and all-dir-p search-sel-p)
+             (helixel--repeat-all-remaining-action
+              (helixel--repeat-strategy tx)))
+            ;; --- All remaining lines in stored direction ---
            ((and all-dir-p line-sel-p)
-            (save-excursion
-              (let* ((line-dir (if (eq (helixel-sel-line-dir sel)
-                                       'backward)
-                                   -1 1))
-                     (advance (helixel-edit-op-advance
-                               (helixel-edit-op tx)))
-                     (cnt 0))
-                (when (eq advance 'line)
-                  (forward-line line-dir))
-                (condition-case nil
-                    (while t
-                      (when (if (eq line-dir -1) (bobp) (eobp))
-                        (signal 'user-error nil))
-                      (setq cnt (1+ cnt))
-                      (helixel--recreate-selection sel)
-                      (helixel--execute-edit tx)
-                      (if (eq advance 'line)
-                          (when (or (/= (forward-line line-dir) 0)
-                                    (if (eq line-dir -1) (bobp) (eobp)))
-                            (signal 'user-error nil))
-                        ;; nil advance: explicit line advance
-                        ;; with bolp/eolp guard to avoid
-                        ;; double-advancing (kill vs change).
-                        (if (if (eq line-dir -1) (bobp) (eobp))
-                            (signal (quote user-error) nil)
-                          (unless (if (eq line-dir -1)
-                                      (eolp) (bolp))
-                            (forward-line line-dir))
-                          (when (if (eq line-dir -1)
-                                    (bobp) (eobp))
-                            (signal (quote user-error)
-                                    nil)))))
-                  (user-error nil))
-                (helixel--repeat-echo cnt))))
-           ;; --- Reverse direction |N| times ---
-           ((and reverse-p (not all-buffer-p) (not all-dir-p)
-                 search-sel-p)
-            (let* ((orig-dir (helixel-sel-search-dir sel))
-                   (flipped-dir (if (eq orig-dir 'forward)
-                                    'backward 'forward))
-                   (flipped (helixel-sel-update-ctx sel
-                              :dir flipped-dir)))
-              (condition-case nil
-                  (dotimes (_ n)
-                    (helixel--recreate-selection flipped)
-                    (helixel--execute-edit tx))
-                (user-error nil)
-                (search-failed nil))
-              (helixel--repeat-echo n)))
-           ((and reverse-p (not all-buffer-p) (not all-dir-p)
-                 line-sel-p)
-            (let ((line-dir (if (eq (helixel-sel-line-dir sel)
-                                    'forward)
-                                -1 1)))
-              (condition-case nil
-                  (dotimes (_ n)
-                    (when (/= (forward-line line-dir) 0)
-                      (signal 'user-error nil))
-                    (helixel--recreate-selection sel)
-                    (helixel--execute-edit tx))
-                (user-error nil))
-              (helixel--repeat-echo n)))
-           ;; --- Entire buffer + reverse: point-max -> backward ---
-           ((and all-buffer-p reverse-p search-sel-p)
-            (save-excursion
-              (goto-char (point-max))
-              (let ((pat (helixel-sel-search-pattern sel))
-                    (entry-kind (helixel-sel-search-entry-kind sel))
-                    (cnt 0))
-                (if entry-kind
-                    (let ((txt (or (plist-get (helixel-edit-payload tx)
-                                              :inserted-text)
-                                   (plist-get (helixel-edit-payload tx) :text)
-                                   ""))
-                          (last-pos nil))
-                      (catch 'done
-                        (while (helixel-search--search pat 'backward nil
-                                                       'noerror)
-                          (let ((mpos (match-beginning 0)))
-                            (when (equal mpos last-pos)
-                              (setq cnt (1- cnt))
-                              (throw 'done nil))
-                            (setq last-pos mpos))
-                          (setq cnt (1+ cnt))
-                          (let ((pos (if (eq entry-kind 'insert)
-                                         (match-beginning 0)
-                                       (match-end 0))))
-                            (unless (save-excursion
-                                      (goto-char pos)
-                                      (looking-at (regexp-quote txt)))
-                              (goto-char pos)
-                              (insert txt)
-                              (when (eq entry-kind 'insert)
-                                (goto-char (match-beginning 0))))))))
-                  (let ((last-pos nil))
-                    (catch 'done
-                      (while (helixel-search--search pat 'backward nil
-                                                     'noerror)
-                        (let ((mpos (match-beginning 0)))
-                          (when (equal mpos last-pos)
-                            (setq cnt (1- cnt))
-                            (throw 'done nil))
-                          (setq last-pos mpos))
-                        (setq cnt (1+ cnt))
-                        (push-mark (match-beginning 0) t t)
-                        (goto-char (match-end 0))
-                        (setq helixel--selection-type 'char)
-                        (helixel--execute-edit tx)))))
-                (helixel--repeat-echo cnt))))
+            (helixel--repeat-all-remaining-action
+             (helixel--repeat-strategy tx)))
+            ;; --- Reverse direction |N| times ---
+            ((and reverse-p (not all-buffer-p) (not all-dir-p)
+                  search-sel-p)
+             (helixel--repeat-n-action
+              (helixel--repeat-strategy tx t) n))
+            ((and reverse-p (not all-buffer-p) (not all-dir-p)
+                  line-sel-p)
+             (helixel--repeat-n-action
+              (helixel--repeat-strategy tx t) n))
+            ;; --- Entire buffer + reverse: point-max -> backward ---
+            ((and all-buffer-p reverse-p search-sel-p)
+             (if (helixel-sel-search-entry-kind sel)
+                 (helixel--allbuffer-search-insert tx sel
+                   (point-max) 'backward)
+               ;; Force backward direction
+               (let* ((bwd-sel (helixel-sel-update-ctx sel :dir 'backward))
+                      (bwd-tx (copy-helixel-edit tx)))
+                 (setf (helixel-edit-sel bwd-tx) bwd-sel)
+                 (helixel--repeat-all-buffer-action
+                  (helixel--repeat-strategy bwd-tx)
+                  prefix))))
            ((and all-buffer-p reverse-p line-sel-p)
             ;; C-u - . = -. (backward) + 0. (forward) from recorded
             ;; marker, so every line is processed exactly once.
@@ -757,7 +681,44 @@ Failure during replay is reported but does not discard the stored edit."
                               (signal 'user-error nil)))))
                     (user-error nil))))
               (helixel--repeat-echo cnt)))
-           ;; --- Non-search sel (not line), 0 or C-u: fall back to once ---
+            ;; --- Chain all-buffer: use strategy (search only)
+            ((and all-buffer-p (eq (helixel-edit-op tx) 'chain)
+                  (eq (plist-get (plist-get (helixel-edit-payload tx)
+                                            :chain-advance) :kind) 'search))
+             (helixel--repeat-all-buffer-action
+              (if reverse-p
+                  (helixel--repeat-strategy tx t)
+                (helixel--repeat-strategy tx))
+              prefix))
+            ;; --- Chain line: entire buffer (C-u ./C-u - .) — keep original
+            ((and all-buffer-p
+                  (eq (helixel-edit-op tx) 'chain)
+                  (eq (plist-get (plist-get (helixel-edit-payload tx)
+                                            :chain-advance) :kind) 'line))
+             (let* ((adv (plist-get (helixel-edit-payload tx)
+                                    :chain-advance))
+                    (use-dir (if reverse-p
+                                 (helixel--flip-dir (plist-get adv :dir))
+                               (plist-get adv :dir)))
+                    (use-adv (plist-put (copy-sequence adv) :dir use-dir))
+                    (start (if (eq use-dir 'forward)
+                               (point-min) (point-max))))
+               (save-excursion
+                 (goto-char start)
+                 (helixel--execute-edit tx)
+                 (helixel--chain-edit-loop tx use-adv))))
+            ;; --- Chain all-dir / reverse-n: use strategy
+            ((and (or all-dir-p (and reverse-p (not all-buffer-p)))
+                  (eq (helixel-edit-op tx) 'chain))
+             (if all-dir-p
+                 (helixel--repeat-all-remaining-action
+                  (if reverse-p (helixel--repeat-strategy tx t)
+                    (helixel--repeat-strategy tx)))
+               (helixel--repeat-n-action
+                (if reverse-p (helixel--repeat-strategy tx t)
+                  (helixel--repeat-strategy tx))
+                n)))
+            ;; --- Non-search sel, 0 or C-u: fall back to once ---
            ((and (or all-dir-p all-buffer-p) sel
                  (not line-sel-p))
             (helixel--recreate-selection sel)
@@ -766,14 +727,12 @@ Failure during replay is reported but does not discard the stored edit."
            (use-preview
             (dotimes (_ n)
               (helixel--execute-edit tx)))
-           ;; --- Normal N times (recreate + execute) ---
+           ;; --- Normal N times: use strategy + repeat-n ---
             (t
              (when (and sel (eq (helixel-sel-get-kind sel) 'textobj))
                (deactivate-mark))
-             (dotimes (_ n)
-               (helixel--repeat-do-advance tx)
-               (helixel--recreate-selection sel)
-               (helixel--execute-edit tx)))))
+             (helixel--repeat-n-action
+              (helixel--repeat-strategy tx) n))))
       ((error quit)
        (message "helixel-repeat-edit aborted: %s"
                 (error-message-string err))))))
@@ -781,63 +740,143 @@ Failure during replay is reported but does not discard the stored edit."
 ;; ---------------------------------------------------------------------------
 ;; Repeat Selection (bound to `,`)
 
-(defun helixel-repeat-selection (&optional count)
+(defun helixel-repeat-selection (&optional raw-prefix)
   "Repeat the last selection without applying any edit (bound to `,`).
-Mirrors the advance-and-recreate behaviour of `.` (\[helixel-repeat-edit])
-without executing the operator.
-For operators with :repeat-advance (e.g. insert-text, replace-char)
-this advances to the next target before showing the selection;
-for operators without advance (e.g. kill, change) it recreates
-the selection in place.
+Mirrors the advance-and-recreate behaviour of `.`
+\(\[helixel-repeat-edit]) without executing the operator.
 
-The full region is shown so you can preview what will be affected
-by a subsequent `.`.
+Prefix RAW-PREFIX semantics (same as `.`):
+  3,          -> 3 times in stored direction
+  0,          -> all remaining targets in stored direction
+  - ,         -> all remaining targets in reverse direction
+  \\[universal-argument] - 3 , -> 3 times in opposite direction
+  \\[universal-argument] ,    -> all targets in entire buffer
 
-In visual state extends the current selection; in normal state
-recreates it from scratch.  With COUNT, repeats the step that many
-times.
-
-Sets `helixel--repeat-has-preview' so a subsequent `.` uses this
-region/position directly instead of advancing again."
-  (interactive "p")
+For chain txs with movement keys, replays those keys to position the
+cursor for preview.  Sets `helixel--repeat-has-preview' so a
+subsequent `.` uses this position directly."
+  (interactive "P")
   (unless helixel--last-tx
     (user-error "No previous edit"))
   (let* ((tx helixel--last-tx)
-         (sel-ctx (helixel-edit-sel tx)))
-    (unless sel-ctx
+         (sel-ctx (helixel-edit-sel tx))
+         (helixel--inhibit-repeat-record t)
+         (helixel--inhibit-action-track t)
+         (prefix (helixel--decode-repeat-prefix raw-prefix))
+         (chain-p (eq (helixel-edit-op tx) 'chain))
+         (chain-adv (and chain-p
+                         (plist-get (helixel-edit-payload tx)
+                                    :chain-advance)))
+         (chain-move (and chain-p
+                          (plist-get (helixel-edit-payload tx)
+                                     :chain-move-keys))))
+    (unless (or sel-ctx chain-p)
       (user-error (concat "Previous edit has no selection to repeat."
                           "  Use a textobj (e.g. ciw)"
                           " or line/rect selection first")))
-    (let ((n (or count 1)))
-      (dotimes (_ n)
-        (helixel--repeat-do-advance tx)
-        (helixel--recreate-selection sel-ctx))
+    (if chain-adv
+        (helixel--repeat-selection-chain tx prefix chain-adv chain-move)
+      ;; Non-chain: use strategy + preview loops.
+      (helixel--repeat-selection-nonchain tx prefix)))
+  (setq helixel--repeat-has-preview t))
 
-      (setq helixel--repeat-has-preview t))))
+(defun helixel--repeat-selection-nonchain (tx prefix)
+  "Non-chain `,` preview.
+All modes use strategy + preview loops."
+  (let ((mode (helixel-repeat-prefix-mode prefix)))
+    (if (eq mode :n-times)
+        ;; N-times: advance + recreate (matches old code exactly).
+        (helixel--repeat-n-preview
+         (helixel--repeat-strategy
+          tx (helixel-repeat-prefix-reverse-p prefix))
+         (helixel-repeat-prefix-n prefix))
+      ;; All-buffer / all-dir: use strategy + preview loops.
+      ;; Non-search non-line ops fall through to one-shot recreate
+      ;; (matches old behavior: all-dir for movement/textobj
+      ;; executes once, not in a loop).
+      (let ((sel (helixel-edit-sel tx)))
+        (if (and sel
+                 (not (memq (helixel-sel-get-kind sel) '(search line))))
+            (helixel--recreate-selection sel)
+        (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
+               (action (helixel--repeat-strategy tx reverse-p)))
+          (helixel--repeat-preview action prefix)))))))
+
+(defun helixel--repeat-selection-chain (tx prefix chain-adv chain-move)
+  "Chain `,` preview: advance + movement-key replay.
+Wraps the strategy's position-fn to also replay CHAIN-MOVE
+movement keys.  Uses preview loops (position-fn only) to iterate.
+For n-times, propagates user-error (matches old behavior)."
+  (setq helixel--repeat-has-preview nil)
+  (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
+         (mode (helixel-repeat-prefix-mode prefix)))
+    ;; Line all-buffer: first target at start needs movement
+    ;; replay before the loop advances.
+    (if (and (eq mode :all-buffer)
+             (eq (plist-get chain-adv :kind) 'line))
+        (let* ((use-dir (if reverse-p
+                            (helixel--flip-dir (plist-get chain-adv :dir))
+                          (plist-get chain-adv :dir)))
+               (start (if (eq use-dir 'forward) (point-min) (point-max))))
+          (goto-char start)
+          (when chain-move (execute-kbd-macro chain-move))
+          (let ((chain-action
+                 (make-helixel-repeat-action
+                  :position-fn
+                  (lambda ()
+                    (when (helixel--chain-do-advance
+                           (plist-put (copy-sequence chain-adv) :dir use-dir))
+                      (when chain-move (execute-kbd-macro chain-move))
+                      t))
+                  :execute-fn (lambda () nil))))
+            (helixel--repeat-all-remaining-preview chain-action)))
+      ;; All other chain cases: wrap strategy with movement replay.
+      (let* ((action (helixel--repeat-strategy tx reverse-p))
+             (wrapped-action
+              (make-helixel-repeat-action
+               :position-fn
+               (lambda ()
+                 (when (funcall
+                        (helixel-repeat-action-position-fn action))
+                   (when chain-move (execute-kbd-macro chain-move))
+                   t))
+               :execute-fn (lambda () nil))))
+        (helixel--repeat-preview wrapped-action prefix))))
+  (setq helixel--repeat-chain-preview t)
+  (setq helixel--repeat-has-preview t))
 
 (defun helixel-repeat-edit-pick ()
-  "Choose a past edit from `helixel--edit-ring' and replay it.
-The chosen entry becomes the new `helixel--last-tx'."
+  "Choose a past edit from the action ring and replay it.
+Scans `helixel--action-ring' for entries with `:edit' data.
+The chosen entry's :edit becomes the new `helixel--last-tx'."
   (interactive)
-  (unless helixel--edit-ring
-    (user-error "Edit ring is empty"))
-  (let* ((items (cl-loop for tx in helixel--edit-ring
-                         for i from 0
-                         collect (cons (format "%3d  %s" i
-                                               (helixel-edit-display tx))
-                                       tx)))
-         (choice (completing-read "Repeat edit: " items nil t))
-         (tx (cdr (assoc choice items))))
-    (when tx
-      (setq helixel--last-tx tx)
-      (helixel-repeat-edit))))
+  (let* ((edit-entries
+          (cl-loop for action in helixel--action-ring
+                   for edit = (plist-get action :edit)
+                   when edit
+                   collect (cons action edit))))
+    (unless edit-entries
+      (user-error "No past edits to repeat"))
+    (let* ((items (cl-loop for (_ . tx) in edit-entries
+                           for i from 0
+                           collect (cons (format "%3d  %s" i
+                                                 (helixel-edit-display tx))
+                                         tx)))
+           (choice (completing-read "Repeat edit: " items nil t))
+           (tx (cdr (assoc choice items))))
+      (when tx
+        (setq helixel--last-tx tx)
+        (helixel-repeat-edit)))))
 
 (defun helixel-repeat-debug ()
-  "Pretty-print `helixel--last-tx' and the head of `helixel--edit-ring'.
+  "Pretty-print `helixel--last-tx' and edit entries in the action ring.
 Intended for development — inspect what dot-repeat would replay next."
   (interactive)
   (require 'pp)
-  (let ((buf (get-buffer-create "*helixel-repeat-debug*")))
+  (let* ((edits (cl-loop for a in helixel--action-ring
+                         for tx = (plist-get a :edit)
+                         when tx collect tx))
+         (buf (get-buffer-create "*helixel-repeat-debug*")))
     (with-current-buffer buf
       (let ((inhibit-read-only t))
         (erase-buffer)
@@ -848,13 +887,259 @@ Intended for development — inspect what dot-repeat would replay next."
                     "<none>")
                 ")\n")
         (pp helixel--last-tx (current-buffer))
-        (insert "\n;; helixel--edit-ring ("
-                (number-to-string (length helixel--edit-ring))
+        (insert "\n;; Edits in action ring ("
+                (number-to-string (length edits))
                 " entries):\n")
-        (dolist (tx helixel--edit-ring)
+        (dolist (tx edits)
           (insert (format ";;   %s\n" (helixel-edit-display tx))))
         (goto-char (point-min))))
     (display-buffer buf)))
+
+;; ── Chain runner + op registration ──
+
+(defvar-local helixel--chain-cmd-count 0
+  "Counter for commands executed during chain recording.
+Incremented by `helixel--chain-post-cmd'.")
+
+(defun helixel--chain-post-cmd ()
+  "Post-command-hook: track movement key count during chain recording.
+Sets `helixel--chain-move-len' when the first edit command is detected."
+  (when helixel--repeat-chaining
+    ;; Don't count Q (chain-end) itself
+    (unless (memq this-command
+                  '(helixel-repeat-chain-start helixel-repeat-chain-end))
+      (setq helixel--chain-cmd-count (1+ helixel--chain-cmd-count)))
+    (unless helixel--chain-move-len
+      ;; Check if this command is a known edit op
+      (when (and helixel--action
+                 (eq (plist-get helixel--action :category) (quote edit)))
+        ;; First edit detected: move-len = commands BEFORE this one
+        (setq helixel--chain-move-len
+              (max 0 (1- helixel--chain-cmd-count)))))))
+
+(defun helixel--repeat-chain-runner (tx)
+  "Execute the stored kmacro in chain TX.
+When `helixel--repeat-chain-preview' is set (from ,), replays only
+the edit part (movement keys were already executed by ,)."
+  (let* ((payload (helixel-edit-payload tx))
+         (edit-keys (plist-get payload :kmacro))
+         (helixel--inhibit-repeat-record t)
+         (helixel--inhibit-action-track t))
+    (setq helixel--repeat-chain-preview nil)
+    (when edit-keys
+      (execute-kbd-macro edit-keys))))
+
+(helixel-register-op chain
+  :display "chain"
+  :repeat-advance nil    ; chain uses its own :chain-advance in payload
+  :runner #'helixel--repeat-chain-runner)
+
+;; ── Chain advance helpers ──
+
+(defun helixel--chain-cursor-touches-p (bounds)
+  "Return non-nil if cursor is within marker BOUNDS (BEG . END).
+When BOUNDS is nil (no initial selection) always returns t."
+  (if bounds
+      (let ((mb (car bounds)) (me (cdr bounds)))
+        (and (marker-position mb) (marker-position me)
+             (let ((sl (line-number-at-pos mb))
+                   (el (line-number-at-pos me))
+                   (cl (line-number-at-pos)))
+               (and (>= cl sl) (<= cl el)))))
+    t))
+
+(defun helixel--chain-advance-data (ctx)
+  "Return advance plist from init CTX, or nil if CTX is nil.
+Only produces advance data for `search' and `line' selection kinds;
+other kinds (movement, textobj, etc.) return nil for no auto-advance."
+  (when ctx
+    (let ((kind (helixel-sel-get-kind ctx)))
+      (cond ((eq kind 'search)
+             `(:kind search
+               :pattern ,(helixel-sel-search-pattern ctx)
+               :dir ,(helixel-sel-search-dir ctx)
+               :entry-kind ,(helixel-sel-search-entry-kind ctx)))
+            ((eq kind 'line)
+             `(:kind line
+               :dir ,(or (plist-get (helixel-sel--ctx-ensure ctx)
+                                    :dir)
+                         'forward)
+               :count ,(or (plist-get (helixel-sel--ctx-ensure ctx)
+                                      :count)
+                           1)))))))
+
+(defun helixel--chain-do-advance (adv-data)
+  "Execute advance using ADV-DATA plist, skipping blank lines for line kind.
+Return t on success, nil on edge or when search finds no more matches.
+For search with :entry-kind, skips the current match so `.` advances
+to the next match instead of re-finding the same one."
+  (let ((kind (plist-get adv-data :kind))
+        (dir (plist-get adv-data :dir))
+        (count (or (plist-get adv-data :count) 1))
+        (pat (plist-get adv-data :pattern))
+        (entry-kind (plist-get adv-data :entry-kind)))
+    (if (eq kind 'search)
+        (progn
+          (when entry-kind
+            (when (or (looking-at pat)
+                      (save-excursion
+                        (condition-case nil
+                            (progn
+                              (helixel-search--search pat 'backward)
+                              (let ((m-end (match-end 0))
+                                    (m-beg (match-beginning 0)))
+                                (if (= m-beg m-end)
+                                    (= (line-number-at-pos)
+                                       (line-number-at-pos m-end))
+                                  (<= (- (point) m-end) (length pat)))))
+                          (search-failed nil))))
+              (if (eq dir 'backward)
+                  (goto-char (max (point-min)
+                                  (1- (match-beginning 0))))
+                (goto-char (if (= (match-beginning 0) (match-end 0))
+                               (min (point-max)
+                                    (1+ (match-end 0)))
+                             (match-end 0))))))
+          (condition-case nil
+              (progn (helixel-search--search pat dir)
+                     (push-mark (match-beginning 0) t t)
+                     (goto-char (match-end 0))
+                     t)
+            (search-failed nil)))
+      (let ((inc (if (eq dir 'backward) -1 1))
+            (lines-left count))
+        (while (and (> lines-left 0) (= (forward-line inc) 0))
+          (unless (helixel--blank-line-p)
+            (setq lines-left (1- lines-left))))
+        (when (= lines-left 0)
+          (end-of-line)
+          t)))))
+
+;; ── Chain lifecycle commands ──
+
+(defun helixel-repeat-chain-start ()
+  "Start recording a kmacro for compound dot-repeat.
+Snapshots the current selection context for advance decisions.
+While recording, all keystrokes are captured by kmacro.
+Call `helixel-repeat-chain-end' to finish and create a repeatable
+transaction, or `helixel-repeat-chain-cancel' to discard."
+  (interactive)
+  (when (or helixel--repeat-chaining executing-kbd-macro)
+    (user-error "Already chaining or macro replay in progress"))
+  (setq helixel--repeat-chaining t)
+  (setq helixel--chain-move-len nil)
+  (setq helixel--chain-cmd-count 0)
+  ;; Snapshot init context BEFORE deactivate-mark
+  (setq helixel--repeat-chain-init-ctx helixel--repeat-sel-ctx)
+  (setq helixel--repeat-chain-init-bounds
+        (when (use-region-p)
+          (cons (copy-marker (region-beginning))
+                (copy-marker (region-end)))))
+  (deactivate-mark)
+  ;; Add hook to count movement keys before first edit
+  (add-hook 'post-command-hook #'helixel--chain-post-cmd nil t)
+  ;; Start kmacro recording
+  (start-kbd-macro nil)
+  (message "Chain rec • Q to finish"))
+
+(defun helixel-repeat-chain-end ()
+  "Stop kmacro recording and create a compound chain transaction.
+Determines advance behavior from the initial selection context
+\(snapshotted at chain-start) and whether the cursor still touches
+the original target range."
+  (interactive)
+  (unless helixel--repeat-chaining
+    (user-error "Not chaining"))
+  (when defining-kbd-macro
+    (end-kbd-macro))
+  (setq helixel--repeat-chaining nil)
+  (remove-hook 'post-command-hook #'helixel--chain-post-cmd t)
+  (let ((macro (copy-sequence last-kbd-macro)))
+    ;; NOTE: Do NOT clean up init-bounds markers yet —
+    ;; helixel--chain-cursor-touches-p reads them below.
+    (if (and macro (> (length macro) 0))
+        (let* ((init-ctx helixel--repeat-chain-init-ctx)
+               ;; The snapshot was taken before the first edit; i/a
+               ;; commands update :entry-kind in the live ctx after
+               ;; the snapshot.  Merge it so search advance can
+               ;; skip the current match correctly.
+               (live-ctx helixel--repeat-sel-ctx)
+               (init-ctx (if (and init-ctx live-ctx
+                                  (eq (helixel-sel-get-kind init-ctx)
+                                      'search)
+                                  (not (helixel-sel-search-entry-kind
+                                        init-ctx))
+                                  (helixel-sel-search-entry-kind
+                                   live-ctx))
+                             (helixel-sel-update-ctx
+                              init-ctx
+                              :entry-kind
+                              (helixel-sel-search-entry-kind live-ctx))
+                           init-ctx))
+               (init-bounds helixel--repeat-chain-init-bounds)
+               (move-len (and helixel--chain-move-len
+                              (> helixel--chain-move-len 0)
+                              (<= helixel--chain-move-len (length macro))
+                              helixel--chain-move-len))
+               (move-keys (when move-len
+                            (substring macro 0 move-len)))
+               (edit-keys (if move-len
+                              (substring macro move-len)
+                            macro))
+               (touching-p (helixel--chain-cursor-touches-p init-bounds))
+               (advance-data (when touching-p
+                               (helixel--chain-advance-data init-ctx)))
+               (tx (helixel-edit-make 'chain nil
+                     :runner #'helixel--repeat-chain-runner
+                     :display (format "chain(%d)" (length edit-keys))
+                     :kmacro edit-keys
+                     :chain-move-keys move-keys
+                     :chain-advance advance-data
+                     :chain-init-ctx init-ctx)))
+          ;; Now clean up markers
+          (when init-bounds
+            (let ((mb (car init-bounds))
+                  (me (cdr init-bounds)))
+              (when (marker-position mb) (set-marker mb nil))
+              (when (marker-position me) (set-marker me nil))))
+          (setq helixel--repeat-chain-init-ctx nil)
+          (setq helixel--repeat-chain-init-bounds nil)
+          (setq helixel--chain-move-len nil)
+          (setq helixel--last-tx tx)
+          ;; Create action so live-edit-set + action-commit have a target
+          (helixel-action-start 'edit 'chain)
+          (helixel--live-edit-set tx)
+          (helixel-action-commit)
+          (message "Chain recorded (%d keys, move=%d) %s"
+                   (length edit-keys)
+                   (if move-keys (length move-keys) 0)
+                   (if advance-data "• . to advance" "• . to repeat")))
+      ;; Clean up markers even when recording empty
+      (when helixel--repeat-chain-init-bounds
+        (let ((mb (car helixel--repeat-chain-init-bounds))
+              (me (cdr helixel--repeat-chain-init-bounds)))
+          (when (marker-position mb) (set-marker mb nil))
+          (when (marker-position me) (set-marker me nil))))
+      (setq helixel--repeat-chain-init-ctx nil)
+      (setq helixel--repeat-chain-init-bounds nil)
+      (message "Chain empty — nothing recorded"))))
+
+(defun helixel-repeat-chain-cancel ()
+  "Discard the current chain without recording."
+  (interactive)
+  (when defining-kbd-macro (end-kbd-macro))
+  ;; Clean up markers
+  (when helixel--repeat-chain-init-bounds
+    (let ((mb (car helixel--repeat-chain-init-bounds))
+          (me (cdr helixel--repeat-chain-init-bounds)))
+      (when (marker-position mb) (set-marker mb nil))
+      (when (marker-position me) (set-marker me nil))))
+  (setq helixel--repeat-chaining nil)
+  (setq helixel--repeat-chain-init-ctx nil)
+  (setq helixel--repeat-chain-init-bounds nil)
+  (setq helixel--chain-move-len nil)
+  (remove-hook 'post-command-hook #'helixel--chain-post-cmd t)
+  (message "Chain cancelled"))
 
 (provide 'helixel-repeat)
 ;;; helixel-repeat.el ends here

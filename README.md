@@ -272,6 +272,61 @@ n           continue backward
 C-u n       pick a past search/find-char from history
 ```
 
+### Chain Recording (`.` Advance)
+
+`q` / `Q` record a compound editing sequence as a kmacro and create
+a repeatable transaction.  `.` advances to the next target and replays
+the entire sequence.
+
+| Key | Action |
+|-----|--------|
+| `q` | Start chain recording (snapshots selection context, starts kmacro) |
+| `Q` | End chain, create repeatable compound transaction |
+| `.` | Advance to next target and replay the recorded sequence |
+| `,` | Preview the next target without editing |
+
+**How it works:**
+
+1. Select a target (line with `x`, search match with `/`) — this
+   establishes the *advance context*.
+2. Press `q` — starts kmacro recording, snapshots the selection.
+3. Perform any editing operations (insert, normal-mode commands, etc.)
+   — all keystrokes are captured by kmacro.
+4. Press `Q` — stops recording, creates a chain transaction.
+5. `.` advances to the **next** target and replays the recorded sequence.
+6. `.` again — advance further, replay again.
+
+**Advance behavior:**
+
+| Init ctx | Advance |
+|----------|---------|
+| Line (`x`) | Next line (EOL positioning matches recording context) |
+| Search (`/`) | Next match |
+| None | Default line advance |
+
+Cursor position at `Q` time: if the cursor has left the original
+target range (e.g. moved to a different line), advance is **disabled**
+and `.` replays in-place.
+
+**Examples:**
+
+```
+x             select line (advance by line)
+q             start chain
+bb            select 2 words backward
+d             kill
+Q             end chain
+.             next line: select 2 words backward, kill
+.             next line, repeat again
+
+/foo<RET>     search for "foo" (advance by search match)
+q             start chain
+ciwbar<ESC>   change inner word to "bar"
+Q             end chain
+.             next "foo" match: change inner word to "bar"
+.             next "foo" match, repeat
+```
+
 ### Dot-Repeat (`.`) Prefixes
 
 After a search-initiated edit (e.g. `/hello<RET> cXXX<ESC>`),

@@ -1,4 +1,4 @@
-;;; helixel-delimiter.el --- Delimiter protocol  -*- lexical-binding: t; -*-
+;;; helixel-delimiter.el --- Delimiter builder functions -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026  jixiuf
 
@@ -20,103 +20,27 @@
 
 ;;; Commentary:
 ;;
-;; Unified delimiter descriptor for text objects and surround operations.
+;; Delimiter builder functions for helixel-mode.
 ;;
-;; A delimiter plist describes a delimited region (pair of brackets, a
-;; quoted string, XML tags, mode-specific blocks, or regex-defined
-;; blocks).  It carries enough information for both text-object selection
-;; and surround add/delete/replace.
+;; Constructs delimiter plists for pair, quote, tag, block, and regex
+;; delimited regions.  Each builder returns a plist conforming to the
+;; delimiter protocol defined in helixel-data.el.
 ;;
-;; Schema:
-;;   (:type    pair|quote|tag|block|regex
-;;    :open    char|string   ;; opening delimiter
-;;    :close   char|string   ;; closing delimiter
-;;    :finder  function      ;; (fn dir) → 0|N, moves point, sets match-data
-;;    :nl-p    boolean)      ;; t → add/delete handles adjacent newlines
-;;
-;; This module has ZERO dependencies on other helixel modules and
-;; NO side effects.  It is the single source of truth for delimiter
-;; data, consumed by helixel-textobj and helixel-surround.
+;; Depends on helixel-data (accessors, protocol schema) and
+;; helixel-textobj-engine (for the actual finder implementations).
 
 ;;; Code:
 
-(require 'cl-lib)
-
-;; ---------------------------------------------------------------------------
-;; Accessors
-;; ---------------------------------------------------------------------------
-
-(defsubst helixel-delimiter-type (d)
-  "Return the :type of delimiter D."
-  (plist-get d :type))
-
-(defsubst helixel-delimiter-open (d)
-  "Return the :open delimiter character or string of D."
-  (plist-get d :open))
-
-(defsubst helixel-delimiter-close (d)
-  "Return the :close delimiter character or string of D."
-  (plist-get d :close))
-
-(defsubst helixel-delimiter-finder (d)
-  "Return the :finder function of delimiter D."
-  (plist-get d :finder))
-
-(defsubst helixel-delimiter-nl-p (d)
-  "Return non-nil if delimiter D uses newline handling."
-  (plist-get d :nl-p))
-
-;; ---------------------------------------------------------------------------
-;; Shared helpers
-;; ---------------------------------------------------------------------------
-
-(defvar-local helixel--block-chosen-spec nil)
-
-(defun helixel--find-equal-char (char dir)
-  "Like `helixel-up-paren' but for equal open/close CHAR (quotes).
-DIR +1 forward, -1 backward.  Returns 0 on success, 1 on failure."
-  (if (> dir 0)
-      (if (search-forward (string char) nil t) 0 1)
-    (if (search-backward (string char) nil t) 0 1)))
-
-(defun helixel-delimiter-find (d dir)
-  "Find delimiter D in DIR (+1 forward, -1 backward).
-Returns 0 on success, non-zero on failure.  Moves point and sets `match-data'."
-  (funcall (helixel-delimiter-finder d) dir))
-
-(defun helixel-delimiter-bounds (d)
-  "Return ((OB . OE) . (CB . CE)) for the innermost delimiter D at point.
-OB, OE: open delimiter beg/end.  CB, CE: close delimiter beg/end."
-  (let ((close (helixel-delimiter-close d)))
-    (when (eobp) (skip-chars-backward " \t\n\r"))
-    (when (and (characterp close) (> (point) 1) (= (char-before) close))
-      (backward-char))
-    (unwind-protect
-        (progn
-          (unless (zerop (helixel-delimiter-find d -1))
-            (user-error "No enclosing delimiter"))
-          (let ((ob (match-beginning 0)) (oe (match-end 0)))
-            (goto-char oe)
-            (unless (zerop (helixel-delimiter-find d 1))
-              (user-error "No enclosing delimiter"))
-            (let ((cb (match-beginning 0)) (ce (match-end 0)))
-              (cons (cons ob oe) (cons cb ce)))))
-      (setq helixel--block-chosen-spec nil))))
-
-(defun helixel--strip-adjacent-newlines (open-end close-beg)
-  "Adjust OPEN-END and CLOSE-BEG to exclude adjacent newlines.
-Returns (OPEN-END . CLOSE-BEG)."
-  (cons (if (eq (char-after open-end) ?\n) (1+ open-end) open-end)
-        (if (eq (char-before close-beg) ?\n) (1- close-beg) close-beg)))
-
-;; ---------------------------------------------------------------------------
-;; Builder — construct delimiter plists for each type
-;; ---------------------------------------------------------------------------
+(require 'helixel-data)
 
 (declare-function helixel-up-paren "helixel-textobj-engine")
 (declare-function helixel-up-xml-tag "helixel-textobj-engine")
 (declare-function helixel-up-block-at-point "helixel-textobj-engine")
 (declare-function helixel-up-regex-block "helixel-textobj-engine")
+
+;; ---------------------------------------------------------------------------
+;; Builder — construct delimiter plists for each type
+;; ---------------------------------------------------------------------------
 
 (defun helixel--make-pair-delimiter (open close)
   "Create a pair delimiter for OPEN and CLOSE characters."

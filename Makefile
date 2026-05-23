@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-action.el helixel-edit.el helixel-repeat.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-delimiter.el helixel-textobj-engine.el helixel-surround.el helixel-textobj.el helixel-shims.el helixel.el
-ELS := helixel-action.elc helixel-edit.elc helixel-repeat.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-delimiter.elc helixel-textobj-engine.elc helixel-surround.elc helixel-textobj.elc helixel-shims.elc helixel.elc
+FILES = helixel-data.el helixel-action.el helixel-edit.el helixel-repeat.el helixel-repeat-strategy.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-delimiter.el helixel-textobj-engine.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
+ELS := helixel-data.elc helixel-action.elc helixel-edit.elc helixel-repeat.elc helixel-repeat-strategy.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-delimiter.elc helixel-textobj-engine.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
@@ -105,7 +105,7 @@ ctx-lint:
 	@echo "---- ctx-lint: raw plist-get on sel/ctx"
 	@err=0; \
 	for file in $(FILES); do \
-	  case "$$file" in helixel-edit.el) continue ;; esac; \
+	  case "$$file" in helixel-edit.el|helixel-data.el) continue ;; esac; \
 	  for key in $(CTX_UNIQUE); do \
 	    if grep -qn "plist-get.*\<$$key\>" "$$file" 2>/dev/null; then \
 	      echo "$$file: FATAL — raw plist-get with ctx-unique key $$key:"; \

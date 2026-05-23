@@ -41,6 +41,8 @@
 (require 'helixel-delimiter)
 (require 'helixel-textobj)
 (require 'helixel-surround)
+(require 'helixel-swap)
+(require 'helixel-repeat-strategy)
 (require 'helixel-shims)
 
 (provide 'helixel)

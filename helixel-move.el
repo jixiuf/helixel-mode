@@ -432,11 +432,7 @@ Replay typed text on all rectangle lines."
 
 ;; ── Region replace / replace-char ──
 
-(defun helixel--replace-region (start end text)
-  "Replace region from START to END in-place with TEXT."
-  (delete-region start end)
-  (insert text)
-  (helixel--clear-data))
+(declare-function helixel--replace-region "helixel-common")
 
 (helixel-define-command helixel-replace-char
     (:category edit :subcat replace-char :params (char))

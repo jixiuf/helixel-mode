@@ -195,19 +195,22 @@ with the ring head so the picker sees the full transaction."
     (helixel-change-thing-at-point)
     (insert "X")
     (helixel-insert-exit)
-    ;; Verify ring head has the payload
-    (should (plist-get (helixel-edit-payload (car helixel--edit-ring))
+    ;; Verify action ring entry has the payload via :edit
+    (should (plist-get (helixel-edit-payload
+                        (plist-get (car helixel--action-ring) :edit))
                        :inserted-text))
     (should (string= (plist-get
-                      (helixel-edit-payload (car helixel--edit-ring))
+                      (helixel-edit-payload
+                       (plist-get (car helixel--action-ring) :edit))
                       :inserted-text)
                      "X"))
-    ;; Ring head should be eq to last-tx
-    (should (eq (car helixel--edit-ring) helixel--last-tx))
-    ;; Simulate picking the first entry (the only one)
-    (should (= 1 (length helixel--edit-ring)))
+    ;; Action ring entry's :edit should be eq to last-tx
+    (should (eq (plist-get (car helixel--action-ring) :edit)
+                helixel--last-tx))
+    ;; Picking the first entry replays correctly
     (goto-char 4)
-    (setq helixel--last-tx (car helixel--edit-ring))
+    (setq helixel--last-tx
+          (plist-get (car helixel--action-ring) :edit))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "X X foo"))))
 
@@ -222,16 +225,20 @@ with the ring head so the picker sees the full transaction."
         (helixel-insert)
         (insert "Z")
         (helixel-insert-exit)
-        ;; Verify ring head has :text payload
-        (should (plist-get (helixel-edit-payload (car helixel--edit-ring))
+        ;; Verify action ring entry has :text payload via :edit
+        (should (plist-get (helixel-edit-payload
+                            (plist-get (car helixel--action-ring) :edit))
                            :text))
         (should (string=
-                 (plist-get (helixel-edit-payload (car helixel--edit-ring))
+                 (plist-get (helixel-edit-payload
+                             (plist-get (car helixel--action-ring) :edit))
                             :text)
                  "Z"))
-        (should (eq (car helixel--edit-ring) helixel--last-tx))
+        (should (eq (plist-get (car helixel--action-ring) :edit)
+                    helixel--last-tx))
         (goto-char 4)
-        (setq helixel--last-tx (car helixel--edit-ring))
+        (setq helixel--last-tx
+              (plist-get (car helixel--action-ring) :edit))
         (helixel-repeat-edit)
         (should (string= (buffer-string) "aZbZc")))))
 

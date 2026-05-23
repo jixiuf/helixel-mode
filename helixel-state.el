@@ -53,7 +53,6 @@
 (declare-function helixel--linewise-text "helixel-move")
 (declare-function helixel--rect-wise-text "helixel-move")
 (declare-function helixel--line-bounds-of-region "helixel-move")
-(declare-function helixel--selection-type "helixel-common")
 
 (defvar rectangle-mark-mode)
 
@@ -362,31 +361,36 @@ Sets up change-hook recording and switches to insert state."
                  (and (marker-position helixel--change-track-marker)
                       (buffer-substring
                        helixel--change-track-marker (point))))))
-    ;; Store kmacro keys as primary replay mechanism
-    (when keys
-      (setq helixel--last-tx
-            (helixel-edit-with-payload helixel--last-tx :keys keys)))
-    ;; Store executed commands (keymap-independent replay)
-    (when commands
-      (setq helixel--last-tx
-            (helixel-edit-with-payload helixel--last-tx :commands
-                                       commands)))
-    ;; Store text as replay fallback (tests, programmatic use)
-    (when text
-      (setq helixel--last-tx
-            (helixel-edit-with-payload helixel--last-tx :text text))
-      ;; For change operations, same text as :inserted-text
-      (when (eq (helixel-edit-op helixel--last-tx) 'change)
+    (when helixel--last-tx
+      ;; Store kmacro keys as primary replay mechanism
+      (when keys
         (setq helixel--last-tx
-              (helixel-edit-with-payload helixel--last-tx
-                                         :inserted-text text))))
+              (helixel-edit-with-payload helixel--last-tx :keys keys)))
+      ;; Store executed commands (keymap-independent replay)
+      (when commands
+        (setq helixel--last-tx
+              (helixel-edit-with-payload helixel--last-tx :commands
+                                         commands)))
+      ;; Store text as replay fallback (tests, programmatic use)
+      (when text
+        (setq helixel--last-tx
+              (helixel-edit-with-payload helixel--last-tx :text text))
+        ;; For change operations, same text as :inserted-text
+        (when (eq (helixel-edit-op helixel--last-tx) 'change)
+          (setq helixel--last-tx
+                (helixel-edit-with-payload helixel--last-tx
+                                           :inserted-text text))))
+      ;; The action ring entry's :edit is the same object as
+      ;; helixel--last-tx, so updating helixel--last-tx also
+      ;; updates the ring entry (same reference).
+      ;; Sync action ring front to point to the updated tx.
+      (let ((front (car helixel--action-ring)))
+        (when front
+          (plist-put front :edit helixel--last-tx))))
     ;; Cleanup
     (when helixel--change-track-marker
       (set-marker helixel--change-track-marker nil)
       (setq helixel--change-track-marker nil))
-    ;; Sync ring head
-    (when (and helixel--edit-ring helixel--last-tx)
-      (setcar helixel--edit-ring helixel--last-tx))
     ;; Rect replay
     (when helixel--rect-replay-data
       (helixel--rect-replay))
@@ -888,6 +892,27 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
 (helixel-define-jump-command 'xref-find-references)
 (helixel-define-jump-command 'eglot-find-typeDefinition)
 (helixel-define-jump-command 'eglot-find-implementation)
+
+
+;; ── Selection type validator ──
+;; (moved from helixel-common.el to avoid circular dep with helixel-swap)
+
+(defun helixel--selection-type ()
+  "Return current selection type, or nil.
+Validates that the region actually matches the claimed type.
+Supports `line' and `rect'."
+  (when (region-active-p)
+    (cond
+     ((eq helixel--selection-type 'rect)
+      (when rectangle-mark-mode 'rect))
+     ((eq helixel--selection-type 'line)
+      (let ((beg (region-beginning))
+            (end (region-end)))
+        (when (and (save-excursion (goto-char beg) (bolp))
+                   (save-excursion (goto-char end) (or (eolp) (eobp))))
+          'line)))
+     ((eq helixel--selection-type 'textobj)
+      'textobj))))
 
 (provide 'helixel-state)
 ;;; helixel-state.el ends here

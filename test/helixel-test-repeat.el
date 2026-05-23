@@ -300,7 +300,35 @@ Kmacro captures cursor keys; test uses text fallback."
             :text "YYXX"))
     (helixel-repeat-edit)
     ;; Text appended at eol of line 1 (earlier line).
-    (should (string= (buffer-string)
-                     "hello worldYYXX\nline2\n"))))
+     (should (string= (buffer-string)
+                      "hello worldYYXX\nline2\n"))))
+
+(ert-deftest helixel-test-repeat-line-advance-skip-blank ()
+  "`. ` after x on a non-blank line skips blank lines on advance."
+  (helixel-test-with-buffer "line1\n   \nline3\n"
+    (goto-char 1)
+    (setq helixel--last-tx
+          (helixel-edit-make 'insert-text
+            (helixel-sel-create 'line '(:dir forward :count 1)
+                                #'helixel--recreate-line "L")
+            :text "X"))
+    (let ((old-line (line-number-at-pos)))
+      (should (= old-line 1))
+      (helixel-repeat-edit)
+      (should (= (line-number-at-pos) 3))))
+  ;; Backward
+  (helixel-test-with-buffer "line1\n   \nline3\n"
+    (goto-char (point-min))
+    (forward-line 2)              ;; go to line 3
+    (setq helixel--last-tx
+          (helixel-edit-make 'insert-text
+            (helixel-sel-create 'line '(:dir backward :count 1)
+                                #'helixel--recreate-line "L")
+            :text "Y"))
+    (let ((old-line (line-number-at-pos)))
+      (should (= old-line 3))
+      (helixel-repeat-edit)
+      ;; Should skip blank line and go to line 1
+      (should (= (line-number-at-pos) 1)))))
 
 ;;; helixel-test-repeat.el ends here

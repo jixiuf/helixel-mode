@@ -34,8 +34,13 @@
 
 ;;; Code:
 
-(require 'flymake)
-(require 'eglot)
+(declare-function flymake-show-buffer-diagnostics "flymake")
+(declare-function flymake-goto-next-error "flymake")
+(declare-function flymake-goto-prev-error "flymake")
+(declare-function eglot-find-typeDefinition "eglot")
+(declare-function eglot-find-implementation "eglot")
+(declare-function eglot-code-action-quickfix "eglot")
+(declare-function eglot-rename "eglot")
 (require 'helixel-state)
 (require 'helixel-move)
 (require 'helixel-common)
@@ -142,6 +147,10 @@
 ;; Macro recording & playback (q = start/insert-counter, @ = end/call)
 (define-key helixel-normal-map "q" #'kmacro-start-macro-or-insert-counter)
 (define-key helixel-normal-map "@" #'kmacro-end-or-call-macro)
+(define-key helixel-normal-map "q" #'helixel-repeat-chain-start)
+(define-key helixel-normal-map "Q" #'helixel-repeat-chain-end)
+(define-key helixel-normal-map "." #'helixel-repeat-edit)
+(define-key helixel-normal-map "," #'helixel-repeat-selection)
 
 (define-key helixel-normal-map "c" #'helixel-change-thing-at-point)
 (define-key helixel-normal-map "d" #'helixel-kill-thing-at-point)
@@ -153,8 +162,6 @@
 (define-key helixel-normal-map "p" #'helixel-yank)
 (define-key helixel-normal-map "P" #'helixel-yank-before)
 (define-key helixel-normal-map "\"" #'helixel-select-register)
-(define-key helixel-normal-map "." #'helixel-repeat-edit)
-(define-key helixel-normal-map "," #'helixel-repeat-selection)
 (define-key helixel-normal-map "x" #'helixel-select-line)
 (define-key helixel-normal-map "v" #'helixel-backward-word-end)
 (define-key helixel-normal-map "\C-v" #'helixel-select-rectangle)
@@ -210,7 +217,9 @@
 (define-key helixel-normal-map "[ d" #'flymake-goto-prev-error)
 ;; Prefix maps
 (define-key helixel-normal-map "m" helixel-textobj-map)
+
 (define-key helixel-normal-map "g" helixel-goto-map)
+;; Chain recording for compound dot-repeat
 (define-key helixel-normal-map "z" helixel-view-map)
 (define-key helixel-normal-map " " helixel-space-map)
 (define-key helixel-normal-map "\C-w" helixel-window-map)

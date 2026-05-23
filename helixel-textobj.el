@@ -37,7 +37,7 @@ Auto-populated by `helixel-define-mark-pair' and `helixel-define-mark-quote'.")
 (defvar helixel--selection-type nil)
 (defvar helixel--repeat-sel-ctx nil)
 
-(declare-function helixel--selection-type "helixel-common")
+(declare-function helixel--selection-type "helixel-state")
 
 (declare-function evil-textobj-tree-sitter--range
                   "evil-textobj-tree-sitter-core" t t)

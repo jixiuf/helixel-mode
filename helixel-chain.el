@@ -97,13 +97,24 @@ Sets `helixel--chain-move-len' when the first edit command is detected."
 (defun helixel--repeat-chain-runner (tx)
   "Execute the stored kmacro in chain TX.
 When `helixel--repeat-chain-preview' is set (from `,'), replays only
-the edit part (movement keys were already executed by `,')."
+the edit part (movement keys were already executed by `,').
+
+For search-initiated chains, positions cursor at match-beginning
+before replay, matching the behaviour of the original recording
+where `helixel-insert' calls `(goto-char (region-beginning))'."
   (let* ((payload (helixel-edit-payload tx))
+         (sel (helixel-edit-sel tx))
          (edit-keys (plist-get payload :kmacro))
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t))
     (setq helixel--repeat-chain-preview nil)
     (when edit-keys
+      ;; Reposition cursor at match-beginning for search sel chains.
+      ;; The advance fn leaves point at match-end, but the original
+      ;; recording started at match-beginning (via region-beginning).
+      (when (and sel (eq (helixel-sel-get-kind sel) 'search)
+                 (match-beginning 0))
+        (goto-char (match-beginning 0)))
       (execute-kbd-macro edit-keys))))
 
 (helixel-register-op chain

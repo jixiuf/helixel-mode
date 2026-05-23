@@ -361,34 +361,35 @@ Sets up change-hook recording and switches to insert state."
                  (and (marker-position helixel--change-track-marker)
                       (buffer-substring
                        helixel--change-track-marker (point))))))
-    (when helixel--last-tx
-      ;; Store kmacro keys as primary replay mechanism.
-      ;; Skip empty vectors — they are truthy but useless,
-      ;; and cause nil-key errors in `helixel--execute-keys'.
-      (when (and keys (> (length keys) 0))
-        (setq helixel--last-tx
-              (helixel-edit-with-payload helixel--last-tx :keys keys)))
-      ;; Store executed commands (keymap-independent replay)
-      (when commands
-        (setq helixel--last-tx
-              (helixel-edit-with-payload helixel--last-tx :commands
-                                         commands)))
-      ;; Store text as replay fallback (tests, programmatic use)
-      (when text
-        (setq helixel--last-tx
-              (helixel-edit-with-payload helixel--last-tx :text text))
-        ;; For change operations, same text as :inserted-text
-        (when (eq (helixel-edit-op helixel--last-tx) 'change)
+    (unless executing-kbd-macro
+      (when helixel--last-tx
+        ;; Store kmacro keys as primary replay mechanism.
+        ;; Skip empty vectors — they are truthy but useless,
+        ;; and cause nil-key errors in `helixel--execute-keys'.
+        (when (and keys (> (length keys) 0))
           (setq helixel--last-tx
-                (helixel-edit-with-payload helixel--last-tx
-                                           :inserted-text text))))
-      ;; The action ring entry's :edit is the same object as
-      ;; helixel--last-tx, so updating helixel--last-tx also
-      ;; updates the ring entry (same reference).
-      ;; Sync action ring front to point to the updated tx.
-      (let ((front (car helixel--action-ring)))
-        (when front
-          (plist-put front :edit helixel--last-tx))))
+                (helixel-edit-with-payload helixel--last-tx :keys keys)))
+        ;; Store executed commands (keymap-independent replay)
+        (when commands
+          (setq helixel--last-tx
+                (helixel-edit-with-payload helixel--last-tx :commands
+                                           commands)))
+        ;; Store text as replay fallback (tests, programmatic use)
+        (when text
+          (setq helixel--last-tx
+                (helixel-edit-with-payload helixel--last-tx :text text))
+          ;; For change operations, same text as :inserted-text
+          (when (eq (helixel-edit-op helixel--last-tx) 'change)
+            (setq helixel--last-tx
+                  (helixel-edit-with-payload helixel--last-tx
+                                             :inserted-text text))))
+        ;; The action ring entry's :edit is the same object as
+        ;; helixel--last-tx, so updating helixel--last-tx also
+        ;; updates the ring entry (same reference).
+        ;; Sync action ring front to point to the updated tx.
+        (let ((front (car helixel--action-ring)))
+          (when front
+            (plist-put front :edit helixel--last-tx)))))
     ;; Cleanup
     (when helixel--change-track-marker
       (set-marker helixel--change-track-marker nil)

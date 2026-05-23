@@ -224,6 +224,18 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
 OBJ is a `helixel-sel' struct or raw ctx plist."
   (plist-get (helixel-sel--ctx-ensure obj) :moves))
 
+(defsubst helixel-sel-movement-inline-advance-p (obj)
+  "Return non-nil if movement ctx has :inline-advance set.
+OBJ is a `helixel-sel' struct or raw ctx plist."
+  (plist-get (helixel-sel--ctx-ensure obj) :inline-advance))
+
+(defsubst helixel-sel-movement-normal-mode-p (obj)
+  "Return non-nil if movement was recorded in normal mode.
+When set, each movement command resets the selection during
+dot-repeat replay (only the final target is selected).
+OBJ is a `helixel-sel' struct or raw ctx plist."
+  (plist-get (helixel-sel--ctx-ensure obj) :normal-mode))
+
 ;;;; textobj
 
 (defsubst helixel-sel-textobj-command (obj)

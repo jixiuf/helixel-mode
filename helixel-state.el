@@ -323,7 +323,8 @@ No-op during dot-repeat replay, or when no region is active."
        ((null ctx)
         (helixel--repeat-sel-set
          (helixel-sel-create 'movement
-                             `(:moves (,entry) :inline-advance t)
+                             `(:moves (,entry) :inline-advance t
+                               :normal-mode ,(eq helixel--current-state 'normal))
                              #'helixel--recreate-movement
                              (lambda (c)
                                (let ((ms (helixel-sel-movement-moves c)))

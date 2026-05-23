@@ -128,3 +128,22 @@
     (should (string= (buffer-string) "x foo"))))
 
 ;;; helixel-test-repeat-new.el ends here
+
+;; ── Normal-mode movement dot-repeat: only final word selected ──
+
+(ert-deftest helixel-test-repeat-movement-normal-mode-single-word ()
+  "w w w d in normal mode then . deletes only the 3rd word."
+  (helixel-test-with-buffer "word1 word2 word3 word4 word5 word6 word7 word8"
+    (setq helixel--current-state 'normal)
+    (helixel-forward-word-start)
+    (helixel-forward-word-start)
+    (helixel-forward-word-start)
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    ;; d deletes the word at point (word3)
+    (should (string= (buffer-string)
+                     "word1 word2 word4 word5 word6 word7 word8"))
+    ;; . deletes word6 (the 3rd word from current position)
+    (helixel-repeat-edit)
+    (should (string= (buffer-string)
+                     "word1 word2 word4 word5 word7 word8"))))

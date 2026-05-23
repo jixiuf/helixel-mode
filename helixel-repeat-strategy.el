@@ -152,8 +152,7 @@ REVERSE-P flips the direction for search/line selections."
            (let ((tmp-tx (copy-helixel-edit tx)))
              (setf (helixel-edit-sel tmp-tx) sel)
              (when (funcall adv-fn tmp-tx adv-tag)
-               (unless (plist-get (helixel-sel-get-ctx sel)
-                                  :inline-advance)
+               (unless (helixel-sel-movement-inline-advance-p sel)
                  (helixel--recreate-selection sel))
                t)))
 

@@ -92,9 +92,13 @@ at the appropriate offset on the selected line:
 
 (defun helixel--recreate-movement (ctx)
   "Replay movement selection from CTX.
+By default, the region accumulates across all commands (visual-mode
+behaviour for e.g. `v w w d .`).  When :normal-mode is non-nil in
+CTX, each movement resets the selection (normal-mode behaviour).
 Signals `user-error' when point does not move (no more targets)."
-  (let ((helixel--current-state 'visual)
-        (saved-pos (point)))
+  (let ((saved-pos (point)))
+    (unless (helixel-sel-movement-normal-mode-p ctx)
+      (setq helixel--current-state 'visual))
     (dolist (m (reverse (helixel-sel-movement-moves ctx)))
       (dotimes (_ (cdr m))
         (funcall (car m))))

@@ -666,8 +666,7 @@ Failure during replay is reported but does not discard the stored edit."
               (helixel--repeat-echo cnt)))
             ;; --- Chain all-buffer: use strategy
             ((and all-buffer-p (eq (helixel-edit-op tx) 'chain)
-                  (eq (plist-get (plist-get (helixel-edit-payload tx)
-                                            :chain-advance) :kind) 'search))
+                  (eq (helixel-sel-get-kind (helixel-edit-sel tx)) 'search))
              (helixel--repeat-all-buffer-action
               (if reverse-p
                   (helixel--repeat-strategy tx t)
@@ -676,8 +675,7 @@ Failure during replay is reported but does not discard the stored edit."
             ;; --- Chain line: entire buffer (C-u ./C-u - .) — use strategy
             ((and all-buffer-p
                   (eq (helixel-edit-op tx) 'chain)
-                  (eq (plist-get (plist-get (helixel-edit-payload tx)
-                                            :chain-advance) :kind) 'line))
+                  (eq (helixel-sel-get-kind (helixel-edit-sel tx)) 'line))
              (let* ((dir (if reverse-p 'backward 'forward))
                     (forced-tx (helixel--force-direction tx dir)))
                ;; Execute once at start (position-fn skips to next line).

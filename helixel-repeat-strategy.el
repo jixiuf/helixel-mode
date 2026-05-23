@@ -75,9 +75,9 @@ Semantics:
   \\[universal-argument] - .       -> :all-buffer, reverse
   0 .           → :all-dir, forward
   - .           → :n-times 1 (caller flips direction permanently, like N)
-  -3 .          → :n-times 3, reverse (one-time; negative integer)
+  -3 .          → :n-times 3 (caller flips direction permanently)
   3 .           → :n-times 3, forward
-  \[universal-argument] -3 .      → :n-times 3, reverse
+  \[universal-argument] -3 .      → :n-times 3, reverse (one-time; has C-u)
   \[universal-argument] 3 .       → :all-buffer + n=3 (treated as :all-buffer)
 
 Note: Bare '-' (raw-prefix is the symbol \\='-) is detected by the caller
@@ -90,9 +90,8 @@ transaction, analogous to how `N' flips `helixel--repeat-dir' for search."
                    (abs (prefix-numeric-value raw-prefix)))
                   ((integerp raw-prefix) (abs raw-prefix))
                   (t 1)))
-         (reverse-p (or (and (integerp raw-prefix) (< raw-prefix 0))
-                        (and (consp raw-prefix)
-                             (< (prefix-numeric-value raw-prefix) 0))))
+         (reverse-p (and (consp raw-prefix)
+                        (< (prefix-numeric-value raw-prefix) 0)))
          (mode (cond (all-buffer-p :all-buffer)
                      (all-dir-p    :all-dir)
                      (t            :n-times))))

@@ -505,8 +505,11 @@ Failure during replay is reported but does not discard the stored edit."
   (let* ((tx helixel--last-tx)
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t)
-         ;; Bare `-` prefix: permanently flip direction (like N for search).
-         (flip-dir-p (eq raw-prefix '-))
+         ;; `-` or `-N` prefix (not C-u): permanently flip direction
+         ;; like N for search (3N also permanently flips).
+         (flip-dir-p (or (eq raw-prefix '-)
+                         (and (integerp raw-prefix)
+                              (< raw-prefix 0))))
          (prefix (helixel--decode-repeat-prefix raw-prefix))
          (all-buffer-p (eq (helixel-repeat-prefix-mode prefix) :all-buffer))
          (all-dir-p    (eq (helixel-repeat-prefix-mode prefix) :all-dir))
@@ -612,11 +615,21 @@ Failure during replay is reported but does not discard the stored edit."
               (helixel--execute-edit tx)))
            ;; --- Normal N times: use strategy + repeat-n ---
             (t
-             ;; Deactivate stale region from previous replay to avoid
-             ;; corrupting push-mark-command in recreate functions.
-             (when sel (deactivate-mark))
-             (helixel--repeat-n-action
-              (helixel--repeat-strategy tx) n))))
+             (let* ((action (helixel--repeat-strategy tx))
+                    (orig-pos-fn (helixel-repeat-action-position-fn
+                                  action))
+                    (wrapped-fn
+                     (lambda ()
+                       ;; Stale region from previous iteration
+                       ;; corrupts push-mark-command.  Only
+                       ;; deactivate when sel exists (recreate
+                       ;; will set a fresh region).
+                       (when sel (deactivate-mark))
+                       (funcall orig-pos-fn))))
+               (helixel--repeat-n
+                wrapped-fn
+                (helixel-repeat-action-execute-fn action)
+                n)))))
       ((error quit)
        (message "helixel-repeat-edit aborted: %s"
                 (error-message-string err))))))
@@ -645,8 +658,10 @@ subsequent `.` uses this position directly."
   (let* ((tx helixel--last-tx)
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t)
-         ;; Bare `-` prefix: permanently flip direction (like N for search).
-         (flip-dir-p (eq raw-prefix '-))
+         ;; `-` or `-N` prefix (not C-u): permanently flip direction.
+         (flip-dir-p (or (eq raw-prefix '-)
+                         (and (integerp raw-prefix)
+                              (< raw-prefix 0))))
          (prefix (helixel--decode-repeat-prefix raw-prefix))
          (chain-p (eq (helixel-edit-op tx) 'chain)))
     (when flip-dir-p (helixel--repeat-flip-tx-dir tx))

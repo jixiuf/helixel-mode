@@ -1510,7 +1510,8 @@ entry-kind=insert means insert at match-beginning, not match-end."
       (should (string= (buffer-string) "")))))
 
 (ert-deftest helixel-test-repeat-reverse-keeps-stored-dir ()
-  "C-u -1 . does NOT change the stored direction for subsequent ."
+  "`-1 .' permanently flips the stored direction (like N for search).
+After `-1 .' a plain `.` continues in the flipped direction."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "hello A hello B hello C"
       (goto-char 9)
@@ -1531,12 +1532,25 @@ entry-kind=insert means insert at match-beginning, not match-end."
       (insert "XXX")
       (helixel-insert-exit)
       (should (string= (buffer-string) "hello A XXX B hello C"))
-      ;; C-u -1 . reverse (backward) -> changes A
+      ;; Direction is forward
+      (should (eq (helixel-sel-search-dir
+                   (helixel-edit-sel helixel--last-tx))
+                  'forward))
+      ;; -1 . — permanently flips to backward, changes A
       (helixel-repeat-edit -1)
       (should (string= (buffer-string) "XXX A XXX B hello C"))
-      ;; Normal . -> still forward, changes C
-      (helixel-repeat-edit)
-      (should (string= (buffer-string) "XXX A XXX B XXX C")))))
+      ;; Direction is now permanently backward
+      (should (eq (helixel-sel-search-dir
+                   (helixel-edit-sel helixel--last-tx))
+                  'backward))
+      ;; Plain `.` continues backward — nothing left to change
+      ;; (A was already changed), so it should error silently.
+      (let ((helixel--inhibit-repeat-record t))
+        (condition-case nil
+            (helixel-repeat-edit)
+          (error nil)))
+      ;; Buffer unchanged
+      (should (string= (buffer-string) "XXX A XXX B hello C")))))
 
 (ert-deftest helixel-test-repeat-all-dir-backward-from-start ()
   "0. after ?search from buffer start: no matches backward, silent stop."

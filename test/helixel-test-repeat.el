@@ -444,6 +444,44 @@ Still does 1 repeat normally (movement selections have no :dir)."
     (helixel-repeat-edit '-)
     (should (>= (how-many "X" (point-min) (point-max)) 2))))
 
+(ert-deftest helixel-test-repeat-flip-dir-neg3 ()
+  "`-3.' permanently flips direction and does 3 repeats.
+Like 3N for search — negative count also permanently flips."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5\nline6\n"
+    (goto-char (point-min))
+    (forward-line 1)                    ; line 2
+    (end-of-line)
+    (let ((helixel--repeat-sel-ctx
+           (helixel-sel-create 'line
+               '(:dir forward :count 1 :entry-kind append)
+               #'helixel--recreate-line "L")))
+      (helixel--record-edit 'insert-text))
+    (setq helixel--last-tx
+          (helixel-edit-with-payload helixel--last-tx :text "X"))
+    (should (eq (helixel-sel-line-dir (helixel-edit-sel helixel--last-tx))
+                'forward))
+    ;; -3. flips to backward + 3 repeats
+    ;; From EOL of line 2: backward appends at EOL of lines 1 (skip: at edge)
+    ;; Actually from line 2 backward: line 1, then no more lines.
+    ;; Let me reposition to line 5 for 3 backward repeats.
+    (goto-char (point-min))
+    (forward-line 4)                    ; line 5
+    (end-of-line)
+    (helixel-repeat-edit -3)
+    ;; 3 backward appends from line 5: lines 4, 3, 2
+    (should (string= (buffer-string)
+                     "line1\nline2X\nline3X\nline4X\nline5\nline6\n"))
+    ;; Direction is now permanently backward
+    (should (eq (helixel-sel-line-dir (helixel-edit-sel helixel--last-tx))
+                'backward))
+    ;; Plain `.` continues backward
+    (goto-char (point-min))
+    (forward-line 4)                    ; line 5
+    (end-of-line)
+    (helixel-repeat-edit)
+    (should (string= (buffer-string)
+                     "line1\nline2X\nline3X\nline4XX\nline5\nline6\n"))))
+
 (ert-deftest helixel-test-repeat-flip-dir-comma ()
   "`-,' flips direction permanently and previews.
 After `-,' a plain `.` uses the preview position (helixel--repeat-has-preview)."

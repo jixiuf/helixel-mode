@@ -36,7 +36,8 @@
 ;;; Forward long word tests
 
 (ert-deftest helixel-test-forward-WORD-start-basic-movement ()
-  "Test basic forward movement between words."
+  "Test basic forward movement between words.
+On the last word at eob, w selects the word suffix."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "hello world test")
@@ -48,8 +49,9 @@
     (should (= (point) 13)) ; before "test"
     (should (= (- (region-end) (region-beginning)) 6))
     (helixel-forward-WORD-start)
-    (should (= (point) 13)) ; no more words, stays
-    (should (= (- (region-end) (region-beginning)) 0))))
+    ;; Last word at eob: selects "test" from point to end
+    (should (= (point) 17))
+    (should (= (- (region-end) (region-beginning)) 4))))
 
 (ert-deftest helixel-test-forward-WORD-start-hyphenated-words ()
   "Test forward movement with hyphenated words (long words)."
@@ -571,7 +573,8 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
 ;;; Symbol movement tests
 
 (ert-deftest helixel-test-forward-symbol-start-basic ()
-  "Test forward-symbol-start movement."
+  "Test forward-symbol-start movement.
+On the last symbol at eob, w selects the symbol suffix."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "foo_bar baz-qux hello")
@@ -583,18 +586,20 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (should (= (point) 17))
     (should (= (- (region-end) (region-beginning)) 8))
     (helixel-forward-symbol-start)
-    (should (= (point) 17))
-    (should (= (- (region-end) (region-beginning)) 0))))
+    ;; Last symbol at eob: selects "hello" from point to end
+    (should (= (point) 22))
+    (should (= (- (region-end) (region-beginning)) 5))))
 
 (ert-deftest helixel-test-forward-symbol-start-single ()
-  "Test forward-symbol-start with a single symbol char."
+  "Test forward-symbol-start with a single symbol char.
+On a single-char symbol at eob, w selects it."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "x")
     (goto-char 1)
     (helixel-forward-symbol-start)
-    (should (= (point) 1))
-    (should (= (- (region-end) (region-beginning)) 0))))
+    (should (= (point) 2))
+    (should (= (- (region-end) (region-beginning)) 1))))
 
 (ert-deftest helixel-test-forward-symbol-start-empty-buffer ()
   "Test forward-symbol-start in empty buffer."

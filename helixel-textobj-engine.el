@@ -241,7 +241,10 @@ do not cross the newline; stop at the end of the current THING instead."
       (when (and bnd (< (point) (cdr bnd)))
         (setq inside-word t)
         (goto-char (cdr bnd)))
-      (unless (and inside-word (eolp) (not (eobp)))
+      ;; Skip forward movement when inside a word at end of line,
+      ;; unless we are at eob AND extending an existing region.
+      (unless (and inside-word (eolp)
+                   (not (and (eobp) (use-region-p))))
         (ignore-errors
           (forward-thing thing count)
           (setq bnd (bounds-of-thing-at-point thing))

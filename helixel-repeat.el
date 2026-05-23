@@ -549,9 +549,7 @@ Failure during replay is reported but does not discard the stored edit."
             ((and all-buffer-p (eq (helixel-edit-op tx) 'chain)
                   (eq (helixel-sel-get-kind (helixel-edit-sel tx)) 'search))
              (helixel--repeat-all-buffer-action
-              (if reverse-p
-                  (helixel--repeat-strategy tx t)
-                (helixel--repeat-strategy tx))
+              (helixel--repeat-strategy tx reverse-p)
               prefix))
             ;; --- Chain line: entire buffer (C-u ./C-u - .) — use strategy
             ((and all-buffer-p
@@ -575,11 +573,9 @@ Failure during replay is reported but does not discard the stored edit."
                   (eq (helixel-edit-op tx) 'chain))
              (if all-dir-p
                  (helixel--repeat-all-remaining-action
-                  (if reverse-p (helixel--repeat-strategy tx t)
-                    (helixel--repeat-strategy tx)))
+                  (helixel--repeat-strategy tx reverse-p))
                (helixel--repeat-n-action
-                (if reverse-p (helixel--repeat-strategy tx t)
-                  (helixel--repeat-strategy tx))
+                (helixel--repeat-strategy tx t)
                 n)))
             ;; --- Non-search sel, 0 or C-u: fall back to once ---
            ((and (or all-dir-p all-buffer-p) sel

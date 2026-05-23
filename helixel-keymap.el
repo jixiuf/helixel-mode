@@ -205,7 +205,7 @@
 (define-key helixel-normal-map "8" "\C-u8")
 (define-key helixel-normal-map "9" "\C-u9")
 (define-key helixel-normal-map "0" "\C-u0")
-(define-key helixel-normal-map "-" "\C-u-")
+(define-key helixel-normal-map "-" 'negative-argument)
 (define-key helixel-normal-map "=" #'indent-for-tab-command)
 ;; Word movement
 (define-key helixel-normal-map "w" #'helixel-forward-word-start)

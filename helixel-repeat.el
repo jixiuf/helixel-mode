@@ -461,17 +461,33 @@ TX is executed on each line.  Advance according to ADVANCE (e.g.
       (user-error nil)))
   cnt)
 
+(defun helixel--repeat-flip-tx-dir (tx)
+  "Permanently flip :dir in TX's sel ctx for line and search selections.
+Modifies TX in-place (same object as `helixel--last-tx').
+Like `N' for search, `-.' permanently reverses dot-repeat direction.
+No-op for movement, textobj, or nil selections."
+  (let* ((sel (helixel-edit-sel tx))
+         (kind (and sel (helixel-sel-get-kind sel))))
+    (when (memq kind '(line search))
+      (let ((current-dir (if (eq kind 'search)
+                             (helixel-sel-search-dir sel)
+                           (helixel-sel-line-dir sel))))
+        (setf (helixel-edit-sel tx)
+              (helixel-sel-update-ctx sel :dir
+                                      (helixel--flip-dir current-dir)))))))
+
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
 
-Prefix RAW-PREFIX semantics with search-based selections:
-  3.          -> 3 times in stored direction
-  0.          -> all remaining matches in stored direction
-  \\[universal-argument] - 3 . -> 3 times, opposite direction
-  \\[universal-argument] .    -> all matches in entire buffer
+Prefix RAW-PREFIX semantics:
+  3.     -> 3 times in stored direction
+  -.     -> flip direction permanently (like N for search), 1 repeat
+  0.     -> all remaining targets in stored direction
+  \\[universal-argument] .    -> all targets in entire buffer
+  \\[universal-argument] - .  -> all targets in entire buffer, reverse
 
-For line selections, 0. and \\[universal-argument] . replay on all
-remaining / entire buffer lines respectively.
+After `-.' the direction is permanently changed — subsequent `.`
+repeats in the new direction.  `-.' again flips back.
 
 All iterations are amalgamated into a single undo step.
 During keyboard macro recording `executing-kbd-macro' is non-nil
@@ -489,6 +505,8 @@ Failure during replay is reported but does not discard the stored edit."
   (let* ((tx helixel--last-tx)
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t)
+         ;; Bare `-` prefix: permanently flip direction (like N for search).
+         (flip-dir-p (eq raw-prefix '-))
          (prefix (helixel--decode-repeat-prefix raw-prefix))
          (all-buffer-p (eq (helixel-repeat-prefix-mode prefix) :all-buffer))
          (all-dir-p    (eq (helixel-repeat-prefix-mode prefix) :all-dir))
@@ -500,6 +518,7 @@ Failure during replay is reported but does not discard the stored edit."
                             (eq (helixel-sel-get-kind sel) 'search)))
          (line-sel-p   (and sel
                             (eq (helixel-sel-get-kind sel) 'line))))
+    (when flip-dir-p (helixel--repeat-flip-tx-dir tx))
     (setq helixel--repeat-has-preview nil)
     (setq helixel--search-advance-done nil)
     (condition-case err
@@ -593,8 +612,9 @@ Failure during replay is reported but does not discard the stored edit."
               (helixel--execute-edit tx)))
            ;; --- Normal N times: use strategy + repeat-n ---
             (t
-             (when (and sel (eq (helixel-sel-get-kind sel) 'textobj))
-               (deactivate-mark))
+             ;; Deactivate stale region from previous replay to avoid
+             ;; corrupting push-mark-command in recreate functions.
+             (when sel (deactivate-mark))
              (helixel--repeat-n-action
               (helixel--repeat-strategy tx) n))))
       ((error quit)
@@ -610,9 +630,9 @@ Mirrors the advance-and-recreate behaviour of `.`
 \(\[helixel-repeat-edit]) without executing the operator.
 
 Prefix RAW-PREFIX semantics (same as `.`):
-  3,          -> 3 times in stored direction
-  0,          -> all remaining targets in stored direction
-  - ,         -> all remaining targets in reverse direction
+  3,     -> 3 times in stored direction
+  -,     -> flip direction permanently (like N for search), preview 1
+  0,     -> all remaining targets in stored direction
   \\[universal-argument] - 3 , -> 3 times in opposite direction
   \\[universal-argument] ,    -> all targets in entire buffer
 
@@ -625,8 +645,11 @@ subsequent `.` uses this position directly."
   (let* ((tx helixel--last-tx)
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t)
+         ;; Bare `-` prefix: permanently flip direction (like N for search).
+         (flip-dir-p (eq raw-prefix '-))
          (prefix (helixel--decode-repeat-prefix raw-prefix))
          (chain-p (eq (helixel-edit-op tx) 'chain)))
+    (when flip-dir-p (helixel--repeat-flip-tx-dir tx))
     (unless (or (helixel-edit-sel tx) chain-p)
       (user-error (concat "Previous edit has no selection to repeat."
                           "  Use a textobj (e.g. ciw)"

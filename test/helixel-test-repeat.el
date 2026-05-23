@@ -380,4 +380,96 @@ Kmacro captures cursor keys; test uses text fallback."
       ;; Should skip blank line and go to line 1
       (should (= (line-number-at-pos) 1)))))
 
+;; ── `-.' permanent direction flip (like N for search) ──
+
+(ert-deftest helixel-test-repeat-flip-dir-forward-to-backward ()
+  "`-.' flips line direction forward→backward permanently.
+After `-.' a plain `.` continues backward.  `-.' again flips back."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5\n"
+    (goto-char (point-min))
+    (forward-line 1)                    ; line 2
+    (end-of-line)                       ; EOL of line 2
+    (let ((helixel--repeat-sel-ctx
+           (helixel-sel-create 'line
+               '(:dir forward :count 1 :entry-kind append)
+               #'helixel--recreate-line "L")))
+      (helixel--record-edit 'insert-text))
+    (setq helixel--last-tx
+          (helixel-edit-with-payload helixel--last-tx :text "X"))
+    ;; Verify sel direction is forward
+    (should (eq (helixel-sel-line-dir (helixel-edit-sel helixel--last-tx))
+                'forward))
+    ;; `-.' — flip direction forward→backward, then 1 repeat
+    (helixel-repeat-edit '-)
+    ;; Should have gone backward from line 2 → appended X at EOL of line 1
+    (should (string= (buffer-string)
+                     "line1X\nline2\nline3\nline4\nline5\n"))
+    ;; Direction is now permanently backward
+    (should (eq (helixel-sel-line-dir (helixel-edit-sel helixel--last-tx))
+                'backward))
+    ;; Plain `.` continues backward
+    (goto-char (point-min))
+    (forward-line 2)                    ; line 3
+    (end-of-line)
+    (helixel-repeat-edit)
+    (should (string= (buffer-string)
+                     "line1X\nline2X\nline3\nline4\nline5\n"))
+    ;; `-.' again flips back to forward
+    (goto-char (point-min))
+    (forward-line 1)                    ; line 2
+    (end-of-line)
+    (helixel-repeat-edit '-)
+    ;; Now forward from line 2 → append at EOL of line 3
+    (should (string= (buffer-string)
+                     "line1X\nline2X\nline3X\nline4\nline5\n"))
+    (should (eq (helixel-sel-line-dir (helixel-edit-sel helixel--last-tx))
+                'forward))))
+
+(ert-deftest helixel-test-repeat-flip-dir-line-noop-on-movement ()
+  "`-.' on a movement selection is a no-op for direction flip.
+Still does 1 repeat normally (movement selections have no :dir)."
+  (helixel-test-with-buffer "hello world"
+    (goto-char 1)
+    (setq helixel--last-tx
+          (helixel-edit-make 'insert-text
+            (helixel-sel-create
+             'movement
+             '(:moves ((forward-word . 1)))
+             #'helixel--recreate-movement "v")
+            :text "X"))
+    (insert "X")
+    ;; `-.' — flip is no-op (movement has no :dir), does 1 repeat.
+    ;; Movement recreate moves point via forward-word,
+    ;; then execute inserts X at the new position.
+    (helixel-repeat-edit '-)
+    (should (>= (how-many "X" (point-min) (point-max)) 2))))
+
+(ert-deftest helixel-test-repeat-flip-dir-comma ()
+  "`-,' flips direction permanently and previews.
+After `-,' a plain `.` uses the preview position (helixel--repeat-has-preview)."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\n"
+    (goto-char (point-min))
+    (forward-line 1)                    ; line 2
+    (end-of-line)
+    (let ((helixel--repeat-sel-ctx
+           (helixel-sel-create 'line
+               '(:dir forward :count 1 :entry-kind append)
+               #'helixel--recreate-line "L")))
+      (helixel--record-edit 'insert-text))
+    (setq helixel--last-tx
+          (helixel-edit-with-payload helixel--last-tx :text "X"))
+    ;; `-,' flips dir and previews
+    (helixel-repeat-selection '-)
+    ;; Should now be on line 1 (previewed backward from line 2)
+    (should (= (line-number-at-pos) 1))
+    ;; Direction permanently flipped
+    (should (eq (helixel-sel-line-dir (helixel-edit-sel helixel--last-tx))
+                'backward))
+    ;; Plain `.` at the preview position: appends at preview EOL.
+    ;; helixel--repeat-has-preview was set by `,` so `.` uses
+    ;; the current position directly (no advance).
+    (helixel-repeat-edit)
+    (should (string= (buffer-string)
+                     "line1X\nline2\nline3\nline4\n"))))
+
 ;;; helixel-test-repeat.el ends here

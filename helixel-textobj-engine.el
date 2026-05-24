@@ -28,12 +28,11 @@
 (require 'cl-lib)
 (require 'thingatpt)
 (require 'helixel-data)
-(require 'helixel-repeat)
 
 (declare-function helixel--recreate-textobj "helixel-textobj")
+(declare-function helixel--pending-sel-set "helixel-data")
 
 (defvar helixel--selection-type)
-(defvar helixel--repeat-sel-ctx)
 
 (defvar helixel-textobj-visual-state-p-function nil
   "If non-nil, called with no args, return t when in visual state.")
@@ -1194,7 +1193,7 @@ the same multiplier."
           (n (or count 1))
           (delim delimiter))
       (setq helixel--selection-type 'textobj)
-      (helixel--repeat-sel-set
+      (helixel--pending-sel-set
        (helixel-sel-create
         'textobj `(:command ,cmd :count ,n :delimiter ,delim
                     :inline-advance t)
@@ -1204,8 +1203,7 @@ the same multiplier."
                (if-let* ((command (helixel-sel-textobj-command c)))
                    (replace-regexp-in-string "^helixel-mark-" ""
                                             (symbol-name command))
-                 "textobj"))
-             :advance #'helixel--repeat-advance-textobj))
+                 "textobj"))))
       (run-hook-with-args 'helixel-textobj-after-select-functions))))
 
 

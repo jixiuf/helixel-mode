@@ -43,7 +43,7 @@
 (declare-function eglot-rename "eglot")
 (require 'helixel-state)
 (require 'helixel-move)
-(require 'helixel-common)
+(require 'helixel-editing)
 (require 'helixel-chain)
 (require 'helixel-surround)
 

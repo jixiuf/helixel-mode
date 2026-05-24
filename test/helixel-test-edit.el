@@ -237,24 +237,24 @@
 ;; edit transaction runner/display tests
 
 (ert-deftest helixel-test-edit-make-stores-runner ()
-  "`helixel-edit-make' stores :runner in the struct slot."
+  "`helixel--make-tx' stores :runner in the struct slot."
   (let ((dummy-fn #'ignore))
-    (let ((tx (helixel-edit-make 'kill nil :runner dummy-fn)))
-      (should (eq (helixel-edit-runner tx) dummy-fn))
-      (should (null (plist-get (helixel-edit-payload tx) :runner))))))
+    (let ((tx (helixel--make-tx 'kill nil :runner dummy-fn)))
+      (should (eq (helixel-event-runner tx) dummy-fn))
+      (should (null (plist-get (helixel-event-payload tx) :runner))))))
 
 (ert-deftest helixel-test-edit-make-stores-display ()
-  "`helixel-edit-make' stores :display in DISPLAY-FIELD slot, not in :payload."
-  (let ((tx (helixel-edit-make 'kill nil :display "d.K")))
-    (should (string= (helixel-edit-display-field tx) "d.K"))
-    (should (null (plist-get (helixel-edit-payload tx) :display)))))
+  "`helixel--make-tx' stores :display in DISPLAY-FIELD slot, not in :payload."
+  (let ((tx (helixel--make-tx 'kill nil :display "d.K")))
+    (should (string= (helixel-event-display tx) "d.K"))
+    (should (null (plist-get (helixel-event-payload tx) :display)))))
 
 (ert-deftest helixel-test-execute-edit-uses-stored-runner ()
   "`helixel--execute-edit' calls the :runner stored in TX."
   (with-temp-buffer
     (insert "hello")
     (goto-char 1)
-    (let ((tx (helixel-edit-make 'test nil
+    (let ((tx (helixel--make-tx 'test nil
                 :runner (lambda (_tx) (insert "X")))))
       (helixel--execute-edit tx)
       (should (string= (buffer-string) "Xhello")))))
@@ -267,15 +267,15 @@
     (insert "hello")
     (goto-char 2)  ; on "e"
     ;; Create a tx without :runner (tests registry fallback)
-    (let ((tx (helixel-edit-make 'kill nil)))
-      (should (helixel-edit-op-runner 'kill)) ;; registry has runner
+    (let ((tx (helixel--make-tx 'kill nil)))
+      (should (helixel--op-runner 'kill)) ;; registry has runner
       ;; Should not error — just verify the fallback path runs
       (should (progn (helixel--execute-edit tx) t)))))
 
 (ert-deftest helixel-test-edit-display-uses-stored-field ()
-  "`helixel-edit-display' prefers :display stored in TX."
-  (let ((tx (helixel-edit-make 'kill nil :display "custom-label")))
-    (should (string= (helixel-edit-display tx) "custom-label"))))
+  "`helixel--tx-display' prefers :display stored in TX."
+  (let ((tx (helixel--make-tx 'kill nil :display "custom-label")))
+    (should (string= (helixel--tx-display tx) "custom-label"))))
 
 (ert-deftest helixel-test-repeat-edit-no-prev ()
   "Test repeat-edit with no previous edit signals error."
@@ -349,7 +349,7 @@
   (helixel-test-with-buffer "hello world foo"
     (goto-char 3)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -399,7 +399,7 @@
   (helixel-test-with-buffer "hello world"
     (goto-char 7)
     (setq helixel--last-tx
-          (helixel-edit-make 'insert-text nil :text "INSERTED"))
+          (helixel--make-tx 'insert-text nil :text "INSERTED"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "hello INSERTEDworld"))))
 
@@ -408,7 +408,7 @@
   (helixel-test-with-buffer "hello world"
     (goto-char 7)
     (setq helixel--last-tx
-          (helixel-edit-make 'insert-text nil :text ""))
+          (helixel--make-tx 'insert-text nil :text ""))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "hello world"))))
 
@@ -417,7 +417,7 @@
   (helixel-test-with-buffer "hello world"
     (goto-char 7)
     (setq helixel--last-tx
-          (helixel-edit-make 'insert-text nil :text "x"))
+          (helixel--make-tx 'insert-text nil :text "x"))
     (helixel-repeat-edit 5)
     (should (string= (buffer-string) "hello xxxxxworld"))))
 
@@ -425,7 +425,7 @@
   "`helixel-repeat-edit' does not discard `helixel--last-tx' on failure."
   (helixel-test-with-buffer "hello"
     (setq helixel--last-tx
-          (helixel-edit-make 'kill (helixel-sel-create 'unknown-kind-no-method nil #'ignore "?")))
+          (helixel--make-tx 'kill (helixel-sel-create 'unknown-kind-no-method nil #'ignore "?")))
     (let ((before helixel--last-tx))
       (helixel-repeat-edit)
       (should (equal helixel--last-tx before)))))
@@ -475,35 +475,35 @@ eduplication is against the ring front by content."
     (setq last-command 'helixel-mark-inner-word
           this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
-    ;; Edit should be accessible via action ring
-    (should helixel--action-ring)
+    ;; Edit should be accessible via event ring
+    (should helixel--event-ring)
     (should helixel--last-tx)
-    (should (plist-get (car helixel--action-ring) :edit))))
+    (should (helixel-event-p (car helixel--event-ring)))))
 
 (ert-deftest helixel-test-edit-display ()
-  "`helixel-edit-display' formats op + sel + payload hints."
-  (should (string= (helixel-edit-display
-                    (helixel-edit-make 'kill
+  "`helixel--tx-display' formats op + sel + payload hints."
+  (should (string= (helixel--tx-display
+                    (helixel--make-tx 'kill
                       (helixel-sel-create 'line '(:count 3)
                         #'helixel--recreate-line "L")))
                    "d.Lx3"))
-  (should (string= (helixel-edit-display
-                    (helixel-edit-make 'kill
+  (should (string= (helixel--tx-display
+                    (helixel--make-tx 'kill
                       (helixel-sel-create 'line '(:dir backward :count 2)
                         #'helixel--recreate-line "L^")))
                    "d.L^x2"))
-  (should (string= (helixel-edit-display
-                    (helixel-edit-make 'replace-char nil :char ?Q))
+  (should (string= (helixel--tx-display
+                    (helixel--make-tx 'replace-char nil :char ?Q))
                    "R[Q]"))
-  (should (string= (helixel-edit-display
-                    (helixel-edit-make 'kill
+  (should (string= (helixel--tx-display
+                    (helixel--make-tx 'kill
                       (helixel-sel-create 'textobj
                         '(:command helixel-mark-inner-word :count 1)
                         #'helixel--recreate-textobj
                         "inner-word")))
                    "d.inner-word"))
-  (should (string= (helixel-edit-display
-                    (helixel-edit-make 'kill
+  (should (string= (helixel--tx-display
+                    (helixel--make-tx 'kill
                       (helixel-sel-create 'movement
                         '(:moves ((helixel-forward-word-start . 3)))
                         #'helixel--recreate-movement
@@ -515,7 +515,7 @@ eduplication is against the ring front by content."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 1)
     (setq helixel--last-tx
-          (helixel-edit-make 'kill
+          (helixel--make-tx 'kill
             (helixel-sel-create 'movement '(:moves ((helixel-forward-word-start . 2)))
             #'helixel--recreate-movement
             (format "v%d" 2))))
@@ -527,7 +527,7 @@ eduplication is against the ring front by content."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 1)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'movement '(:moves ((helixel-forward-word-start . 1)))
             #'helixel--recreate-movement
             (format "v%d" 1))
@@ -536,15 +536,15 @@ eduplication is against the ring front by content."
     (should (string= (buffer-string) "Xworld foo"))))
 
 (ert-deftest helixel-test-repeat-invariant-sel-ctx-consumed ()
-  "Test record-edit consumes helixel--repeat-sel-ctx."
+  "Test record-edit consumes helixel--pending-sel."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
-    (should helixel--repeat-sel-ctx)
+    (should helixel--pending-sel)
     (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
-    (should (null helixel--repeat-sel-ctx))))
+    (should (null helixel--pending-sel))))
 
 (ert-deftest helixel-test-repeat-invariant-repeat-no-pollute-ring ()
   "Test repeat-edit does not add extra entries to the action ring beyond record-edit."
@@ -554,9 +554,9 @@ eduplication is against the ring front by content."
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
-    (let ((ring-len (length helixel--action-ring)))
+    (let ((ring-len (length helixel--event-ring)))
       (helixel-repeat-edit)
-      (should (= (length helixel--action-ring) ring-len)))))
+      (should (= (length helixel--event-ring) ring-len)))))
 
 (ert-deftest helixel-test-repeat-invariant-insert-after-records ()
   "Test helixel-insert-after (a) records insert-text."
@@ -565,7 +565,7 @@ eduplication is against the ring front by content."
     (setq helixel--last-tx nil
           helixel--change-track-marker nil)
     (helixel-insert-after)
-    (should (eq (helixel-edit-op helixel--last-tx) 'insert-text))
+    (should (eq (helixel-event-op helixel--last-tx) 'insert-text))
     (should helixel--change-track-marker)
     (set-marker helixel--change-track-marker nil)
     (setq helixel--change-track-marker nil)))
@@ -588,46 +588,21 @@ key-binding dispatch, not `insert-char'."
     (helixel--execute-keys (kbd "a M-f b"))
     (should (string= (buffer-string) "aoneb two three"))))
 
-(ert-deftest helixel-test-execute-commands ()
-  "`helixel--execute-keys' with :commands replays recorded commands.
-Command-based replay is keymap-independent — correct even when
-insert-mode bindings differ from normal-mode."
-  ;; Test: recorded commands simulate h (backward-char in insert mode)
-  ;; In normal mode, 'h' is NOT self-insert — but commands bypass keymaps.
-  (helixel-test-with-buffer "abcdef"
-    (goto-char 4)
-    ;; Recorded: self-insert ?X, then backward-char, then self-insert ?Y
-    (helixel--execute-keys (kbd "X h Y")
-                           '(self-insert-command
-                             backward-char
-                             self-insert-command))
-    ;; X inserts at 4, backward-char to 3, Y inserts at 3
-    (should (string= (buffer-string) "abcYXdef")))
-  ;; Test: fallback to keys when no commands
-  (helixel-test-with-buffer "hello"
-    (goto-char 1)
-    (helixel--execute-keys (kbd "XX"))
-    (should (string= (buffer-string) "XXhello"))))
-
 (ert-deftest helixel-test-execute-keys-backspace ()
-  "`helixel--execute-keys' replays DEL via command-based path.
-Command-based replay calls backward-delete-char-untabify directly."
+  "`helixel--execute-keys' replays DEL via execute-kbd-macro.
+Key-based replay handles DEL (127) as non-printable."
   (helixel-test-with-buffer "hello"
     (goto-char 6)
-    ;; Replay: insert A, insert B, DEL (deletes B) → "helloA"
-    ;; Keys must match command count; non-self-insert keys are ignored.
-    (helixel--execute-keys (kbd "ABx")
-                           '(self-insert-command
-                             self-insert-command
-                             backward-delete-char-untabify))
-    (should (string= (buffer-string) "helloA"))))
+    ;; A (65), DEL (127), x (120): DEL triggers delete-backward-char
+    (helixel--execute-keys [65 127 120])
+    (should (string= (buffer-string) "hellox"))))
 
 (ert-deftest helixel-test-execute-keys-control-d ()
-  "`helixel--execute-keys' replays C-d via command-based path.
-C-d (delete-char) is called via call-interactively, not insert-char."
+  "`helixel--execute-keys' replays C-d via execute-kbd-macro.
+C-d is non-printable and dispatched through execute-kbd-macro."
   (helixel-test-with-buffer "hello"
     (goto-char 1)
-    (helixel--execute-keys (kbd "C-d") '(delete-char))
+    (helixel--execute-keys (kbd "C-d"))
     (should (string= (buffer-string) "ello"))))
 
 (ert-deftest helixel-test-execute-keys-mixed-backspace ()
@@ -635,13 +610,8 @@ C-d (delete-char) is called via call-interactively, not insert-char."
 Simulates typing 'bao' then DEL (deletes 'o') then 'r'."
   (helixel-test-with-buffer "hello"
     (goto-char 6)
-    ;; Replay: insert b,a,o, DEL deletes o, insert r → "hellobar"
-    (helixel--execute-keys (kbd "baoxr")
-                           '(self-insert-command     ; b
-                             self-insert-command     ; a
-                             self-insert-command     ; o
-                             backward-delete-char-untabify ; DEL
-                             self-insert-command))   ; r
+    ;; b, a, o, DEL (127), r: DEL triggers delete-backward-char
+    (helixel--execute-keys [98 97 111 127 114])
     (should (string= (buffer-string) "hellobar"))))
 
 (ert-deftest helixel-test-execute-keys-symbol-no-crash ()
@@ -716,7 +686,7 @@ Also verifies the characterp guard in helixel--insert-finish."
       ;; what c X Y <esc> would record.  The keys are only the
       ;; productive insert-mode keystrokes (X Y), not the initiating c.
       (setq helixel--last-tx
-            (helixel-edit-make 'change
+            (helixel--make-tx 'change
               (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -735,7 +705,7 @@ Also verifies the characterp guard in helixel--insert-finish."
       (goto-char 2)
       ;; Directly construct a tx with :keys payload (simulating i Z <esc>)
       (setq helixel--last-tx
-            (helixel-edit-make 'insert-text nil
+            (helixel--make-tx 'insert-text nil
               :text "Z" :keys (kbd "Z")))
       (helixel-repeat-edit)
       (should (string= (buffer-string) "aZbc"))
@@ -751,7 +721,7 @@ Also verifies the characterp guard in helixel--insert-finish."
       (goto-char 1)
       ;; Manually construct a tx without :keys (old-format tx)
       (setq helixel--last-tx
-            (helixel-edit-make 'insert-text nil :text "OLD"))
+            (helixel--make-tx 'insert-text nil :text "OLD"))
       (helixel-repeat-edit)
       (should (string= (buffer-string) "OLDhello")))))
 
@@ -761,7 +731,7 @@ Also verifies the characterp guard in helixel--insert-finish."
     (goto-char 1)
     ;; A tx with both :inserted-text and :keys — :keys wins
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'textobj
               '(:command helixel-mark-inner-word :count 1)
               #'helixel--recreate-textobj
@@ -785,7 +755,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world"
     (goto-char 3)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -800,7 +770,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "line one\nline two\nline three\n"
     (goto-char 3)
     (setq helixel--last-tx
-          (helixel-edit-make 'kill
+          (helixel--make-tx 'kill
             (helixel-sel-create 'line '(:count 1)
               #'helixel--recreate-line "L")))
     (helixel-repeat-selection)
@@ -812,7 +782,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "line one\nline two\nline three\n"
     (goto-char 1)
     (setq helixel--last-tx
-          (helixel-edit-make 'kill (helixel-sel-create 'line '(:count 1) #'helixel--recreate-line "L")))
+          (helixel--make-tx 'kill (helixel-sel-create 'line '(:count 1) #'helixel--recreate-line "L")))
     (helixel-repeat-selection 2)
     (should (region-active-p))
     (should (= (region-beginning) 1))
@@ -823,7 +793,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world"
     (goto-char 3)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -837,7 +807,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world foo bar"
     (goto-char 3)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -859,7 +829,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello"
     (goto-char 1)
     (setq helixel--last-tx
-          (helixel-edit-make 'insert-text nil :text "X"))
+          (helixel--make-tx 'insert-text nil :text "X"))
     (should-error (helixel-repeat-selection))))
 
 ;; ============================================================================
@@ -871,7 +841,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello   world"
     (goto-char 3)                                ;; on "l" of "hello"
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -886,7 +856,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 3)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -908,7 +878,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -922,7 +892,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -938,7 +908,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -953,7 +923,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "a hello b hello c hello d"
     (goto-char 3)
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -970,7 +940,7 @@ Also verifies the characterp guard in helixel--insert-finish."
   (helixel-test-with-buffer "hello world hello"
     (goto-char (point-max))
     (setq helixel--last-tx
-          (helixel-edit-make 'change
+          (helixel--make-tx 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir backward)
             #'helixel--recreate-search
             "?hello")
@@ -1516,7 +1486,7 @@ The leading newline is part of content so mt adds newline only before close."
     (setq last-command 'helixel-select-line this-command 'helixel-select-line)
     (helixel-select-line)
     ;; Verify count stored
-    (should (= (helixel-sel-count helixel--repeat-sel-ctx) 3))
+    (should (= (helixel-sel-count helixel--pending-sel) 3))
     ;; Kill
     (setq last-command 'helixel-select-line this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
@@ -1534,7 +1504,7 @@ The leading newline is part of content so mt adds newline only before close."
     (setq last-command nil this-command 'helixel-select-line)
     (helixel-select-line 3)
     ;; Verify count stored
-    (should (= (helixel-sel-count helixel--repeat-sel-ctx) 3))
+    (should (= (helixel-sel-count helixel--pending-sel) 3))
     ;; Kill
     (setq last-command 'helixel-select-line this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
@@ -1552,7 +1522,7 @@ The leading newline is part of content so mt adds newline only before close."
     ;; Select 2 lines upward
     (setq last-command nil this-command 'helixel-select-line-up)
     (helixel-select-line-up 2)
-    (should (= (helixel-sel-count helixel--repeat-sel-ctx) 2))
+    (should (= (helixel-sel-count helixel--pending-sel) 2))
     ;; Kill
     (setq last-command 'helixel-select-line-up this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
@@ -1568,6 +1538,6 @@ The leading newline is part of content so mt adds newline only before close."
     (setq last-command 'helixel-select-line this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
     ;; The tx sel should have count 2
-    (should (= (helixel-sel-count (helixel-edit-sel helixel--last-tx)) 2))))
+    (should (= (helixel-sel-count (helixel-event-sel helixel--last-tx)) 2))))
 
 ;;; helixel-test-edit.el ends here

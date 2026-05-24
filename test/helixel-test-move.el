@@ -748,7 +748,7 @@ On a single-char symbol at eob, w selects it."
     (helixel-find-next-char ?b)
     (should (eql (point) 8))       ; after second b
     (helixel-search-repeat-reverse)
-    (should (eq (helixel--live-cat-get :dir) 'backward))
+    (should (eq (plist-get helixel--active-search :dir) 'backward))
     (should (< (point) 8))))
 
 ;;; helixel-test-move.el ends here

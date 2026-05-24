@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-data.el helixel-action.el helixel-repeat.el helixel-repeat-strategy.el helixel-chain.el helixel-register.el helixel-state.el helixel-move.el helixel-keymap.el helixel-common.el helixel-search.el helixel-textobj-engine.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
-ELS := helixel-data.elc helixel-action.elc helixel-repeat.elc helixel-repeat-strategy.elc helixel-chain.elc helixel-register.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-common.elc helixel-search.elc helixel-textobj-engine.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
+FILES = helixel-data.el helixel-ring.el helixel-action.el helixel-repeat.el helixel-repeat-strategy.el helixel-register.el helixel-macros.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-editing.el helixel-search.el helixel-textobj-engine.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
+ELS := helixel-data.elc helixel-ring.elc helixel-action.elc helixel-repeat.elc helixel-repeat-strategy.elc helixel-register.elc helixel-macros.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-editing.elc helixel-search.elc helixel-textobj-engine.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
@@ -106,17 +106,22 @@ ctx-lint:
 	for file in $(FILES); do \
 	  case "$$file" in helixel-data.el) continue ;; esac; \
 	  for key in $(CTX_UNIQUE); do \
-	    if grep -qn "plist-get.*\<$$key\>" "$$file" 2>/dev/null; then \
+	    if grep -qn "plist-get.*$$key" "$$file" 2>/dev/null; then \
 	      echo "$$file: FATAL — raw plist-get with ctx-unique key $$key:"; \
-	      grep -n "plist-get.*\<$$key\>" "$$file"; \
+	      grep -n "plist-get.*$$key" "$$file"; \
 	      err=1; \
 	    fi; \
 	  done; \
 	  for key in $(CTX_SUSPECT); do \
-	    matches=$$(grep -n "plist-get.*\<$$key\>" "$$file" 2>/dev/null) || true; \
-	    if [ -n "$$matches" ]; then \
-	      echo "$$file: REVIEW — plist-get with key $$key (verify it is not ctx):"; \
-	      echo "$$matches"; \
+	    if grep -qn "plist-get.*$$key" "$$file" 2>/dev/null; then \
+	      MATCHES=$$(grep -n "plist-get.*$$key" "$$file" \
+	                | grep -v "helixel--active-search" \
+	                | grep -v "helixel-event-payload" \
+	                | grep -v "ctx-lint-ok"); \
+	      if [ -n "$$MATCHES" ]; then \
+	        echo "$$file: REVIEW — plist-get with key $$key (verify it is not ctx):"; \
+	        echo "$$MATCHES"; \
+	      fi; \
 	    fi; \
 	  done; \
 	done; \

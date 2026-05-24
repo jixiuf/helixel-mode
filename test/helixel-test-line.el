@@ -35,15 +35,6 @@
 
 ;;; Line-wise helper tests
 
-(defmacro helixel-test-with-buffer (content &rest body)
-  "Execute BODY in a temp buffer with CONTENT and transient-mark-mode on.
-Buffer starts with point at position 1."
-  (declare (indent 1))
-  `(with-temp-buffer
-     (transient-mark-mode 1)
-     (insert ,content)
-     (goto-char 1)
-     ,@body))
 
 (ert-deftest helixel-test-linewise-text-adds-newline ()
   "Test that `helixel--linewise-text' ensures trailing newline."

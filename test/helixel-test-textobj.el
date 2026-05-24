@@ -420,48 +420,48 @@ Second paragraph.")
 ;;; Text object action tests
 
 (ert-deftest helixel-test-textobj-session-start ()
-  "Test text-object command starts an action."
+  "Test text-object command starts a live event."
   (helixel-test-with-buffer "hello world"
-    (setq helixel--action nil helixel--action-ring nil helixel--action-pos nil
+    (setq helixel--event-ring nil helixel--live-event nil helixel--action-pos nil
           last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
-    (should helixel--action)
-    (should (eq (helixel--live-get :category) 'textobj))
-    (should (= (marker-position (helixel--live-get :marker)) 1))))
+    (should helixel--live-event)
+    (should (eq (helixel-event-category helixel--live-event) 'textobj))
+    (should (= (marker-position (helixel-event-marker helixel--live-event)) 1))))
 
 (ert-deftest helixel-test-textobj-session-same-family-continues ()
   "Test same-category text-object commands continue action."
   (helixel-test-with-buffer "(hello) (world)"
-    (setq helixel--action nil helixel--action-ring nil helixel--action-pos nil
+    (setq helixel--event-ring nil helixel--live-event nil helixel--action-pos nil
           last-command nil this-command 'helixel-mark-inner-paren)
     (goto-char 2)
     (helixel-mark-inner-paren)
-    (should (eq (helixel--live-get :category) 'textobj))
-    (let ((mark-pos (marker-position (helixel--live-get :marker))))
+    (should (eq (helixel-event-category helixel--live-event) 'textobj))
+    (let ((mark-pos (marker-position (helixel-event-marker helixel--live-event))))
       (setq last-command 'helixel-mark-inner-paren this-command 'helixel-mark-a-paren)
       (goto-char 10)
       (helixel-mark-a-paren)
-      (should (eq (helixel--live-get :category) 'textobj)))))
+      (should (eq (helixel-event-category helixel--live-event) 'textobj)))))
 
 (ert-deftest helixel-test-textobj-session-different-family-breaks ()
-  "Test different-family textobj pushes old action to ring."
+  "Test different-family textobj commits old event to ring."
   (helixel-test-with-buffer "hello (world)"
-    (setq helixel--action nil helixel--action-ring nil helixel--action-pos nil
+    (setq helixel--event-ring nil helixel--live-event nil helixel--action-pos nil
           last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word this-command 'helixel-mark-inner-paren)
     (helixel-mark-inner-paren)
-    (should (= (length helixel--action-ring) 1))
-    (should (eq (helixel--live-get :subcat) 'pair))))
+    (should (= (length helixel--event-ring) 1))
+    (should (eq (helixel-event-subcat helixel--live-event) 'pair))))
 
 (ert-deftest helixel-test-textobj-session-type-property ()
   "Test textobj actions have correct category and subcat."
-  (let (helixel--action helixel--action-ring helixel--action-pos)
+  (let (helixel--event-ring helixel--live-event helixel--action-pos)
     (helixel-test-with-buffer "hello world"
       (setq last-command nil this-command 'helixel-mark-inner-word)
       (helixel-mark-inner-word)
-      (should (eq (helixel--live-get :category) 'textobj))
-      (should (eq (helixel--live-get :subcat) 'word)))))
+      (should (eq (helixel-event-category helixel--live-event) 'textobj))
+      (should (eq (helixel-event-subcat helixel--live-event) 'word)))))
 ;;; Regex block text object tests
 
 ;; --- helixel-up-regex-block: counter-based (markdown fences) ---

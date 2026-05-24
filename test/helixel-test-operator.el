@@ -56,7 +56,7 @@
     (should (string= (buffer-string) "hello"))
     (should (= (point) 2))
     (let ((tx helixel--last-tx))
-      (funcall (helixel-edit-op-runner (helixel-edit-op tx)) tx))
+      (funcall (helixel--op-runner (helixel-event-op tx)) tx))
     (should (string= (buffer-string) "hEllo"))
     (should (= (point) 3))))
 

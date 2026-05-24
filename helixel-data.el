@@ -26,15 +26,17 @@
 ;; It has ZERO dependencies on other helixel modules and NO side effects.
 ;;
 ;; Contents:
-;;   Part 1 — helixel-sel   : selection descriptor (cl-struct)
-;;   Part 2 — Delimiter     : delimiter protocol (plist accessors + operations)
-;;   Part 3 — helixel-edit  : edit transaction (cl-struct)
-;;   Part 4 — Operator registry : symbol-property based op registration
+;;   Part 1 — helixel-sel          : selection descriptor + pending-sel
+;;   Part 2 — Delimiter Protocol   : delimiter plist accessors + operations
+;;   Part 3 — Kind Registry        : centralised kind protocol
+;;   Part 4 — helixel-event        : unified event struct
+;;   Part 5 — Transaction helpers  : make-tx, copy-tx, tx-display, etc.
+;;   Part 6 — Operator Registry    : symbol-property based op registration
 ;;
 ;; Consumed by: helixel-action, helixel-repeat,
-;;              helixel-textobj, helixel-surround, helixel-common, etc.
+;;              helixel-textobj, helixel-surround, helixel-editing, etc.
 ;;
-;; helixel-edit.el is now a backward-compat shim that requires this file.
+;; helixel-data.el provides the transaction helpers used by dot-repeat.
 
 ;;; Code:
 
@@ -45,7 +47,8 @@
 ;; ═══════════════════════════════════════════════════════════════════════
 
 (cl-defstruct (helixel-sel (:conc-name helixel-sel--)
-                           (:constructor helixel-sel--internal))
+                           (:constructor helixel-sel--internal)
+                           (:copier helixel-sel--shallow-copy))
   "Selection descriptor for dot-repeat with closure-based recreate.
 KIND is a symbol identifying the selection type.
 CTX is a plist of mutable extra data (:count, :dir, :moves, ...).
@@ -298,6 +301,45 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
 
 
 ;; ═══════════════════════════════════════════════════════════════════════
+;; Pending selection (selection-first protocol)
+;; ═══════════════════════════════════════════════════════════════════════
+;;
+;; Helixel is selection-first: selection commands push a `helixel-sel'
+;; descriptor; the next editing command pops and consumes it.
+;; Pairs with `helixel--pending-op' defined in helixel-state.el.
+
+(defvar-local helixel--pending-sel nil
+  "The pending selection descriptor (`helixel-sel' struct or nil).
+Set by selection commands (w, b, e, iw, aw, line, rect, search,
+find-char, textobj).  Consumed by operator commands (d, c, y).")
+
+(defsubst helixel--pending-sel-set (sel)
+  "Set `helixel--pending-sel' to SEL."
+  (setq helixel--pending-sel sel))
+
+(defsubst helixel--pending-sel-get ()
+  "Return `helixel--pending-sel'."
+  helixel--pending-sel)
+
+(defsubst helixel--pending-sel-clear ()
+  "Clear `helixel--pending-sel'."
+  (setq helixel--pending-sel nil))
+
+(defsubst helixel--sel-push (sel)
+  "Push SEL onto the pending-selection stack.
+Selection commands call this; editing commands consume via
+`helixel--sel-pop'."
+  (setq helixel--pending-sel sel))
+
+(defsubst helixel--sel-pop ()
+  "Pop and return the pending selection, or nil.
+Editing commands call this to consume the selection set by the
+previous selection command."
+  (prog1 helixel--pending-sel
+    (setq helixel--pending-sel nil)))
+
+
+;; ═══════════════════════════════════════════════════════════════════════
 ;; Part 2 — Delimiter Protocol
 ;; ═══════════════════════════════════════════════════════════════════════
 ;;
@@ -384,34 +426,147 @@ Returns (OPEN-END . CLOSE-BEG)."
 
 
 ;; ═══════════════════════════════════════════════════════════════════════
-;; Part 3 — helixel-edit: Edit Transaction
+;; Part 3 — Kind Registry (centralised kind protocol)
 ;; ═══════════════════════════════════════════════════════════════════════
+;;
+;; Each selection kind registers four protocol methods:
+;;   :recreate  — function (ctx) to recreate selection at point
+;;   :advance   — function (tx tag) → boolean for next target
+;;   :display   — function (ctx) → string for history display
+;;   :make-sel  — factory function (args...) → helixel-sel (optional)
+;;
+;; The strategy builder looks up :advance and :recreate from this
+;; registry, eliminating kind-specific cond branches.
 
-(cl-defstruct (helixel-edit (:conc-name helixel-edit-))
-  "An immutable editing operation for dot-repeat.
+(defvar helixel--kind-registry (make-hash-table :test #'eq)
+  "Hash table: kind symbol → plist.
+Keys: :recreate :advance :display :make-sel :all-buffer-fn.")
+
+(cl-defmacro helixel-register-kind (kind &rest props)
+  "Register selection KIND with protocol PROPS.
+PROPS is a keyword plist."
+  (declare (indent 1))
+  `(puthash ',kind (list ,@props) helixel--kind-registry))
+
+(defun helixel--kind-advance (kind)
+  "Return the :advance function for KIND from the registry."
+  (plist-get (gethash kind helixel--kind-registry) :advance))
+
+(defun helixel--kind-recreate (kind)
+  "Return the :recreate function for KIND from the registry."
+  (plist-get (gethash kind helixel--kind-registry) :recreate))
+
+(defun helixel--kind-display (kind)
+  "Return the :display function/string for KIND from the registry."
+  (plist-get (gethash kind helixel--kind-registry) :display))
+
+(defun helixel--kind-all-buffer-fn (kind)
+  "Return the :all-buffer-fn for KIND from the registry, or nil."
+  (plist-get (gethash kind helixel--kind-registry) :all-buffer-fn))
+
+(defun helixel--kind-all-dir-fn (kind)
+  "Return the :all-dir-fn for KIND from the registry, or nil."
+  (plist-get (gethash kind helixel--kind-registry) :all-dir-fn))
+
+
+;; ═══════════════════════════════════════════════════════════════════════
+;; Part 4 — helixel-event: Unified Event Struct
+;; ═══════════════════════════════════════════════════════════════════════
+;;
+;; Replaces the old `helixel--action' plist system.
+;; A single struct serves dot-repeat (`.`) replay, `;` jumping,
+;; and history selection.
+
+(cl-defstruct (helixel-event (:conc-name helixel-event-)
+                             (:copier helixel-event--shallow-copy))
+  "Immutable editing event — serves both `.` replay and `;` jumping.
 Slots:
-  OP           — symbol: operator name (kill, change, insert-text, ...)
-  SEL          — `helixel-sel' struct or nil (selection descriptor)
-  PAYLOAD      — plist of operator-specific data (:text, :char, :keys, ...)
-  MARKER       — position marker where the edit started (for `;' jumping)
-  RUNNER       — function (TX) → nil, executes the edit at replay time
-  DISPLAY-FIELD — string or function (TX) → string, stored at record time"
+  OP        — symbol: operator name (kill, change, chain, ...)
+  SEL       — `helixel-sel' struct or nil
+  PAYLOAD   — plist of operator-specific data (:text :keys ...)
+  RUNNER    — function (event) → nil, executes the edit at replay time
+  MARKER    — position marker for `;` jumping to session start
+  CATEGORY  — symbol for action classification (edit search movement ...)
+  SUBCAT    — symbol sub-classification (kill search word ...)
+  DISPLAY   — string or function (event) → string for history
+  TIMESTAMP — float from `float-time'
+  BUFFER    — buffer object where the event occurred"
   op
   sel
   payload
-  marker
   runner
-  display-field)
+  marker
+  category
+  subcat
+  display
+  timestamp
+  buffer)
 
-;; ── Builder ──
+(defun helixel-event--copy (event)
+  "Deep-copy `helixel-event' struct EVENT.
+Copies marker (via `copy-marker') and sel (via `helixel-sel--copy')
+so the copy is fully independent of the original."
+  (when (helixel-event-p event)
+    (let ((copy (helixel-event--shallow-copy event)))
+      (when-let* ((m (helixel-event-marker event)))
+        (setf (helixel-event-marker copy)
+              (copy-marker m (marker-insertion-type m))))
+      (when-let* ((s (helixel-event-sel event)))
+        (setf (helixel-event-sel copy) (helixel-sel--copy s)))
+      copy)))
 
-(defun helixel-edit-make (op sel-ctx &rest payload-kv)
-  "Create a `helixel-edit' transaction struct.
+(defun helixel-event--same-content-p (e1 e2)
+  "Return non-nil if E1 and E2 have identical key content.
+Compares op, sel, payload, category, subcat, and marker position.
+Two events at different positions are never considered the same."
+  (if (or (null e1) (null e2))
+      (eq e1 e2)
+    (and (eq (helixel-event-op e1) (helixel-event-op e2))
+         (eq (helixel-event-category e1) (helixel-event-category e2))
+         (eq (helixel-event-subcat e1) (helixel-event-subcat e2))
+         (helixel-sel-equal-p (helixel-event-sel e1)
+                              (helixel-event-sel e2))
+         (equal (helixel-event-payload e1)
+                (helixel-event-payload e2))
+         (= (marker-position (helixel-event-marker e1))
+            (marker-position (helixel-event-marker e2))))))
+
+(defun helixel-event-format (event)
+  "Return display string for EVENT.
+Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored."
+  (let* ((op (helixel-event-op event))
+         (sel (helixel-event-sel event))
+         (op-str (or (when (stringp (helixel-event-display event))
+                       (helixel-event-display event))
+                     (symbol-name op)))
+         (sel-str (when sel (helixel-sel-call-display sel)))
+         (count (helixel-sel-count sel)))
+    (concat op-str
+            (when sel-str (concat "." sel-str))
+            (when (and count (> count 1)) (format "x%d" count)))))
+
+
+;; ═══════════════════════════════════════════════════════════════════════
+;; ═══════════════════════════════════════════════════════════════════════
+;; Part 5 — Transaction helpers (build on `helixel-event')
+;; ═══════════════════════════════════════════════════════════════════════
+;;
+;; Dot-repeat transactions are `helixel-event' structs.  These helpers
+;; replaces the old `helixel-edit` API.
+
+(defvar helixel--last-tx nil
+  "The most recent edit transaction (a `helixel-event' struct).
+Cross-buffer: `.` replays the last edit regardless of which buffer
+it was recorded in.  May be re-pointed by `helixel-repeat-edit-pick'
+to replay an older entry.")
+
+(defun helixel--make-tx (op sel-ctx &rest payload-kv)
+  "Create a `helixel-event' transaction for dot-repeat.
 OP is a registered operator symbol.
 SEL-CTX is a selection descriptor or nil.
 PAYLOAD-KV are keyword/value pairs.  Special keys:
   :runner  FUNCTION — stored in slot, called at replay time
-  :display STRING|FUNCTION — stored in DISPLAY-FIELD slot, for history
+  :display STRING|FUNCTION — stored in DISPLAY slot, for history
 All other keys form the :payload plist."
   (let (runner display-field rest)
     (while payload-kv
@@ -426,58 +581,76 @@ All other keys form the :payload plist."
          (push (car payload-kv) rest)
          (push (cadr payload-kv) rest)
          (setq payload-kv (cddr payload-kv)))))
-    (make-helixel-edit :op op
-                       :sel sel-ctx
-                       :payload (nreverse rest)
-                       :marker (point-marker)
-                       :runner runner
-                       :display-field display-field)))
+    (make-helixel-event
+     :op op
+     :sel sel-ctx
+     :payload (nreverse rest)
+     :marker (point-marker)
+     :runner runner
+     :display display-field
+     :timestamp (float-time)
+     :buffer (current-buffer))))
+
+(defun helixel--copy-tx (tx)
+  "Return a shallow copy of transaction TX."
+  (helixel-event--shallow-copy tx))
 
 ;; ── Equality (for action ring dedup) ──
 
-(defun helixel-edit-equal-p (tx1 tx2)
+(defun helixel--tx-equal-p (tx1 tx2)
   "Return non-nil if TX1 and TX2 represent the same editing operation.
 Compares op, sel, and payload.  Ignores marker (position differs
-on replay).
-Returns t when both are nil (non-edit actions are equal for dedup)."
+on replay).  Returns t when both are nil."
   (if (or (null tx1) (null tx2))
       (eq tx1 tx2)
-    (and (eq (helixel-edit-op tx1) (helixel-edit-op tx2))
-         (helixel-sel-equal-p (helixel-edit-sel tx1)
-                              (helixel-edit-sel tx2))
-         (equal (helixel-edit-payload tx1)
-                (helixel-edit-payload tx2)))))
+    (and (eq (helixel-event-op tx1) (helixel-event-op tx2))
+         (helixel-sel-equal-p (helixel-event-sel tx1)
+                              (helixel-event-sel tx2))
+         (equal (helixel-event-payload tx1)
+                (helixel-event-payload tx2)))))
+
+;; ── Payload helpers ──
+
+(defun helixel--tx-with-payload (tx key value)
+  "Return a new transaction equal to TX with :payload KEY set to VALUE.
+Does not mutate TX."
+  (let* ((payload (copy-sequence (helixel-event-payload tx)))
+         (new-payload (plist-put payload key value))
+         (new-tx (helixel--copy-tx tx)))
+    (setf (helixel-event-payload new-tx) new-payload)
+    new-tx))
 
 ;; ── Display ──
 
-(defun helixel-edit-display (tx)
+(defun helixel--tx-display (tx)
   "Return a short display string for transaction TX.
-Format: OP[.SEL][xCOUNT].  Uses DISPLAY-FIELD slot if stored;
-otherwise falls back to `helixel-edit-op-display'."
-  (let* ((op (helixel-edit-op tx))
-         (sel (helixel-edit-sel tx))
-         (op-str (or (helixel-edit-display-field tx)
-                     (helixel-edit-op-display op tx)))
+Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored;
+otherwise falls back to `helixel--op-display'."
+  (let* ((op (helixel-event-op tx))
+         (sel (helixel-event-sel tx))
+         (op-str (or (helixel-event-display tx)
+                     (helixel--op-display op tx)))
          (sel-str (when sel (helixel-sel-call-display sel)))
          (count (helixel-sel-count sel)))
     (concat op-str
             (when sel-str (concat "." sel-str))
             (when (and count (> count 1)) (format "x%d" count)))))
 
-;; ── Payload helpers ──
 
-(defun helixel-edit-with-payload (tx key value)
-  "Return a new transaction equal to TX with :payload KEY set to VALUE.
-Does not mutate TX."
-  (let* ((payload (copy-sequence (helixel-edit-payload tx)))
-         (new-payload (plist-put payload key value))
-         (new-tx (copy-helixel-edit tx)))
-    (setf (helixel-edit-payload new-tx) new-payload)
-    new-tx))
+;; ── Deep copy ──
+
+(defun helixel-sel--copy (sel)
+  "Deep-copy `helixel-sel' struct SEL.
+Copies the ctx plist so the copy is independent."
+  (when (helixel-sel-p sel)
+    (let ((copy (helixel-sel--shallow-copy sel)))
+      (setf (helixel-sel--ctx copy)
+            (copy-sequence (helixel-sel--ctx sel)))
+      copy)))
 
 
 ;; ═══════════════════════════════════════════════════════════════════════
-;; Part 4 — Operator Registry
+;; Part 6 — Operator Registry
 ;; ═══════════════════════════════════════════════════════════════════════
 ;;
 ;; Operators are registered in a module-private hash table — no symbol
@@ -499,20 +672,22 @@ to their property plists (:runner :display :repeat-advance).")
   "Register edit operator OP with keyword PROPS.
 
 PROPS is a plist with keys:
-  :runner        — function (TX) -> nil for `.` replay
-  :display       — string or function (TX) -> string for history
-  :repeat-advance — nil, `line', or function for `.` auto-advance
+  :runner           — function (TX) -> nil for `.` replay
+  :display          — string or function (TX) -> string for history
+  :repeat-advance   — nil, `line', or function for `.` auto-advance
+  :strategy-builder — function (event &optional reverse-p)
+                       → helixel-repeat-strategy or nil
 
-Stores runner, display, and advance in the internal hash table."
+Stores all props in the internal hash table."
   (declare (indent 1))
   `(puthash ',op (list ,@(mapcan (lambda (kv) (list kv)) props))
             helixel--op-registry))
 
-(defun helixel-edit-op-runner (op)
+(defun helixel--op-runner (op)
   "Return the runner function for OP from the operator registry."
   (plist-get (gethash op helixel--op-registry) :runner))
 
-(defun helixel-edit-op-display (op &optional tx)
+(defun helixel--op-display (op &optional tx)
   "Return display label for OP, optionally evaluated with TX.
 Reads the :display entry from the operator registry.
 Falls back to `symbol-name'."
@@ -522,9 +697,13 @@ Falls back to `symbol-name'."
      ((functionp d) (or (funcall d tx) (symbol-name op)))
      (t (symbol-name op)))))
 
-(defun helixel-edit-op-advance (op)
+(defun helixel--op-advance (op)
   "Return the :repeat-advance property for OP, or nil."
   (plist-get (gethash op helixel--op-registry) :repeat-advance))
+
+(defun helixel--op-strategy-builder (op)
+  "Return the :strategy-builder for OP, or nil."
+  (plist-get (gethash op helixel--op-registry) :strategy-builder))
 
 (defun helixel-op-set-runner (op runner)
   "Override the :runner for OP in the operator registry to RUNNER.

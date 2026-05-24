@@ -34,7 +34,6 @@
 Auto-populated by `helixel-define-mark-pair' and `helixel-define-mark-quote'.")
 
 (defvar helixel--selection-type nil)
-(defvar helixel--repeat-sel-ctx nil)
 
 (declare-function helixel--selection-type "helixel-state")
 

@@ -25,8 +25,12 @@
 
 ;;; Code:
 
-(require 'helixel-data)                  ; for helixel-edit-make
+(require 'helixel-data)                  ; for helixel--make-tx
 (require 'helixel-repeat)                ; for helixel--last-tx, etc.
+(require 'helixel-repeat-strategy)       ; for strategy struct
+(require 'helixel-macros)                ; for helixel-with-edit-tracking
+(declare-function helixel--kind-advance "helixel-data")
+(declare-function helixel--flip-dir "helixel-repeat")
 
 (defvar helixel--repeat-chain-preview)    ; defined in helixel-repeat.el
 
@@ -106,8 +110,8 @@ the edit part (movement keys were already executed by `,').
 For search-initiated chains, positions cursor at `match-beginning'
 before replay, matching the behaviour of the original recording
 where `helixel-insert' calls `(goto-char (region-beginning))'."
-  (let* ((payload (helixel-edit-payload tx))
-         (sel (helixel-edit-sel tx))
+  (let* ((payload (helixel-event-payload tx))
+         (sel (helixel-event-sel tx))
          (edit-keys (plist-get payload :kmacro))
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t))
@@ -123,8 +127,82 @@ where `helixel-insert' calls `(goto-char (region-beginning))'."
 
 (helixel-register-op chain
   :display "chain"
-  :repeat-advance nil    ; chain uses sel-driven advance via unified strategy
-  :runner #'helixel--repeat-chain-runner)
+  :runner #'helixel--repeat-chain-runner
+  :strategy-builder #'helixel--chain-strategy-builder)
+
+(defvar helixel--repeat-permanent-flip) ;; from helixel-repeat.el
+
+(defun helixel--chain-strategy-builder (edit &optional reverse-p)
+  "Build a repeat strategy for chain EDIT.
+If REVERSE-P or `helixel--repeat-permanent-flip' is non-nil,
+flip :dir for line/search selections.
+Advance: sel advance + move-keys + edit-keys.
+Apply: edit-keys only.
+Reset: goto marker."
+  (let* ((sel (helixel-event-sel edit))
+         (kind (and sel (helixel-sel-get-kind sel)))
+         (advance-fn (helixel--kind-advance kind))
+         (payload (helixel-event-payload edit))
+         (move-keys (plist-get payload :chain-move-keys))
+         (effective-reverse (or reverse-p helixel--repeat-permanent-flip))
+         (effective-edit
+          (if (and effective-reverse (memq kind '(line search)))
+              (let* ((current-dir (if (eq kind 'search)
+                                      (helixel-sel-search-dir sel)
+                                    (helixel-sel-line-dir sel)))
+                     (reversed (helixel-sel-update-ctx
+                                sel :dir (helixel--flip-dir current-dir)))
+                     (new-edit (helixel--copy-tx edit)))
+                (setf (helixel-event-sel new-edit) reversed)
+                new-edit)
+            edit)))
+    (make-helixel-repeat-strategy
+     :advance (lambda (_edit)
+                (and (or (null advance-fn)
+                         (funcall advance-fn effective-edit))
+                     (progn
+                       (when move-keys
+                         (execute-kbd-macro move-keys))
+                       t)))
+     :apply (lambda (_edit)
+              (helixel--execute-edit effective-edit))
+     :reset (lambda (_edit)
+              (when-let* ((m (helixel-event-marker effective-edit)))
+                (goto-char (marker-position m))))
+     :all-buffer-fn (helixel--kind-all-buffer-fn kind))))
+
+(defun helixel--chain-preview-strategy (edit &optional reverse-p)
+  "Build a preview-only repeat strategy for chain EDIT and REVERSE-P.
+Same as chain strategy but uses `ignore' for apply (no edit execution)."
+  (let* ((sel (helixel-event-sel edit))
+         (kind (and sel (helixel-sel-get-kind sel)))
+         (advance-fn (helixel--kind-advance kind))
+         (payload (helixel-event-payload edit))
+         (move-keys (plist-get payload :chain-move-keys))
+         (effective-reverse (or reverse-p helixel--repeat-permanent-flip))
+         (effective-edit
+          (if (and effective-reverse (memq kind '(line search)))
+              (let* ((current-dir (if (eq kind 'search)
+                                      (helixel-sel-search-dir sel)
+                                    (helixel-sel-line-dir sel)))
+                     (reversed (helixel-sel-update-ctx
+                                sel :dir (helixel--flip-dir current-dir)))
+                     (new-edit (helixel--copy-tx edit)))
+                (setf (helixel-event-sel new-edit) reversed)
+                new-edit)
+            edit)))
+    (make-helixel-repeat-strategy
+     :advance (lambda (_edit)
+                (and (or (null advance-fn)
+                         (funcall advance-fn effective-edit))
+                     (progn
+                       (when move-keys
+                         (execute-kbd-macro move-keys))
+                       t)))
+     :apply #'ignore
+     :reset (lambda (_edit)
+              (when-let* ((m (helixel-event-marker effective-edit)))
+                (goto-char (marker-position m)))))))
 
 
 ;; ── Lifecycle commands ──
@@ -144,7 +222,7 @@ transaction, or `helixel-repeat-chain-cancel' to discard."
   (setq helixel--chain-last-tx-snapshot helixel--last-tx)
   (setq helixel--chain-move-keys nil)
   (setq helixel--chain-edit-keys nil)
-  (setq helixel--repeat-chain-init-ctx helixel--repeat-sel-ctx)
+  (setq helixel--repeat-chain-init-ctx helixel--pending-sel)
   (setq helixel--repeat-chain-init-bounds
         (when (use-region-p)
           (cons (copy-marker (region-beginning))
@@ -178,7 +256,7 @@ Determines advance behavior from the initial selection context
                   (or move-keys edit-keys)))
          (init-ctx helixel--repeat-chain-init-ctx)
          ;; Merge entry-kind from live ctx (i/a updates it after snapshot)
-         (live-ctx helixel--repeat-sel-ctx)
+         (live-ctx helixel--pending-sel)
          (init-ctx (if (and init-ctx live-ctx
                             (eq (helixel-sel-get-kind init-ctx)
                                 'search)
@@ -193,7 +271,7 @@ Determines advance behavior from the initial selection context
                      init-ctx))
          (init-bounds helixel--repeat-chain-init-bounds))
     (if (and macro (> (length macro) 0))
-        (let* ((tx (helixel-edit-make 'chain init-ctx
+        (let* ((tx (helixel--make-tx 'chain init-ctx
                      :runner #'helixel--repeat-chain-runner
                      :display (format "chain(%d)" (length edit-keys))
                      :kmacro edit-keys
@@ -210,9 +288,9 @@ Determines advance behavior from the initial selection context
           (setq helixel--chain-move-keys nil)
           (setq helixel--chain-edit-keys nil)
           (helixel--update-last-tx tx)
-          (helixel-action-start 'edit 'chain)
-          (helixel--live-edit-set tx)
-          (helixel-action-commit)
+          (helixel-with-edit-tracking
+              (:op 'chain :category 'edit :subcat 'chain)
+            (helixel--live-edit-set tx))
           (message "Chain recorded (%d keys, move=%d)"
                    (length edit-keys)
                    (if move-keys (length move-keys) 0)))

@@ -1,4 +1,4 @@
-;;; helixel-common.el --- Editing and dot-repeat  -*- lexical-binding: t; -*-
+;;; helixel-editing.el --- Edit commands, selection recreate, op runners  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026  jixiuf
 
@@ -36,6 +36,7 @@
 (require 'cl-lib)
 (require 'helixel-state)
 (require 'helixel-move)
+(require 'helixel-data)
 
 (declare-function helixel-search--search "helixel-search"
                   (pattern dir &optional bound noerror))
@@ -183,36 +184,73 @@ at the appropriate offset within the match for insert-text ops."
 (defun helixel--recreate-insert-search-offset (ctx)
   "Replay insert-search-offset.  CTX holds :offset (integer)."
   (let ((offset (helixel-sel-insert-offset ctx)))
-    (goto-char (+ (match-beginning 0) offset))))
+    (goto-char (+ (match-beginning 0) offset)))
+
+;; ── Insert-* kind registrations ──
+;; Recreate functions defined here; advance functions in helixel-repeat.el.
+
+(helixel-register-kind insert-selection-start
+  :recreate #'helixel--recreate-insert-selection-start
+  :advance  #'helixel--repeat-advance-search
+  :display  "i"
+  :make-sel nil)
+
+(helixel-register-kind insert-selection-end
+  :recreate #'helixel--recreate-insert-selection-end
+  :advance  #'helixel--repeat-advance-search
+  :display  "a"
+  :make-sel nil)
+
+(helixel-register-kind insert-beginning-line
+  :recreate #'helixel--recreate-insert-beginning-line
+  :advance  #'helixel--repeat-advance-line
+  :display  "I"
+  :make-sel nil)
+
+(helixel-register-kind insert-end-line
+  :recreate #'helixel--recreate-insert-end-line
+  :advance  #'helixel--repeat-advance-line
+  :display  "A"
+  :make-sel nil)
+
+(helixel-register-kind insert-search-offset
+  :recreate #'helixel--recreate-insert-search-offset
+  :advance  #'helixel--repeat-advance-search
+  :display  "s"
+  :make-sel nil))
 
 
+;; Runtime require avoids circular dep between helixel-editing and helixel-swap.
+;; helixel-swap requires helixel-state, which requires helixel-repeat and
+;; helixel-ring — loading helixel-swap at toplevel would introduce a cycle.
+;; Confined to op runners that call helixel--swap-source-type and friends:
+;; change, replace, yank (replay path only, not recording).
 (require 'helixel-swap)
 
 ;; ── Edit-op change runner ──
 
 (defun helixel--repeat-change-core (tx)
-  "Repeat change TX: delete selection, replay kmacro keys or insert text.
-TX is the complete edit transaction (see `helixel-edit-make').
-Kmacro keys/commands (primary) capture the full insert-mode keystrokes.
-Text (fallback) is used when keys/commands are unavailable (tests).
+  "Repeat change TX: delete selection, replay keys or insert text.
+TX is the complete edit transaction (see `helixel--make-tx').
+Keys (primary) capture the full insert-mode keystrokes.
+Text (fallback) is used when keys are unavailable (tests).
 
 For rect selections the stored text is replayed on every subsequent
 rectangle line via `helixel--rect-replay' — no state-switching side
 -effect (avoids an unnecessary helixel-insert-exit during replay)."
   (let* ((keys (helixel--repeat-get-keys tx))
-         (cmds (plist-get (helixel-edit-payload tx) :commands))
-         (text (plist-get (helixel-edit-payload tx) :inserted-text)))
+         (text (plist-get (helixel-event-payload tx) :inserted-text)))
     (cond
      ((and (use-region-p) (eq (helixel--selection-type) 'rect))
       (helixel--rect-change)
-      (if (or keys cmds)
-          (helixel--execute-keys keys cmds)
+      (if keys
+          (helixel--execute-keys keys)
         (when text (insert text)))
       (helixel--rect-replay))
      (t
       (helixel--delete-selection)
-      (if (or keys cmds)
-          (helixel--execute-keys keys cmds)
+      (if keys
+          (helixel--execute-keys keys)
         (when text (insert text)))))))
 
 ;; ── Edit-op registry ──
@@ -229,19 +267,18 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 (helixel-register-op replace-char :repeat-advance 'line
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-edit-payload tx) :char)))
+             (let ((c (plist-get (helixel-event-payload tx) :char)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
             (helixel-replace-char
-             (plist-get (helixel-edit-payload tx) :char))))
+             (plist-get (helixel-event-payload tx) :char))))
 
 (helixel-register-op insert-text :display "i" :repeat-advance 'line
   :runner (lambda (tx)
-            (let ((keys (plist-get (helixel-edit-payload tx) :keys))
-                  (cmds (plist-get (helixel-edit-payload tx) :commands)))
-              (if (or keys cmds)
-                  (progn (helixel--execute-keys keys cmds))
-                (insert (or (plist-get (helixel-edit-payload tx) :text)
+            (let ((keys (plist-get (helixel-event-payload tx) :keys)))
+              (if keys
+                  (helixel--execute-keys keys)
+                (insert (or (plist-get (helixel-event-payload tx) :text)
                             ""))))))
 
 
@@ -523,18 +560,18 @@ Set by the op runner from the transaction's :multiplier payload.")
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last tx.
       (when-let* ((tx helixel--last-tx)
-                  (sel (helixel-edit-sel tx)))
-        (when (eq (helixel-edit-op tx) 'indent-left)
-          (when-let* ((m (helixel-edit-marker tx))
+                  (sel (helixel-event-sel tx)))
+        (when (eq (helixel-event-op tx) 'indent-left)
+          (when-let* ((m (helixel-event-marker tx))
                       (pos (marker-position m)))
             (goto-char pos))
           (let ((helixel--inhibit-action-track t))
             (helixel--recreate-selection sel))
           (indent-rigidly (region-beginning) (region-end) (- 1))
-          (let* ((payload (helixel-edit-payload tx))
+          (let* ((payload (helixel-event-payload tx))
                  (mult (or (plist-get payload :multiplier) 1)))
             (helixel--update-last-tx
-             (helixel-edit-with-payload tx :multiplier (1+ mult))))
+             (helixel--tx-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p
@@ -550,7 +587,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 (helixel-op-set-runner 'indent-left
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (plist-get (helixel-edit-payload tx) :multiplier) 1)))
+              (or (plist-get (helixel-event-payload tx) :multiplier) 1)))
          (helixel-indent-left))))
 
 (helixel-define-operator helixel-indent-right
@@ -563,18 +600,18 @@ Set by the op runner from the transaction's :multiplier payload.")
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last tx.
       (when-let* ((tx helixel--last-tx)
-                  (sel (helixel-edit-sel tx)))
-        (when (eq (helixel-edit-op tx) 'indent-right)
-          (when-let* ((m (helixel-edit-marker tx))
+                  (sel (helixel-event-sel tx)))
+        (when (eq (helixel-event-op tx) 'indent-right)
+          (when-let* ((m (helixel-event-marker tx))
                       (pos (marker-position m)))
             (goto-char pos))
           (let ((helixel--inhibit-action-track t))
             (helixel--recreate-selection sel))
           (indent-rigidly (region-beginning) (region-end) 1)
-          (let* ((payload (helixel-edit-payload tx))
+          (let* ((payload (helixel-event-payload tx))
                  (mult (or (plist-get payload :multiplier) 1)))
             (helixel--update-last-tx
-             (helixel-edit-with-payload tx :multiplier (1+ mult))))
+             (helixel--tx-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p
@@ -589,7 +626,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 (helixel-op-set-runner 'indent-right
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (plist-get (helixel-edit-payload tx) :multiplier) 1)))
+              (or (plist-get (helixel-event-payload tx) :multiplier) 1)))
          (helixel-indent-right))))
 
 ;; ── Case operations ──
@@ -674,7 +711,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 
 (helixel-register-op join-lines :display "J" :repeat-advance nil
   :runner (lambda (tx)
-            (let ((n (or (plist-get (helixel-edit-payload tx) :count) 2)))
+            (let ((n (or (plist-get (helixel-event-payload tx) :count) 2)))
               (dotimes (_ (1- n))
                 (join-line 1)))))
 
@@ -687,5 +724,5 @@ Set by the op runner from the transaction's :multiplier payload.")
       (join-line 1))
     (helixel--clear-data)))
 
-(provide 'helixel-common)
-;;; helixel-common.el ends here
+(provide 'helixel-editing)
+;;; helixel-editing.el ends here

@@ -35,17 +35,19 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'helixel-macros)
 (require 'helixel-action)
 (require 'helixel-repeat)
+(require 'helixel-ring)
 (require 'helixel-register)
 (require 'helixel-textobj)
 (require 'helixel-surround)
 (declare-function helixel-search--search "helixel-search")
-(declare-function helixel--recreate-movement "helixel-common")
-(declare-function helixel--recreate-insert-selection-start "helixel-common")
-(declare-function helixel--recreate-insert-selection-end "helixel-common")
-(declare-function helixel--recreate-insert-beginning-line "helixel-common")
-(declare-function helixel--recreate-insert-end-line "helixel-common")
+(declare-function helixel--recreate-movement "helixel-editing")
+(declare-function helixel--recreate-insert-selection-start "helixel-editing")
+(declare-function helixel--recreate-insert-selection-end "helixel-editing")
+(declare-function helixel--recreate-insert-beginning-line "helixel-editing")
+(declare-function helixel--recreate-insert-end-line "helixel-editing")
 (declare-function helixel--linewise-text "helixel-move")
 (declare-function helixel--rect-wise-text "helixel-move")
 (declare-function helixel--line-bounds-of-region "helixel-move")
@@ -167,114 +169,41 @@ Populated by `helixel-keymap' at load time.")
 MODE is a major or minor mode symbol.  STATE is a helixel state symbol.
 Stores mode-specific helixel bindings registered via `helixel-define-key'.")
 
-;; ── Command definition macro ──
+;; ── Pending-op system (selection-first pattern) ──
 ;;
-;; All helixel commands use `helixel-define-command' to declare their
-;; action metadata.  Tracking code (action-start, direction, highlight
-;; clearing, visual-mode tracking) is expanded inline at compile time.
+;; Helixel is selection-first: user selects a region (w/b/e/iw/aw/line/
+;; rect/search/find-char), THEN presses an operator (d/c/y).
 ;;
-;; Editing commands should additionally call `helixel--record-edit'
-;; in their body (or use `helixel-define-operator' which handles both).
-
-(defmacro helixel-define-command (name metadata &rest body)
-  "Define a helixel command NAME with METADATA auto-tracking.
-
-METADATA is a plist:
-  :category CAT — action category (movement, edit, search, state, etc.)
-  :subcat   SUB — action subcategory (word, kill, insert, etc.)
-  :dir      DIR — direction for n/N repeat context (forward, backward)
-  :clear-highlights — default t for :category movement, nil otherwise
-  :params   PARAM-LIST — optional function parameter list
-
-For :category movement:
-  - Auto-injects `helixel--track-visual-move' for `.` replay in visual mode
-  - Auto-injects `helixel--clear-highlights' (unless :clear-highlights nil)
-
-All tracking code is expanded inline at compile time — zero hooks.
-BODY is the command's business logic."
-  (declare (indent 2))
-  (let* ((cat (plist-get metadata :category))
-         (sub (plist-get metadata :subcat))
-         (dir (plist-get metadata :dir))
-         (clear (if (plist-member metadata :clear-highlights)
-                    (plist-get metadata :clear-highlights)
-                  (eq cat 'movement)))
-         (has-interactive (and (consp (car body))
-                               (eq (caar body) 'interactive)))
-         (interactive-form (if has-interactive (car body) '(interactive)))
-         (rest-body (if has-interactive (cdr body) body))
-         (params (plist-get metadata :params))
-         (track-visual
-          (when (eq cat 'movement)
-            `((helixel--track-visual-move ',name)))))
-    `(defun ,name ,(or params ())
-       ,(format "Helixel %s.%s command." cat sub)
-       ,interactive-form
-       ;; ── Action tracking (for ; and C-o/C-i) ──
-       (helixel-action-start ',cat ',sub)
-       ;; ── Direction (for n/N repeat) ──
-       ,@(when dir `((helixel--live-cat-set-dir ',dir)))
-       ;; ── Highlight clearing ──
-       ,@(when clear '((helixel--clear-highlights)))
-       ;; ── Body (pure business logic) ──
-       ,@rest-body
-       ;; ── Visual-mode tracking (for . replay of movements) ──
-       ;; Only movement commands accumulate moves; edit commands
-       ;; record the accumulated moves via `helixel--record-edit'.
-       ,@track-visual)))
-
-;; ── Operator definition macro ──
+;; `helixel--pending-sel' holds the selection descriptor (helixel-sel
+;; struct) created by the selection command.  The operator command
+;; consumes it.
 ;;
-;; Combines command definition + op registration for `.` repeat.
-;; Replaces the old :repeatable / :edit-op patterns with a single,
-;; explicit form.
+;; `helixel--pending-op' is NOT a vim-style operator-pending state
+;; machine — it's just a marker that the next command should consume
+;; the pending selection.
 
-(defmacro helixel-define-operator (name metadata &rest body)
-  "Define a helixel editing operator NAME.
+(defvar-local helixel--pending-op nil
+  "The current pending operator: \='kill | \='change | \='copy | nil.
+Set by operator commands (d, c, y) when awaiting a selection.
+Consumed alongside `helixel--pending-sel'.")
 
-Combines command definition (action tracking for \=`;\=` jumping
-and jump-list navigation) with
-op registration (for `.` repeat) into a single form.
-
-METADATA is a plist:
-  :op OP              — operator symbol for `.` (required)
-  :display DISPLAY    — label string or function (TX) -> string
-  :repeat-advance TAG — nil, `line', or function
-  :subcat SUB         — action subcategory (default: OP)
-  :params PARAMS      — function parameter list
-
-Expands to:
-  1. (helixel-register-op OP :display ... :runner (lambda () (NAME)))
-  2. (helixel-define-command NAME (:category edit ...) BODY)
-
-The command body SHOULD call (helixel--record-edit OP ...) to record
-the edit for `.` replay."
-  (declare (indent 2))
-  (let* ((op (plist-get metadata :op))
-         (display (plist-get metadata :display))
-         (advance (plist-get metadata :repeat-advance))
-         (subcat (or (plist-get metadata :subcat) op)))
-    (unless op
-      (error "helixel-define-operator: :op is required"))
-    `(progn
-       ;; ── Op registration (for . replay) ──
-       (helixel-register-op ,op
-         :display ,display
-         :repeat-advance ,advance
-         :runner (lambda (_tx) (,name)))
-       ;; ── Command definition (for action tracking) ──
-       (helixel-define-command ,name
-           (:category edit :subcat ,subcat
-            ,@(when-let* ((p (plist-get metadata :params)))
-                (list :params p)))
-         ,@body))))
+(defun helixel--commit-pending-event ()
+  "Finalize the pending event after operator+selection are both ready.
+Creates the helixel-sel from pending-sel, sets it on the current live-event,
+and commits the event.  This is called from `post-command-hook'."
+  (when (and helixel--pending-op helixel--pending-sel)
+    (let ((sel helixel--pending-sel))
+      (setq helixel--pending-op nil
+            helixel--pending-sel nil)
+      (when helixel--live-event
+        (setf (helixel-event-sel helixel--live-event) sel)
+        (helixel-event-commit)))))
 
 ;; Wire textobj hooks for action recording and visual state detection.
-(setq helixel-textobj-action-function #'helixel-action-start)
+(setq helixel-textobj-action-function #'helixel--tracking-open)
 (setq helixel-textobj-visual-state-p-function
       (lambda () (eq helixel--current-state 'visual)))
 (setq helixel-jump-cleanup-function #'helixel--clear-data)
-(add-hook 'helixel-action-push-functions #'helixel--jump-list-push)
 
 (defun helixel--unload-current-state ()
   "Deactivate the minor mode described by `helixel--current-state'."
@@ -299,14 +228,14 @@ the edit for `.` replay."
   (deactivate-mark))
 
 (defun helixel--track-visual-move (cmd)
-  "Append movement CMD to `helixel--repeat-sel-ctx'.
+  "Append movement CMD to `helixel--pending-sel'.
 Creates/updates a `helixel-sel' struct of kind `movement' whenever
 a region is active — from visual mode or `normal-mode' movements that
 created a selection (e.g. w, e, b).
 No-op during dot-repeat replay, or when no region is active."
   (when (and (not helixel--inhibit-repeat-record)
              (use-region-p))
-    (let* ((ctx helixel--repeat-sel-ctx)
+    (let* ((ctx helixel--pending-sel)
            (entry (cons cmd 1)))
       (cond
        ;; Update: extend existing movement sel.
@@ -315,16 +244,18 @@ No-op during dot-repeat replay, or when no region is active."
                (last (car moves)))
           (if (and last (eq (car last) cmd))
               (setcdr last (1+ (cdr last)))
-            (helixel--repeat-sel-set
+            (helixel--pending-sel-set
              (helixel-sel-update-ctx ctx :moves
                                      (cons entry moves))))))
        ;; Create: first movement that made a region.
        ;; Only when no sel exists — never clobber line/rect/textobj.
        ((null ctx)
-        (helixel--repeat-sel-set
+        (helixel--pending-sel-set
          (helixel-sel-create 'movement
                              `(:moves (,entry) :inline-advance t
-                               :normal-mode ,(eq helixel--current-state 'normal))
+                               :normal-mode
+                               ,(eq helixel--current-state
+                                   'normal))
                              #'helixel--recreate-movement
                              (lambda (c)
                                (let ((ms (helixel-sel-movement-moves c)))
@@ -342,38 +273,36 @@ Sets up change-hook recording and switches to insert state."
     (:category state :subcat insert)
   (cond
    ;; Search context: refine the search sel with entry-kind
-   ((and (helixel--repeat-sel-get)
-         (eq (helixel-sel-get-kind (helixel--repeat-sel-get)) 'search))
-     (helixel--repeat-sel-set
-          (helixel-sel-update-ctx (helixel--repeat-sel-get)
+   ((and (helixel--pending-sel-get)
+         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'search))
+     (helixel--pending-sel-set
+          (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'insert))
     (goto-char (region-beginning)))
    ;; Line selection: preserve sel for `.` auto-advance
-   ((and (helixel--repeat-sel-get)
-         (eq (helixel-sel-get-kind (helixel--repeat-sel-get)) 'line))
-     (helixel--repeat-sel-set
-          (helixel-sel-update-ctx (helixel--repeat-sel-get)
+   ((and (helixel--pending-sel-get)
+         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'line))
+     (helixel--pending-sel-set
+          (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'insert))
     (goto-char (region-beginning)))
    ;; Manual region
    ((use-region-p)
-     (helixel--repeat-sel-set
+     (helixel--pending-sel-set
           (helixel-sel-create
            'insert-selection-start nil
            #'helixel--recreate-insert-selection-start "is"))
     (goto-char (region-beginning)))
    ;; No context
    (t
-    (helixel--repeat-sel-clear)))
+    (helixel--pending-sel-clear)))
   (helixel--record-edit 'insert-text)
   (setq helixel--change-track-marker (point-marker))
   (helixel--enter-insert))
 
 (helixel-define-command helixel-insert-exit
     (:category state :subcat exit)
-  (let* ((result (helixel--insert-finish))
-         (keys (car result))
-         (commands (cdr result))
+  (let* ((keys (helixel--insert-finish))
          (text (when helixel--change-track-marker
                  (and (marker-position helixel--change-track-marker)
                       (buffer-substring
@@ -381,30 +310,21 @@ Sets up change-hook recording and switches to insert state."
     (unless executing-kbd-macro
       (when helixel--last-tx
         (let ((tx helixel--last-tx))
-          ;; Store kmacro keys as primary replay mechanism.
-          ;; Skip empty vectors — they are truthy but useless,
-          ;; and cause nil-key errors in `helixel--execute-keys'.
+          ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
-            (setq tx (helixel-edit-with-payload tx :keys keys)))
-          ;; Store executed commands (keymap-independent replay)
-          (when commands
-            (setq tx (helixel-edit-with-payload tx :commands commands)))
+            (setq tx (helixel--tx-with-payload tx :keys keys)))
           ;; Store text as replay fallback (tests, programmatic use)
           (when text
-            (setq tx (helixel-edit-with-payload tx :text text))
-            ;; For change operations, same text as :inserted-text
-            (when (eq (helixel-edit-op tx) 'change)
-              (setq tx (helixel-edit-with-payload tx
+            (setq tx (helixel--tx-with-payload tx :text text))
+            (when (eq (helixel-event-op tx) 'change)
+              (setq tx (helixel--tx-with-payload tx
                                                   :inserted-text text))))
           (helixel--update-last-tx tx))))
-    ;; Cleanup
     (when helixel--change-track-marker
       (set-marker helixel--change-track-marker nil)
       (setq helixel--change-track-marker nil))
-    ;; Rect replay
     (when (helixel--rect-replay-get)
       (helixel--rect-replay))
-    ;; Switch state
     (let ((state (helixel--default-state-for-buffer)))
       (when (eq state 'insert)
         (setq state 'normal))
@@ -422,22 +342,22 @@ Also preserve highlights when `rectangle-mark-mode' is active."
     (:category state :subcat insert)
   (cond
    ;; Search context: refine the search sel with entry-kind
-   ((and (helixel--repeat-sel-get)
-         (eq (helixel-sel-get-kind (helixel--repeat-sel-get)) 'search))
-     (helixel--repeat-sel-set
-          (helixel-sel-update-ctx (helixel--repeat-sel-get)
+   ((and (helixel--pending-sel-get)
+         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'search))
+     (helixel--pending-sel-set
+          (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'append))
     (goto-char (region-end)))
    ;; Line selection: preserve sel for `.` auto-advance
-   ((and (helixel--repeat-sel-get)
-         (eq (helixel-sel-get-kind (helixel--repeat-sel-get)) 'line))
-     (helixel--repeat-sel-set
-          (helixel-sel-update-ctx (helixel--repeat-sel-get)
+   ((and (helixel--pending-sel-get)
+         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'line))
+     (helixel--pending-sel-set
+          (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'append))
     (goto-char (region-end)))
    ;; Manual region
    ((use-region-p)
-     (helixel--repeat-sel-set
+     (helixel--pending-sel-set
           (helixel-sel-create
            'insert-selection-end nil
            #'helixel--recreate-insert-selection-end "ie"))
@@ -446,7 +366,7 @@ Also preserve highlights when `rectangle-mark-mode' is active."
    (t
     (unless (helixel--end-of-line-p)
       (forward-char))
-    (helixel--repeat-sel-clear)))
+    (helixel--pending-sel-clear)))
   (helixel--record-edit 'insert-text)
   (setq helixel--change-track-marker (point-marker))
   (helixel--enter-insert))
@@ -454,7 +374,7 @@ Also preserve highlights when `rectangle-mark-mode' is active."
 (helixel-define-command helixel-insert-beginning-line
     (:category state :subcat insert)
   (beginning-of-line)
-   (helixel--repeat-sel-set
+   (helixel--pending-sel-set
         (helixel-sel-create
          'insert-beginning-line nil
          #'helixel--recreate-insert-beginning-line "I"))
@@ -465,7 +385,7 @@ Also preserve highlights when `rectangle-mark-mode' is active."
 (helixel-define-command helixel-insert-after-end-line
     (:category state :subcat insert)
   (end-of-line)
-   (helixel--repeat-sel-set
+   (helixel--pending-sel-set
         (helixel-sel-create
          'insert-end-line nil
          #'helixel--recreate-insert-end-line "A"))
@@ -861,7 +781,7 @@ The default state is determined by `helixel--default-state-for-buffer'."
 
 Argument STATUS is passed through to `helixel-mode-maybe-activate'."
   (interactive)
-  (helixel-action-start 'state 'toggle)
+  (helixel--tracking-open 'state 'toggle)
   ;; Set global mode to t before iterating over the buffers so that we
   ;; send the status directly to `helixel-normal-state' (which checks for
   ;; a non-nil value of `helixel-global-mode'.
@@ -876,7 +796,7 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
 (defun helixel-mode ()
   "Toggle global Helixel mode."
   (interactive)
-  (helixel-action-start 'state 'toggle)
+  (helixel--tracking-open 'state 'toggle)
   (setq helixel-global-mode (not helixel-global-mode))
   (if helixel-global-mode
       (progn
@@ -892,8 +812,8 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
      (helixel-visual-state (helixel-visual-state -1)))
     (advice-remove #'keyboard-quit #'helixel--clear-data)
     (advice-remove #'keyboard-quit #'helixel--cancel-action)
-    (remove-hook 'after-change-major-mode-hook #'helixel-mode-maybe-activate)
-    (remove-hook 'helixel-action-push-functions #'helixel--jump-list-push)))
+    (remove-hook 'after-change-major-mode-hook #'helixel-mode-maybe-activate)))
+    ;; helixel-action-push-functions removed — event-ring handles this now
 
 ;; Register xref/eglot jump commands so they push to the jump list.
 (helixel-define-jump-command 'xref-find-definitions)
@@ -903,7 +823,7 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
 
 
 ;; ── Selection type validator ──
-;; (moved from helixel-common.el to avoid circular dep with helixel-swap)
+;; (moved from helixel-editing.el to avoid circular dep with helixel-swap)
 
 (defun helixel--selection-type ()
   "Return current selection type, or nil.

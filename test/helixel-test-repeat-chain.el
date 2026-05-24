@@ -40,8 +40,9 @@
      (setq helixel--repeat-chaining nil)
      (setq helixel--repeat-chain-init-ctx nil)
      (setq helixel--repeat-chain-init-bounds nil)
-     (setq helixel--repeat-sel-ctx nil)
+     (setq helixel--pending-sel nil)
      (setq helixel--inhibit-action-track nil)
+     (setq helixel--repeat-permanent-flip nil)
      (setq helixel--chain-in-edit-phase nil)
      (setq helixel--chain-move-keys nil)
      (setq helixel--chain-edit-keys nil)
@@ -113,8 +114,8 @@
     (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
-    (should (eq (helixel-edit-op helixel--last-tx) 'chain))
-    (let ((kmacro (plist-get (helixel-edit-payload helixel--last-tx) :kmacro)))
+    (should (eq (helixel-event-op helixel--last-tx) 'chain))
+    (let ((kmacro (plist-get (helixel-event-payload helixel--last-tx) :kmacro)))
       (should kmacro)
       (should (vectorp kmacro))
       (should (> (length kmacro) 0)))))
@@ -126,42 +127,42 @@
     (helixel-repeat-chain-start)
     (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
-    (should (eq (helixel-edit-op helixel--last-tx) 'chain))))
+    (should (eq (helixel-event-op helixel--last-tx) 'chain))))
 
 (ert-deftest helixel-test-chain-merge-entry-kind ()
   "Chain-end merges :entry-kind from live ctx when snapshot lacks it."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
-    (setq helixel--repeat-sel-ctx
+    (setq helixel--pending-sel
           (helixel-sel-create 'search
             '(:pattern "foo" :dir forward)
             #'ignore "s"))
     (helixel-repeat-chain-start)
     ;; Simulate i updating live ctx after snapshot
-    (setq helixel--repeat-sel-ctx
-          (helixel-sel-update-ctx helixel--repeat-sel-ctx
+    (setq helixel--pending-sel
+          (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'insert))
     (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
-    (let ((sel (helixel-edit-sel helixel--last-tx)))
+    (let ((sel (helixel-event-sel helixel--last-tx)))
       (should sel)
       (should (eq (helixel-sel-search-entry-kind sel) 'insert)))))
 
 (ert-deftest helixel-test-chain-in-edit-ring ()
-  "Chain tx is pushed onto the edit ring."
+  "Chain tx is pushed onto the event ring."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
     (push (kbd "x") helixel--chain-edit-keys)
     (helixel-repeat-chain-end)
-    (should helixel--action-ring)
-    (should (eq (helixel-edit-op (plist-get (car helixel--action-ring) :edit))
+    (should helixel--event-ring)
+    (should (eq (helixel-event-op (car helixel--event-ring))
                 'chain))))
 
 (ert-deftest helixel-test-chain-op-registered ()
-  "Chain op is registered in helixel-edit-op-runner."
-  (should (helixel-edit-op-runner 'chain)))
+  "Chain op is registered in helixel--op-runner."
+  (should (helixel--op-runner 'chain)))
 
 ;; ── Chain advance: helper functions tested directly ──
 
@@ -187,7 +188,7 @@
 
 (defun helixel-chain--make-test-tx (&optional sel-ctx)
   "Create a minimal chain TX with SEL-CTX for testing ./, flows."
-  (helixel-edit-make 'chain (or sel-ctx nil)
+  (helixel--make-tx 'chain (or sel-ctx nil)
     :runner #'helixel--repeat-chain-runner
     :display "chain(test)"
     :kmacro (vconcat (kbd "x"))
@@ -208,7 +209,7 @@
                               (helixel-repeat-edit))))))
 
 (ert-deftest helixel-test-chain-dot-line-edge ()
-  ". on chain line at edge aborts with error message."
+  ". on chain line at last line operates on current line."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char (point-max))
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
@@ -216,8 +217,9 @@
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
-      (should (string-match-p "aborted"
-                              (helixel-repeat-edit))))))
+      ;; Should not error: the last line is a valid target
+      (helixel-repeat-edit)
+      (should t))))
 
 (ert-deftest helixel-test-chain-comma-search-no-more ()
   ", on chain search at edge signals user-error."
@@ -247,7 +249,7 @@
       (should (= (point) 12)))))
 
 (ert-deftest helixel-test-chain-dot-skip-blank-line ()
-  ". on chain line skips blank lines."
+  ", on chain line skips blank lines like dot does."
   (helixel-chain-test-with-buffer "aaa\n   \nbbb\n"
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
@@ -257,6 +259,7 @@
            (helixel--inhibit-action-track t)
            (helixel--repeat-has-preview nil))
       (helixel-repeat-selection)
+      ;; Comma advances past blank line to next non-blank target
       (should (= (line-number-at-pos) 3)))))
 
 (ert-deftest helixel-test-chain-dot-no-advance-data ()
@@ -288,7 +291,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -305,7 +308,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -323,7 +326,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -339,7 +342,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -356,7 +359,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -373,7 +376,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -395,7 +398,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -413,7 +416,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)
                   #'ignore "s"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -431,7 +434,7 @@
     (goto-char 10)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel-edit-make 'chain ctx
+           (tx (helixel--make-tx 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -439,7 +442,7 @@
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection '(4))
       ;; C-u , previews all → ends at eol of last line
-      (should (= (line-number-at-pos) 4))))) ;; past last line + 1
+      (should (= (line-number-at-pos) 3)))))   ;; last content line
 
 (provide 'helixel-test-repeat-chain)
 ;;; helixel-test-repeat-chain.el ends here

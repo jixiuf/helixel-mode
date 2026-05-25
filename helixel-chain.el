@@ -122,12 +122,9 @@ where `helixel-insert' calls `(goto-char (region-beginning))'."
   :runner #'helixel--repeat-chain-runner
   :strategy-builder #'helixel--chain-strategy-builder)
 
-(defvar helixel--repeat-permanent-flip) ;; from helixel-repeat.el
-
 (defun helixel--chain-strategy-builder (edit &optional reverse-p)
-  "Build a repeat strategy for chain EDIT.
-If REVERSE-P or `helixel--repeat-permanent-flip' is non-nil,
-flip :dir for line/search selections.
+  "Build a repeat strategy for chain EDIT with optional REVERSE-P.
+Direction flip is delegated to `helixel--maybe-flip-dir-edit'.
 Advance: sel advance + move-keys + edit-keys.
 Apply: edit-keys only.
 Reset: goto marker."
@@ -136,18 +133,7 @@ Reset: goto marker."
          (advance-fn (helixel--kind-advance kind))
          (payload (helixel-event-payload edit))
          (move-keys (plist-get payload :chain-move-keys))
-         (effective-reverse (or reverse-p helixel--repeat-permanent-flip))
-         (effective-edit
-          (if (and effective-reverse (memq kind '(line search)))
-              (let* ((current-dir (if (eq kind 'search)
-                                      (helixel-sel-search-dir sel)
-                                    (helixel-sel-line-dir sel)))
-                     (reversed (helixel-sel-update-ctx
-                                sel :dir (helixel--flip-dir current-dir)))
-                     (new-edit (helixel--copy-tx edit)))
-                (setf (helixel-event-sel new-edit) reversed)
-                new-edit)
-            edit)))
+         (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p)))
     (make-helixel-repeat-strategy
      :advance (lambda (_edit)
                 (and (or (null advance-fn)
@@ -171,18 +157,7 @@ Same as chain strategy but uses `ignore' for apply (no edit execution)."
          (advance-fn (helixel--kind-advance kind))
          (payload (helixel-event-payload edit))
          (move-keys (plist-get payload :chain-move-keys))
-         (effective-reverse (or reverse-p helixel--repeat-permanent-flip))
-         (effective-edit
-          (if (and effective-reverse (memq kind '(line search)))
-              (let* ((current-dir (if (eq kind 'search)
-                                      (helixel-sel-search-dir sel)
-                                    (helixel-sel-line-dir sel)))
-                     (reversed (helixel-sel-update-ctx
-                                sel :dir (helixel--flip-dir current-dir)))
-                     (new-edit (helixel--copy-tx edit)))
-                (setf (helixel-event-sel new-edit) reversed)
-                new-edit)
-            edit)))
+         (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p)))
     (make-helixel-repeat-strategy
      :advance (lambda (_edit)
                 (and (or (null advance-fn)

@@ -524,6 +524,29 @@ ALL-DIR-FN:    fn(edit) → nil — custom all-dir scan, or nil.
 
 
 ;; ----------------------------------------------------------------------
+;; Shared direction-flip helper (used by all strategy builders)
+;; ----------------------------------------------------------------------
+
+(defun helixel--maybe-flip-dir-edit (edit reverse-p)
+  "Return EDIT with :dir flipped for line/search selections, or EDIT unchanged.
+When REVERSE-P or `helixel--repeat-permanent-flip' is non-nil and the
+selection kind is `line' or `search', creates a copy of EDIT with
+:dir flipped.  Otherwise returns EDIT unchanged."
+  (let* ((sel (helixel-event-sel edit))
+         (kind (and sel (helixel-sel-get-kind sel)))
+         (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
+    (if (and effective-reverse sel (memq kind '(line search)))
+        (let* ((current-dir (if (eq kind 'search)
+                                (helixel-sel-search-dir sel)
+                              (helixel-sel-line-dir sel)))
+               (reversed-sel (helixel-sel-update-ctx
+                              sel :dir (helixel--flip-dir current-dir)))
+               (new-edit (helixel--copy-tx edit)))
+          (setf (helixel-event-sel new-edit) reversed-sel)
+          new-edit)
+      edit)))
+
+;; ----------------------------------------------------------------------
 ;; Strategy builder — dispatches on op
 ;; ----------------------------------------------------------------------
 
@@ -555,22 +578,7 @@ just recreates the selection at the current position
          (kind (and sel (helixel-sel-get-kind sel)))
          (op (helixel-event-op edit))
          (adv-tag (helixel--op-advance op))
-         ;; Permanent flip (via `-.'): checked alongside one-time reverse-p
-         (effective-reverse (or reverse-p helixel--repeat-permanent-flip))
-         (reversed-edit
-          ;; When effective-reverse: create edit copy with flipped :dir
-          (when (and effective-reverse (memq kind '(line search)))
-            (let* ((orig-sel (helixel-event-sel edit))
-                   (current-dir (if (eq kind 'search)
-                                    (helixel-sel-search-dir orig-sel)
-                                  (helixel-sel-line-dir orig-sel)))
-                   (reversed-sel (helixel-sel-update-ctx
-                                  orig-sel :dir
-                                  (helixel--flip-dir current-dir)))
-                   (new-edit (helixel--copy-tx edit)))
-              (setf (helixel-event-sel new-edit) reversed-sel)
-              new-edit)))
-         (effective-edit (or reversed-edit edit))
+         (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p))
          (advance-fn
           (cond
            ;; Advance tag present: use the kind's advance function

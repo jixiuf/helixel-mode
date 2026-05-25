@@ -281,6 +281,7 @@
   "Test repeat-edit with no previous edit signals error."
   (helixel-test-with-buffer "hello world"
     (setq helixel--last-tx nil)
+    (setq helixel--last-event nil)
     (should-error (helixel-repeat-edit))))
 
 (ert-deftest helixel-test-repeat-edit-paste ()
@@ -821,7 +822,8 @@ Also verifies the characterp guard in helixel--insert-finish."
 
 (ert-deftest helixel-test-repeat-selection-no-prev ()
   "`,` without a previous edit signals an error."
-  (let ((helixel--last-tx nil))
+  (let ((helixel--last-tx nil)
+        (helixel--last-event nil))
     (should-error (helixel-repeat-selection))))
 
 (ert-deftest helixel-test-repeat-selection-no-sel ()

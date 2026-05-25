@@ -67,9 +67,10 @@ Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
   "The currently in-progress `helixel-event'.
 Set at command start, committed to ring when complete.")
 
-(defvar-local helixel--last-event nil
+(defvar helixel--last-event nil
   "Pointer to the most recent committed event in the ring.
-Consumed by `.` and `,` for repeat.")
+Consumed by `.` and `,` for repeat.
+Global — mirrors `helixel--last-tx' for cross-buffer replay.")
 
 (defun helixel-event--ring-cap ()
   "Truncate `helixel--event-ring' to `helixel-event-ring-max' entries.

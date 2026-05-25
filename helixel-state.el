@@ -24,13 +24,11 @@
 ;; Modal state machine for helixel-mode.
 ;;
 ;; Provides the modal editing framework: state switching, minor modes,
-;; mode activation, keymap management, insert entry/exit, and the
-;; `helixel-define-command' macro for action-tracking command definition.
-;; Also houses the shared kill core, visual state, and all insert-variant
-;; commands (i, a, I, A, o, O).
+;; mode activation, keymap management, and helixel-mode toggle entry points.
 ;;
 ;; Keymaps are NOT defined here — see `helixel-keymap' for keymap
 ;; definitions that populate `helixel-state-map-alist'.
+;; Editing commands live in `helixel-editing', macros in `helixel-macros'.
 
 ;;; Code:
 

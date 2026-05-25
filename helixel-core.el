@@ -36,7 +36,7 @@
 ;;   Part 4 — helixel-event        : unified event struct
 ;;   Part 5 — Transaction helpers  : make-tx, copy-tx, tx-display, etc.
 ;;   Part 6 — Operator Registry    : hash-table based op registration
-;;   Part 9 — Swap-source type     : helper for editing and swap modules
+;;   Part 7 — Swap-source type     : helper for editing and swap modules
 
 ;;; Code:
 
@@ -743,7 +743,7 @@ Shows operator name, display label, and advance tag."
 
 
 ;; ----------------------------------------------------------------------
-;; Part 9 — Swap-source type (used by helixel-editing and helixel-swap)
+;; Part 7 — Swap-source type (used by helixel-editing and helixel-swap)
 ;; ----------------------------------------------------------------------
 
 (defvar rectangle-mark-mode)            ; defined in rect.el

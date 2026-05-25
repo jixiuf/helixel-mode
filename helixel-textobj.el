@@ -29,8 +29,6 @@
 (require 'thingatpt)
 (require 'helixel-core)
 
-(defvar helixel--selection-type)
-
 (defvar helixel-textobj-visual-state-p-function nil
   "If non-nil, called with no args, return t when in visual state.")
 

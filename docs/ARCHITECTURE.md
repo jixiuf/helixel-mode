@@ -81,6 +81,7 @@ Events are deduplicated by content: same op, category, subcat, sel, payload, and
 
 ---
 
+## Repeat Engine
 
 ### Strategy Struct
 
@@ -201,12 +202,6 @@ Chain has a custom `:strategy-builder` in the op registry:
 - `.` replay uses direction from event's sel (immutable snapshot)
 - History selection copies direction to active-search
 
-### Legacy Accessors
-
-Removed in Phase 1-4.  Search direction is managed solely via
-`helixel--active-search` and `helixel-search--current-dir` /
-`helixel-search--set-dir`.
-
 ---
 
 ## Action Tracking (`helixel-action.el`)
@@ -221,7 +216,7 @@ Uses `helixel--jump-list` (global). Same group-skipping algorithm as `;`, with b
 
 ### Bridge Functions
 
-Removed in Phase 3.  `helixel--tracking-open` in `helixel-macros.el`
+Removed in Phase 3.  `helixel--tracking-open` in `helixel-ring.el`
 is the single entry point; no bridge functions needed.
 
 ---
@@ -272,13 +267,13 @@ helixel-core (cl-lib only)
   │     └── helixel-chain (→ core + repeat + macros)
   │
   ├── helixel-textobj (→ core)
-  │     └── helixel-surround (→ core + textobj)
+  │     └── helixel-surround (→ core + ring + repeat + textobj)
   │
   └── helixel-state (→ core + ring + macros + register + action
                       + repeat + textobj + surround)
         ├── helixel-move (→ state + macros)
-        ├── helixel-editing (→ state + move + core + macros)
-        │     ├── helixel-search (→ state + core + macros)
+        ├── helixel-editing (→ state + move + core + macros + search)
+        │     ├── helixel-search (→ state + core + macros + repeat + move)
         │     ├── helixel-keymap (→ state + move + editing
         │     │                   + chain + surround + swap + search)
         │     └── helixel-swap (→ state + macros + editing)

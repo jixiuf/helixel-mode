@@ -46,7 +46,6 @@
 
 ;; ── State variables ──
 (defvar helixel--inhibit-action-track)
-(defvar helixel--selection-type)
 (declare-function helixel--repeat-line-pass "helixel-move"
                   (tx sel advance start-pos dir cnt &optional preview-p))
 

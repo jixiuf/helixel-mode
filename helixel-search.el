@@ -3,13 +3,8 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
-
-;; ── Forward declarations for variables in later-loaded modules ──
-(defvar helixel--event-ring)
-(defvar helixel--live-event)
-
-;; ── Cross-module forward declarations ──
 ;; Keywords: convenience
+;; URL: https://github.com/jixiuf/helixel-mode
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -35,6 +30,10 @@
 ;;   n  N        repeat last search or find (N toggles direction)
 
 ;;; Code:
+
+;; ── Forward declarations for variables in later-loaded modules ──
+(defvar helixel--event-ring)
+(defvar helixel--live-event)
 
 (require 'helixel-state)
 (require 'helixel-core)

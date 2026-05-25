@@ -49,9 +49,6 @@ Bound during dot-repeat replay to prevent re-recording.")
   "Ring position for `;' cycling.
 nil = live event.  0 = newest ring entry.  N = older.")
 
-;; Forward declaration: defined in helixel-state.el
-(defvar helixel--selection-type)
-
 ;; ----------------------------------------------------------------------
 ;; Buffer-local event ring
 ;; ----------------------------------------------------------------------

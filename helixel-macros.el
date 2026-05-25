@@ -36,8 +36,6 @@
 (require 'helixel-core)
 (require 'helixel-ring)
 
-(defvar helixel--selection-type)        ; defined in helixel-core.el
-
 ;; ── Full tracking macro: open + body + commit ──
 
 (cl-defmacro helixel-with-edit-tracking ((&key op category subcat)

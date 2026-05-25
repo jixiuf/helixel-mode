@@ -37,6 +37,8 @@ Requires Emacs >= 29.1.
 | `n` `N` | Repeat / reverse direction repeat (`C-u n` pick from history) |
 | `.` | Repeat last edit.  Prefixes: `3.` = 3 times; `0.` = all remaining; `C-u .` = entire buffer; `C-u - 3 .` = 3 times reversed.  Works for all selection kinds (line, search, movement w/e/b, textobj, find-char).  `M-x helixel-repeat-edit-pick` chooses from the per-buffer ring. |
 | `,` | Repeat last selection without editing (same prefix behavior as `.`). |
+| `g.` |  Repeat by picking from history |
+helixel-repeat-edit-pick
 | `i` `a` `I` `A` `o` `O` | Enter insert mode |
 | `v` | Enter visual mode |
 | `d` `c` `y` `r` `R` | Edit: delete, change, copy, replace, replace-char |

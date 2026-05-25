@@ -180,6 +180,7 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-goto-map "U" #'helixel-upcase)
 (define-key helixel-goto-map "c" #'helixel-comment-toggle)
 (define-key helixel-goto-map "q" #'helixel-fill)
+(define-key helixel-goto-map "." #'helixel-repeat-edit-pick)
 
 (define-key helixel-view-map "z" #'recenter-top-bottom)
 

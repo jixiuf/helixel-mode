@@ -39,6 +39,8 @@
 (require 'helixel-state)
 (require 'helixel-macros)
 
+(declare-function helixel--repeat-line-pass "helixel-repeat"
+                  (tx sel advance start-pos dir cnt &optional preview-p))
 
 (defmacro helixel-define-movement (name builtin type &rest options)
   "Define a movement command NAME wrapping BUILTIN with TYPE.
@@ -386,12 +388,6 @@ Signals `user-error' when point does not move (no more targets)."
 
 ;; ── Line and movement advance functions (from helixel-repeat.el) ──
 
-(defun helixel--blank-line-p ()
-  "Return non-nil if the current line is blank (empty or whitespace only)."
-  (save-excursion
-    (goto-char (line-beginning-position))
-    (looking-at-p "[ \t]*$")))
-
 (defun helixel--repeat-advance-line (tx)
   "Advance TX past the current line target in selection's direction.
 For append entry-kind (cursor at `region-end' after op), advance 1 line.
@@ -427,40 +423,6 @@ advance functions to avoid double-moving."
       (condition-case nil
           (progn (helixel--recreate-selection sel) t)
         (error nil)))))
-
-;; ── Line pass helper ──
-
-(defun helixel--repeat-line-pass (tx sel advance start-pos dir cnt
-                                     &optional preview-p)
-  "Process one line per step from START-POS in direction DIR.
-TX is the edit transaction, SEL the selection descriptor.
-ADVANCE is the operator advance tag, CNT the starting count.
-If PREVIEW-P is non-nil, only recreate selections without executing edits."
-  (save-excursion
-    (goto-char start-pos)
-    (forward-line dir)
-    (condition-case nil
-        (while t
-          (when (if (eq dir -1) (bobp) (eobp))
-            (signal 'user-error nil))
-          (setq cnt (1+ cnt))
-          (helixel--recreate-selection sel)
-          (unless preview-p
-            (helixel--execute-edit tx))
-          (if (eq advance 'line)
-              (progn
-                (when (/= (forward-line dir) 0)
-                  (signal 'user-error nil))
-                (when (if (eq dir -1) (bobp) (eobp))
-                  (signal 'user-error nil)))
-            (if (if (eq dir -1) (bobp) (eobp))
-                (signal 'user-error nil)
-              (unless (if (eq dir -1) (eolp) (bolp))
-                (forward-line dir))
-              (when (if (eq dir -1) (bobp) (eobp))
-                (signal 'user-error nil)))))
-      (user-error nil)))
-  cnt)
 
 ;; ── All-buffer / all-dir line handlers ──
 

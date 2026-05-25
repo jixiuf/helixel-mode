@@ -89,7 +89,7 @@ Notes:
   Every module that requires `helixel-core` can read/write the most recent transaction.
 - `declare-function` counts are minimal and only for third-party packages:
   - `helixel-keymap.el`: 7 (flymake, eglot)
-  - `helixel-repeat.el`: 2 (chain preview, move line-pass)
+  - `helixel-repeat.el`: 0
   - `helixel-textobj.el`: 2 (evil-tree-sitter)
   - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww)
 

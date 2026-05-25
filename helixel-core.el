@@ -768,6 +768,12 @@ More permissive than `helixel--selection-type' — detects
 ;; Shared utilities (used by repeat engine and domain modules)
 ;; ----------------------------------------------------------------------
 
+(defun helixel--blank-line-p ()
+  "Return non-nil if the current line is blank (empty or whitespace only)."
+  (save-excursion
+    (goto-char (line-beginning-position))
+    (looking-at-p "[ \t]*$")))
+
 (defun helixel--recreate-selection (sel-ctx)
   "Recreate a selection from SEL-CTX at the current point.
 Thin wrapper around `helixel-sel-call-recreate' —

@@ -158,7 +158,6 @@ Notes:
 (helixel-event-sel event)
 (helixel-event-category event)
 (helixel-event-subcat event)
-(helixel--event->tx event)           → event (identity, kept for compat)
 
 ;; ── Kind Registry ──
 (helixel-register-kind kind &rest props)

@@ -49,7 +49,7 @@
 
 (require 'cl-lib)
 (require 'helixel-core)
-(require 'helixel-ring)                 ; for helixel--tracking-open & live-edit-set
+(require 'helixel-ring)                 ; helixel--tracking-open, live-edit-set
 (require 'helixel-repeat)               ; for helixel--record-edit
 (require 'helixel-textobj)
 

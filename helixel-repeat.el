@@ -47,7 +47,6 @@
 ;; ── State variables ──
 (defvar helixel--inhibit-action-track)
 (defvar helixel--selection-type)
-(declare-function helixel--chain-preview-strategy "helixel-chain")
 (declare-function helixel--repeat-line-pass "helixel-move"
                   (tx sel advance start-pos dir cnt &optional preview-p))
 
@@ -78,11 +77,6 @@ to extract :change-text.")
 Bound during `helixel-repeat-edit' to prevent re-recording.
 Also bound in compound commands (e.g. `helixel-replace' calling
 `helixel-yank') to avoid double-recording.")
-
-(defvar-local helixel--repeat-chain-preview nil
-  "Non-nil when , was used to preview movement; . should skip it.
-Set by `helixel-repeat-selection' for chain txs, cleared by the runner.")
-
 
 ;; ---------------------------------------------------------------------------
 ;; Insert-mode recording
@@ -198,12 +192,6 @@ For non-printable keys, uses `execute-kbd-macro'."
 ;; Auto-advance — per-selection-kind advance for `.` replay.
 ;; Registered in the kind registry via `helixel-register-kind'.
 ;; Each advance fn receives (TX) → boolean.
-
-;; ── Per-kind advance functions ──
-
-
-
-
 
 ;; ── Flip-dir, all-buffer, line-pass ──
 ;; ── Search advance state (reset per repeat-edit/repeat-selection) ──
@@ -341,10 +329,9 @@ preview position."
            (flip-dir-p (or (eq raw-prefix '-)
                            (and (integerp raw-prefix)
                                 (< raw-prefix 0))))
-           (prefix (helixel--decode-repeat-prefix raw-prefix))
-           (chain-p (eq (helixel-event-op tx) 'chain)))
+           (prefix (helixel--decode-repeat-prefix raw-prefix)))
     (when flip-dir-p (helixel--repeat-flip-tx-dir))
-    (unless (or (helixel-event-sel tx) chain-p)
+    (unless (helixel-event-sel tx)
       (user-error (concat "Previous edit has no selection to repeat."
                           "  Use a textobj (e.g. ciw)"
                           " or line/rect selection first")))
@@ -368,11 +355,8 @@ preview position."
           (helixel--repeat-echo cnt)))
        ;; Generic: strategy-driven preview
        (t
-        (let ((strategy (if chain-p
-                            (helixel--chain-preview-strategy tx reverse-p)
-                          (helixel--build-strategy tx reverse-p))))
+        (let ((strategy (helixel--build-strategy tx reverse-p)))
           (helixel--repeat-preview strategy tx mode n)))))
-    (when chain-p (setq helixel--repeat-chain-preview t))
     (setq helixel--repeat-has-preview t))))
 
 ;; ── Interactive entry points ──
@@ -444,11 +428,6 @@ The chosen event's edit data becomes the new `helixel--last-tx'."
 
 ;; ── Kind-specific all-buffer handlers ──
 ;; These are invoked via the :all-buffer-fn slot in the kind registry.
-
-
-
-
-;;; helixel-repeat.el ends here
 
 
 

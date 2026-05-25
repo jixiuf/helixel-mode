@@ -763,8 +763,7 @@ using advance+apply without recursion."
   :advance  #'helixel--repeat-advance-search
   :all-buffer-fn #'helixel--all-buffer-search
   :display  (lambda (ctx)
-              (format "/%s/" (or (helixel-sel-search-pattern ctx) "?")))
-  :make-sel nil)
+              (format "/%s/" (or (helixel-sel-search-pattern ctx) "?"))))
 
 ;; ── Hook registrations ──
 

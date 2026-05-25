@@ -29,8 +29,6 @@
 (require 'helixel-macros)                ; for helixel-with-edit-tracking
 (require 'helixel-repeat)                ; for helixel--last-tx, etc.
 
-(defvar helixel--repeat-chain-preview)    ; defined in helixel-repeat.el
-
 ;; ── State variables ──
 
 (defvar-local helixel--repeat-chaining nil
@@ -101,8 +99,6 @@ called), all subsequent keys go to edit-keys."
 
 (defun helixel--repeat-chain-runner (tx)
   "Execute the stored kmacro in chain TX.
-When `helixel--repeat-chain-preview' is set (from `,'), replays only
-the edit part (movement keys were already executed by `,').
 
 For search-initiated chains, positions cursor at `match-beginning'
 before replay, matching the behaviour of the original recording
@@ -112,7 +108,6 @@ where `helixel-insert' calls `(goto-char (region-beginning))'."
          (edit-keys (plist-get payload :kmacro))
          (helixel--inhibit-repeat-record t)
          (helixel--inhibit-action-track t))
-    (setq helixel--repeat-chain-preview nil)
     (when edit-keys
       ;; Reposition cursor at match-beginning for search sel chains.
       ;; The advance fn leaves point at match-end, but the original

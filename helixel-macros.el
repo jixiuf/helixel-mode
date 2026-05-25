@@ -36,7 +36,7 @@
 (require 'helixel-core)
 (require 'helixel-ring)
 
-(defvar-local helixel--selection-type)  ; defined in helixel-state.el
+(defvar helixel--selection-type)        ; defined in helixel-core.el
 
 ;; ── Full tracking macro: open + body + commit ──
 

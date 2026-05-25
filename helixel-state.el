@@ -475,3 +475,4 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
 
 
 (provide 'helixel-state)
+;;; helixel-state.el ends here

@@ -1528,12 +1528,7 @@ whitespace, skip whitespace backward then backward one char."
       (backward-char)))))
 
 
-(defvar-local helixel--block-chosen-spec nil
-  "The block spec chosen by `helixel-up-block-at-point'.
-Set during `helixel-select-block-at-point' to keep the pattern
-consistent between the +1/-1 calls made by `helixel-select-block'.
-Cleared by `helixel-select-block-at-point' on exit, and by
-`helixel-delimiter-bounds' for surround operations.")
+(defvar helixel--block-chosen-spec)  ; defined in helixel-core.el
 
 (defcustom helixel-block-textobj-alist
   '((org-mode . ("^#\\+begin_\\([^ \n\r]+\\)[^\n]*"
@@ -2072,8 +2067,7 @@ advance functions to avoid double-moving."
 (helixel-register-kind textobj
   :recreate nil
   :advance  #'helixel--repeat-advance-textobj
-  :display  (lambda (ctx) (symbol-name (helixel-sel-textobj-command ctx)))
-  :make-sel nil)
+  :display  (lambda (ctx) (symbol-name (helixel-sel-textobj-command ctx))))
 
 (provide 'helixel-textobj)
 ;;; helixel-textobj.el ends here

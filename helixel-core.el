@@ -433,14 +433,13 @@ Returns (OPEN-END . CLOSE-BEG)."
 ;;   :recreate  — function (ctx) to recreate selection at point
 ;;   :advance   — function (tx tag) → boolean for next target
 ;;   :display   — function (ctx) → string for history display
-;;   :make-sel  — factory function (args...) → helixel-sel (optional)
 ;;
 ;; The strategy builder looks up :advance and :recreate from this
 ;; registry, eliminating kind-specific cond branches.
 
 (defvar helixel--kind-registry (make-hash-table :test #'eq)
   "Hash table: kind symbol → plist.
-Keys: :recreate :advance :display :make-sel :all-buffer-fn.")
+Keys: :recreate :advance :display :all-buffer-fn.")
 
 (cl-defmacro helixel-register-kind (kind &rest props)
   "Register selection KIND with protocol PROPS.

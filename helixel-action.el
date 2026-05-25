@@ -55,15 +55,6 @@ Categories not listed here are invisible during cycling."
 ;; State variables
 ;; ----------------------------------------------------------------------
 
-(defvar helixel--inhibit-action-track nil
-  "When non-nil, event recording is inhibited.
-Bound during dot-repeat replay to prevent re-recording.")
-
-
-(defvar-local helixel--action-pos nil
-  "Ring position for `;' cycling.
-nil = live event.  0 = newest ring entry.  N = older.")
-
 (defvar helixel-jump-cleanup-function nil
   "Function called after a successful jump to clean up selection state.
 Typically `helixel--clear-data'.")

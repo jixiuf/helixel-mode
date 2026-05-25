@@ -111,32 +111,27 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
 (helixel-register-kind insert-selection-start
   :recreate #'helixel--recreate-insert-selection-start
   :advance  #'helixel--repeat-advance-search
-  :display  "i"
-  :make-sel nil)
+  :display  "i")
 
 (helixel-register-kind insert-selection-end
   :recreate #'helixel--recreate-insert-selection-end
   :advance  #'helixel--repeat-advance-search
-  :display  "a"
-  :make-sel nil)
+  :display  "a")
 
 (helixel-register-kind insert-beginning-line
   :recreate #'helixel--recreate-insert-beginning-line
   :advance  #'helixel--repeat-advance-line
-  :display  "I"
-  :make-sel nil)
+  :display  "I")
 
 (helixel-register-kind insert-end-line
   :recreate #'helixel--recreate-insert-end-line
   :advance  #'helixel--repeat-advance-line
-  :display  "A"
-  :make-sel nil)
+  :display  "A")
 
 (helixel-register-kind insert-search-offset
   :recreate #'helixel--recreate-insert-search-offset
   :advance  #'helixel--repeat-advance-search
-  :display  "s"
-  :make-sel nil))
+  :display  "s"))
 
 (helixel-define-command helixel-insert
     (:category state :subcat insert)

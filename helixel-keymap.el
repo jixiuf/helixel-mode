@@ -258,9 +258,6 @@ to composed keymaps with mode overrides on top of the base maps."
 ;; ── State keymaps ──
 
 ;; helixel-normal-map
-;; Macro recording & playback (q = start/insert-counter, @ = end/call)
-(define-key helixel-normal-map "q" #'kmacro-start-macro-or-insert-counter)
-(define-key helixel-normal-map "@" #'kmacro-end-or-call-macro)
 (define-key helixel-normal-map "q" #'helixel-repeat-chain-start)
 (define-key helixel-normal-map "Q" #'helixel-repeat-chain-end)
 (define-key helixel-normal-map "." #'helixel-repeat-edit)

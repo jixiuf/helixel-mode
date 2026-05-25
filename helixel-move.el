@@ -521,20 +521,17 @@ Uses `helixel--repeat-line-pass' for proper cursor advance."
   :all-buffer-fn #'helixel--all-buffer-line
   :all-dir-fn #'helixel--all-dir-line
   :display  (lambda (ctx)
-              (format "%dL" (or (helixel-sel-count ctx) 1)))
-  :make-sel nil)
+              (format "%dL" (or (helixel-sel-count ctx) 1))))
 
 (helixel-register-kind rect
   :recreate #'helixel--recreate-rect
   :advance  nil
-  :display  "R"
-  :make-sel nil)
+  :display  "R")
 
 (helixel-register-kind movement
   :recreate nil
   :advance  #'helixel--repeat-advance-movement
-  :display  "m"
-  :make-sel nil)
+  :display  "m")
 
 ;; ── Visual move tracking (from helixel-state.el) ──
 

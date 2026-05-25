@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-data.el helixel-ring.el helixel-action.el helixel-repeat.el helixel-repeat-strategy.el helixel-register.el helixel-macros.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-editing.el helixel-search.el helixel-textobj-engine.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
-ELS := helixel-data.elc helixel-ring.elc helixel-action.elc helixel-repeat.elc helixel-repeat-strategy.elc helixel-register.elc helixel-macros.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-editing.elc helixel-search.elc helixel-textobj-engine.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
+FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-register.el helixel-action.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
+ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-register.elc helixel-action.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
@@ -95,7 +95,7 @@ lint: compile checkdoc package-lint column-check ctx-lint
 # ----------------------------------------------------------------------
 # ctx-lint: forbid raw plist-get on sel/ctx — must use helixel-sel-* accessors.
 # ----------------------------------------------------------------------
-# ctx-unique keys — any plist-get on these outside helixel-data.el is forbidden
+# ctx-unique keys — any plist-get on these outside helixel-core.el is forbidden
 CTX_UNIQUE = :kind :cursor-offset :moves :command
 # suspicious keys — flag for manual review (may be used in other plists)
 CTX_SUSPECT = :dir :count :pattern :offset
@@ -104,7 +104,7 @@ ctx-lint:
 	@echo "---- ctx-lint: raw plist-get on sel/ctx"
 	@err=0; \
 	for file in $(FILES); do \
-	  case "$$file" in helixel-data.el) continue ;; esac; \
+	  case "$$file" in helixel-core.el) continue ;; esac; \
 	  for key in $(CTX_UNIQUE); do \
 	    if grep -qn "plist-get.*$$key" "$$file" 2>/dev/null; then \
 	      echo "$$file: FATAL — raw plist-get with ctx-unique key $$key:"; \

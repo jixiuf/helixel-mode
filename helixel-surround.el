@@ -48,18 +48,12 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-textobj-engine)
-(require 'helixel-data)
+(require 'helixel-core)
+(require 'helixel-ring)                 ; for helixel--tracking-open & live-edit-set
+(require 'helixel-repeat)               ; for helixel--record-edit
+(require 'helixel-textobj)
 
 (defvar helixel--surround-pairs)
-(declare-function helixel-up-paren "helixel-textobj-engine")
-(declare-function helixel--pending-sel-get "helixel-data")
-(declare-function helixel--pending-sel-set "helixel-data")
-(declare-function helixel--record-edit "helixel-repeat")
-(declare-function helixel--tracking-open "helixel-macros"
-                  (category subcat &optional op))
-(declare-function helixel--live-edit-set "helixel-action")
-(declare-function helixel--clear-data "helixel-state")
 (defvar helixel-textobj-after-select-functions)
 (defvar helixel-textobj-inner-map)
 (defvar helixel-textobj-outer-map)

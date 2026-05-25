@@ -27,7 +27,7 @@
 
 (require 'ert)
 (require 'helixel)
-(require 'helixel-ring)
+(require 'helixel-core)
 
 ;;; Event commit basics
 

@@ -1,44 +1,36 @@
 # AGENTS.md — helixel-mode
 
-> AI reference. Architecture status: Phase 1-4 complete, Phase 5 partial,
-> Phase 3 enhanced (helixel-with-edit-tracking now has guards;
-> chain command migrated).
-> See `docs/architecture-redesign-plan.md` §9 for full status.
-
 ## File Map
 
 | File | Role |
 |------|------|
-| `helixel-data.el` | **Foundation layer**: `helixel-sel`, `helixel-event` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol. Zero helixel deps (cl-lib only). |
-| `helixel-ring.el` | Event ring (buffer-local) + global jump-log. Commit, dedup, cap. |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-event` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type. Zero helixel deps (cl-lib only). |
+| `helixel-ring.el` | **Event storage**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-edit-set`, live-event management. |
+| `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-edit-tracking`. |
+| `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
 | `helixel-action.el` | `;` cycling + C-o/C-i jump navigation (thin consumers of event-ring). |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, insert recording, kind-specific advance/all-buffer/all-dir functions, line-pass helper. |
-| `helixel-repeat-strategy.el` | Strategy protocol: `helixel-repeat-strategy` struct (advance/apply/reset/all-buffer-fn/all-dir-fn), prefix parsing, default/chain builders, generic repeat loops. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, insert recording, kind-specific advance/all-buffer/all-dir functions, line-pass helper, strategy engine. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel, chain strategy builder, chain preview. |
-| `helixel-register.el` | Register integration (kill-ring side). |
-| `helixel-macros.el` | `helixel-define-command`/`helixel-define-operator`/`helixel-with-edit-tracking` macros. Extracted from helixel-state. |
-| `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes. |
+| `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
-| `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners. Depends on helixel-state, helixel-move, helixel-data. Runtime require for helixel-swap (circular-dep avoidance). |
-| `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. |
+| `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
+| `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. 7 `declare-function` for flymake/eglot (third-party only). |
 | `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state. |
-| `helixel-textobj-engine.el` | Selection engine: motion-loop, select-block, up-paren, up-block, regex-block, word/symbol/sentence/paragraph forward. Delimiter builders. |
-| `helixel-textobj.el` | Text object command macros + concretions + keymaps + recreate. Depends on textobj-engine. |
+| `helixel-textobj.el` | Text object command macros + concretions + keymaps + recreate. |
 | `helixel-surround.el` | Surround add/delete/replace. |
-| `helixel-swap.el` | Swap commands. |
-| `helixel-shims.el` | `with-eval-after-load` shims for third-party integration. |
-| `helixel.el` | Package entry point. |
+| `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
+| `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww). 29 `declare-function` (all third-party). |
+| `helixel.el` | Package entry point. Requires all 15 domain files. |
 
 ### Test Files
 
 | File | Covers |
 |------|--------|
 | `test/helixel-test-common.el` | `helixel-test-with-buffer` macro |
-| `test/helixel-test-edit.el` | Edit transactions, sel struct, dot-repeat core tests |
+| `test/helixel-test-editing.el` | Edit transactions, sel struct, editing commands |
 | `test/helixel-test-action.el` | Action tracking and command execution |
-| `test/helixel-test-repeat.el` | Line selection auto-advance, flip-dir |
-| `test/helixel-test-repeat-chain.el` | Chain dot/comma tests |
-| `test/helixel-test-repeat-new.el` | Movement, textobj, find-char, chain dot-repeat |
+| `test/helixel-test-repeat.el` | Line selection auto-advance, flip-dir, movement, textobj, find-char dot-repeat |
+| `test/helixel-test-chain.el` | Chain dot/comma tests |
 | `test/helixel-test-search.el` | Search, search history, n/N repeat |
 | `test/helixel-test-move.el` | Movement/word/symbol/find-char |
 | `test/helixel-test-keymap.el` | Keymap and define-key |
@@ -48,41 +40,58 @@
 | `test/helixel-test-swap.el` | Swap |
 | `test/helixel-test-textobj.el` | Text object and regex block |
 | `test/helixel-test-register.el` | Register |
+| `test/helixel-test-ring.el` | Event ring + jump log |
 | `test/helixel-test-jump.el` | Jump navigation + all-buffer/all-dir repeat tests |
 
 ## Deps (one-way, compile-time — actual `require` graph)
 
 ```
-helixel-data (cl-lib only, zero helixel deps)
-  ├── helixel-ring
-  │     ├── helixel-action  (; cycling, C-o/C-i — thin consumers)
-  │     └── helixel-repeat → helixel-repeat-strategy → helixel-chain
-  │       (chain also → helixel-repeat directly)
+helixel-core (cl-lib only, zero helixel deps)
   │
-  ├── helixel-register (zero helixel deps)
-  ├── helixel-textobj-engine
-  │     ├── helixel-textobj (→ data + engine)
-  │     └── helixel-surround (→ data + engine)
+  ├── helixel-ring (→ core)
+  │     ├── helixel-macros (→ core + ring)
+  │     └── helixel-action (→ core + ring)
   │
-  ├── helixel-macros (→ data)
-  └── helixel-state (→ macros + action + repeat + ring + register + textobj + surround)
-        ├── helixel-move (→ state)
-        ├── helixel-editing (→ state + move + data;
-        │                    runtime → helixel-swap for circular-dep avoidance)
-        │     ├── helixel-search (→ common)
-        │     ├── helixel-keymap (→ state + move + common + chain + surround)
-        │     └── helixel-swap (→ state)
-        └── helixel-shims (→ state)
+  ├── helixel-register (→ core)
+  │
+  ├── helixel-textobj (→ core)
+  │     └── helixel-surround (→ core + ring + repeat + textobj)
+  │
+  ├── helixel-repeat (→ core + action)   [action→ring→core]
+  │     └── helixel-chain (→ core + macros + repeat)
+  │
+  └── helixel-state (→ core + ring + macros + register + action
+                      + repeat + textobj + surround)
+        │
+        ├── helixel-move (→ state + macros)
+        │     │
+        │     └── helixel-editing (→ state + move + core + macros
+        │                          + search)
+        │           │
+        │           ├── helixel-search (→ state + core + macros
+        │           │                   + repeat + move)
+        │           │
+        │           ├── helixel-swap (→ state + macros + editing)
+        │           │
+        │           └── helixel-keymap (→ state + move + editing
+        │                               + chain + surround + swap
+        │                               + search)
+        │
+        └── helixel-shims (→ state + keymap)
 ```
 
 Notes:
-- `helixel-editing.el` runtime-requires `helixel-swap` because
-  `helixel-swap` requires `helixel-state`, creating a cycle if done at
-  toplevel.  The runtime require is confined to op-runner code that
-  calls `helixel--swap-source-type' and is documented in the source.
-- `helixel--last-tx` lives in `helixel-data.el` (the shared data
-  layer).  Every module that requires `helixel-data` (directly or
-  transitively) can read/write the most recent transaction.
+- **Zero circular deps.** `swap→editing` is one-way (editing does NOT require swap).
+- `helixel--replace-region` lives in `helixel-editing.el`.
+- `helixel--delete-selection` lives in `helixel-editing.el` (moved from state.el in Phase 5).
+- `helixel--swap-source-type` lives in `helixel-core.el`.
+- `helixel--last-tx` lives in `helixel-core.el` (the shared data layer).
+  Every module that requires `helixel-core` can read/write the most recent transaction.
+- `declare-function` counts are minimal and only for third-party packages:
+  - `helixel-keymap.el`: 7 (flymake, eglot)
+  - `helixel-repeat.el`: 2 (chain preview, move line-pass)
+  - `helixel-textobj.el`: 2 (evil-tree-sitter)
+  - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww)
 
 ## Key Structs
 
@@ -102,11 +111,9 @@ Notes:
 
 ### helixel-event (unified transaction and ring storage)
 ```elisp
-
- 
-```elisp
 (cl-defstruct helixel-event op sel payload runner marker
               category subcat display timestamp buffer)
+```
 
 ### helixel-repeat-strategy (dot-repeat strategy)
 ```elisp
@@ -225,7 +232,7 @@ When `transient-mark-mode` is on, `helixel-select-line-up`/`helixel-select-line`
 `helixel--all-buffer-search` for non-entry-kind must NOT call `helixel--repeat-all-buffer` with a strategy that has `:all-buffer-fn` set (would recurse). Instead it does the scan inline.
 
 ### ctx-lint keys
-CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-data.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-get-field`, `helixel-sel-textobj-command`, etc.).
+CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-get-field`, `helixel-sel-textobj-command`, etc.).
 
 ### Design notes
 - `:repeat-advance` tag on ops gates auto-advance. nil = no advance (kill, change); 'line = line advance (insert-text).

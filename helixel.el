@@ -24,25 +24,29 @@
 ;;; Commentary:
 ;;
 ;; helixel-mode is a minor mode that provides modal editing inspired by
-;; the Helix editor.  It loads helixel-state (modal state machine),
-;; helixel-move (movement commands), helixel-editing (editing commands
-;; and dot-repeat replay), helixel-keymap (keymap definitions),
-;; helixel-search (isearch-backed search), and helixel-textobj
-;; (text objects).
+;; the Helix editor.  It loads helixel-core (core data, event ring,
+;; macros), helixel-state (modal state machine), helixel-move
+;; (movement commands), helixel-editing (editing commands and
+;; dot-repeat replay), helixel-keymap (keymap definitions),
+;; helixel-search (search engine), and helixel-textobj (text objects).
 
 
 ;;; Code:
 
-(require 'helixel-action)
+(require 'helixel-core)
+(require 'helixel-ring)
+(require 'helixel-macros)
 (require 'helixel-register)
-(require 'helixel-editing)
-(require 'helixel-keymap)
+(require 'helixel-action)
+(require 'helixel-repeat)
+(require 'helixel-chain)
+(require 'helixel-state)
 (require 'helixel-search)
+(require 'helixel-editing)
 (require 'helixel-textobj)
 (require 'helixel-surround)
 (require 'helixel-swap)
-(require 'helixel-repeat-strategy)
-(require 'helixel-chain)
+(require 'helixel-keymap)
 (require 'helixel-shims)
 
 (provide 'helixel)

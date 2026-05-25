@@ -33,12 +33,12 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-data)
+(require 'helixel-core)
 (require 'helixel-ring)
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Custom groups
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defgroup helixel nil
   "Custom group for Helixel."
@@ -51,9 +51,9 @@ Categories not listed here are invisible during cycling."
   :type '(repeat symbol)
   :group 'helixel)
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; State variables
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defvar helixel--inhibit-action-track nil
   "When non-nil, event recording is inhibited.
@@ -68,52 +68,9 @@ nil = live event.  0 = newest ring entry.  N = older.")
   "Function called after a successful jump to clean up selection state.
 Typically `helixel--clear-data'.")
 
-;; ═══════════════════════════════════════════════════════════════════════
-;; Event-based action recording (replaces old action plist system)
-;; ═══════════════════════════════════════════════════════════════════════
-;; Event-based action recording (replaces old action plist system)
-;; ═══════════════════════════════════════════════════════════════════════
-;;
-;; `helixel-action-start' and `helixel-event-commit' have been replaced
-;; by `helixel--tracking-open' and `helixel-event-commit' respectively.
-
-(defun helixel--cancel-action ()
-  "Cancel the current action via \\[keyboard-quit].
-Commits meaningful events, pushes a state/cancel sentinel,
-and clears the live state."
-  (helixel-event-commit)
-  ;; Push cancel sentinel for dedup boundary
-  (setq helixel--live-event
-        (make-helixel-event
-         :category 'state
-         :subcat 'cancel
-         :marker (point-marker)
-         :timestamp (float-time)
-         :buffer (current-buffer)))
-  (helixel-event-commit))
-
-;; ═══════════════════════════════════════════════════════════════════
-;; Live-event helpers
-;; ═══════════════════════════════════════════════════════════════════
-;;
-;; `helixel--live-edit-set' copies tx fields onto the live event
-;; so that `helixel-event-commit' stores complete data in the ring.
-
-(defun helixel--live-edit-set (tx)
-  "Set edit details from TX on `helixel--live-event'."
-  (when (and helixel--live-event (helixel-event-p tx))
-    (setf (helixel-event-op helixel--live-event) (helixel-event-op tx))
-    (setf (helixel-event-sel helixel--live-event) (helixel-event-sel tx))
-    (setf (helixel-event-payload helixel--live-event)
-          (helixel-event-payload tx))
-    (setf (helixel-event-runner helixel--live-event)
-          (helixel-event-runner tx))
-    (when-let* ((disp (helixel-event-display tx)))
-      (setf (helixel-event-display helixel--live-event) disp))))
-
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Event display
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defun helixel-event-display-format (event)
   "Format `helixel-event' EVENT for display in cycling messages.
@@ -130,9 +87,9 @@ category and subcat."
   "Format EVENT for display.  Delegates to `helixel-event-display-format'."
   (helixel-event-display-format event))
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Generic grouped-ring helpers
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;;
 ;; Both `;' cycling (event ring) and C-o/C-i (jump list) share the
 ;; same core algorithm.  These helpers are parameterized by visibility
@@ -186,18 +143,18 @@ element returning non-nil when the entry is visible."
              when (funcall visible-pred (nth i list))
              return i)))
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Marker jump helper
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defun helixel--jump-to-marker (marker)
   "Set mark at MARKER, keeping point unchanged."
   (when (and (markerp marker) (marker-buffer marker))
     (push-mark marker t t)))
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; ; cycling — session jump within buffer
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defun helixel-action--cycle-visible-p (event)
   "Return non-nil if EVENT should be visible during `;' cycling."
@@ -296,9 +253,9 @@ With prefix ARG (`C-u'): go to newer action or restore live event."
           (message "No saved actions"))))
      (t (message "No saved actions")))))
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Global jump list (C-o / C-i)
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defun helixel-register-jump (&optional category subcat)
   "Register current point in `helixel--global-jump-log'.

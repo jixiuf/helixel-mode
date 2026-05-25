@@ -33,46 +33,10 @@
 (require 'cl-lib)
 (require 'rect)
 (require 'helixel-state)
+(require 'helixel-macros)
+(require 'helixel-editing)
 
 ;; ── Region swap utilities ──
-
-(defun helixel--replace-region (str beg end)
-  "Replace region from BEG to END with STR.
-Return the region replaced as (NEW-BEG . NEW-END)."
-  (let* ((len (length str))
-         (i-end 0)
-         (i-beg 0)
-         (i-end-ofs nil)
-         (max-skip (min (- end beg) len)))
-    ;; Skip common suffix.
-    (while (and (< i-end max-skip)
-                (eq (aref str (- len i-end 1))
-                    (char-after (- end i-end 1))))
-      (cl-incf i-end))
-    (when (> i-end 0)
-      (cl-decf len i-end)
-      (cl-decf end i-end)
-      (setq i-end-ofs i-end))
-    ;; Skip common prefix.
-    (setq max-skip (min (- end beg) len))
-    (while (and (< i-beg max-skip)
-                (eq (aref str i-beg)
-                    (char-after (+ beg i-beg))))
-      (cl-incf i-beg))
-    (when (> i-beg 0)
-      (cl-incf beg i-beg))
-    ;; Trim common parts from str.
-    (when (or (> i-beg 0) (> i-end 0))
-      (setq str (substring-no-properties str i-beg len)))
-    ;; Replace.
-    (goto-char beg)
-    (unless (eq beg end)
-      (delete-region beg end))
-    (unless (string-empty-p str)
-      (insert str))
-    (when i-end-ofs
-      (goto-char (+ (point) i-end-ofs)))
-    (cons beg (+ beg (length str)))))
 
 (defun helixel--rect-ranges (beg end)
   "Return a list of (BEG . END) ranges for each line in rectangle BEG..END."
@@ -382,17 +346,6 @@ Returns the new source end position for updating the swap-source."
     source-end-next))
 
 ;; ── Swap source helpers ──
-
-(defun helixel--swap-source-type ()
-  "Return the swap-source type for the current selection.
-Returns nil (char), `line', or `rect'.
-More permissive than `helixel--selection-type' — detects
-`rectangle-mark-mode' directly."
-  (cond
-   ((eq (helixel--selection-type) 'rect) 'rect)
-   ((eq (helixel--selection-type) 'line) 'line)
-   ((bound-and-true-p rectangle-mark-mode) 'rect)
-   (t nil)))
 
 (defun helixel--swap-source-from-kill ()
   "Extract swap-source plist from the current kill/register top.

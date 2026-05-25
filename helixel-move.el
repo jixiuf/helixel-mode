@@ -37,9 +37,8 @@
 (require 'cl-lib)
 (require 'rect)
 (require 'helixel-state)
+(require 'helixel-macros)
 
-(declare-function helixel--recreate-line "helixel-editing")
-(declare-function helixel--recreate-rect "helixel-editing")
 
 (defmacro helixel-define-movement (name builtin type &rest options)
   "Define a movement command NAME wrapping BUILTIN with TYPE.
@@ -319,129 +318,261 @@ automatically, so this macro only does `push-mark' + activate."
                                   "r")
                                 :advance #'helixel--repeat-advance-line)))))
 
-;;; Line-wise helpers
 
-(defun helixel--yank-handler-line-wise (text)
-  "Insert TEXT as a complete line.
-Dispatches on `this-command' to decide insertion position."
-  (cond
-   ((member this-command '(helixel-yank helixel-replace))
-    (end-of-line)
-    (newline)
-    (insert (string-trim-right text "\n"))
-    (beginning-of-line)
-    (back-to-indentation))
-   ((eq this-command 'helixel-yank-before)
-    (beginning-of-line)
-    (save-excursion
-      (insert text)
-      (unless (bolp) (newline)))
-    (back-to-indentation))
-   (t
-    (insert text))))
+;; ── Line / Rect recreate functions ──
+;; Used by `.` replay to rebuild linewise/rectangular selections.
 
-(defun helixel--linewise-text (text)
-  "Return a copy of TEXT propertized with line-wise yank-handler.
-Ensures TEXT ends with a newline."
-  (let ((s (if (and (> (length text) 0)
-                    (/= (aref text (1- (length text))) ?\n))
-               (concat text "\n")
-             text)))
-    (propertize s 'yank-handler '(helixel--yank-handler-line-wise nil t))))
+(defun helixel--recreate-line (ctx)
+  "Replay a linewise selection from CTX.
+When :entry-kind is present (insert ops), position cursor
+at the appropriate offset on the selected line:
+  :entry-kind insert \=`region-beginning' + cursor-offset
+  :entry-kind append \=`region-end' + cursor-offset"
+  (let ((n (helixel-sel-line-count ctx))
+        (entry-kind (plist-get ctx :entry-kind)))
+    (if (eq (helixel-sel-line-dir ctx) 'backward)
+        (helixel-select-line-up n)
+      (helixel-select-line n))
+    ;; Signal error when buffer is empty (nothing to select).
+    ;; The strategy catches this to stop iteration.
+    (when (and (bobp) (eobp))
+      (user-error "No more targets"))
+    (when entry-kind
+      ;; Position cursor for key/text insertion.
+      ;; Use region-beginning/region-end because helixel-select-line
+      ;; leaves point on the LAST selected line, so
+      ;; line-beginning-position/line-end-position would target
+      ;; the wrong line for multi-line selections.
+      (if (eq entry-kind 'append)
+          (goto-char (region-end))
+        (let ((rend (region-end)))
+          (goto-char (region-beginning))
+          ;; If point landed on the mark (zero-length region),
+          ;; restore the visible region so the selection highlight
+          ;; shows the full target range.
+          (when (= (point) (mark))
+            (set-mark rend))))
+      (let ((off (helixel-sel-insert-cursor-offset ctx)))
+        (when off (forward-char off))))))
 
-(defun helixel--linewise-kill-p (&optional text)
-  "Return non-nil if TEXT (default: top of kill ring) was killed line-wise."
-  (when-let* ((s (or text
-                     (and helixel--current-register
-                          (helixel--current-kill 0 t))
-                     (and kill-ring (helixel--current-kill 0 t)))))
-    (eq (car-safe (get-text-property 0 'yank-handler s))
-        'helixel--yank-handler-line-wise)))
+(defun helixel--recreate-rect (ctx)
+  "Replay a rectangular selection from CTX."
+  (let ((n (helixel-sel-rect-count ctx)))
+    (unless rectangle-mark-mode
+      (helixel--switch-state 'visual)
+      (push-mark (point) t t)
+      (rectangle-mark-mode 1))
+    (dotimes (_ (1- n))
+      (forward-line 1)
+      (rectangle--reset-point-crutches))
+    (setq helixel--selection-type 'rect)))
 
-(defun helixel--line-bounds-of-region ()
-  "Return (BEG . END) expanded to full line boundaries.
-BEG is at bol of `region-beginning', END includes the trailing newline."
-  (when (use-region-p)
-    (let ((beg (save-excursion (goto-char (region-beginning)) (pos-bol)))
-          (end (save-excursion (goto-char (region-end))
-                               (if (bolp) (point)
-                                 (min (1+ (pos-eol)) (point-max))))))
-      (cons beg end))))
+(defun helixel--recreate-movement (ctx)
+  "Replay movement selection from CTX.
+By default, the region accumulates across all commands (visual-mode
+behaviour for e.g. `v w w d .`).  When :normal-mode is non-nil in
+CTX, each movement resets the selection (normal-mode behaviour).
+Signals `user-error' when point does not move (no more targets)."
+  (let ((saved-pos (point)))
+    (unless (helixel-sel-movement-normal-mode-p ctx)
+      (setq helixel--current-state 'visual))
+    (dolist (m (reverse (helixel-sel-movement-moves ctx)))
+      (dotimes (_ (cdr m))
+        (funcall (car m))))
+    ;; Signal error when movement commands produced no displacement.
+    (when (= (point) saved-pos)
+      (user-error "No more targets"))))
 
-;;; Rect-wise helpers
 
-(defun helixel--yank-handler-rect-wise (lines)
-  "Insert LINES as a rectangle at point."
-  (insert-rectangle lines))
+;; ── Line and movement advance functions (from helixel-repeat.el) ──
 
-(defun helixel--rect-wise-text (strings)
-  "Return a propertized string from STRINGS, a list of rect lines.
-Tags the text with a rect-wise yank-handler for proper pasting."
-  (let ((text (mapconcat #'identity strings "\n")))
-    (propertize text 'yank-handler
-                (list 'helixel--yank-handler-rect-wise strings t))))
+(defun helixel--blank-line-p ()
+  "Return non-nil if the current line is blank (empty or whitespace only)."
+  (save-excursion
+    (goto-char (line-beginning-position))
+    (looking-at-p "[ \t]*$")))
 
-(defun helixel--rect-wise-kill-p (&optional text)
-  "Return non-nil if TEXT was killed as a rectangle."
-  (when-let* ((s (or text
-                     (and helixel--current-register
-                          (helixel--current-kill 0 t))
-                     (and kill-ring (helixel--current-kill 0 t)))))
-    (eq (car-safe (get-text-property 0 'yank-handler s))
-        'helixel--yank-handler-rect-wise)))
+(defun helixel--repeat-advance-line (tx)
+  "Advance TX past the current line target in selection's direction.
+For append entry-kind (cursor at `region-end' after op), advance 1 line.
+Otherwise advance by the selection count.
+After advancing, recreates the line selection to position point
+correctly (bol for insert, eol for append).  Returns nil at buffer edge.
+Deactivates any prior region so `helixel-select-line-up' starts
+fresh rather than extending a stale mark."
+  (let* ((sel (helixel-event-sel tx))
+         (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
+         (entry-kind (plist-get (helixel-sel-get-ctx sel) :entry-kind))
+         (count (if (eq entry-kind 'append) 1
+                  (helixel-sel-line-count sel)))
+         (lines-left count))
+    (while (and (> lines-left 0) (= (forward-line dir) 0))
+      (unless (helixel--blank-line-p)
+        (setq lines-left (1- lines-left))))
+    (when (= lines-left 0)
+      (deactivate-mark)
+      (helixel--recreate-selection sel)
+      t)))
 
-(defun helixel--rect-bounds-of-region ()
-  "Return the rectangle bounds as a list of cons cells (BEG . END).
-One per line of the rectangle."
-  (when (and (use-region-p) rectangle-mark-mode)
-    (extract-rectangle-bounds (region-beginning) (region-end))))
+(defun helixel--repeat-advance-movement (tx)
+  "Advance to next target for TX's movement selection.
+Calls the selection's recreate function from the current cursor
+position.  The recreate IS the advance (inline — movement commands
+inherently create the region).  Returns t on success, nil when
+point does not move.
+The strategy skips the separate `recreate-selection' call for inline
+advance functions to avoid double-moving."
+  (let ((sel (helixel-event-sel tx)))
+    (when sel
+      (condition-case nil
+          (progn (helixel--recreate-selection sel) t)
+        (error nil)))))
 
-;;; Rect change with replay
+;; ── Line pass helper ──
 
-(defun helixel--rect-change ()
-  "Kill rectangle content, enter insert mode.
-Replay typed text on all rectangle lines."
-  (let* ((beg (region-beginning))
-         (end (region-end))
-         (line-count (count-lines beg end))
-         (col (save-excursion (goto-char beg) (current-column)))
-         (lines (extract-rectangle beg end)))
-    (delete-rectangle beg end)
-    (helixel--kill-new (helixel--rect-wise-text lines))
-    (goto-char beg)
-    (setq helixel--rect-replay-info
-          `(:col ,col :line-count ,line-count :marker ,(point-marker)))
-    (helixel--enter-insert)))
+(defun helixel--repeat-line-pass (tx sel advance start-pos dir cnt
+                                     &optional preview-p)
+  "Process one line per step from START-POS in direction DIR.
+TX is the edit transaction, SEL the selection descriptor.
+ADVANCE is the operator advance tag, CNT the starting count.
+If PREVIEW-P is non-nil, only recreate selections without executing edits."
+  (save-excursion
+    (goto-char start-pos)
+    (forward-line dir)
+    (condition-case nil
+        (while t
+          (when (if (eq dir -1) (bobp) (eobp))
+            (signal 'user-error nil))
+          (setq cnt (1+ cnt))
+          (helixel--recreate-selection sel)
+          (unless preview-p
+            (helixel--execute-edit tx))
+          (if (eq advance 'line)
+              (progn
+                (when (/= (forward-line dir) 0)
+                  (signal 'user-error nil))
+                (when (if (eq dir -1) (bobp) (eobp))
+                  (signal 'user-error nil)))
+            (if (if (eq dir -1) (bobp) (eobp))
+                (signal 'user-error nil)
+              (unless (if (eq dir -1) (eolp) (bolp))
+                (forward-line dir))
+              (when (if (eq dir -1) (bobp) (eobp))
+                (signal 'user-error nil)))))
+      (user-error nil)))
+  cnt)
 
-(defun helixel--rect-replay ()
-  "Replay inserted text from rect change on remaining rectangle lines."
-  (when-let* ((info (helixel--rect-replay-get))
-              (col (plist-get info :col))
-              (line-count (plist-get info :line-count))
-              (marker (plist-get info :marker))
-              ((marker-position marker)))
-    (let ((text (buffer-substring marker (point))))
-      (save-excursion
-        (dotimes (_ (1- line-count))
-          (forward-line 1)
-          (move-to-column col t)
-          (insert text))))
-    (helixel--rect-replay-clear)))
+;; ── All-buffer / all-dir line handlers ──
 
-;; ── Region replace / replace-char ──
+(defun helixel--all-buffer-line (edit prefix)
+  "All-buffer repeat handler for line selections, for EDIT and PREFIX.
+Forward pass then backward pass from the marker position.
+For chain ops, does a single pass from the buffer edge."
+  (let* ((sel (helixel-event-sel edit))
+         (op (helixel-event-op edit))
+         (reverse-p (helixel-repeat-prefix-reverse-p prefix))
+         (marker (helixel-event-marker edit))
+         (chain-p (eq op 'chain)))
+    (if chain-p
+        (let* ((dir (if reverse-p -1
+                     (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
+               (start (if (> dir 0) (point-min) (point-max)))
+               (cnt 0))
+          (save-excursion
+            (goto-char start)
+            (unless (helixel--blank-line-p)
+              (helixel--execute-edit edit)))
+          (setq cnt (helixel--repeat-line-pass
+                     edit sel (or (helixel--op-advance op) 'line)
+                     start dir cnt))
+          (helixel--repeat-echo cnt))
+      (let* ((first-dir (if reverse-p -1
+                          (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
+             (cnt 0)
+             (start-pos (and marker (marker-position marker))))
+        (when start-pos
+          (goto-char start-pos)
+          (beginning-of-line)
+          (setq start-pos (point)))
+        (setq cnt (helixel--repeat-line-pass
+                   edit sel (helixel--op-advance op)
+                   start-pos first-dir cnt))
+        (setq cnt (helixel--repeat-line-pass
+                   edit sel (helixel--op-advance op)
+                   start-pos (- first-dir) cnt))
+        (helixel--repeat-echo cnt)))))
 
-(declare-function helixel--replace-region "helixel-editing")
+(defun helixel--all-dir-line (edit)
+  "All-dir repeat handler for line selections, for EDIT.
+Uses `helixel--repeat-line-pass' for proper cursor advance."
+  (let* ((sel (helixel-event-sel edit))
+         (op (helixel-event-op edit))
+         (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
+         (adv (or (helixel--op-advance op) 'line))
+         (cnt 0))
+    (setq cnt (helixel--repeat-line-pass edit sel adv (point) dir cnt))
+    (helixel--repeat-echo cnt)))
 
-(helixel-define-command helixel-replace-char
-    (:category edit :subcat replace-char :params (char))
-  (interactive "c")
-  (helixel--record-edit 'replace-char :char char)
-  (if (use-region-p)
-      (helixel--replace-region
-       (make-string (- (region-end) (region-beginning)) char)
-       (region-beginning) (region-end))
-    (helixel--replace-region
-     (char-to-string char) (point) (1+ (point)))))
+;; ── Kind registrations ──
+
+(helixel-register-kind line
+  :recreate #'helixel--recreate-line
+  :advance  #'helixel--repeat-advance-line
+  :all-buffer-fn #'helixel--all-buffer-line
+  :all-dir-fn #'helixel--all-dir-line
+  :display  (lambda (ctx)
+              (format "%dL" (or (helixel-sel-count ctx) 1)))
+  :make-sel nil)
+
+(helixel-register-kind rect
+  :recreate #'helixel--recreate-rect
+  :advance  nil
+  :display  "R"
+  :make-sel nil)
+
+(helixel-register-kind movement
+  :recreate nil
+  :advance  #'helixel--repeat-advance-movement
+  :display  "m"
+  :make-sel nil)
+
+;; ── Visual move tracking (from helixel-state.el) ──
+
+(defun helixel--track-visual-move (cmd)
+  "Append movement CMD to `helixel--pending-sel'.
+Creates/updates a `helixel-sel' struct of kind `movement' whenever
+a region is active — from visual mode or `normal-mode' movements that
+created a selection (e.g. w, e, b).
+No-op during dot-repeat replay, or when no region is active."
+  (when (and (not helixel--inhibit-repeat-record)
+             (use-region-p))
+    (let* ((ctx helixel--pending-sel)
+           (entry (cons cmd 1)))
+      (cond
+       ;; Update: extend existing movement sel.
+       ((and ctx (eq (helixel-sel-get-kind ctx) 'movement))
+        (let* ((moves (helixel-sel-movement-moves ctx))
+               (last (car moves)))
+          (if (and last (eq (car last) cmd))
+              (setcdr last (1+ (cdr last)))
+            (helixel--pending-sel-set
+             (helixel-sel-update-ctx ctx :moves
+                                     (cons entry moves))))))
+       ;; Create: first movement that made a region.
+       ;; Only when no sel exists — never clobber line/rect/textobj.
+       ((null ctx)
+        (helixel--pending-sel-set
+         (helixel-sel-create 'movement
+                             `(:moves (,entry) :inline-advance t
+                               :normal-mode
+                               ,(eq helixel--current-state
+                                   'normal))
+                             #'helixel--recreate-movement
+                             (lambda (c)
+                               (let ((ms (helixel-sel-movement-moves c)))
+                                 (let ((n (apply #'+ (mapcar #'cdr ms))))
+                                   (format "v%d" n))))
+                             :advance #'helixel--repeat-advance-movement)))))))
 
 (provide 'helixel-move)
 ;;; helixel-move.el ends here

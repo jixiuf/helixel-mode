@@ -1,4 +1,4 @@
-;;; helixel-data.el --- Unified data layer for helixel-mode -*- lexical-binding: t; -*-
+;;; helixel-core.el --- Core data layer for helixel-mode -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026  jixiuf
 
@@ -20,31 +20,31 @@
 
 ;;; Commentary:
 ;;
-;; Unified data layer for helixel-mode.
+;; Core data layer for helixel-mode — the single foundation module.
 ;;
-;; This file defines ALL core data types consumed across helixel modules.
-;; It has ZERO dependencies on other helixel modules and NO side effects.
+;; This file defines the core data types and registries consumed by
+;; all helixel modules.  It has ZERO dependencies on other helixel
+;; modules and NO side effects.
+;;
+;; Event storage moved to `helixel-ring', macros to `helixel-macros',
+;; named registers to `helixel-register'.
 ;;
 ;; Contents:
 ;;   Part 1 — helixel-sel          : selection descriptor + pending-sel
-;;   Part 2 — Delimiter Protocol   : delimiter plist accessors + operations
+;;   Part 2 — Delimiter Protocol   : delimiter plist accessors
 ;;   Part 3 — Kind Registry        : centralised kind protocol
 ;;   Part 4 — helixel-event        : unified event struct
 ;;   Part 5 — Transaction helpers  : make-tx, copy-tx, tx-display, etc.
-;;   Part 6 — Operator Registry    : symbol-property based op registration
-;;
-;; Consumed by: helixel-action, helixel-repeat,
-;;              helixel-textobj, helixel-surround, helixel-editing, etc.
-;;
-;; helixel-data.el provides the transaction helpers used by dot-repeat.
+;;   Part 6 — Operator Registry    : hash-table based op registration
+;;   Part 9 — Swap-source type     : helper for editing and swap modules
 
 ;;; Code:
 
 (require 'cl-lib)
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Part 1 — helixel-sel: Selection Descriptor
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (cl-defstruct (helixel-sel (:conc-name helixel-sel--)
                            (:constructor helixel-sel--internal)
@@ -300,9 +300,9 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
   (plist-get (helixel-sel--ctx-ensure obj) :cursor-offset))
 
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Pending selection (selection-first protocol)
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;;
 ;; Helixel is selection-first: selection commands push a `helixel-sel'
 ;; descriptor; the next editing command pops and consumes it.
@@ -339,9 +339,9 @@ previous selection command."
     (setq helixel--pending-sel nil)))
 
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Part 2 — Delimiter Protocol
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;;
 ;; A delimiter plist describes a delimited region (pair of brackets,
 ;; a quoted string, XML tags, mode-specific blocks, or regex-defined
@@ -355,7 +355,7 @@ previous selection command."
 ;;    :finder  function      ;; (fn dir) → 0|N, moves point, sets match-data
 ;;    :nl-p    boolean)      ;; t → add/delete handles adjacent newlines
 ;;
-;; Builder functions live in helixel-textobj-engine.el (they reference
+;; Builder functions live in helixel-textobj.el (they reference
 ;; textobj-engine functions via closures).
 
 ;; ── Accessors ──
@@ -425,9 +425,9 @@ Returns (OPEN-END . CLOSE-BEG)."
         (if (eq (char-before close-beg) ?\n) (1- close-beg) close-beg)))
 
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Part 3 — Kind Registry (centralised kind protocol)
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;;
 ;; Each selection kind registers four protocol methods:
 ;;   :recreate  — function (ctx) to recreate selection at point
@@ -469,9 +469,9 @@ PROPS is a keyword plist."
   (plist-get (gethash kind helixel--kind-registry) :all-dir-fn))
 
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Part 4 — helixel-event: Unified Event Struct
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;;
 ;; Replaces the old `helixel--action' plist system.
 ;; A single struct serves dot-repeat (`.`) replay, `;` jumping,
@@ -546,10 +546,10 @@ Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored."
             (when (and count (> count 1)) (format "x%d" count)))))
 
 
-;; ═══════════════════════════════════════════════════════════════════════
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
+;; ----------------------------------------------------------------------
 ;; Part 5 — Transaction helpers (build on `helixel-event')
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;;
 ;; Dot-repeat transactions are `helixel-event' structs.  These helpers
 ;; replaces the old `helixel-edit` API.
@@ -649,9 +649,9 @@ Copies the ctx plist so the copy is independent."
       copy)))
 
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;; Part 6 — Operator Registry
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 ;;
 ;; Operators are registered in a module-private hash table — no symbol
 ;; property pollution, no accidental clobbering, discoverable via
@@ -742,5 +742,84 @@ Shows operator name, display label, and advance tag."
       (goto-char (point-min)))
     (display-buffer buf)))
 
-(provide 'helixel-data)
-;;; helixel-data.el ends here
+
+;; ----------------------------------------------------------------------
+;; Part 9 — Swap-source type (used by helixel-editing and helixel-swap)
+;; ----------------------------------------------------------------------
+
+(defvar rectangle-mark-mode)            ; defined in rect.el
+
+(defvar-local helixel--selection-type nil
+  "Current selection type.
+nil means charwise, `line' means linewise, `rect' means rectangle.")
+
+(defun helixel--swap-source-type ()
+  "Return the swap-source type for the current selection.
+Returns nil (char), \=`line', or \=`rect'.
+More permissive than `helixel--selection-type' — detects
+`rectangle-mark-mode' directly."
+  (cond
+   ((eq helixel--selection-type 'rect) 'rect)
+   ((eq helixel--selection-type 'line) 'line)
+   ((bound-and-true-p rectangle-mark-mode) 'rect)
+   (t nil)))
+
+
+;; ----------------------------------------------------------------------
+;; Shared utilities (used by repeat engine and domain modules)
+;; ----------------------------------------------------------------------
+
+(defun helixel--recreate-selection (sel-ctx)
+  "Recreate a selection from SEL-CTX at the current point.
+Thin wrapper around `helixel-sel-call-recreate' —
+dispatches on struct closures."
+  (when sel-ctx
+    (helixel-sel-call-recreate sel-ctx)))
+
+(defun helixel--execute-edit (tx)
+  "Execute transaction TX on the current buffer.
+Does NOT record, does NOT switch state.
+Calls the :runner stored in TX (set at record time by
+`helixel--op-runner').  If :runner is missing,
+falls back to the operator registry."
+  (when-let* ((runner (or (helixel-event-runner tx)
+                         (helixel--op-runner (helixel-event-op tx)))))
+    (funcall runner tx)))
+
+(defsubst helixel--repeat-echo (count)
+  "Echo COUNT of repeated iterations."
+  (unless (zerop count)
+    (message "Repeated %d time%s" count (if (> count 1) "s" "")))
+  nil)
+
+(defun helixel--flip-dir (dir)
+  "Return the opposite direction of DIR.  `forward' <-> `backward'."
+  (if (eq dir 'forward) 'backward 'forward))
+
+(defun helixel--clear-data ()
+  "Clear any intermediate data, e.g. selections/mark.
+Used by state machine, surround, and jump navigation."
+  (setq helixel--selection-type nil)
+  (when rectangle-mark-mode
+    (rectangle-mark-mode -1))
+  (deactivate-mark))
+
+(defun helixel--selection-type ()
+  "Return current selection type, or nil.
+Validates that the region actually matches the claimed type.
+Supports `line', `rect' and `textobj'."
+  (when (region-active-p)
+    (cond
+     ((eq helixel--selection-type 'rect)
+      (when rectangle-mark-mode 'rect))
+     ((eq helixel--selection-type 'line)
+      (let ((beg (region-beginning))
+            (end (region-end)))
+        (when (and (save-excursion (goto-char beg) (bolp))
+                   (save-excursion (goto-char end) (or (eolp) (eobp))))
+          'line)))
+     ((eq helixel--selection-type 'textobj)
+      'textobj))))
+
+(provide 'helixel-core)
+;;; helixel-core.el ends here

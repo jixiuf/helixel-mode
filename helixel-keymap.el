@@ -46,6 +46,122 @@
 (require 'helixel-editing)
 (require 'helixel-chain)
 (require 'helixel-surround)
+(require 'helixel-swap)
+(require 'helixel-search)
+
+;; ── Keymap management ──
+
+(defun helixel-define-key (state key def &rest modes)
+  "Define a Helixel keybinding for KEY to DEF.
+
+When MODES is nil, bind to the keymap associated with STATE from
+`helixel-state-map-alist'.  When MODES is provided, each argument
+is a major or minor mode symbol for which the binding takes
+precedence via `minor-mode-overriding-map-alist'.
+
+Argument STATE must be one of: insert, normal, motion, visual, view,
+goto, window, space, textobj (m prefix), textobj-inner (mi prefix),
+textobj-outer (ma prefix).
+
+Argument KEY and DEF follow the same conventions as `define-key'.
+
+Any arguments after DEF are treated as mode symbols.
+
+Example:
+  ;; Standard: bind to Helix's normal state keymap
+  (helixel-define-key \\='normal \"s\" #\\='my-command)
+
+  ;; Major-mode specific: override normal state bindings in Dired
+  (with-eval-after-load \\='Dired
+    (helixel-define-key \\='normal \"j\" #\\='dired-next-line \\='dired-mode)
+    (helixel-define-key \\='normal \"k\"
+      #\\='dired-previous-line \\='dired-mode))
+
+  ;; Motion state with major-mode specific bindings
+  (helixel-define-key \\='motion \"j\" #\\='next-line \\='prog-mode)
+  (helixel-define-key \\='motion \"k\" #\\='previous-line \\='prog-mode)
+
+  ;; Mode-specific text object binding (org-mode only)
+  (helixel-define-key \\='textobj-inner \"o\"
+    #\\='helixel-mark-inner-org-block \\='org-mode)
+  (helixel-define-key \\='textobj-outer \"o\"
+    #\\='helixel-mark-a-org-block \\='org-mode)
+
+  ;; Bind to multiple modes at once
+  (helixel-define-key \\='normal \"j\" #\\='next-line
+    \\='prog-mode \\='text-mode)
+  (helixel-define-key \\='normal (kbd \"C-i\") nil
+    \\='org-mode \\='markdown-mode)"
+  (unless (alist-get state helixel-state-map-alist)
+    (error "Invalid state %s" state))
+  (if modes
+      ;; Store binding in helixel--mode-keybindings
+      (dolist (m modes)
+        (let* ((alist-key (cons m state))
+               (entry (assoc alist-key helixel--mode-keybindings)))
+          (unless entry
+            (setq entry (cons alist-key (make-sparse-keymap)))
+            (push entry helixel--mode-keybindings))
+          (define-key (cdr entry) key def)))
+    ;; Bind to global state keymap
+    (let ((state-keymap (alist-get state helixel-state-map-alist)))
+      (define-key state-keymap key def))))
+
+(defun helixel--refresh-overriding-maps ()
+  "Rebuild `minor-mode-overriding-map-alist' for the current buffer."
+  (let ((state helixel--current-state)
+        (state-mode (alist-get helixel--current-state helixel-state-alist))
+        (overrides nil))
+    (dolist (entry helixel--mode-keybindings)
+      (let ((mode (caar entry)))
+        (when (and (eq (cdar entry) state)
+                   (or (eq mode major-mode)
+                       (and (boundp mode) (symbol-value mode))))
+          (push (cdr entry) overrides))))
+    (setq minor-mode-overriding-map-alist
+          (assq-delete-all state-mode minor-mode-overriding-map-alist))
+    (when overrides
+      (let ((base-keymap (alist-get state helixel-state-map-alist)))
+        (push (cons state-mode (make-composed-keymap overrides base-keymap))
+              minor-mode-overriding-map-alist)))
+    ;; Textobj sub-map mode-specific overrides
+    (helixel--refresh-textobj-overrides)))
+
+(defun helixel--refresh-textobj-overrides ()
+  "Build mode-specific composed keymaps for textobj inner/outer.
+When `helixel--mode-keybindings' contains entries for `textobj-inner'
+or `textobj-outer' in the current `major-mode', make
+`helixel-textobj-map' buffer-local and point its \"i\"/\"a\" entries
+to composed keymaps with mode overrides on top of the base maps."
+  (let ((inner-overrides nil)
+        (outer-overrides nil))
+    (dolist (entry helixel--mode-keybindings)
+      (let ((mode (caar entry))
+            (sub (cdar entry)))
+        (when (or (eq mode major-mode)
+                  (and (boundp mode) (symbol-value mode)))
+          (cond ((eq sub 'textobj-inner)
+                 (push (cdr entry) inner-overrides))
+                ((eq sub 'textobj-outer)
+                 (push (cdr entry) outer-overrides))))))
+    ;; Restore defaults when no overrides
+    (unless (or inner-overrides outer-overrides)
+      (when (local-variable-p 'helixel-textobj-map)
+        (define-key helixel-textobj-map "i" helixel-textobj-inner-map)
+        (define-key helixel-textobj-map "a" helixel-textobj-outer-map)
+        (kill-local-variable 'helixel-textobj-map)))
+    ;; Build composed keymaps with overrides
+    (when (or inner-overrides outer-overrides)
+      (make-local-variable 'helixel-textobj-map)
+      (when inner-overrides
+        (define-key helixel-textobj-map "i"
+                    (make-composed-keymap inner-overrides
+                                          helixel-textobj-inner-map)))
+      (when outer-overrides
+        (define-key helixel-textobj-map "a"
+                    (make-composed-keymap outer-overrides
+                                          helixel-textobj-outer-map))))))
+
 
 ;; ── Prefix keymaps ──
 
@@ -325,6 +441,26 @@ Example with multiple callbacks:
               (setq this-command cb))
             (funcall cb)))
       (message "no such command '%s'" command))))
+
+;; ── Search & find-char keybindings ──
+
+
+(helixel-define-key 'normal "/" #'helixel-search-forward)
+(helixel-define-key 'normal "?" #'helixel-search-backward)
+(helixel-define-key 'normal "*" #'helixel-search-at-point-next)
+(helixel-define-key 'normal "#" #'helixel-search-at-point-prev)
+(helixel-define-key 'normal "f" #'helixel-find-next-char)
+(helixel-define-key 'normal "F" #'helixel-find-prev-char)
+(helixel-define-key 'normal "t" #'helixel-find-till-char)
+(helixel-define-key 'normal "T" #'helixel-find-prev-till-char)
+(helixel-define-key 'normal "n" #'helixel-search-repeat-next)
+(helixel-define-key 'normal "N" #'helixel-search-repeat-reverse)
+(helixel-define-key 'normal "M-." #'helixel-find-repeat)
+
+;; ── Hook registrations ──
+
+(add-hook 'helixel-state-change-hook #'helixel--refresh-overriding-maps)
+(add-hook 'helixel-state-change-hook #'helixel--refresh-textobj-overrides)
 
 (provide 'helixel-keymap)
 ;;; helixel-keymap.el ends here

@@ -4,7 +4,18 @@
 
 ---
 
-## Data Layer (`helixel-data.el`)
+## Core Modules
+
+| Module | Role |
+|--------|------|
+| `helixel-core.el` | Pure data layer: structs, registries, delimiter protocol, tx helpers |
+| `helixel-ring.el` | Event storage: ring + jump-log + tracking-open + live-event |
+| `helixel-macros.el` | Command/operator definition macros |
+| `helixel-register.el` | Named register system + kill-ring wrappers |
+
+---
+
+## Data Layer (`helixel-core.el`)
 
 ### Three Structs
 
@@ -70,7 +81,6 @@ Events are deduplicated by content: same op, category, subcat, sel, payload, and
 
 ---
 
-## Repeat Strategy (`helixel-repeat-strategy.el`)
 
 ### Strategy Struct
 
@@ -251,31 +261,36 @@ For self-contained commands (chain).  Wraps body in
 ## File Dependency Graph
 
 ```
-helixel-data (cl-lib only)
-  ├── helixel-ring
-  │     ├── helixel-action
-  │     └── helixel-repeat → helixel-repeat-strategy → helixel-chain
+helixel-core (cl-lib only)
+  ├── helixel-ring (→ core)
+  │     ├── helixel-macros (→ core + ring)
+  │     └── helixel-action (→ core + ring)
   │
-  ├── helixel-register
-  ├── helixel-macros (→ data only)
-  ├── helixel-state (→ macros + action + repeat + ring + register
-  │     │              + textobj + surround)
-  │     ├── helixel-move (→ state)
-  │     ├── helixel-editing (→ state + move + data;
-  │     │                    runtime → swap for circular-dep avoidance)
-  │     │     ├── helixel-search (→ editing)
-  │     │     ├── helixel-keymap (→ state + move + editing + chain + surround)
-  │     │     └── helixel-swap (→ state)
-  │     └── helixel-textobj-engine → helixel-textobj → helixel-surround
-  └── helixel-shims (→ state)
+  ├── helixel-register (→ core)
+  │
+  ├── helixel-repeat (→ core + action)
+  │     └── helixel-chain (→ core + repeat + macros)
+  │
+  ├── helixel-textobj (→ core)
+  │     └── helixel-surround (→ core + textobj)
+  │
+  └── helixel-state (→ core + ring + macros + register + action
+                      + repeat + textobj + surround)
+        ├── helixel-move (→ state + macros)
+        ├── helixel-editing (→ state + move + core + macros)
+        │     ├── helixel-search (→ state + core + macros)
+        │     ├── helixel-keymap (→ state + move + editing
+        │     │                   + chain + surround + swap + search)
+        │     └── helixel-swap (→ state + macros + editing)
+        └── helixel-shims (→ state + keymap)
 ```
 
 ## Key Shared Variables
 
 | Variable | Location | Purpose |
 |----------|----------|---------|
-| `helixel--pending-sel` | `helixel-data.el` | Pending selection descriptor |
-| `helixel--last-tx` | `helixel-data.el` | Most recent edit transaction |
+| `helixel--pending-sel` | `helixel-core.el` | Pending selection descriptor |
+| `helixel--last-tx` | `helixel-core.el` | Most recent edit transaction |
 | `helixel--live-event` | `helixel-ring.el` | Current in-progress event |
 | `helixel--active-search` | `helixel-search.el` | Active search direction+pattern |
 

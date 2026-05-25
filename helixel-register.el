@@ -1,10 +1,9 @@
-;;; helixel-register.el --- Named registers  -*- lexical-binding: t; -*-
+;;; helixel-register.el --- Named register support for helixel-mode -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
 ;; Keywords: convenience
-;; URL: https://github.com/jixiuf/helixel-mode
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,28 +19,22 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
-
-;; Named register support for helixel-mode, bridging Emacs `register-alist'.
 ;;
-;; Usage:
-;;   \"ay  — copy to register a
-;;   \"ap  — paste from register a
-;;   \"ad  — delete to register a
-;;   \"ac  — change to register a
-;;   \"ar  — replace with register a
-;;   \"\"y  — copy to default register (kill-ring, same as y)
+;; Named register support bridging Emacs `register-alist'.
 ;;
-;; Register names: any character can be mapped to a storage backend.
-;; By default: a-z → Emacs `register-alist', \" → kill-ring,
-;; + → system clipboard, * → primary selection.
-;; Customize `helixel-register-backends' to change these mappings.
-;;
-;; This module is required by `helixel-state' so the wrappers are
-;; available everywhere in the helixel dependency tree.
+;; Provides register-aware wrappers around Emacs kill-ring operations.
+;; When `helixel--current-register' is a non-default named register
+;; (e.g. \"a), kill/yank operations redirect to that register's backend.
+;; Otherwise they use the standard kill-ring.
 
 ;;; Code:
 
 (require 'cl-lib)
+(require 'helixel-core)
+
+;; ----------------------------------------------------------------------
+;; Customization
+;; ----------------------------------------------------------------------
 
 (defcustom helixel-register-backends
   '((?\" . kill-ring)
@@ -99,6 +92,10 @@ the delete register ring.  Default is 9 (registers 1-9)."
   :type 'natnum
   :group 'helixel)
 
+;; ----------------------------------------------------------------------
+;; State
+;; ----------------------------------------------------------------------
+
 (defvar helixel--current-register nil
   "Character identifying the register for the next operator.
 Set by `helixel-select-register' (bound to `\\\"' in normal mode).
@@ -106,7 +103,9 @@ Consumed and cleared by each operator that uses it.
 When nil or equal to `helixel-default-register', the `kill-ring'
 is used directly.")
 
-;; ── Register selection (bound to `\"' in normal mode) ──
+;; ----------------------------------------------------------------------
+;; Register selection
+;; ----------------------------------------------------------------------
 
 (defun helixel-select-register ()
   "Read a register name for the next operator.
@@ -121,11 +120,11 @@ Press \\[keyboard-quit] to cancel."
           (setq helixel--current-register nil)
           (message "Register cancelled"))
       (setq helixel--current-register char)
-      ;; Show the register name in echo area so user knows
-      ;; it's pending (e.g. \"a).
       (message "\"%c" char))))
 
-;; ── Backend lookup ──
+;; ----------------------------------------------------------------------
+;; Backend lookup
+;; ----------------------------------------------------------------------
 
 (defun helixel-register-backend (char)
   "Return the storage backend keyword for register CHAR.
@@ -133,7 +132,9 @@ Looks up CHAR in `helixel-register-backends'.  Returns nil when
 CHAR is not in the alist (meaning it uses `register-alist')."
   (cdr (assq char helixel-register-backends)))
 
-;; ── Register I/O ──
+;; ----------------------------------------------------------------------
+;; Register I/O
+;; ----------------------------------------------------------------------
 
 (defun helixel-register-get (char)
   "Return text contents of register CHAR, or nil if empty.
@@ -164,13 +165,15 @@ TEXT is a string preserving any yank-handler properties."
     (primary   (gui-set-selection 'PRIMARY text))
     (t (set-register char text))))
 
-;; ── Register-aware kill-ring wrappers ──
+;; ----------------------------------------------------------------------
+;; Register-aware kill-ring wrappers
 ;;
 ;; These replace direct `kill-new' / `current-kill' / `yank' calls
 ;; throughout the codebase.  When `helixel--current-register' is a
 ;; non-default register (not nil and not `helixel-default-register'),
 ;; they redirect to the configured backend.  When nil or the default
 ;; register, they use the real kill-ring.
+;; ----------------------------------------------------------------------
 
 (defun helixel--register-active-p ()
   "Return non-nil when a non-default named register is selected.
@@ -183,7 +186,6 @@ is non-nil and not equal to `helixel-default-register'."
   "Return and clear `helixel--current-register'."
   (prog1 helixel--current-register
     (setq helixel--current-register nil)))
-
 
 (defun helixel-register-rotate-delete (text)
   "Rotate numbered delete registers and store TEXT in the first slot.

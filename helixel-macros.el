@@ -1,10 +1,9 @@
-;;; helixel-macros.el --- Command & operator definition macros  -*- lexical-binding: t; -*-
+;;; helixel-macros.el --- Command and operator definition macros -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025-2026  jixiuf
+;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
 ;; Keywords: convenience
-;; URL: https://github.com/jixiuf/helixel-mode
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -21,81 +20,32 @@
 
 ;;; Commentary:
 ;;
-;; Command definition macros and the unified tracking entry point.
+;; Command definition macros for helixel-mode.
 ;;
-;; `helixel--tracking-open'      — unified entry: open event (commit prev)
 ;; `helixel-with-edit-tracking'  — full wrapper: open + body + commit
-;; `helixel-define-command'      — define a command with auto-injected tracking
-;; `helixel-define-operator'     — define an editing operator (command + op reg)
+;; `helixel-define-command'      — define command with auto-injected tracking
+;; `helixel-define-operator'     — editing operator (command + op reg)
 ;;
-;; All tracking flows through `helixel--tracking-open':
-;;
-;;   helixel--tracking-open  ←  the single entry point (defun)
-;;     ↑                ↑
-;;     |                helixel-with-edit-tracking (full: open + body + commit)
-;;     |
-;;     helixel-define-command / direct callers / textobj-hook
-;;
-;; Extracted from helixel-state.el to reduce fan-in and clarify module
-;; boundaries.
+;; All macros expand to inline code (zero hooks).  They depend on
+;; `helixel--tracking-open' and `helixel-event-commit' from
+;; `helixel-ring', and `helixel-register-op' from `helixel-core'.
 
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-data)   ; for make-helixel-event, helixel-register-op
+(require 'helixel-core)
+(require 'helixel-ring)
 
-(declare-function helixel-event-commit "helixel-ring")
-(declare-function helixel--clear-highlights "helixel-state")
-(declare-function helixel--track-visual-move "helixel-state")
-
-(defvar helixel--live-event)            ; defined in helixel-ring.el
-(defvar helixel--inhibit-action-track)  ; defined in helixel-action.el
-(defvar helixel--action-pos)            ; defined in helixel-action.el
 (defvar-local helixel--selection-type)  ; defined in helixel-state.el
 
-;; ═══════════════════════════════════════════════════════════════════════
-;; Unified entry point: open event (commit prev, create new)
-;; ═══════════════════════════════════════════════════════════════════════
-;;
-;; This is the SINGLE function through which all event-tracking flows.
-;; Replaces the old `helixel-action-start'.
-
-(defun helixel--tracking-open (category subcat &optional op)
-  "Commit previous `helixel--live-event' and create a new one.
-CATEGORY and SUBCAT classify the event for \\=`;\\=` and jump-list.
-OP is an optional operator symbol (nil for movement/search).
-
-No-op when `helixel--inhibit-action-track' is non-nil (dot-repeat).
-Does NOT commit the new event — caller is responsible for eventual commit."
-  (unless helixel--inhibit-action-track
-    ;; Clear textobj selection state on non-textobj actions
-    (when (and (eq helixel--selection-type 'textobj)
-               (not (eq category 'textobj)))
-      (setq helixel--selection-type nil))
-    (helixel-event-commit)
-    (setq helixel--live-event
-          (make-helixel-event
-           :op op
-           :category category
-           :subcat subcat
-           :marker (point-marker)
-           :timestamp (float-time)
-           :buffer (current-buffer))
-          helixel--action-pos nil)))
-
-;; ═══════════════════════════════════════════════════════════════════════
-;; Full tracking macro: open + body + commit
-;; ═══════════════════════════════════════════════════════════════════════
-;;
-;; For standalone (self-contained) commands: opens the event before
-;; body, commits in `unwind-protect' after body.
+;; ── Full tracking macro: open + body + commit ──
 
 (cl-defmacro helixel-with-edit-tracking ((&key op category subcat)
                                          &body body)
   "Execute BODY with full event tracking (open → body → commit).
 
 OP — operator symbol (nil for movement/search).
-CATEGORY + SUBCAT — classification for \\=`;\\=` and jump-list.
+CATEGORY + SUBCAT — classification for \=`;\=` and jump-list.
 
 Calls `helixel--tracking-open' for the open phase.  Commits the
 event in an `unwind-protect' so it always finalises even on error."
@@ -107,12 +57,7 @@ event in an `unwind-protect' so it always finalises even on error."
        (unless helixel--inhibit-action-track
          (helixel-event-commit)))))
 
-;; ═══════════════════════════════════════════════════════════════════════
-;; Command definition macro
-;; ═══════════════════════════════════════════════════════════════════════
-;;
-;; Uses `helixel--tracking-open' for event-open (event stays open
-;; for a subsequent editing command to mutate and commit).
+;; ── Command definition macro ──
 
 (defmacro helixel-define-command (name metadata &rest body)
   "Define a helixel command NAME with METADATA auto-tracking.
@@ -124,7 +69,7 @@ METADATA is a plist:
   :params   PARAM-LIST — optional function parameter list
 
 For :category movement:
-  - Auto-injects `helixel--track-visual-move' for \\=`.\\=` replay.
+  - Auto-injects `helixel--track-visual-move' for \=`.\=` replay.
   - Auto-injects `helixel--clear-highlights' (unless :clear-highlights nil).
 
 All tracking code is expanded inline at compile time — zero hooks.
@@ -155,21 +100,19 @@ BODY is the command's business logic."
        ;; ── Visual-mode tracking (for . replay of movements) ──
        ,@track-visual)))
 
-;; ═══════════════════════════════════════════════════════════════════════
-;; Operator definition macro
-;; ═══════════════════════════════════════════════════════════════════════
+;; ── Operator definition macro ──
 
 (defmacro helixel-define-operator (name metadata &rest body)
   "Define a helixel editing operator NAME.
 
-Combines command definition (action tracking for \\=`;\\=` jumping
-and jump-list navigation) with op registration (for \\=`.\\=` repeat)
+Combines command definition (action tracking for \=`;\=` jumping
+and jump-list navigation) with op registration (for \=`.\=` repeat)
 into a single form.
 
 METADATA is a plist:
-  :op OP              — operator symbol for \\=`.\\=` (required)
+  :op OP              — operator symbol for \=`.\=` (required)
   :display DISPLAY    — label string or function (TX) -> string
-  :repeat-advance TAG — nil, \\=`line', or function
+  :repeat-advance TAG — nil, \=`line', or function
   :subcat SUB         — action subcategory (default: OP)
   :params PARAMS      — function parameter list
 
@@ -178,7 +121,7 @@ Expands to:
   2. (helixel-define-command NAME (:category edit ...) BODY)
 
 The command body SHOULD call (helixel--record-edit OP ...) to record
-the edit for \\=`.\\=` replay."
+the edit for \=`.\=` replay."
   (declare (indent 2))
   (let* ((op (plist-get metadata :op))
          (display (plist-get metadata :display))

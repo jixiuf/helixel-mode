@@ -36,6 +36,7 @@
 ;;; Code:
 
 (require 'helixel-state)
+(require 'helixel-keymap)
 
 ;; ── Declare external functions (byte-compiler) ──
 

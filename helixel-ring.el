@@ -1,4 +1,4 @@
-;;; helixel-ring.el --- Unified event ring for helixel-mode -*- lexical-binding: t; -*-
+;;; helixel-ring.el --- Event ring and jump log storage -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026  jixiuf
 
@@ -20,7 +20,7 @@
 
 ;;; Commentary:
 ;;
-;; Unified event ring for helixel-mode.
+;; Event storage layer for helixel-mode.
 ;;
 ;; Two storage containers:
 ;;   1. buffer-local `helixel--event-ring' — serves `;` cycling,
@@ -28,19 +28,33 @@
 ;;   2. global `helixel--global-jump-log' — serves C-o/C-i jump
 ;;      navigation across buffers.
 ;;
-;; Both are populated by `helixel-event-commit', eliminating the
-;; old `helixel-action-push-functions' hook bridge.
-;;
-;; Dependencies: helixel-data (helixel-event struct).
+;; Also provides the unified tracking entry point
+;; `helixel--tracking-open' used by all command-definition macros,
+;; and the live-event management helpers.
 
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-data)
+(require 'helixel-core)
 
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
+;; State variables
+;; ----------------------------------------------------------------------
+
+(defvar helixel--inhibit-action-track nil
+  "When non-nil, event recording is inhibited.
+Bound during dot-repeat replay to prevent re-recording.")
+
+(defvar-local helixel--action-pos nil
+  "Ring position for `;' cycling.
+nil = live event.  0 = newest ring entry.  N = older.")
+
+;; Forward declaration: defined in helixel-state.el
+(defvar helixel--selection-type)
+
+;; ----------------------------------------------------------------------
 ;; Buffer-local event ring
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defcustom helixel-event-ring-max 50
   "Maximum number of events stored in `helixel--event-ring'."
@@ -92,10 +106,63 @@ Returns the committed entry or nil."
       (setq helixel--live-event nil)
       entry)))
 
+;; ── Live-event helpers ──
 
-;; ═══════════════════════════════════════════════════════════════════════
+(defun helixel--cancel-action ()
+  "Cancel the current action via \\[keyboard-quit].
+Commits meaningful events, pushes a state/cancel sentinel,
+and clears the live state."
+  (helixel-event-commit)
+  ;; Push cancel sentinel for dedup boundary
+  (setq helixel--live-event
+        (make-helixel-event
+         :category 'state
+         :subcat 'cancel
+         :marker (point-marker)
+         :timestamp (float-time)
+         :buffer (current-buffer)))
+  (helixel-event-commit))
+
+(defun helixel--live-edit-set (tx)
+  "Set edit details from TX on `helixel--live-event'."
+  (when (and helixel--live-event (helixel-event-p tx))
+    (setf (helixel-event-op helixel--live-event) (helixel-event-op tx))
+    (setf (helixel-event-sel helixel--live-event) (helixel-event-sel tx))
+    (setf (helixel-event-payload helixel--live-event)
+          (helixel-event-payload tx))
+    (setf (helixel-event-runner helixel--live-event)
+          (helixel-event-runner tx))
+    (when-let* ((disp (helixel-event-display tx)))
+      (setf (helixel-event-display helixel--live-event) disp))))
+
+;; ── Unified entry point: open event (commit prev, create new) ──
+
+(defun helixel--tracking-open (category subcat &optional op)
+  "Commit previous `helixel--live-event' and create a new one.
+CATEGORY and SUBCAT classify the event for \=`;\=` and jump-list.
+OP is an optional operator symbol (nil for movement/search).
+
+No-op when `helixel--inhibit-action-track' is non-nil (dot-repeat).
+Does NOT commit the new event — caller is responsible for eventual commit."
+  (unless helixel--inhibit-action-track
+    ;; Clear textobj selection state on non-textobj actions
+    (when (and (eq helixel--selection-type 'textobj)
+               (not (eq category 'textobj)))
+      (setq helixel--selection-type nil))
+    (helixel-event-commit)
+    (setq helixel--live-event
+          (make-helixel-event
+           :op op
+           :category category
+           :subcat subcat
+           :marker (point-marker)
+           :timestamp (float-time)
+           :buffer (current-buffer))
+          helixel--action-pos nil)))
+
+;; ----------------------------------------------------------------------
 ;; Global jump log (C-o / C-i)
-;; ═══════════════════════════════════════════════════════════════════════
+;; ----------------------------------------------------------------------
 
 (defcustom helixel-jump-log-max 100
   "Maximum number of entries in `helixel--global-jump-log'."

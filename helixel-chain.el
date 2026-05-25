@@ -25,12 +25,9 @@
 
 ;;; Code:
 
-(require 'helixel-data)                  ; for helixel--make-tx
-(require 'helixel-repeat)                ; for helixel--last-tx, etc.
-(require 'helixel-repeat-strategy)       ; for strategy struct
+(require 'helixel-core)                  ; for helixel--make-tx
 (require 'helixel-macros)                ; for helixel-with-edit-tracking
-(declare-function helixel--kind-advance "helixel-data")
-(declare-function helixel--flip-dir "helixel-repeat")
+(require 'helixel-repeat)                ; for helixel--last-tx, etc.
 
 (defvar helixel--repeat-chain-preview)    ; defined in helixel-repeat.el
 

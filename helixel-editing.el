@@ -294,10 +294,21 @@ rectangle line via `helixel--rect-replay' — no state-switching side
         (when text (insert text)))
       (helixel--rect-replay))
      (t
-      (helixel--delete-selection)
-      (if keys
-          (helixel--execute-keys keys)
-        (when text (insert text)))))))
+      ;; Save the region-beginning set by the advance function
+      ;; so we can restore an active region afterward for
+      ;; undo-in-region.
+      (let ((sel-beg (region-beginning)))
+        (helixel--delete-selection)
+        ;; Deactivate the mark left by the deleted selection
+        ;; so that key replay (e.g. delete-backward-char) does
+        ;; not see an active region and delete the wrong span.
+        (deactivate-mark)
+        (if keys
+            (helixel--execute-keys keys)
+          (when text (insert text)))
+        ;; Restore an active region covering the replayed edit
+        ;; so undo-in-region limits undo to this replay only.
+        (push-mark sel-beg t t))))))
 
 ;; ── Edit-op registry ──
 ;; Each operator registers a `:runner' (called by `.`) and a `:display'

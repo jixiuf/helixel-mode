@@ -590,7 +590,7 @@ key-binding dispatch, not `insert-char'."
     (should (string= (buffer-string) "aoneb two three"))))
 
 (ert-deftest helixel-test-execute-keys-backspace ()
-  "`helixel--execute-keys' replays DEL via execute-kbd-macro.
+  "`helixel--execute-keys' replays DEL via `execute-kbd-macro'.
 Key-based replay handles DEL (127) as non-printable."
   (helixel-test-with-buffer "hello"
     (goto-char 6)
@@ -599,8 +599,8 @@ Key-based replay handles DEL (127) as non-printable."
     (should (string= (buffer-string) "hellox"))))
 
 (ert-deftest helixel-test-execute-keys-control-d ()
-  "`helixel--execute-keys' replays C-d via execute-kbd-macro.
-C-d is non-printable and dispatched through execute-kbd-macro."
+  "`helixel--execute-keys' replays C-d via `execute-kbd-macro'.
+C-d is non-printable and dispatched through macro replay."
   (helixel-test-with-buffer "hello"
     (goto-char 1)
     (helixel--execute-keys (kbd "C-d"))
@@ -618,13 +618,10 @@ Simulates typing 'bao' then DEL (deletes 'o') then 'r'."
 (ert-deftest helixel-test-execute-keys-symbol-no-crash ()
   "`helixel--execute-keys' handles symbol keys without crashing.
 Unbound symbols (like backspace on some Emacs) go through
-execute-kbd-macro — may beep but must not raise wrong-type-argument.
-Also verifies the characterp guard in helixel--insert-finish."
+`execute-kbd-macro' — may beep but must not raise
+wrong-type-argument."
   (helixel-test-with-buffer "hello"
     (goto-char 1)
-    ;; The key-based fallback must not crash on symbols.
-    ;; execute-kbd-macro may error on unbound keys — that's OK.
-    ;; The old bug (= 'backspace ?\e) must NOT happen.
     (condition-case err
         (helixel--execute-keys [backspace])
       (wrong-type-argument
@@ -949,6 +946,78 @@ Also verifies the characterp guard in helixel--insert-finish."
             :inserted-text "X"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "hello world X"))))
+
+(ert-deftest helixel-test-repeat-search-change-with-DEL ()
+  "`.` replays a search-based change whose keys include DEL (127).
+Simulates `/hello c foo <backspace> o <ESC> .` — the recorded
+keys [f o o DEL o] should produce 'foo' on the next match, not 'o'."
+  (helixel-test-with-buffer "hello world hello"
+    (goto-char 1)
+    ;; Construct the tx that /hello c foo <backspace> o <ESC> records.
+    (setq helixel--last-tx
+          (helixel--make-tx 'change
+            (helixel-sel-create 'search '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search
+              "/hello")
+            :inserted-text "foo"
+            :keys [102 111 111 127 111]))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "foo world hello"))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "foo world foo"))))
+
+(ert-deftest helixel-test-repeat-search-change-with-backspace-symbol ()
+  "`.` replays a search-based change whose keys include backspace symbol.
+Like `helixel-test-repeat-search-change-with-DEL' but records
+backspace as a symbol (GUI Emacs) instead of DEL (127)."
+  (helixel-test-with-buffer "hello world hello"
+    (goto-char 1)
+    (setq helixel--last-tx
+          (helixel--make-tx 'change
+            (helixel-sel-create 'search '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search
+              "/hello")
+            :inserted-text "foo"
+            :keys [102 111 111 backspace 111]))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "foo world hello"))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "foo world foo"))))
+
+(ert-deftest helixel-test-repeat-change-deactivates-mark ()
+  "`.` replays keys with no active region, so delete-backward-char
+deletes exactly one char rather than an entire region."
+  (helixel-test-with-buffer "hello world"
+    (goto-char 1)
+    (setq helixel--last-tx
+          (helixel--make-tx 'change
+            (helixel-sel-create 'search '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search
+              "/hello")
+            :runner #'helixel--repeat-change-core
+            :keys (kbd "foo DEL o")))
+    (helixel-repeat-edit)
+    ;; f o o DEL o should produce "foo", not "o" (which is what
+    ;; would happen if the mark were active during key replay).
+    (should (string= (buffer-string) "foo world"))))
+
+(ert-deftest helixel-test-repeat-search-change-with-C-d ()
+  "`.` replays a search-based change whose keys include C-d.
+C-d is a non-printable key — verifies `execute-kbd-macro' replay
+works in the dot-repeat context."
+  (helixel-test-with-buffer "hello world"
+    (goto-char 1)
+    ;; c ab<C-d>X <esc>: deletes "hello", types "ab", C-d deletes the
+    ;; space after "ab", then types "X".
+    (setq helixel--last-tx
+          (helixel--make-tx 'change
+            (helixel-sel-create 'search '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search
+              "/hello")
+            :inserted-text "abX"
+            :keys (kbd "ab C-d X")))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "abXworld"))))
 
 (ert-deftest helixel-test-search-sel-display ()
   "`helixel-sel-call-display' for search shows /pattern."

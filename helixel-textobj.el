@@ -1274,10 +1274,11 @@ the same multiplier."
   "Return a range (BEG END) of COUNT matching XML tags.
 TYPE is the selection type.  If INCLUSIVE is non-nil, the tags
 themselves are included from the range."
+  (unless inclusive (setq inclusive 'exclusive-line))
   (cond
-   ((and (not inclusive) (= (abs (or count 1)) 1))
+   ((and (eq inclusive 'exclusive-line) (= (abs (or count 1)) 1))
     (let ((rng (helixel-select-block #'helixel-up-xml-tag beg end type
-                                     count nil t)))
+                                     count 'exclusive-line t)))
       (if (or (and beg (= beg (helixel-range-beginning rng))
                    end (= end (helixel-range-end rng))))
           (helixel-select-block #'helixel-up-xml-tag beg end type count t)

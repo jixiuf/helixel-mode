@@ -262,6 +262,80 @@ Second paragraph.")
     (should (= (region-beginning) 1))
     (should (= (region-end) 8))))
 
+;;; Paren core-correctness tests
+
+(ert-deftest helixel-test-textobj-paren-nested-inner ()
+  "mi( selects innermost paren pair in ((inner) outer)."
+  (with-temp-buffer
+    (insert "((inner) outer)")
+    (goto-char 4)                  ; on 'n' of inner
+    (call-interactively #'helixel-mark-inner-paren)
+    (should (= (region-beginning) 3))
+    (should (= (region-end) 8))))
+
+(ert-deftest helixel-test-textobj-paren-nested-2count ()
+  "2mi( selects the outer paren pair in ((inner) outer)."
+  (with-temp-buffer
+    (insert "((inner) outer)")
+    (goto-char 4)                  ; on 'n' of inner
+    (call-interactively (lambda () (interactive)
+                           (helixel-mark-inner-paren 2)))
+    ;; Outer exclusive range: (cdr op . car cl) = (2 . 15)
+    ;; after outer ( at pos 1, includes inner ( at pos 2
+    (should (= (region-beginning) 2))
+    (should (= (region-end) 15))))
+
+(ert-deftest helixel-test-textobj-paren-cursor-on-delimiter ()
+  "mi( with cursor on '(' selects inner content."
+  (with-temp-buffer
+    (insert "(hello)")
+    (goto-char 1)                  ; on '('
+    (call-interactively #'helixel-mark-inner-paren)
+    (should (= (region-beginning) 2))
+    (should (= (region-end) 7))))
+
+(ert-deftest helixel-test-textobj-paren-cursor-on-close-delimiter ()
+  "mi( with cursor on ')' selects inner content."
+  (with-temp-buffer
+    (insert "(hello)")
+    (goto-char 7)                  ; on ')'
+    (call-interactively #'helixel-mark-inner-paren)
+    (should (= (region-beginning) 2))
+    (should (= (region-end) 7))))
+
+(ert-deftest helixel-test-textobj-paren-multiline ()
+  "mi( works across multiple lines."
+  (with-temp-buffer
+    (insert "(\nhello\nworld\n)")
+    (goto-char 4)
+    (call-interactively #'helixel-mark-inner-paren)
+    ;; inner = content between ( and ), exclusive
+    (should (= (region-beginning) 3))
+    (should (= (region-end) 15))))
+
+(ert-deftest helixel-test-textobj-paren-empty ()
+  "mi( on empty parens () returns zero-width selection."
+  (with-temp-buffer
+    (insert "()")
+    (goto-char 1)                  ; on '('
+    (call-interactively #'helixel-mark-inner-paren)
+    ;; inner selection is empty: region-beginning == region-end
+    (should (= (region-beginning) (region-end)))
+    (should (= (region-beginning) 2))))
+
+;;; Quote edge-case tests
+
+(ert-deftest helixel-test-textobj-quote-escaped ()
+  "Quoted string with escaped inner quotes is selected correctly."
+  (with-temp-buffer
+    (insert "\"hello \\\"world\\\"!\"")
+    (goto-char 4)
+    (call-interactively #'helixel-mark-inner-double-quote)
+    ;; inner content: hello \"world\"! (between outer quotes)
+    (should (= (region-beginning) 2))
+    ;; End should be at the position before the closing "
+    (should (char-equal (char-before (region-end)) ?!))))
+
 ;;; Quote text object tests
 
 (ert-deftest helixel-test-textobj-single-quote-inner ()
@@ -317,6 +391,35 @@ Second paragraph.")
     (call-interactively #'helixel-mark-a-back-quote)
     (should (= (region-beginning) 1))
     (should (= (region-end) 8))))
+
+;;; Tag text object edge-case tests
+
+(ert-deftest helixel-test-textobj-tag-with-attrs ()
+  "Tag textobj works with attributes like <div class='x'>."
+  (with-temp-buffer
+    (insert "<div class=\"foo\">bar</div>")
+    (goto-char 10)
+    (call-interactively #'helixel-mark-inner-tag)
+    ;; inner content = "bar" (between > and </)
+    (should (= (region-beginning) 18))
+    (should (= (region-end) 21))))
+
+(ert-deftest helixel-test-textobj-tag-nested ()
+  "mit inside <div><p>text</p></div> selects innermost <p>."
+  (with-temp-buffer
+    (insert "<div><p>text</p></div>")
+    (goto-char 10)                 ; on 't' of text
+    (call-interactively #'helixel-mark-inner-tag)
+    ;; inner <p> content = "text"
+    (should (= (region-beginning) 9))
+    (should (= (region-end) 13))))
+
+(ert-deftest helixel-test-textobj-tag-mismatched ()
+  "mit on <div>text</span> should error (mismatched tags)."
+  (with-temp-buffer
+    (insert "<div>text</span>")
+    (goto-char 3)
+    (should-error (call-interactively #'helixel-mark-inner-tag))))
 
 ;;; Tag text object tests
 

@@ -589,62 +589,6 @@ a property list."
              (when (helixel-type-p type) (list type))
              properties))))
 
-(defun helixel-up-block (beg end &optional count)
-  "Move point to the end or beginning of text enclosed by BEG and END.
-BEG and END should be regular expressions matching the opening
-and closing delimiters, respectively.  If COUNT is greater than
-zero point is moved forward otherwise it is moved
-backwards.  Whenever an opening delimiter is found the COUNT is
-increased by one, if a closing delimiter is found the COUNT is
-decreased by one.  The motion stops when COUNT reaches zero.  The
-`match-data' reflects the last successful match (that caused COUNT
-to reach zero).  The behaviour of this functions is similar to
-`up-list'."
-  (let* ((count (or count 1))
-         (forwardp (> count 0))
-         (dir (if forwardp +1 -1)))
-    (catch 'done
-      (while (not (zerop count))
-        (let* ((pnt (point))
-               (cl (save-excursion
-                     (and (re-search-forward (if forwardp end beg) nil t dir)
-                          (or (/= pnt (point))
-                              (progn
-                                ;; zero size match, repeat search from
-                                ;; the next position
-                                (forward-char dir)
-                                (re-search-forward
-                                 (if forwardp end beg)
-                                 nil t dir)))
-                          (point))))
-               (match (match-data t))
-               (op (save-excursion
-                     (and (not (equal beg end))
-                          (re-search-forward (if forwardp beg end) cl t dir)
-                          (or (/= pnt (point))
-                              (progn
-                                ;; zero size match, repeat search from
-                                ;; the next position
-                                (forward-char dir)
-                                (re-search-forward
-                                 (if forwardp beg end)
-                                 cl t dir)))
-                          (point)))))
-          (cond
-           ((not cl)
-            (goto-char (if forwardp (point-max) (point-min)))
-            (set-match-data nil)
-            (throw 'done count))
-           (t
-            (if op
-                (progn
-                  (setq count (if forwardp (1+ count) (1- count)))
-                  (goto-char op))
-              (setq count (if forwardp (1- count) (1+ count)))
-              (if (zerop count) (set-match-data match))
-              (goto-char cl))))))
-      0)))
-
 (defun helixel--get-block-range (op cl selection-type)
   "Return the exclusive range of a visual selection.
 OP and CL are pairs of buffer positions for the opening and
@@ -831,18 +775,16 @@ last successful match (that caused COUNT to reach zero)."
 
 (defun helixel-select-paren (open close beg end type count &optional inclusive)
   "Return a range (BEG END) of COUNT delimited text objects.
-OPEN and CLOSE specify the opening and closing delimiter,
-respectively.  BEG END TYPE are the currently selected (visual)
+OPEN and CLOSE are characters specifying the opening and closing
+delimiters.  BEG END TYPE are the currently selected (visual)
 range.  If INCLUSIVE is non-nil, OPEN and CLOSE are included in
 the range; otherwise they are excluded.
 
 If you aren't inside a pair of the opening and closing delimiters,
 it jumps you inside the next one.  If there isn't one, it errors.
 
-The types of OPEN and CLOSE specify which kind of THING is used
-for parsing with `helixel-select-block'.  If OPEN and CLOSE are
-characters `helixel-up-paren' is used.  Otherwise OPEN and CLOSE
-must be regular expressions and `helixel-up-block' is used.
+Uses `helixel-up-paren' with syntax-table awareness to handle
+nesting and string/comment boundaries.
 
 If the selection is exclusive, whitespace at the end or at the
 beginning of the selection until the end-of-line or beginning-of-line
@@ -851,9 +793,7 @@ is ignored."
       (progn
         ;; we need special linewise exclusive selection
         (unless inclusive (setq inclusive 'exclusive-line))
-        (cond
-         ((and (characterp open) (characterp close))
-          (let ((thing #'(lambda (&optional cnt)
+        (let ((thing #'(lambda (&optional cnt)
                            (helixel-up-paren open close cnt)))
                 (bnd (or (bounds-of-thing-at-point 'helixel-string)
                          (bounds-of-thing-at-point 'helixel-comment)
@@ -891,15 +831,11 @@ is ignored."
                                             inclusive
                                             (or (< extbeg beg) (> extend end))
                                             t)))))))
-         (t
-          (helixel-select-block #'(lambda (&optional cnt)
-                                    (helixel-up-block open close cnt))
-                                beg end type count inclusive))))
     (error ; we aren't in the parens, so find next instance
      (save-match-data
        (goto-char (or (if (and count (> 0 count)) end beg)
                       (point)))
-       (let ((re (if (characterp open) (regexp-quote (string open)) open)))
+       (let ((re (regexp-quote (string open))))
          (if (and (not (looking-at-p re))
                   (re-search-forward re nil t count))
              (progn
@@ -1868,66 +1804,66 @@ Auto-populated by `helixel-define-mark-pair' and `helixel-define-mark-quote'.")
 ;; helixel--current-selection removed; use visual state checks instead
 
 
-(defmacro helixel-define-mark-pair (name open close doc inner-p)
-  "Define mark inner/a functions for a pair of brackets.
-NAME is the name of the bracket pair.  OPEN and CLOSE are the
-opening and closing delimiters.  DOC is a description of the
-pair.  INNER-P non-nil means inner, nil means a."
-  (let ((func-name (intern (format "helixel-mark-%s-%s"
-                                   (if inner-p "inner" "a")
-                                   name)))
-        (func-doc (format "Select %s %s."
-                          (if inner-p "inner" "a")
-                          doc))
-        (inclusive (if inner-p nil t)))
+(defmacro helixel--define-mark-delimited (kind name open close doc inner-p)
+  "Internal: define inner/a mark functions for a delimited textobj.
+KIND is `:pair' or `:quote'.  NAME is the object name.
+OPEN and CLOSE are the opening and closing delimiters (characters).
+DOC is the description.  INNER-P non-nil means inner, nil means a."
+  (declare (indent defun))
+  (let* ((func-name (intern (format "helixel-mark-%s-%s"
+                                    (if inner-p "inner" "a")
+                                    name)))
+         (func-doc (format "Select %s %s."
+                           (if inner-p "inner" "a")
+                           doc))
+         (inclusive (if inner-p nil t))
+         (subcat (if (eq kind :quote) 'quote 'pair))
+         (selector
+          (if (eq kind :quote)
+              `(helixel-select-quote ,open
+                                     (when (helixel--use-region-p)
+                                       (region-beginning))
+                                     (when (helixel--use-region-p)
+                                       (region-end))
+                                     nil count ,inclusive)
+            `(helixel-select-paren ,open ,close
+                                   (when (helixel--use-region-p)
+                                     (region-beginning))
+                                   (when (helixel--use-region-p)
+                                     (region-end))
+                                   nil count ,inclusive)))
+         (surround-pushes
+          (if (eq kind :quote)
+              `((push (cons ,open ,close) helixel--surround-pairs))
+            `((push (cons ,open ,close) helixel--surround-pairs)
+              (push (cons ,close ,open) helixel--surround-pairs)))))
     `(progn
        (defun ,func-name (&optional count)
          ,func-doc
          (interactive "p")
          (when helixel-textobj-action-function
-           (funcall helixel-textobj-action-function 'textobj 'pair))
+           (funcall helixel-textobj-action-function 'textobj ',subcat))
          (helixel--activate-textobj-range
-          (helixel-select-paren ,open ,close
-                                (when (helixel--use-region-p)
-                                  (region-beginning))
-                                (when (helixel--use-region-p)
-                                  (region-end))
-                                nil count ,inclusive)
+          ,selector
           (helixel--make-pair-delimiter ,open ,close)
           count))
-       ,@(unless inner-p
-           `((push (cons ,open ,close) helixel--surround-pairs)
-             (push (cons ,close ,open) helixel--surround-pairs))))))
+       ,@(unless inner-p surround-pushes))))
+
+(defmacro helixel-define-mark-pair (name open close doc inner-p)
+  "Define mark inner/a functions for a pair of brackets.
+NAME is the name of the bracket pair.  OPEN and CLOSE are the
+opening and closing delimiters.  DOC is a description of the
+pair.  INNER-P non-nil means inner, nil means a."
+  (declare (indent defun))
+  `(helixel--define-mark-delimited :pair ,name ,open ,close ,doc ,inner-p))
 
 (defmacro helixel-define-mark-quote (name quote-char doc inner-p)
   "Define mark inner/a functions for a quote character.
 NAME is the name of the quote character.  QUOTE-CHAR is the
 quotation character.  DOC is a description of the quote.
 INNER-P non-nil means inner, nil means a."
-  (let ((func-name (intern (format "helixel-mark-%s-%s"
-                                   (if inner-p "inner" "a")
-                                   name)))
-        (func-doc (format "Select %s %s."
-                          (if inner-p "inner" "a")
-                          doc))
-        (inclusive (if inner-p nil t)))
-    `(progn
-       (defun ,func-name (&optional count)
-         ,func-doc
-         (interactive "p")
-         (when helixel-textobj-action-function
-           (funcall helixel-textobj-action-function 'textobj 'quote))
-         (helixel--activate-textobj-range
-          (helixel-select-quote ,quote-char
-                                (when (helixel--use-region-p)
-                                  (region-beginning))
-                                (when (helixel--use-region-p)
-                                  (region-end))
-                                nil count ',inclusive)
-          (helixel--make-pair-delimiter ,quote-char ,quote-char)
-          count))
-       ,@(unless inner-p
-           `((push (cons ,quote-char ,quote-char) helixel--surround-pairs))))))
+  (declare (indent defun))
+  `(helixel--define-mark-delimited :quote ,name ,quote-char ,quote-char ,doc ,inner-p))
 
 (defmacro helixel-define-mark-object
     (name thing doc subcat &optional restricted-p)

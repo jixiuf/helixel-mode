@@ -954,6 +954,12 @@ backwards."
         (modify-syntax-entry quote "\"")
         (syntax-ppss-flush-cache (point-min))
         (setq reset-parser t))
+      ;; Ensure backslash has escape syntax (see
+      ;; `helixel--bounds-of-quote-at-point').
+      (unless (= (char-syntax ?\\) ?\\)
+        (modify-syntax-entry ?\\ "\\")
+        (syntax-ppss-flush-cache (point-min))
+        (setq reset-parser t))
       ;; global parser state is out of state, use local one
       (let* ((pnt (point))
              (state (save-excursion
@@ -1025,16 +1031,132 @@ The quotation character is specified by the global variable
 
 (defun helixel--bounds-of-quote-at-point ()
   "Return bounds of quoted string at point using `helixel--bounds-quote-char'.
-Temporarily sets the quote character's syntax to string-quote."
+Temporarily sets the quote character's syntax to string-quote and
+ensures backslash has escape syntax."
   (when helixel--bounds-quote-char
     (with-syntax-table (copy-syntax-table (syntax-table))
       (unless (= (char-syntax helixel--bounds-quote-char) ?\")
         (modify-syntax-entry helixel--bounds-quote-char "\""))
+      ;; Ensure backslash acts as an escape character so that \"
+      ;; inside strings is treated as an escaped quote, not a string
+      ;; terminator.  Necessary in modes like text-mode where \ has
+      ;; no escape syntax by default.
+      (unless (= (char-syntax ?\\) ?\\)
+        (modify-syntax-entry ?\\ "\\"))
       (syntax-ppss-flush-cache (point-min))
       (helixel--bounds-of-string-at-point))))
 (put 'helixel-quote 'forward-op #'helixel--forward-quote)
 (put 'helixel-quote 'bounds-of-thing-at-point
      #'helixel--bounds-of-quote-at-point)
+
+;; ── Simple quote (character-based, for use inside comments/strings) ──
+
+(defun helixel--preceded-by-odd-backslashes-p (pos)
+  "Return non-nil if character at POS is preceded by an odd number of backslashes."
+  (let ((n 0))
+    (while (and (> pos (point-min))
+                (eq (char-before pos) ?\\))
+      (setq n (1+ n)
+            pos (1- pos)))
+    (= (logand n 1) 1)))
+
+(defun helixel--bounds-of-quote-simple-at-point ()
+  "Return bounds (BEG . END) of a simple quoted string at point.
+Uses `helixel--bounds-quote-char' as delimiter and searches
+literally without syntax tables.  Handles backslash-escaped quotes.
+Returns nil if point is not inside a simple quoted string."
+  (when helixel--bounds-quote-char
+    (let* ((q helixel--bounds-quote-char)
+           (qstr (char-to-string q))
+           (orig (point)))
+      (save-excursion
+        ;; Start backward search from one past point so that
+        ;; a quote at the current position is included.
+        (unless (eobp) (forward-char))
+        (catch 'helixel--found
+          (while (search-backward qstr nil t)
+            (unless (helixel--preceded-by-odd-backslashes-p (point))
+              (let ((candidate-open (point)))
+                ;; Use save-excursion so failed forward searches
+                ;; don't move point away from the backward scan.
+                (save-excursion
+                  (goto-char (1+ candidate-open))
+                  (let (close)
+                    (while (and (not close)
+                                (search-forward qstr nil t))
+                      (let ((qpos (1- (point))))
+                        (unless (helixel--preceded-by-odd-backslashes-p
+                                 qpos)
+                          (setq close (point)))))
+                    (when (and close
+                               (>= orig candidate-open)
+                               (<= orig close))
+                      (throw 'helixel--found
+                             (cons candidate-open close))))))))
+          nil)))))
+
+(defun helixel--forward-quote-simple (&optional count)
+  "Move forward COUNT simple quoted strings.
+Uses `helixel-forward-quote-char' as delimiter and searches literally
+without syntax tables.  Returns 0 on success, or (* dir remaining) on
+failure."
+  (setq count (or count 1))
+  (let* ((q helixel-forward-quote-char)
+         (qstr (char-to-string q))
+         (dir (if (> count 0) 1 -1))
+         (n (abs count)))
+    (while (and (> n 0)
+                (if (> dir 0)
+                    ;; ── Forward ──
+                    ;; Find next unescaped opening quote.
+                    (let ((open nil))
+                      (while (and (not open) (not (eobp)))
+                        (if (search-forward qstr nil t)
+                            (let ((qpos (1- (point))))
+                              (unless (helixel--preceded-by-odd-backslashes-p
+                                       qpos)
+                                (setq open qpos)))
+                          (setq n 0)))
+                      (when open
+                        ;; Find matching unescaped closing quote.
+                        (goto-char (1+ open))
+                        (let ((close nil))
+                          (while (and (not close) (not (eobp)))
+                            (if (search-forward qstr nil t)
+                                (let ((qpos (1- (point))))
+                                  (unless (helixel--preceded-by-odd-backslashes-p
+                                           qpos)
+                                    (setq close (point))))
+                              (setq n 0)))
+                          (if close
+                              (progn (goto-char close) (setq n (1- n)) t)
+                            (setq n 0) nil))))
+                  ;; ── Backward ──
+                  ;; Find previous unescaped quote (treat as closer).
+                  (let ((close nil))
+                    (while (and (not close) (not (bobp)))
+                      (if (search-backward qstr nil t)
+                          (unless (helixel--preceded-by-odd-backslashes-p
+                                   (point))
+                            (setq close (point)))
+                        (setq n 0)))
+                    (when close
+                      ;; Find matching opener before this closer.
+                      (let ((open nil))
+                        (while (and (not open) (not (bobp)))
+                          (if (search-backward qstr nil t)
+                              (unless (helixel--preceded-by-odd-backslashes-p
+                                       (point))
+                                (setq open (point)))
+                            (setq n 0)))
+                        (if open
+                            (progn (goto-char open) (setq n (1- n)) t)
+                          (setq n 0) nil)))))))
+    (* dir n)))
+
+(put 'helixel-quote-simple 'forward-op #'helixel--forward-quote-simple)
+(put 'helixel-quote-simple 'bounds-of-thing-at-point
+     #'helixel--bounds-of-quote-simple-at-point)
 
 (defun helixel-select-quote-thing
     (thing beg end _type count &optional inclusive)
@@ -1138,12 +1260,22 @@ following (if (> COUNT 0)) or preceeding object (if (< COUNT
 new selection is added to the selection.  If no such whitespace
 exists and the selection contains only one quoted string then the
 preceeding (or following) whitespace is added to the range."
-  (let ((helixel-forward-quote-char quote))
-    (or (let ((bnd (or (bounds-of-thing-at-point 'helixel-comment)
-                       (bounds-of-thing-at-point 'helixel-string))))
+  (let ((helixel-forward-quote-char quote)
+        (helixel--bounds-quote-char quote))
+    (or (let* ((comment-bnd (bounds-of-thing-at-point 'helixel-comment))
+               (bnd (or comment-bnd
+                        (bounds-of-thing-at-point 'helixel-string))))
           (when (and bnd (< (point) (cdr bnd))
                      (/= (char-after (car bnd)) quote)
-                     (/= (char-before (cdr bnd)) quote))
+                     ;; Only check the closing delimiter when we are
+                     ;; inside a string (not a comment).  Comments are
+                     ;; delimited by //, \n or /*, */ — never by a
+                     ;; quote character, so the closing-delimiter check
+                     ;; is both unnecessary and harmful (e.g. when the
+                     ;; last character before the comment end is a
+                     ;; quote).
+                     (or comment-bnd
+                         (/= (char-before (cdr bnd)) quote)))
             (helixel-with-restriction (car bnd) (cdr bnd)
               (ignore-errors (helixel-select-quote-thing
                               'helixel-quote-simple

@@ -118,6 +118,7 @@ Notes:
 ### helixel-repeat-strategy (dot-repeat strategy)
 ```elisp
 (cl-defstruct helixel-repeat-strategy advance apply reset all-buffer-fn all-dir-fn)
+```
 
 ## Key APIs
 
@@ -183,6 +184,7 @@ Notes:
 
 ;; ── Chain ──
 (helixel-repeat-chain-start/end/cancel)  ; interactive commands
+```
 
 ## Build & Test
 
@@ -197,7 +199,7 @@ Stale .elc silently hides changes. `rm -f *.elc && make compile` before testing.
 
 ### Docstring rules
 - Max 80 cols per line (`make lint` checks this)
-- Lisp symbols in backticks: `` `foo' ``
+- Lisp symbols in backticks: ``` `foo' ```
 - Closing `"` must stay — missing it → "End of file during parsing"
 - Open paren at column 0 in docstring must be escaped: `\\(`
 - First line must be a complete sentence

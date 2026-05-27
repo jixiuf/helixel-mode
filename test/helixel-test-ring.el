@@ -168,12 +168,12 @@
         (helixel-event-ring-max 1))
     (helixel-test-with-buffer "hello"
       (helixel--tracking-open 'movement 'char)
-      (let ((m1 (helixel-event-marker helixel--live-event)))
+      (let ((m1 (car (helixel-event-mark-region helixel--live-event))))
         (should (marker-buffer m1))
         (helixel-event-commit))
       ;; Push second entry — first is evicted
       (helixel--tracking-open 'movement 'line)
-      (let ((m2 (helixel-event-marker helixel--live-event)))
+      (let ((m2 (car (helixel-event-mark-region helixel--live-event))))
         (should (marker-buffer m2))
         (helixel-event-commit))
       (should (= (length helixel--event-ring) 1)))))

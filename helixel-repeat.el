@@ -598,7 +598,8 @@ just recreates the selection at the current position
      :advance (lambda (_ed) (funcall advance-fn effective-edit))
      :apply   (lambda (_ed) (helixel--execute-edit effective-edit))
      :reset   (lambda (_ed)
-                (when-let* ((m (helixel-event-marker effective-edit)))
+                (when-let* ((m (car (helixel-event-mark-region
+                                       effective-edit))))
                   (goto-char (marker-position m))))
      :all-buffer-fn (helixel--kind-all-buffer-fn kind)
      :all-dir-fn (helixel--kind-all-dir-fn kind))))

@@ -111,7 +111,7 @@ Notes:
 
 ### helixel-event (unified transaction and ring storage)
 ```elisp
-(cl-defstruct helixel-event op sel payload runner marker
+(cl-defstruct helixel-event op sel payload runner mark-region
               category subcat display timestamp buffer)
 ```
 
@@ -147,7 +147,7 @@ Notes:
 (helixel-event-sel tx)
 (helixel-event-payload tx)
 (helixel-event-runner tx)
-(helixel-event-marker tx)
+(helixel-event-mark-region tx)
 (helixel-event-display tx)
 (helixel--tx-with-payload tx k v)  → new tx with payload entry added
 (helixel--copy-tx tx)              → shallow copy

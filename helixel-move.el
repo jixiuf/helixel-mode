@@ -42,6 +42,11 @@
 (declare-function helixel--repeat-line-pass "helixel-repeat"
                   (tx sel advance start-pos dir cnt &optional preview-p))
 
+(defvar helixel-block-textobj-alist)
+
+;; Forward-declare from helixel-textobj.el (mutual deps via helixel-state).
+(declare-function helixel--block-spec-at-point "helixel-textobj" ())
+
 (defmacro helixel-define-movement (name builtin type &rest options)
   "Define a movement command NAME wrapping BUILTIN with TYPE.
 
@@ -134,84 +139,493 @@ automatically, so this macro only does `push-mark' + activate."
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-word (or count 1))))
+   (helixel--forward-beginning 'helixel-word (or count 1)))
+  (helixel--set-mark-region 'helixel-word :a))
 
 (helixel-define-command helixel-forward-word-end
     (:category movement :subcat word
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-word (or count 1))))
+   (helixel--forward-end 'helixel-word (or count 1)))
+  (helixel--set-mark-region 'helixel-word :inner))
 
 (helixel-define-command helixel-backward-word-start
     (:category movement :subcat word
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-word (- (or count 1)))))
+   (helixel--forward-beginning 'helixel-word (- (or count 1))))
+  (helixel--set-mark-region 'helixel-word :inner))
 
 (helixel-define-command helixel-backward-word-end
     (:category movement :subcat word
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-word (- (or count 1)))))
+   (helixel--forward-end 'helixel-word (- (or count 1))))
+  (helixel--set-mark-region 'helixel-word :a))
 
 (helixel-define-command helixel-forward-WORD-start
     (:category movement :subcat WORD
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-WORD (or count 1))))
+   (helixel--forward-beginning 'helixel-WORD (or count 1)))
+  (helixel--set-mark-region 'helixel-WORD :a))
 
 (helixel-define-command helixel-forward-WORD-end
     (:category movement :subcat WORD
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-WORD (or count 1))))
+   (helixel--forward-end 'helixel-WORD (or count 1)))
+  (helixel--set-mark-region 'helixel-WORD :inner))
 
 (helixel-define-command helixel-backward-WORD
     (:category movement :subcat WORD
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-WORD (- (or count 1)))))
+   (helixel--forward-beginning 'helixel-WORD (- (or count 1))))
+  (helixel--set-mark-region 'helixel-WORD :a))
 
 (helixel-define-command helixel-backward-WORD-end
     (:category movement :subcat WORD
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-WORD (- (or count 1)))))
+   (helixel--forward-end 'helixel-WORD (- (or count 1))))
+  (helixel--set-mark-region 'helixel-WORD :inner))
 
 (helixel-define-command helixel-forward-symbol-start
     (:category movement :subcat symbol
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-symbol (or count 1))))
+   (helixel--forward-beginning 'helixel-symbol (or count 1)))
+  (helixel--set-mark-region 'helixel-symbol :a))
 
 (helixel-define-command helixel-forward-symbol-end
     (:category movement :subcat symbol
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-symbol (or count 1))))
+   (helixel--forward-end 'helixel-symbol (or count 1)))
+  (helixel--set-mark-region 'helixel-symbol :inner))
 
 (helixel-define-command helixel-backward-symbol-start
     (:category movement :subcat symbol
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-symbol (- (or count 1)))))
+   (helixel--forward-beginning 'helixel-symbol (- (or count 1))))
+  (helixel--set-mark-region 'helixel-symbol :a))
 
 (helixel-define-command helixel-backward-symbol-end
     (:category movement :subcat symbol
      :params (&optional count))
   (interactive "p")
   (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-symbol (- (or count 1)))))
+   (helixel--forward-end 'helixel-symbol (- (or count 1))))
+  (helixel--set-mark-region 'helixel-symbol :inner))
+
+;; ── Pair delimiter movement ([ { outward, ] } forward-to-end) ──
+;; [key → outer textobj opening,  ]key → outer textobj closing
+;; {key → inner textobj opening,  }key → inner textobj closing
+
+;; Helpers to construct delimiter objects on demand.
+(defun helixel--delimiter-pair-factory (open-char close-char)
+  "Return a pair delimiter for OPEN-CHAR and CLOSE-CHAR."
+  (helixel--make-pair-delimiter open-char close-char))
+
+(defun helixel--delimiter-tag-factory ()
+  "Return a tag delimiter."
+  (helixel--make-tag-delimiter))
+
+(defun helixel--delimiter-block-factory ()
+  "Return a block delimiter."
+  (helixel--make-block-delimiter))
+
+(defun helixel--delimiter-bounds-at (open-char close-char &optional inner-p)
+  "Return (BEG . END) of enclosing pair delimited by OPEN-CHAR and CLOSE-CHAR.
+If INNER-P is non-nil, exclude the delimiters from the bounds.
+Convenience wrapper around `helixel--generic-bounds-at' for pair delimiters."
+  (helixel--generic-bounds-at
+   (helixel--make-pair-delimiter open-char close-char) inner-p))
+
+(defun helixel--delimiter-bounds-next (open-char close-char &optional inner-p)
+  "Skip past current pair of OPEN-CHAR/CLOSE-CHAR, find next pair.
+Return (BEG . END) of the found pair.
+If INNER-P is non-nil, exclude delimiters from bounds.
+Delegates to `helixel--generic-bounds-next' for consistent behavior."
+  (helixel--generic-bounds-next
+   (helixel--make-pair-delimiter open-char close-char) inner-p))
+
+(defmacro helixel--define-delimiter-movement (name outer-p forward-p
+                                                   factory &rest factory-args)
+  "Define a delimiter movement command NAME.
+OUTER-P non-nil → outer (a), nil → inner (i).
+FORWARD-P non-nil → forward-to-end (] }), nil → outward-to-open ([ {).
+FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
+  (declare (indent defun))
+  (let ((inner-p (not outer-p))
+        (bounds-fn (if forward-p
+                       'helixel--generic-bounds-next
+                     'helixel--generic-bounds-at)))
+    `(helixel-define-command ,name
+         (:category movement :subcat pair :clear-highlights nil)
+       (interactive)
+       (deactivate-mark)
+       (let* ((d (,factory ,@factory-args))
+              (b (,bounds-fn d ,inner-p)))
+         (when b
+           (helixel--set-mark-region b)
+           (let ((pos (if ,forward-p (cdr b) (car b))))
+             (goto-char pos)))))))
+
+;; ── Pair delimiters (parens, brackets, braces, angle, quotes) ──
+
+(helixel--define-delimiter-movement helixel-outer-paren t nil
+  helixel--delimiter-pair-factory ?\( ?\))
+(helixel--define-delimiter-movement helixel-next-paren-end t t
+  helixel--delimiter-pair-factory ?\( ?\))
+(helixel--define-delimiter-movement helixel-inner-outer-paren nil nil
+  helixel--delimiter-pair-factory ?\( ?\))
+(helixel--define-delimiter-movement helixel-inner-next-paren-end nil t
+  helixel--delimiter-pair-factory ?\( ?\))
+
+(helixel--define-delimiter-movement helixel-outer-bracket t nil
+  helixel--delimiter-pair-factory ?\[ ?\])
+(helixel--define-delimiter-movement helixel-next-bracket-end t t
+  helixel--delimiter-pair-factory ?\[ ?\])
+(helixel--define-delimiter-movement helixel-inner-outer-bracket nil nil
+  helixel--delimiter-pair-factory ?\[ ?\])
+(helixel--define-delimiter-movement helixel-inner-next-bracket-end nil t
+  helixel--delimiter-pair-factory ?\[ ?\])
+
+(helixel--define-delimiter-movement helixel-outer-brace t nil
+  helixel--delimiter-pair-factory ?{ ?})
+(helixel--define-delimiter-movement helixel-next-brace-end t t
+  helixel--delimiter-pair-factory ?{ ?})
+(helixel--define-delimiter-movement helixel-inner-outer-brace nil nil
+  helixel--delimiter-pair-factory ?{ ?})
+(helixel--define-delimiter-movement helixel-inner-next-brace-end nil t
+  helixel--delimiter-pair-factory ?{ ?})
+
+(helixel--define-delimiter-movement helixel-outer-angle t nil
+  helixel--delimiter-pair-factory ?< ?>)
+(helixel--define-delimiter-movement helixel-next-angle-end t t
+  helixel--delimiter-pair-factory ?< ?>)
+(helixel--define-delimiter-movement helixel-inner-outer-angle nil nil
+  helixel--delimiter-pair-factory ?< ?>)
+(helixel--define-delimiter-movement helixel-inner-next-angle-end nil t
+  helixel--delimiter-pair-factory ?< ?>)
+
+(helixel--define-delimiter-movement helixel-outer-double-quote t nil
+  helixel--delimiter-pair-factory ?\" ?\")
+(helixel--define-delimiter-movement helixel-next-double-quote-end t t
+  helixel--delimiter-pair-factory ?\" ?\")
+(helixel--define-delimiter-movement helixel-inner-outer-double-quote nil nil
+  helixel--delimiter-pair-factory ?\" ?\")
+(helixel--define-delimiter-movement helixel-inner-next-double-quote-end nil t
+  helixel--delimiter-pair-factory ?\" ?\")
+
+(helixel--define-delimiter-movement helixel-outer-single-quote t nil
+  helixel--delimiter-pair-factory ?' ?')
+(helixel--define-delimiter-movement helixel-next-single-quote-end t t
+  helixel--delimiter-pair-factory ?' ?')
+(helixel--define-delimiter-movement helixel-inner-outer-single-quote nil nil
+  helixel--delimiter-pair-factory ?' ?')
+(helixel--define-delimiter-movement helixel-inner-next-single-quote-end nil t
+  helixel--delimiter-pair-factory ?' ?')
+
+(helixel--define-delimiter-movement helixel-outer-back-quote t nil
+  helixel--delimiter-pair-factory ?` ?`)
+(helixel--define-delimiter-movement helixel-next-back-quote-end t t
+  helixel--delimiter-pair-factory ?` ?`)
+(helixel--define-delimiter-movement helixel-inner-outer-back-quote nil nil
+  helixel--delimiter-pair-factory ?` ?`)
+(helixel--define-delimiter-movement helixel-inner-next-back-quote-end nil t
+  helixel--delimiter-pair-factory ?` ?`)
+
+;; ── Tag delimiter movement ──
+
+(helixel--define-delimiter-movement helixel-outer-tag t nil
+  helixel--delimiter-tag-factory)
+(helixel--define-delimiter-movement helixel-next-tag-end t t
+  helixel--delimiter-tag-factory)
+(helixel--define-delimiter-movement helixel-inner-outer-tag nil nil
+  helixel--delimiter-tag-factory)
+(helixel--define-delimiter-movement helixel-inner-next-tag-end nil t
+  helixel--delimiter-tag-factory)
+
+;; ── Block delimiter movement ──
+
+(helixel--define-delimiter-movement helixel-outer-block t nil
+  helixel--delimiter-block-factory)
+(helixel--define-delimiter-movement helixel-next-block-end t t
+  helixel--delimiter-block-factory)
+(helixel--define-delimiter-movement helixel-inner-outer-block nil nil
+  helixel--delimiter-block-factory)
+(helixel--define-delimiter-movement helixel-inner-next-block-end nil t
+  helixel--delimiter-block-factory)
+
+;; ── Generic bounds helpers (used by the macro above) ──
+
+(defun helixel--generic-bounds-next (d &optional inner-p)
+  "Skip past current delimiter D, find next, return (BEG . END).
+If INNER-P is non-nil, exclude delimiters from bounds.
+If no next opening delimiter exists, falls back to the current
+pair's bounds so callers can still move to that closing."
+  (save-excursion
+    (let* ((orig-pt (point))
+           (cur-bounds (save-excursion
+                         (condition-case nil
+                             (helixel--generic-bounds-at d inner-p)
+                           (error nil))))
+           (open (helixel-delimiter-open d))
+           (open-str (and open (if (characterp open)
+                                   (char-to-string open)
+                                 open)))
+           (tag-p (eq (helixel-delimiter-type d) 'tag)))
+      ;; Step 1: skip past current enclosing pair (or climb outward
+      ;; if already at its closing edge).
+      (when cur-bounds
+        (setq cur-bounds
+              (condition-case nil
+                  (pcase-let* ((`(,_ob ,_oe ,cb ,ce)
+                                (helixel-delimiter-bounds-flat d))
+                               (at-closing
+                                (>= orig-pt cb)))
+                    (if at-closing
+                        (save-excursion
+                          (goto-char ce)
+                          (helixel--generic-bounds-at d inner-p t))
+                      (goto-char ce)
+                      cur-bounds))
+                (error cur-bounds))))
+      ;; Step 2: return enclosing pair's bounds, or search forward
+      ;; for the first opening delimiter if not inside any pair.
+      (or cur-bounds
+          (when open-str
+            (when (search-forward open-str nil t)
+              (goto-char (1+ (match-beginning 0)))
+              (when tag-p (search-forward ">" nil t))
+              (helixel--generic-bounds-at d inner-p t)))))))
+
+;; ── Paragraph / Sentence / Function movement ──
+
+(helixel-define-command helixel-forward-paragraph-start
+    (:category movement :subcat paragraph
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-beginning 'helixel-paragraph (or count 1)))
+  (helixel--set-mark-region 'helixel-paragraph :a))
+
+(helixel-define-command helixel-backward-paragraph-start
+    (:category movement :subcat paragraph
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-beginning 'helixel-paragraph (- (or count 1))))
+  (helixel--set-mark-region 'helixel-paragraph :a))
+
+(helixel-define-command helixel-forward-paragraph-end
+    (:category movement :subcat paragraph
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-end 'helixel-paragraph (or count 1)))
+  (helixel--set-mark-region 'helixel-paragraph :a))
+
+(helixel-define-command helixel-backward-paragraph-end
+    (:category movement :subcat paragraph
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-end 'helixel-paragraph (- (or count 1))))
+  (helixel--set-mark-region 'helixel-paragraph :a))
+
+(helixel-define-command helixel-forward-sentence-end
+    (:category movement :subcat sentence
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-end 'helixel-sentence (or count 1)))
+  (helixel--set-mark-region 'helixel-sentence :a))
+
+(helixel-define-command helixel-backward-sentence-start
+    (:category movement :subcat sentence
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-beginning 'helixel-sentence (- (or count 1))))
+  (helixel--set-mark-region 'helixel-sentence :a))
+
+(helixel-define-command helixel-forward-sentence-start
+    (:category movement :subcat sentence
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-beginning 'helixel-sentence (or count 1)))
+  (helixel--set-mark-region 'helixel-sentence :a))
+
+(helixel-define-command helixel-backward-sentence-end
+    (:category movement :subcat sentence
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-end 'helixel-sentence (- (or count 1))))
+  (helixel--set-mark-region 'helixel-sentence :a))
+
+(helixel-define-command helixel-forward-function-end
+    (:category movement :subcat function
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-end 'helixel-function (or count 1)))
+  (helixel--set-mark-region 'helixel-function :a))
+
+(helixel-define-command helixel-backward-function-start
+    (:category movement :subcat function
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-beginning 'helixel-function (- (or count 1))))
+  (helixel--set-mark-region 'helixel-function :a))
+
+(helixel-define-command helixel-forward-function-start
+    (:category movement :subcat function
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-beginning 'helixel-function (or count 1)))
+  (helixel--set-mark-region 'helixel-function :a))
+
+(helixel-define-command helixel-backward-function-end
+    (:category movement :subcat function
+     :params (&optional count))
+  (interactive "p")
+  (helixel--with-movement-surround
+   (helixel--forward-end 'helixel-function (- (or count 1))))
+  (helixel--set-mark-region 'helixel-function :a))
+
+(defun helixel--jump-target-for-delimiter (d orig &optional no-close-backoff
+                                                mark-thing)
+  "Try to find a jump target using delimiter D.
+ORIG is the original point.  Returns (TARGET . (OB . CE)) on success,
+or nil if no enclosing pair found.
+When NO-CLOSE-BACKOFF is non-nil, passed through to `helixel-delimiter-bounds'.
+When MARK-THING is non-nil, stores bounds as markers in the
+live event's \=:mark-region for `\;' marking."
+  (save-excursion
+    (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
+      (funcall adj))
+    (condition-case nil
+        (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                      (helixel-delimiter-bounds-flat d no-close-backoff)))
+          (when mark-thing
+            (helixel--set-mark-region (cons ob ce)))
+          (cons (if (<= (abs (- orig ob)) (abs (- orig ce))) ce ob)
+                (cons ob ce)))
+      (error nil))))
+
+(defun helixel--jump-syntax-table (char-a char-b orig)
+  "Try to jump via syntax-table from any position.
+Returns a cons (TARGET . (OB . CE)) on success, or nil.
+CHAR-A and CHAR-B are as in `helixel-jump-to-match'.
+ORIG is the original point before jumping."
+  (save-excursion
+    (condition-case nil
+        (let ((match-end
+               (progn
+                 (cond
+                  ((and char-a (memq (char-syntax char-a) '(4 ?\( ?\))))
+                   (forward-list 1))
+                  ((and char-b (memq (char-syntax char-b) '(5 ?\( ?\))))
+                   (forward-list -1))
+                  (t
+                   (up-list 1)))
+                 (point))))
+          (goto-char match-end)
+          (condition-case nil
+              (backward-list 1)
+            (error nil))
+          (let ((b (if (>= match-end (point)) (point) match-end))
+                (e (if (>= match-end (point)) match-end (point))))
+            (helixel--set-mark-region (cons b e))
+            (cons (if (<= (abs (- orig b)) (abs (- orig e))) e b)
+                  (cons b e))))
+      (error nil))))
+
+(helixel-define-command helixel-jump-to-match
+    (:category movement :subcat match)
+  "Jump between matching delimiters.
+Uses the textobj delimiter protocol to find the matching end of
+any pair (parens, brackets, braces, quotes, angle-brackets),
+XML tags, or org/markdown blocks.  Falls back to syntax-table
+for unmatched bracket characters."
+  (let* ((orig (point))
+         ;; Build canonical open→close and close→open maps.
+         (open->close
+          (let ((map (make-hash-table)))
+            (dolist (pair helixel--surround-pairs)
+              (let ((a (car pair)) (b (cdr pair)))
+                (when (<= a b)            ; <= so quotes (a=b) are included
+                  (puthash a b map))))
+            map))
+         (close->open
+          (let ((map (make-hash-table)))
+            (maphash (lambda (k v) (puthash v k map)) open->close)
+            map))
+         (char-a (and (not (eobp)) (char-after)))
+         (char-b (and (not (bobp)) (char-before)))
+         (open-char
+          (or (and char-a (gethash char-a open->close) char-a)
+              (and char-b (gethash char-b open->close) char-b)
+              (and char-a (gethash char-a close->open))
+              (and char-b (gethash char-b close->open))))
+         (close-char (and open-char (gethash open-char open->close))))
+    (catch 'done
+      ;; ── Pair delimiters (parens, brackets, braces, quotes) ──
+      ;; Angle brackets (< >) are excluded — handled as tags below.
+      ;; Skip pair handling when on a block delimiter line
+      ;; (e.g. markdown ``` fences — backtick is also a quote char).
+      (when (and open-char close-char (not (eq open-char ?<))
+                 (not (and (eq open-char ?\`)
+                           (helixel--block-spec-at-point))))
+        (let* ((d (helixel--make-pair-delimiter open-char close-char))
+               (on-opener (and char-a (eq char-a open-char)))
+               (equalp (eq open-char close-char)))
+          (when on-opener (forward-char))
+          (when-let* ((result (helixel--jump-target-for-delimiter
+                              d orig (and on-opener equalp))))
+            (goto-char (car result))
+            (throw 'done t))))
+      ;; ── Syntax-table fallback (innermost bracket from any pos) ──
+      (when-let* ((result (helixel--jump-syntax-table char-a char-b orig)))
+        (goto-char (car result))
+        (throw 'done t))
+      ;; ── Tags (XML/HTML tags) ──
+      (when-let* ((d (helixel--make-tag-delimiter))
+                  (result (helixel--jump-target-for-delimiter
+                           d orig nil 'helixel-mark-a-tag)))
+        (goto-char (car result))
+        (throw 'done t))
+      ;; ── Blocks (org, markdown) ──
+      (when-let* ((d (helixel--make-block-delimiter))
+                  (result (helixel--jump-target-for-delimiter
+                           d orig)))
+        (goto-char (car result))
+        (throw 'done t))
+      ;; ── Syntax-table fallback (final safety net) ──
+      (when-let* ((result (helixel--jump-syntax-table char-a char-b orig)))
+        (goto-char (car result))
+        (throw 'done t)))
+    (when (= (point) orig)
+      (message "No matching bracket found"))))
 
 (helixel-define-command helixel-go-beginning-buffer
     (:category movement :subcat goto)
@@ -433,7 +847,7 @@ For chain ops, does a single pass from the buffer edge."
   (let* ((sel (helixel-event-sel edit))
          (op (helixel-event-op edit))
          (reverse-p (helixel-repeat-prefix-reverse-p prefix))
-         (marker (helixel-event-marker edit))
+         (marker (car (helixel-event-mark-region edit)))
          (chain-p (eq op 'chain)))
     (if chain-p
         (let* ((dir (if reverse-p -1

@@ -349,11 +349,13 @@ previous selection command."
 ;; selection and surround add/delete/replace.
 ;;
 ;; Schema:
-;;   (:type    pair|quote|tag|block|regex
-;;    :open    char|string   ;; opening delimiter
+;;   (:type    pair|tag|regex
+;;    :open    char|string   ;; opening delimiter (for char-at detection)
 ;;    :close   char|string   ;; closing delimiter
 ;;    :finder  function      ;; (fn dir) → 0|N, moves point, sets match-data
-;;    :nl-p    boolean)      ;; t → add/delete handles adjacent newlines
+;;    :nl-p    boolean       ;; t → add/delete handles adjacent newlines
+;;    :match-close function) ;; (fn tag-name) → 0, for tag delimiters only
+;;    :adjust-for-jump fn)   ;; move point into content before jump
 ;;
 ;; Builder functions live in helixel-textobj.el (they reference
 ;; textobj-engine functions via closures).
@@ -380,6 +382,20 @@ previous selection command."
   "Return non-nil if delimiter D uses newline handling."
   (plist-get d :nl-p))
 
+(defsubst helixel-delimiter-match-close (d)
+  "Return the :match-close function of delimiter D, or nil.
+The function takes a tag name and searches forward from point
+for the matching closing tag, counting nested same-name pairs."
+  (plist-get d :match-close))
+
+(defsubst helixel-delimiter-adjust-for-jump (d)
+  "Return the :adjust-for-jump function of delimiter D, or nil.
+If non-nil, callers like `jump-to-match' call this function before
+`helixel-delimiter-bounds' to move point inside the pair, so that
+the enclosing-pair lookup finds the pair whose delimiter point is
+on rather than an outer enclosing pair."
+  (plist-get d :adjust-for-jump))
+
 ;; ── Delimiter operations (stateless, no external deps) ──
 
 (defvar-local helixel--block-chosen-spec nil
@@ -387,24 +403,23 @@ previous selection command."
 Set by block finder functions during `helixel-delimiter-bounds'.
 Consumed by callers that need to know which block spec was matched.")
 
-(defun helixel--find-equal-char (char dir)
-  "Like `helixel-up-paren' but for equal open/close CHAR (quotes).
-DIR +1 forward, -1 backward.  Returns 0 on success, 1 on failure."
-  (if (> dir 0)
-      (if (search-forward (string char) nil t) 0 1)
-    (if (search-backward (string char) nil t) 0 1)))
-
 (defun helixel-delimiter-find (d dir)
   "Find delimiter D in DIR (+1 forward, -1 backward).
 Returns 0 on success, non-zero on failure.  Moves point and sets `match-data'."
   (funcall (helixel-delimiter-finder d) dir))
 
-(defun helixel-delimiter-bounds (d)
+(defun helixel-delimiter-bounds (d &optional no-close-backoff)
   "Return ((OB . OE) . (CB . CE)) for the innermost delimiter D at point.
-OB, OE: open delimiter beg/end.  CB, CE: close delimiter beg/end."
+OB, OE: open delimiter beg/end.  CB, CE: close delimiter beg/end.
+When NO-CLOSE-BACKOFF is non-nil, skip stepping back before a
+closing delimiter.  Callers that just moved inside from the
+opening delimiter (e.g. `helixel--generic-bounds-next' step 2)
+should set this to avoid a false match for equal open/close chars."
   (let ((close (helixel-delimiter-close d)))
     (when (eobp) (skip-chars-backward " \t\n\r"))
-    (when (and (characterp close) (> (point) 1) (= (char-before) close))
+    (when (and (not no-close-backoff)
+               (characterp close) (> (point) 1)
+               (= (char-before) close))
       (backward-char))
     (unwind-protect
         (progn
@@ -412,11 +427,37 @@ OB, OE: open delimiter beg/end.  CB, CE: close delimiter beg/end."
             (user-error "No enclosing delimiter"))
           (let ((ob (match-beginning 0)) (oe (match-end 0)))
             (goto-char oe)
-            (unless (zerop (helixel-delimiter-find d 1))
-              (user-error "No enclosing delimiter"))
+            ;; For delimiters with a :match-close method (tags), use
+            ;; targeted search so nested different-name pairs don't
+            ;; steal the match.
+            (if-let* ((mc (helixel-delimiter-match-close d))
+                     (tag (match-string 1)))
+                (funcall mc tag)
+              (unless (zerop (helixel-delimiter-find d 1))
+                (user-error "No enclosing delimiter")))
             (let ((cb (match-beginning 0)) (ce (match-end 0)))
               (cons (cons ob oe) (cons cb ce)))))
       (setq helixel--block-chosen-spec nil))))
+
+(defun helixel-delimiter-bounds-flat (d &optional no-close-backoff)
+  "Return (OB OE CB CE) for the innermost delimiter D at point.
+OB, OE: open delimiter beg/end.  CB, CE: close delimiter beg/end.
+Like `helixel-delimiter-bounds' but returns a flat list instead
+of nested cons cells for easier destructuring.
+Optional NO-CLOSE-BACKOFF is passed through to `helixel-delimiter-bounds'."
+  (pcase-let* ((`((,ob . ,oe) . (,cb . ,ce))
+                (helixel-delimiter-bounds d no-close-backoff)))
+    (list ob oe cb ce)))
+
+(defun helixel--generic-bounds-at (d &optional inner-p no-close-backoff)
+  "Return (BEG . END) of enclosing delimiter D.
+If INNER-P is non-nil, exclude delimiters from bounds.
+When NO-CLOSE-BACKOFF is non-nil, skip the `backward-char' heuristic
+in `helixel-delimiter-bounds' for the case where point is right
+after the closing delimiter."
+  (pcase-let* ((`(,ob ,oe ,cb ,ce)
+                (helixel-delimiter-bounds-flat d no-close-backoff)))
+    (if inner-p (cons oe cb) (cons ob ce))))
 
 (defun helixel--strip-adjacent-newlines (open-end close-beg)
   "Adjust OPEN-END and CLOSE-BEG to exclude adjacent newlines.
@@ -484,7 +525,9 @@ Slots:
   SEL       — `helixel-sel' struct or nil
   PAYLOAD   — plist of operator-specific data (:text :keys ...)
   RUNNER    — function (event) → nil, executes the edit at replay time
-  MARKER    — position marker for `;` jumping to session start
+  MARK-REGION — cons (START . END) of two markers; start serves
+                 as the `;` jump target; degenerate (= point . point)
+                 when no explicit region is set by the command
   CATEGORY  — symbol for action classification (edit search movement ...)
   SUBCAT    — symbol sub-classification (kill search word ...)
   DISPLAY   — string or function (event) → string for history
@@ -494,7 +537,7 @@ Slots:
   sel
   payload
   runner
-  marker
+  mark-region
   category
   subcat
   display
@@ -507,9 +550,11 @@ Copies marker (via `copy-marker') and sel (via `helixel-sel--copy')
 so the copy is fully independent of the original."
   (when (helixel-event-p event)
     (let ((copy (helixel-event--shallow-copy event)))
-      (when-let* ((m (helixel-event-marker event)))
-        (setf (helixel-event-marker copy)
-              (copy-marker m (marker-insertion-type m))))
+      (when-let* ((mr (helixel-event-mark-region event))
+                  ((consp mr)))
+        (setf (helixel-event-mark-region copy)
+              (cons (copy-marker (car mr))
+                    (copy-marker (cdr mr) t))))
       (when-let* ((s (helixel-event-sel event)))
         (setf (helixel-event-sel copy) (helixel-sel--copy s)))
       copy)))
@@ -527,8 +572,8 @@ Two events at different positions are never considered the same."
                               (helixel-event-sel e2))
          (equal (helixel-event-payload e1)
                 (helixel-event-payload e2))
-         (= (marker-position (helixel-event-marker e1))
-            (marker-position (helixel-event-marker e2))))))
+         (= (marker-position (car (helixel-event-mark-region e1)))
+            (marker-position (car (helixel-event-mark-region e2)))))))
 
 (defun helixel-event-format (event)
   "Return display string for EVENT.
@@ -584,7 +629,7 @@ All other keys form the :payload plist."
      :op op
      :sel sel-ctx
      :payload (nreverse rest)
-     :marker (point-marker)
+     :mark-region (let ((pm (point-marker))) (cons pm (copy-marker pm t)))
      :runner runner
      :display display-field
      :timestamp (float-time)
@@ -801,10 +846,15 @@ falls back to the operator registry."
   "Return the opposite direction of DIR.  `forward' <-> `backward'."
   (if (eq dir 'forward) 'backward 'forward))
 
+
+
+(defvar helixel--action-pos)  ; defined in helixel-ring.el
+
 (defun helixel--clear-data ()
   "Clear any intermediate data, e.g. selections/mark.
 Used by state machine, surround, and jump navigation."
   (setq helixel--selection-type nil)
+  (setq helixel--action-pos nil)
   (when rectangle-mark-mode
     (rectangle-mark-mode -1))
   (deactivate-mark))

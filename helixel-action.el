@@ -33,8 +33,60 @@
 ;;; Code:
 
 (require 'cl-lib)
+
 (require 'helixel-core)
 (require 'helixel-ring)
+
+;; ----------------------------------------------------------------------
+;; Mark region helpers (used by movement commands + action cycle)
+;; ----------------------------------------------------------------------
+
+(defun helixel--compute-mark-bounds (thing &optional outer-p)
+  "Compute mark bounds for THING at point.
+THING is a thingatpt symbol (e.g. \='helixel-word, \='helixel-symbol).
+If OUTER-P is non-nil, include trailing whitespace.
+Returns (BEG . END) or nil if no bounds found."
+  (when-let* ((b (bounds-of-thing-at-point thing)))
+    (if outer-p
+        (save-excursion
+          (goto-char (cdr b))
+          (skip-chars-forward " \t")
+          (cons (car b) (point)))
+      (cons (car b) (cdr b)))))
+
+(defun helixel--set-mark-region (thing-or-bounds &optional outer-p)
+  "Set the \=:mark-region slot of `helixel--live-event'.
+If THING-OR-BOUNDS is a cons (BEG . END), use it as pre-computed bounds.
+If it is a thingatpt symbol, compute bounds via
+`helixel--compute-mark-bounds' at point.
+OUTER-P only applies when THING-OR-BOUNDS is a symbol.
+No-op if action tracking is inhibited, no live event exists,
+or bounds are nil.
+
+The mark-region is a cons of two markers (START . END).
+These survive buffer edits and are used by the action cycle (`\;')
+to mark the region without re-computing bounds.
+
+Old markers are freed before replacement to prevent leaks."
+  (when (and (not helixel--inhibit-action-track)
+             helixel--live-event)
+    (let* ((old (helixel-event-mark-region helixel--live-event))
+           (bounds (if (consp thing-or-bounds)
+                       thing-or-bounds
+                     (save-excursion
+                       (goto-char (car (helixel-event-mark-region
+                                         helixel--live-event)))
+                       (helixel--compute-mark-bounds
+                        thing-or-bounds outer-p)))))
+      (when bounds
+        ;; Free old markers to prevent leaks.
+        (when (consp old)
+          (set-marker (car old) nil)
+          (set-marker (cdr old) nil))
+        (let ((beg-marker (copy-marker (car bounds)))
+              (end-marker (copy-marker (cdr bounds) t)))
+          (setf (helixel-event-mark-region helixel--live-event)
+                (cons beg-marker end-marker)))))))
 
 ;; ----------------------------------------------------------------------
 ;; Custom groups
@@ -49,6 +101,14 @@
   "Event :category symbols that `;' (`helixel-action-cycle') navigates.
 Categories not listed here are invisible during cycling."
   :type '(repeat symbol)
+  :group 'helixel)
+
+(defcustom helixel-semicolon-mark-thing t
+  "Select the full thing on first `;' after a movement/seek command.
+When non-nil, the first `;' selects the full thing (word, paren,
+paragraph, etc.) instead of starting the action cycle.  The next `;' does
+the normal action cycle."
+  :type 'boolean
   :group 'helixel)
 
 ;; ----------------------------------------------------------------------
@@ -138,11 +198,6 @@ element returning non-nil when the entry is visible."
 ;; Marker jump helper
 ;; ----------------------------------------------------------------------
 
-(defun helixel--jump-to-marker (marker)
-  "Set mark at MARKER, keeping point unchanged."
-  (when (and (markerp marker) (marker-buffer marker))
-    (push-mark marker t t)))
-
 ;; ----------------------------------------------------------------------
 ;; ; cycling — session jump within buffer
 ;; ----------------------------------------------------------------------
@@ -162,12 +217,32 @@ element returning non-nil when the entry is visible."
             (helixel-event-display-format event))))
 
 (defun helixel-action--cycle-show (pos ring)
-  "Show the group-start entry for the group containing RING[POS]."
+  "Show the group-start entry for the group containing RING[POS].
+If the event has a non-degenerate \=:mark-region and
+`helixel-semicolon-mark-thing' is non-nil, mark the region
+using the pre-computed markers.
+
+If the jump results in no useful region change and no marking
+was performed, automatically advance to the next older event."
   (let* ((gpos (helixel-action--cycle-group-start pos ring))
-         (event (nth gpos ring)))
+         (event (nth gpos ring))
+         (first-call (null helixel--action-pos))
+         (did-mark nil))
     (setq helixel--action-pos gpos)
-    (helixel--jump-to-marker (helixel-event-marker event))
-    (message "%s" (helixel-action--cycle-display event gpos ring))))
+    (let* ((mr (helixel-event-mark-region event))
+           (a (marker-position (car mr)))
+           (b (marker-position (cdr mr)))
+           (degenerate (= a b)))
+      (if (and helixel-semicolon-mark-thing first-call (not degenerate))
+          (progn
+            (let ((p (point)))
+              (push-mark (if (> (abs (- p a)) (abs (- p b))) a b) t t)
+              (activate-mark)
+              (setq did-mark t)))
+        (push-mark a t t)))
+    (message "%s" (helixel-action--cycle-display event gpos ring))
+    ;; Auto-advance: skip events that produce no useful region change.
+    (helixel-action--cycle-auto-advance did-mark first-call)))
 
 (defun helixel-action--same-group-p (a b)
   "Return non-nil if `helixel-event' structs A and B share a group.
@@ -189,11 +264,36 @@ Uses `helixel-action--same-group-p' as the grouping predicate."
   (helixel--grouped-ring-group-newest ring pos
     #'helixel-action--same-group-p))
 
+(defun helixel-action--cycle-auto-advance (did-mark first-call)
+  "Auto-advance the action cycle when \=`;\=' produced no useful change.
+DID-MARK is non-nil when mark-thing selected a region.
+FIRST-CALL is non-nil when this is the first \=`;\=' after a movement.
+
+When the current event doesn't change point or the region, skip
+forward to the next older event to avoid cycling through dead spots."
+  (when (and (not (use-region-p))
+             (not did-mark)
+             (not first-call))
+    (helixel--action-cycle)))
+
 (defun helixel-action-cycle (&optional arg)
   "Cycle through `helixel--event-ring' entries with `;'.
-Without prefix ARG: go to older action.
-With prefix ARG (`C-u'): go to newer action or restore live event."
+If a pair-movement was the last command, the first `;' jumps to
+the event and marks the full thing (meep-style).
+Second `;' does the normal action cycle.
+
+Optional prefix ARG is passed to the underlying commands."
   (interactive "P")
+  (unless (eq last-command 'helixel-action-cycle)
+    (setq helixel--action-pos nil))
+  (helixel--action-cycle arg))
+
+(defun helixel--action-cycle (&optional arg)
+  "Internal: cycle logic without `last-command' guard.
+Called by `helixel-action-cycle' and recursive auto-advance.
+Optional prefix ARG is passed to the underlying commands."
+  ;; Normal action cycle — marking is handled inline when showing
+  ;; events that have a non-degenerate :mark-region.
   (if arg
       ;; C-u ; → go forward (newer)
       (cond
@@ -211,8 +311,8 @@ With prefix ARG (`C-u'): go to newer action or restore live event."
         (if helixel--live-event
             (progn
               (setq helixel--action-pos nil)
-              (helixel--jump-to-marker
-               (helixel-event-marker helixel--live-event))
+              (push-mark (car (helixel-event-mark-region
+                                  helixel--live-event)) t t)
               (message "[live] %s"
                        (helixel-event-display-format helixel--live-event)))
           (message "At newest")))
@@ -225,7 +325,16 @@ With prefix ARG (`C-u'): go to newer action or restore live event."
                   #'helixel-action--cycle-visible-p)))
         (if pos
             (helixel-action--cycle-show pos helixel--event-ring)
-          (message "No more"))))
+          ;; No older group: jump to current group-start marker
+          ;; to expand the visible region (meep-style wrap).
+          (let ((gpos (helixel-action--cycle-group-start
+                       helixel--action-pos helixel--event-ring)))
+            (push-mark (car (helixel-event-mark-region
+                                (nth gpos helixel--event-ring))) t t)
+            (message "%s"
+                     (helixel-action--cycle-display
+                      (nth gpos helixel--event-ring)
+                      gpos helixel--event-ring))))))
      (helixel--live-event
       ;; Commit live event first, then show ring[0]
       (helixel-event-commit)
@@ -257,7 +366,7 @@ CATEGORY defaults to `user', SUBCAT defaults to `jump'."
      (make-helixel-event
       :category cat
       :subcat sub
-      :marker (point-marker)
+      :mark-region (let ((pm (point-marker))) (cons pm (copy-marker pm t)))
       :timestamp (float-time)
       :buffer (current-buffer)))))
 
@@ -289,9 +398,10 @@ Adds :before advice to record position before SYMBOL runs."
 (defun helixel--jump-visible-p (entry)
   "Return non-nil if jump log ENTRY is visible during cycling."
   (and (memq (plist-get entry :category) helixel-jump-cycle-categories)
-       (let ((m (plist-get entry :marker))
+       (let ((mr (plist-get entry :mark-region))
              (buf (plist-get entry :buffer)))
-         (and (markerp m) (marker-buffer m) (buffer-live-p buf)))))
+         (and (consp mr) (markerp (car mr))
+              (marker-buffer (car mr)) (buffer-live-p buf)))))
 
 (defun helixel--jump-same-group-p (a b)
   "Return non-nil if A and B belong to the same jump group."
@@ -332,13 +442,18 @@ Adds :before advice to record position before SYMBOL runs."
       (cl-decf gpos)
       (setq entry (nth gpos helixel--global-jump-log)))
     (let ((buf (plist-get entry :buffer))
-          (m (plist-get entry :marker)))
-      (when (and (markerp m) (marker-buffer m) (buffer-live-p buf))
+          (mr (plist-get entry :mark-region)))
+      (when (and (consp mr) (markerp (car mr))
+                 (marker-buffer (car mr)) (buffer-live-p buf))
         (let ((cross-buffer (not (eq buf (current-buffer)))))
           (setq helixel--jump-pos gpos)
           (when cross-buffer
             (switch-to-buffer buf))
-          (goto-char (marker-position m))
+          (goto-char (marker-position (car mr)))
+          (when (consp mr)
+            (push-mark (car mr) t t)
+            (goto-char (cdr mr))
+            (activate-mark))
           (when (functionp helixel-jump-cleanup-function)
             (funcall helixel-jump-cleanup-function))
           t)))))

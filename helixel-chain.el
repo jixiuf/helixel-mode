@@ -145,7 +145,7 @@ Reset: goto marker."
      :apply (lambda (_edit)
               (helixel--execute-edit effective-edit))
      :reset (lambda (_edit)
-              (when-let* ((m (helixel-event-marker effective-edit)))
+              (when-let* ((m (car (helixel-event-mark-region effective-edit))))
                 (goto-char (marker-position m))))
      :all-buffer-fn (helixel--kind-all-buffer-fn kind))))
 
@@ -168,7 +168,7 @@ Same as chain strategy but uses `ignore' for apply (no edit execution)."
                        t)))
      :apply #'ignore
      :reset (lambda (_edit)
-              (when-let* ((m (helixel-event-marker effective-edit)))
+              (when-let* ((m (car (helixel-event-mark-region effective-edit))))
                 (goto-char (marker-position m)))))))
 
 

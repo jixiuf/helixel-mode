@@ -751,4 +751,757 @@ On a single-char symbol at eob, w selects it."
     (should (eq (plist-get helixel--active-search :dir) 'backward))
     (should (< (point) 8))))
 
+;;; Pair delimiter movement tests — [ ] { } prefixes
+
+(ert-deftest helixel-test-pair-outer-paren ()
+  "Test [ ( outward to enclosing paren opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "foo (bar) baz")
+    (deactivate-mark)
+    (goto-char 7)
+    (helixel-outer-paren)
+    (should (= (point) 5))))
+
+(ert-deftest helixel-test-pair-next-paren-end-outside ()
+  "Test ] ( forward to next paren closing from outside."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x (one) (two)")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-next-paren-end)
+    (should (= (point) 8))))
+
+(ert-deftest helixel-test-pair-outer-bracket ()
+  "Test [ [ outward to enclosing bracket opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "[abc] def")
+    (deactivate-mark)
+    (goto-char 4)
+    (helixel-outer-bracket)
+    (should (= (point) 1))))
+
+(ert-deftest helixel-test-pair-next-bracket-end ()
+  "Test ] [ forward to next bracket closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x [one] [two]")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-next-bracket-end)
+    (should (= (point) 8))))
+
+(ert-deftest helixel-test-pair-outer-brace ()
+  "Test [ { outward to enclosing brace opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "{abc} def")
+    (deactivate-mark)
+    (goto-char 4)
+    (helixel-outer-brace)
+    (should (= (point) 1))))
+
+(ert-deftest helixel-test-pair-next-brace-end ()
+  "Test ] { forward to next brace closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x {one} {two}")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-next-brace-end)
+    (should (= (point) 8))))
+
+(ert-deftest helixel-test-pair-outer-double-quote ()
+  "Test [ \" outward to enclosing double-quote opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x \"abc\" def")
+    (deactivate-mark)
+    (goto-char 5)
+    (helixel-outer-double-quote)
+    (should (= (point) 3))))
+
+(ert-deftest helixel-test-pair-outer-single-quote ()
+  "Test [ ' outward to enclosing single-quote opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x 'abc' def")
+    (deactivate-mark)
+    (goto-char 5)
+    (helixel-outer-single-quote)
+    (should (= (point) 3))))
+
+(ert-deftest helixel-test-pair-outer-angle ()
+  "Test [ < outward to enclosing angle opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<abc> def")
+    (deactivate-mark)
+    (goto-char 4)
+    (helixel-outer-angle)
+    (should (= (point) 1))))
+
+(ert-deftest helixel-test-pair-outer-back-quote ()
+  "Test [ ` outward to enclosing back-quote opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x `abc` def")
+    (deactivate-mark)
+    (goto-char 5)
+    (helixel-outer-back-quote)
+    (should (= (point) 3))))
+
+;; Inner variants: { outward, } forward
+
+(ert-deftest helixel-test-pair-inner-outer-paren ()
+  "Test { ( outward to enclosing inner paren opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(abc def) ghi")
+    (deactivate-mark)
+    (goto-char 5)
+    (helixel-inner-outer-paren)
+    (should (= (point) 2))))
+
+(ert-deftest helixel-test-pair-inner-next-paren-end ()
+  "Test } ( forward to next inner paren closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x (one) (two)")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-inner-next-paren-end)
+    (should (= (point) 7))))
+
+(ert-deftest helixel-test-pair-inner-outer-bracket ()
+  "Test { [ outward to enclosing inner bracket opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "[abc] def")
+    (deactivate-mark)
+    (goto-char 4)
+    (helixel-inner-outer-bracket)
+    (should (= (point) 2))))
+
+(ert-deftest helixel-test-pair-inner-next-bracket-end ()
+  "Test } [ forward to next inner bracket closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x [one] [two]")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-inner-next-bracket-end)
+    (should (= (point) 7))))
+
+(ert-deftest helixel-test-pair-inner-outer-brace ()
+  "Test { { outward to enclosing inner brace opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "{abc} def")
+    (deactivate-mark)
+    (goto-char 4)
+    (helixel-inner-outer-brace)
+    (should (= (point) 2))))
+
+(ert-deftest helixel-test-pair-inner-next-brace-end ()
+  "Test } { forward to next inner brace closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x {one} {two}")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-inner-next-brace-end)
+    (should (= (point) 7))))
+
+(ert-deftest helixel-test-pair-inner-outer-double-quote ()
+  "Test { \" outward to enclosing inner double-quote opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "\"abc\" def")
+    (deactivate-mark)
+    (goto-char 4)
+    (helixel-inner-outer-double-quote)
+    (should (= (point) 2))))
+
+;; ; mark-thing after pair movement
+(ert-deftest helixel-test-pair-semicolon-mark-paren ()
+  "Test ; after [ ( marks the enclosing paren using stored bounds."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "foo (the target) bar")
+    (deactivate-mark)
+    (goto-char 9)
+    
+    (helixel-outer-paren)
+    (should (helixel-event-mark-region helixel--live-event))
+    (should (helixel-event-mark-region helixel--live-event))
+    ;; Simulate ; — use stored markers from mark-region
+    (let ((mr (helixel-event-mark-region helixel--live-event)))
+      (push-mark (car mr) t t)
+      (goto-char (cdr mr))
+      (activate-mark))
+    (should (use-region-p))
+    ;; foo (the target) bar: positions 1-4="foo ", 5="(", 16=")", 17-20=" bar"
+    (should (= (region-beginning) 5))
+    (should (= (region-end) 17))))
+
+;;; Paragraph / sentence / function move tests
+
+(ert-deftest helixel-test-paragraph-move-forward-start ()
+  "Test } moves to next paragraph start."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "line one\n\nline two\n")
+    (goto-char 1)
+    (helixel-forward-paragraph-start)
+    (should (>= (point) 10))))
+
+(ert-deftest helixel-test-paragraph-move-backward-start ()
+  "Test g { moves to previous paragraph start."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "line one\n\nline two\n")
+    (goto-char 18)
+    (helixel-backward-paragraph-start)
+    (should (>= (point) 10))))
+
+(ert-deftest helixel-test-sentence-move-forward-end ()
+  "Test ] s moves to next sentence end."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "Hello.  World.")
+    (goto-char 1)
+    (helixel-forward-sentence-end)
+    ;; Forward sentence end lands after the period
+    (should (>= (point) 5))))
+
+;;; Jump to match — %
+(ert-deftest helixel-test-jump-to-match-from-open ()
+  "Test % from opening paren jumps after closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(abc def) ghi")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-jump-to-match)
+    (should (= (point) 10))))
+
+(ert-deftest helixel-test-jump-to-match-from-close ()
+  "Test % from closing paren jumps to opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(abc def) ghi")
+    (deactivate-mark)
+    (goto-char 9)
+    (helixel-jump-to-match)
+    (should (= (point) 1))))
+
+(ert-deftest helixel-test-jump-to-match-brace ()
+  "Test % on { jumps to }."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "{abc}")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-jump-to-match)
+    (should (= (point) 6))))
+
+(ert-deftest helixel-test-jump-to-match-bracket ()
+  "Test % on [ jumps to ]."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "[abc]")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-jump-to-match)
+    (should (= (point) 6))))
+
+(ert-deftest helixel-test-jump-to-match-between-close ()
+  "Test % between ) and } jumps to matching (."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(x) {y}")
+    (deactivate-mark)
+    (goto-char 4)  ; between ) and space
+    (helixel-jump-to-match)
+    ;; char-before is ), should jump to matching (
+    (should (= (point) 1))))
+
+(ert-deftest helixel-test-jump-to-match-nested ()
+  "Test % from inner ( in nested parens jumps to inner )."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b) c)")
+    (deactivate-mark)
+    (goto-char 4)  ; inner (
+    (helixel-jump-to-match)
+    (should (= (point) 7))))
+
+(ert-deftest helixel-test-jump-to-match-double-quote ()
+  "Test % on \" jumps to matching \"."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x \"hi\" y")
+    (deactivate-mark)
+    (goto-char 3)
+    (helixel-jump-to-match)
+    ;; Should land right after the closing "
+    (should (= (point) 7))))
+
+(ert-deftest helixel-test-jump-to-match-no-match ()
+  "Test % with no bracket does not crash."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "no brackets here")
+    (deactivate-mark)
+    (goto-char 5)
+    (condition-case nil
+        (helixel-jump-to-match)
+      (error nil))
+    (should t)))
+
+(ert-deftest helixel-test-jump-to-match-tag ()
+  "Test % inside XML tag jumps to matching closing tag."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<div>hi</div>")
+    (deactivate-mark)
+    (goto-char 2)  ; on 'd' of <div>
+    (helixel-jump-to-match)
+    ;; Should jump to closing </div> (position 14 = after > of </div>)
+    (should (= (point) 14))))
+
+;;; Structure ; mark-thing
+(ert-deftest helixel-test-structure-semicolon-mark-function ()
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (emacs-lisp-mode)
+    (insert "\n(defun foo () 1)\n")
+    (deactivate-mark)
+    (goto-char 2)
+    (helixel-forward-function-end)
+    (should (helixel-event-mark-region helixel--live-event))
+    ;; Mark using stored mark-region from event
+    (let ((mr (helixel-event-mark-region helixel--live-event)))
+      (push-mark (car mr) t t)
+      (goto-char (cdr mr))
+      (activate-mark))
+    (should (use-region-p))))
+
+;;; mark-thing ; after various movements
+
+(defmacro helixel-test-mark-thing (name movement-cmd buffer-content
+                                        init-pos expected-beg expected-end)
+  `(ert-deftest ,(intern (format "helixel-test-mark-%s" name)) ()
+     ,(format "Test ; after %s selects the thing." name)
+     (with-temp-buffer
+       (transient-mark-mode 1)
+       (setq helixel--event-ring nil helixel--live-event nil
+          helixel--action-pos nil)
+       (insert ,buffer-content)
+       (deactivate-mark)
+       (goto-char ,init-pos)
+       (setq last-command nil)
+       (call-interactively ,movement-cmd)
+       (should (helixel-event-mark-region helixel--live-event))
+       ;; Simulate ;
+       (helixel--action-cycle)
+       (should (use-region-p))
+       (should (= (region-beginning) ,expected-beg))
+       (should (= (region-end) ,expected-end)))))
+
+(helixel-test-mark-thing "w-word" #'helixel-forward-word-start
+  "hello world" 1 1 7)
+(helixel-test-mark-thing "W-WORD" #'helixel-forward-WORD-start
+  "hello world" 1 1 7)
+(helixel-test-mark-thing "e-word-end" #'helixel-forward-word-end
+  "hello world" 1 1 6)
+(helixel-test-mark-thing "E-WORD-end" #'helixel-forward-WORD-end
+  "hello world" 1 1 6)
+(helixel-test-mark-thing "b-back-word" #'helixel-backward-word-start
+  "hello world" 3 1 7)
+(helixel-test-mark-thing "B-back-WORD" #'helixel-backward-WORD
+  "hello world" 3 1 7)
+(helixel-test-mark-thing "o-symbol" #'helixel-forward-symbol-start
+  "foo.bar baz" 1 1 4)
+(helixel-test-mark-thing "outer-paren" #'helixel-outer-paren
+  "foo (bar)" 7 5 10)
+(helixel-test-mark-thing "next-paren" #'helixel-next-paren-end
+  "a (one) (two)" 1 3 8)
+
+(ert-deftest helixel-test-mark-thing-second-semicolon ()
+  "Test second ; after mark-thing does action cycle."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil helixel--live-event nil
+          helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    ;; First ; marks the thing
+    (helixel--action-cycle)
+    (should (use-region-p))
+    ;; Second ; does action cycle (no error, no mark-thing)
+    (deactivate-mark)
+    (helixel--action-cycle)
+    ;; Should have committed live event and be cycling
+    (should helixel--action-pos)))
+
+(ert-deftest helixel-test-mark-thing-disabled-by-defcustom ()
+  "Test mark-thing disabled when helixel-semicolon-mark-thing is nil."
+  (let ((helixel-semicolon-mark-thing nil))
+    (with-temp-buffer
+      (transient-mark-mode 1)
+      (setq helixel--event-ring nil helixel--live-event nil
+          helixel--action-pos nil)
+      (insert "hello world")
+      (deactivate-mark)
+      (goto-char 1)
+      (helixel-forward-word-start)
+      (helixel--action-cycle)
+      ;; ; did NOT do mark-thing: region is from movement, action cycle started
+      (should (region-active-p))
+      (should helixel--action-pos))))
+
+;;; Tag pair movement [t and ; mark-thing
+
+(ert-deftest helixel-test-pair-tag-semicolon-mark ()
+  "Test [t; after pair movement marks the enclosing tag."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil helixel--live-event nil
+          helixel--action-pos nil)
+    (insert "<p>\n<div>\nhe\n</div>\n</p>")
+    (deactivate-mark)
+    (goto-char 2)
+    (search-forward "he")
+    ;; [t from inside <div> content
+    (helixel-outer-tag)
+    (should (helixel-event-mark-region helixel--live-event))
+    ;; ; marks the stored bounds
+    (helixel--action-cycle)
+    (should (use-region-p))
+    ;; Should mark <div>...</div> (positions 5-20)
+    (should (= (region-beginning) 5))
+    (should (= (region-end) 20))))
+
+(ert-deftest helixel-test-pair-tag-double-semicolon-mark ()
+  "Test [t from between inner close and outer close finds the outer tag."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil helixel--live-event nil
+          helixel--action-pos nil)
+    (insert "<p>\n<div>\nhe\n</div>\n</p>")
+    (deactivate-mark)
+    ;; Go between </div> and </p> (position 20 is \n after </div>)
+    (goto-char 20)
+    ;; [t finds <p>...</p> (the outer enclosing tag)
+    (helixel-outer-tag)
+    (should (helixel-event-mark-region helixel--live-event))
+    ;; ; marks the stored bounds (outer <p>)
+    (helixel--action-cycle)
+    (should (use-region-p))
+    ;; Should mark <p>...</p> (positions 1-25)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 25))))
+
+(ert-deftest helixel-test-pair-tag-inner-semicolon-mark ()
+  "Test {t; marks the inner content of the enclosing tag."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil helixel--live-event nil
+          helixel--action-pos nil)
+    (insert "<p>\ninner\n</p>")
+    (deactivate-mark)
+    (goto-char 7)
+    ;; {t from inside <p> content
+    (helixel-inner-outer-tag)
+    (should (helixel-event-mark-region helixel--live-event))
+    ;; ; marks the stored inner bounds
+    (helixel--action-cycle)
+    (should (use-region-p))
+    ;; Should mark inner content: \ninner\n (positions 4-11)
+    (should (= (region-beginning) 4))
+    (should (= (region-end) 11))))
+
+(ert-deftest helixel-test-pair-tag-next-end-semicolon-mark ()
+  "Test ]t; marks the current enclosing tag."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil helixel--live-event nil
+          helixel--action-pos nil)
+    (insert "<a>x</a> <b>y</b>")
+    (deactivate-mark)
+    (goto-char 4)  ; inside <a> content (the "x")
+    ;; ]t from inside <a>
+    (helixel-next-tag-end)
+    (should (helixel-event-mark-region helixel--live-event))
+    ;; ; marks the current enclosing tag <a>
+    (helixel--action-cycle)
+    (should (use-region-p))
+    ;; Should mark from <a> opening to point after ]t (positions 1-8)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 9))))
+
+;;; Tag textobj mat from between tags
+
+(ert-deftest helixel-test-textobj-tag-between-tags ()
+  "Test mat from between <p> and <div> marks the enclosing <p>."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<p>\n<div>\nhe\n</div>\n</p>")
+    (goto-char 4)  ; between <p> and <div>
+    (call-interactively #'helixel-mark-a-tag)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 25))))
+
+(ert-deftest helixel-test-textobj-tag-nested-inner ()
+  "Test mat from inside nested <div> marks the innermost <div>."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<p>\n<div>\nhello\n</div>\n</p>")
+    (goto-char 2)
+    (search-forward "hello")  ; inside <div> content
+    (call-interactively #'helixel-mark-a-tag)
+    (should (= (region-beginning) 5))
+    (should (= (region-end) 23))))
+
+(ert-deftest helixel-test-textobj-tag-before-outer-close ()
+  "Test mat before outer closing tag marks the outer tag."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<p>\n<div>\nhello\n</div>\n</p>")
+    (goto-char (point-max))
+    (search-backward "</p>")
+    ;; cursor is at < of </p>
+    (call-interactively #'helixel-mark-a-tag)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 28))))
+
+;;; Pair climb-outward tests — ]/} when point at closing edge
+
+(ert-deftest helixel-test-pair-next-paren-climb-outward ()
+  "Test ] ( at inner ) climbs to outer ) in nested parens."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b) c)")
+    (deactivate-mark)
+    ;; Point at the inner close ) — position 6
+    (goto-char 6)
+    (helixel-next-paren-end)
+    ;; Climb outward to outer ), whose match-end is eob (pos 10).
+    (should (= (point) 10))))
+
+(ert-deftest helixel-test-pair-inner-next-paren-climb-outward ()
+  "Test } ( at inner ) climbs to outer inner ) in nested parens."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b) c)")
+    (deactivate-mark)
+    (goto-char 6)
+    (helixel-inner-next-paren-end)
+    ;; Inner closing: cdr of (oe . cb) = cb = 9 (the outer ))
+    (should (= (point) 9))))
+
+(ert-deftest helixel-test-pair-next-brace-climb-outward ()
+  "Test ] { at inner } climbs to outer } in nested braces."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "{a {b} c}")
+    (deactivate-mark)
+    (goto-char 6)
+    (helixel-next-brace-end)
+    (should (= (point) 10))))
+
+(ert-deftest helixel-test-pair-inner-next-brace-climb-outward ()
+  "Test } { at inner } climbs to outer inner } in nested braces."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "{a {b} c}")
+    (deactivate-mark)
+    (goto-char 6)
+    (helixel-inner-next-brace-end)
+    (should (= (point) 9))))
+
+;;; Multi-char delimiter climb-outward — tag and block
+
+(ert-deftest helixel-test-pair-next-tag-climb-outward ()
+  "Test ]t at inner </div> climbs to outer </p> in nested tags."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<p><div>hi</div></p>")
+    (deactivate-mark)
+    ;; Point at the > of inner </div>.
+    ;; <p><div>hi</div></p>: 1=< 2=p 3=> 4=< 5=d 6=i 7=v 8=> 9=h 10=i
+    ;;  11=< 12=/ 13=d 14=i 15=v 16=> 17=< 18=/ 19=p 20=> 21=eob
+    (goto-char 16)  ; right after > of </div>
+    (helixel-next-tag-end)
+    ;; Climb outward to after outer </p> (eob at 21).
+    (should (= (point) 21))))
+
+(ert-deftest helixel-test-pair-inner-next-tag-climb-outward ()
+  "Test }t at inner </div> climbs to outer inner </p> in nested tags."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<p><div>hi</div></p>")
+    (deactivate-mark)
+    (goto-char 16)
+    (helixel-inner-next-tag-end)
+    ;; Inner close beginning of outer tag: cb = 17 (the < of </p>).
+    (should (= (point) 17))))
+
+;;; Pair next-end from outside (not inside any pair)
+
+(ert-deftest helixel-test-pair-next-paren-end-from-outside ()
+  "Test ] ( from before a paren pair jumps into it."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "before (target) after")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-next-paren-end)
+    (should (= (point) 16))))
+
+(ert-deftest helixel-test-pair-next-brace-end-from-outside ()
+  "Test ] { from before a brace pair jumps into it."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "before {target} after")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-next-brace-end)
+    (should (= (point) 16))))
+
+(ert-deftest helixel-test-pair-next-double-quote-end-from-outside ()
+  "Test ] \" from before a quoted string finds its closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x \"one\" y")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-next-double-quote-end)
+    (should (= (point) 8))))
+
+(ert-deftest helixel-test-pair-next-single-quote-end-from-outside ()
+  "Test ] ' from before a quoted string finds its closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "x 'one' y")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-next-single-quote-end)
+    (should (= (point) 8))))
+
+(ert-deftest helixel-test-pair-next-angle-end ()
+  "Test ] < moves to closing angle bracket."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "<foo> bar")
+    (deactivate-mark)
+    (goto-char 2)
+    (helixel-next-angle-end)
+    (should (= (point) 6))))
+
+;;; No pair found — graceful handling
+
+(ert-deftest helixel-test-pair-next-paren-no-pair ()
+  "Test ] ( with no paren in buffer does not crash."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "no parens here at all")
+    (deactivate-mark)
+    (goto-char 5)
+    (condition-case nil
+        (helixel-next-paren-end)
+      (error nil))
+    (let ((mr (helixel-event-mark-region helixel--live-event)))
+      (should (= (marker-position (car mr)) (marker-position (cdr mr)))))))
+
+(ert-deftest helixel-test-pair-outer-paren-no-pair ()
+  "Test [ ( with no paren in buffer does not crash."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "no parens here")
+    (deactivate-mark)
+    (condition-case nil
+        (helixel-outer-paren)
+      (error nil))
+    (let ((mr (helixel-event-mark-region helixel--live-event)))
+      (should (= (marker-position (car mr)) (marker-position (cdr mr)))))))
+
+;;; Block movement (org-mode)
+
+(ert-deftest helixel-test-pair-outer-block-org ()
+  "Test [ c outward to enclosing org block opening."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (delay-mode-hooks (org-mode))
+    (insert "#+begin_src emacs-lisp\ncode\n#+end_src\n")
+    (deactivate-mark)
+    (goto-char 10)
+    (condition-case nil
+        (helixel-outer-block)
+      (error nil))
+    (when-let* ((mr (helixel-event-mark-region helixel--live-event)))
+      (should (<= (marker-position (car mr)) 10)))))
+
+(ert-deftest helixel-test-pair-next-block-end-org ()
+  "Test ] c forward to enclosing org block closing."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (delay-mode-hooks (org-mode))
+    (insert "#+begin_src emacs-lisp\ncode\n#+end_src\n")
+    (deactivate-mark)
+    (goto-char 10)
+    (condition-case nil
+        (helixel-next-block-end)
+      (error nil))
+    (when-let* ((mr (helixel-event-mark-region helixel--live-event)))
+      (should (>= (marker-position (cdr mr)) 10)))))
+
+;;; ; mark-thing for paragraph/sentence/function movements
+
+(ert-deftest helixel-test-mark-thing-paragraph-forward ()
+  "Test ; after } (paragraph forward) marks the paragraph."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "First paragraph.\n\nSecond paragraph.")
+    (deactivate-mark)
+    (goto-char 1)
+    (setq helixel--action-pos nil)
+    (helixel-forward-paragraph-start)
+    (should (helixel-event-mark-region helixel--live-event))
+    (helixel--action-cycle)
+    (should (use-region-p))))
+
+(ert-deftest helixel-test-mark-thing-sentence-forward ()
+  "Test ; after ]s (sentence forward end) marks the sentence."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "One. Two. Three.")
+    (deactivate-mark)
+    (goto-char 1)
+    (setq helixel--action-pos nil)
+    (helixel-forward-sentence-end)
+    (should (helixel-event-mark-region helixel--live-event))
+    (helixel--action-cycle)
+    (should (use-region-p))))
+
+(ert-deftest helixel-test-mark-thing-function-forward ()
+  "Test ; after ]f (function forward end) marks the function."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (emacs-lisp-mode)
+    (insert "(defun foo () (message \"hi\"))\n\n(defun bar () nil)")
+    (deactivate-mark)
+    (goto-char 1)
+    (setq helixel--action-pos nil)
+    (helixel-forward-function-end)
+    (should (helixel-event-mark-region helixel--live-event))
+    (helixel--action-cycle)
+    (should (use-region-p))))
+
 ;;; helixel-test-move.el ends here

@@ -196,11 +196,8 @@ Returns (OPEN . CLOSE) where each is a char or string, or nil."
 (defun helixel--surround-delete-delimiter (d)
   "Delete the delimiters described by D.
 Returns position where point should be placed after deletion."
-  (let* ((bounds (helixel-delimiter-bounds d))
-         (open (car bounds))
-         (close (cdr bounds))
-         (ob (car open)) (oe (cdr open))
-         (cb (car close)) (ce (cdr close)))
+  (pcase-let* ((`(,ob ,oe ,cb ,ce)
+                (helixel-delimiter-bounds-flat d)))
     (when (helixel-delimiter-nl-p d)
       (pcase-let ((`(,oe2 . ,cb2) (helixel--strip-adjacent-newlines oe cb)))
         (setq oe oe2 cb cb2)))
@@ -214,10 +211,8 @@ Returns position where point should be placed after deletion."
 
 (defun helixel--surround-replace-pair (d new-open new-close)
   "Replace delimiters of D with NEW-OPEN and NEW-CLOSE."
-  (let* ((bounds (helixel-delimiter-bounds d))
-         (open (car bounds)) (close (cdr bounds))
-         (ob (car open)) (oe (cdr open))
-         (cb (car close)) (ce (cdr close)))
+  (pcase-let* ((`(,ob ,oe ,cb ,ce)
+                (helixel-delimiter-bounds-flat d)))
     (delete-region cb ce)
     (delete-region ob oe)
     (goto-char ob)
@@ -242,7 +237,6 @@ The prompt shows the old delimiter being replaced."
   (let* ((old-type (helixel-delimiter-type d))
          (old-label (pcase old-type
                       ('pair (format "%c" (helixel-delimiter-open d)))
-                      ('quote (format "%c" (helixel-delimiter-open d)))
                       (_ (symbol-name old-type))))
          (prompt (format "replace %s ->" old-label))
          (new-char (read-char (helixel--surround-prompt prompt)))
@@ -266,15 +260,12 @@ The prompt shows the old delimiter being replaced."
 (defun helixel--surround-replace-tag (new-tag-name d)
   "Replace surrounding XML tags with NEW-TAG-NAME.
 D is the tag delimiter plist used to locate the tags."
-  (let* ((bounds (helixel-delimiter-bounds d))
-         (open (car bounds))
-         (close (cdr bounds))
-         (ob (car open)) (oe (cdr open))
-         (cb (car close)) (ce (cdr close))
-         (open-tag (format "<%s>" new-tag-name))
-         (close-tag (format "</%s>" new-tag-name))
-         (nl-after-open (eq (char-after oe) ?\n))
-         (nl-before-close (and (> cb 1) (eq (char-before cb) ?\n))))
+  (pcase-let* ((`(,ob ,oe ,cb ,ce)
+                (helixel-delimiter-bounds-flat d))
+               (open-tag (format "<%s>" new-tag-name))
+               (close-tag (format "</%s>" new-tag-name))
+               (nl-after-open (eq (char-after oe) ?\n))
+               (nl-before-close (and (> cb 1) (eq (char-before cb) ?\n))))
     (delete-region cb ce)
     (delete-region ob oe)
     (goto-char ob)

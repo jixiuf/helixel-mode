@@ -317,12 +317,14 @@ negative the beginning is returned.  If WHICH is positive the END
 is returned."
   (let ((pnt (point)))
     (let ((beg (save-excursion
-                 (and (zerop (forward-thing thing -1))
-                      (forward-thing thing))
+                 (ignore-errors
+                   (and (zerop (forward-thing thing -1))
+                        (forward-thing thing)))
                  (if (> (point) pnt) (point-min) (point))))
           (end (save-excursion
-                 (and (zerop (forward-thing thing))
-                      (forward-thing thing -1))
+                 (ignore-errors
+                   (and (zerop (forward-thing thing))
+                        (forward-thing thing -1)))
                  (if (< (point) pnt) (point-max) (point)))))
       (when (and (<= beg (point) end) (< beg end))
         (cond
@@ -669,8 +671,19 @@ are the delimiters of a string or comment."
         (when (and (zerop (funcall thing -1)) (match-beginning 0))
           (setq op-end (cons (match-beginning 0) (match-end 0)))
           (goto-char (cdr op-end))
-          (when (and (zerop (funcall thing +1)) (match-beginning 0))
-            (setq cl-end (cons (match-beginning 0) (match-end 0)))))
+          ;; For delimiters with a :match-close method (tags), use
+          ;; targeted forward search so nested different-name pairs
+          ;; don't steal the close.
+          (let ((mc (and (symbolp thing)
+                         (get thing 'helixel--match-close))))
+            (if (and mc (match-string 1))
+                (progn
+                  (funcall mc (match-string 1))
+                  (when (match-beginning 0)
+                    (setq cl-end (cons (match-beginning 0)
+                                       (match-end 0)))))
+              (when (and (zerop (funcall thing +1)) (match-beginning 0))
+                (setq cl-end (cons (match-beginning 0) (match-end 0)))))))
         ;; Bug #607: use the tightest selection that contains the
         ;; original selection.  If non selection contains the original,
         ;; use the larger one.
@@ -684,6 +697,14 @@ are the delimiters of a string or comment."
                    (<= (car op-end) beg)      ; second contains orig
                    (>= (cdr cl-end) end)))
           (setq op op-end cl cl-end)))
+        ;; When there is no active region and scan 1's opening starts
+        ;; at or after the scan position, prefer scan 2 (backward-first)
+        ;; because scan 1 found the next tag rather than the enclosing
+        ;; one.  This matters when point is between tags.
+        (when (and op-end cl-end
+                   (not orig-beg) (not orig-end)
+                   (>= (car op) beg))
+          (setq op op-end cl cl-end))
         ;; Validate that op/cl form a matched pair. Scan 1 can produce
         ;; mismatched tags (e.g., <div> with </p>) when point is between
         ;; the inner closing tag and the outer closing tag.
@@ -707,6 +728,14 @@ are the delimiters of a string or comment."
                              count
                            (1- count)))
                      (1- count))))
+          ;; When there is no active region and the selected pair
+          ;; does not contain the cursor (e.g., cursor between
+          ;; </div> and </p>), expand one level outward so the
+          ;; enclosing tag is found.
+          (when (and (or (not orig-beg) (not orig-end))
+                     (or (< beg (car op))
+                         (> beg (cdr cl))))
+            (setq cnt 1))
           ;; starting from the innermost surrounding delimiters
           ;; increase selection
           (when (> cnt 0)
@@ -981,6 +1010,7 @@ ensures backslash has escape syntax."
         (modify-syntax-entry ?\\ "\\"))
       (syntax-ppss-flush-cache (point-min))
       (helixel--bounds-of-string-at-point))))
+
 (put 'helixel-quote 'forward-op #'helixel--forward-quote)
 (put 'helixel-quote 'bounds-of-thing-at-point
      #'helixel--bounds-of-quote-at-point)
@@ -988,7 +1018,7 @@ ensures backslash has escape syntax."
 ;; ── Simple quote (character-based, for use inside comments/strings) ──
 
 (defun helixel--preceded-by-odd-backslashes-p (pos)
-  "Return non-nil if character at POS is preceded by an odd number of backslashes."
+  "Return non-nil if POS is preceded by an odd number of backslashes."
   (let ((n 0))
     (while (and (> pos (point-min))
                 (eq (char-before pos) ?\\))
@@ -1060,8 +1090,9 @@ failure."
                           (while (and (not close) (not (eobp)))
                             (if (search-forward qstr nil t)
                                 (let ((qpos (1- (point))))
-                                  (unless (helixel--preceded-by-odd-backslashes-p
-                                           qpos)
+                                  (unless
+                                      (helixel--preceded-by-odd-backslashes-p
+                                       qpos)
                                     (setq close (point))))
                               (setq n 0)))
                           (if close
@@ -1294,6 +1325,128 @@ Returns the tag name without <, </, or >."
         (match-string 2 str)
       "")))
 
+(defun helixel--tag-regex (tag-name)
+  "Return a regex matching <TAG-NAME...> or </TAG-NAME>.
+Group 1 captures the slash for closing tags."
+  (concat "<\\(/\\)?" (regexp-quote tag-name)
+          "\\(?:>\\|[ \n]\\(?:[^\"/>]\\|\"[^\"]*\"\\)*?>\\)"))
+
+(defun helixel--find-matching-tag-close (tag-name)
+  "Search forward from point for matching </TAG-NAME>, counting nested pairs.
+Point should be right after the opening <TAG-NAME>.
+Sets `match-data' for the closing tag on success, returns 0."
+  (let ((regex (helixel--tag-regex tag-name))
+        (depth 1))
+    (while (and (> depth 0) (re-search-forward regex nil t))
+      (setq depth (+ depth (if (match-string 1) -1 +1))))
+    (if (zerop depth)
+        0
+      (user-error "No matching closing tag for %s" tag-name))))
+
+(defun helixel--tag-move-past-markup (&optional dir)
+  "Move point past XML tag markup if inside one.
+This lets the tag finder locate the enclosing pair.
+
+For backward search (DIR < 0):
+  - On or inside opening tag like <div|> → move after >
+  - On or inside closing tag like </div|> → move before <
+
+For forward search (DIR > 0):
+  - On or inside opening tag like <div|> → move before <
+  - On or inside closing tag like </div|> → move after >
+
+Returns non-nil if point was adjusted."
+  (let* (;; If point is on <, that's the tag we're inside.
+         (on-lt (and (eq (char-after) ?<) (point)))
+         ;; Otherwise search backward for the nearest < before point.
+         (lt-pos (or on-lt
+                     (save-excursion
+                       (search-backward "<"
+                                        (line-beginning-position) t)))))
+    (when lt-pos
+      (let ((gt-pos (save-excursion
+                      (goto-char lt-pos)
+                      (search-forward ">" (line-end-position) t))))
+        (when (and gt-pos (> gt-pos (point)))
+          ;; Point is strictly between < and > (not at >)
+          (if (eq (char-after (1+ lt-pos)) ?/)
+              ;; Closing tag
+              (if (< (or dir 0) 0)
+                  (goto-char lt-pos)    ; backward: move before <
+                (goto-char gt-pos))     ; forward: move after >
+            ;; Opening tag
+            (if (< (or dir 0) 0)
+                (goto-char gt-pos)      ; backward: move after >
+              (goto-char lt-pos)))      ; forward: move before <
+          t)))))
+
+(defun helixel--tag-find-opener-backward ()
+  "Search backward for the nearest *unclosed* XML opening tag.
+Balances closing tags as we go backward so the returned opener
+is the innermost tag that still encloses point.  When a matched
+opener is found (depth drops to 0), it is returned as the
+enclosing tag.  Returns 0 on success with `match-data' set, 1 on
+failure."
+  (let ((depth 0)
+        (saved-match nil)
+        (regex (concat "<\\([^/ >\n]+\\)"
+                       "\\(?:=>?\\|[^\"/>]\\|\"[^\"]*\"\\)*?>\\|"
+                       "</\\([^>]+?\\)>")))
+    (catch 'helixel--found
+      (while (re-search-backward regex nil t)
+        (if (match-beginning 1)
+            ;; Opening tag
+            (if (> depth 0)
+                (progn
+                  (setq depth (1- depth))
+                  ;; When depth reaches 0, this opener balances the
+                  ;; pending closer — it is our enclosing tag.
+                  (when (zerop depth)
+                    (setq saved-match (match-data t))))
+              ;; depth=0: unclosed opener found — this is the
+              ;; innermost enclosing tag.
+              (throw 'helixel--found 0))
+          ;; Closing tag
+          (setq depth (1+ depth))))
+      ;; If we exhausted the buffer, use the last balanced opener.
+      (if saved-match
+          (progn
+            (set-match-data saved-match)
+            0)
+        1))))
+
+(defun helixel--tag-adjust-for-jump ()
+  "Move point inside the tag pair whose boundary point is on.
+If point is on or inside an opening tag (<div|>), move after >.
+If point is on or after a closing tag (</div|>), move before <.
+This is used by `helixel-jump-to-match' so that the enclosing-pair
+lookup finds the pair whose delimiter point is on, rather than the
+outer enclosing pair."
+  (let ((c (char-after)))
+    (cond
+     ;; On < of an opening tag → move after >
+     ((and c (eq c ?<)
+           (not (eq (char-after (1+ (point))) ?/)))
+      (search-forward ">" (line-end-position) t))
+     ;; On < of a closing tag → move before <
+     ((and c (eq c ?<)
+           (eq (char-after (1+ (point))) ?/))
+      (backward-char))
+     ;; Right after > of a closing tag → move before < of that tag
+     ((and (not (bobp)) (eq (char-before) ?>))
+      (backward-char)
+      (let ((lt (search-backward "<" (line-beginning-position) t)))
+        (when (and lt (eq (char-after (1+ lt)) ?/))
+          (goto-char lt))))
+     ;; Inside a closing tag (after </ and before >) → move before <
+     ((and (not (bobp))
+           (save-excursion
+             (search-backward "<" (line-beginning-position) t)
+             (eq (char-after (1+ (point))) ?/)))
+      ;; Point is inside </xxx> markup
+      (search-backward "<" (line-beginning-position) t)
+      (goto-char (match-beginning 0))))))
+
 (defun helixel-up-xml-tag (&optional count)
   "Move point to the end or beginning of balanced xml tags.
 If COUNT is greater than zero point is moved forward otherwise it is moved
@@ -1305,7 +1458,6 @@ match (that caused COUNT to reach zero)."
          (count (abs (or count 1)))
          (op (if (> dir 0) 1 2))
          (cl (if (> dir 0) 2 1))
-         (orig (point))
          pnt tags match)
     (catch 'done
       (while (> count 0)
@@ -1330,6 +1482,9 @@ match (that caused COUNT to reach zero)."
                    ;; test will make us ignore this tag
                    (pop tags)
                    tags)
+                  ((and (< dir 0) tags)
+                   ;; backward: non-matching opener nested inside — skip
+                   tags)
                   ((and (> dir 0))
                    ;; non matching openers are considered free openers
                    (while (and tags
@@ -1350,10 +1505,7 @@ match (that caused COUNT to reach zero)."
           (setq pnt (match-beginning 0))
           (goto-char (match-end 0))))
         (let* ((tag (match-string cl))
-               (refwd (concat "<\\(/\\)?"
-                              (regexp-quote tag)
-                              "\\(?:>\\|[ \n]\\(?:[^\"/>]\\|"
-                              "\"[^\"]*\"\\)*?>\\)"))
+               (refwd (helixel--tag-regex tag))
                (cnt 1))
           (while (and (> cnt 0) (re-search-backward refwd nil t dir))
             (setq cnt (+ cnt (if (match-beginning 1) dir (- dir)))))
@@ -1366,9 +1518,10 @@ match (that caused COUNT to reach zero)."
     ;; if not found, set to point-max/point-min
     (unless (zerop count)
       (set-match-data nil)
-      (goto-char (if (> dir 0) (point-max) (point-min)))
-      (if (/= (point) orig) (setq count (1- count))))
+      (goto-char (if (> dir 0) (point-max) (point-min))))
     (* dir count)))
+(put 'helixel-up-xml-tag 'helixel--match-close
+     #'helixel--find-matching-tag-close)
 
 ;; ============================================================================
 ;; Generic Regex Block Text Objects (org begin/end, markdown fences, etc.)
@@ -1647,6 +1800,50 @@ tried.  The tightest enclosing delimiter wins."
                               (const :tag "Counter-based" nil))))
   :group 'helixel)
 
+(defvar helixel--block-no-bracket-fallback nil
+  "Skip bracket pair fallback in `helixel-up-block-at-point'.
+When non-nil, `helixel-up-block-at-point' does not fall back to
+bracket pairs ((), [], {}).  Bound by callers that handle bracket pairs
+through a different mechanism (e.g. `jump-to-match').")
+
+(defun helixel--block-spec-at-point ()
+  "Return the matching block spec (MODE . (BEGIN-RE END-RE ...)) at point.
+Consults `helixel-block-textobj-alist' for the current major mode.
+Returns nil when point is not on a block delimiter line.
+Used by `helixel-jump-to-match' to distinguish fenced code-block
+delimiters from single-char quotes, and by `helixel-up-block-at-point'."
+  (let ((specs (cl-remove-if-not (lambda (e) (derived-mode-p (car e)))
+                                 helixel-block-textobj-alist)))
+    (catch 'found
+      (dolist (spec specs)
+        (let* ((data (cdr spec))
+               (begin-re (nth 0 data))
+               (end-re (nth 1 data)))
+          (when (and begin-re end-re
+                     (save-excursion
+                       (beginning-of-line)
+                       (or (looking-at begin-re)
+                           (looking-at end-re))))
+            (throw 'found spec)))))))
+
+(defun helixel--block-adjust-for-jump ()
+  "If point is on a block delimiter line, move inside the block.
+On an opener line moves one line down; on a closer line moves
+one line up."
+  (when-let* ((spec (helixel--block-spec-at-point))
+              (data (cdr spec))
+              (begin-re (nth 0 data)))
+    (if (save-excursion (beginning-of-line) (looking-at begin-re))
+        (forward-line 1)
+      (forward-line -1))))
+
+(defun helixel--regex-adjust-for-jump (begin-re end-re)
+  "If point is on a regex delimiter line, move inside.
+BEGIN-RE and END-RE are the opening and closing patterns."
+  (save-excursion (beginning-of-line)
+                  (cond ((looking-at begin-re) (forward-line 1))
+                        ((looking-at end-re) (forward-line -1)))))
+
 (defun helixel-up-block-at-point (&optional count)
   "Move point past the nearest matching block delimiter.
 
@@ -1695,7 +1892,8 @@ Returns 0 on success, non-zero if not all levels found."
                              helixel-block-textobj-fallback-alist)
                           mode-specs))
            ;; Built-in bracket pairs (syntax-aware, only in fallback mode)
-           (bracket-pairs (when fallback-needed
+           (bracket-pairs (when (and fallback-needed
+                                     (not helixel--block-no-bracket-fallback))
                             '((?\( . ?\)) (?\[ . ?\]) (?\{ . ?\}))))
            best-spec best-dist best-match-data)
       (when (and (null regex-specs) (null bracket-pairs))
@@ -1752,28 +1950,71 @@ See `helixel-up-block-at-point' for supported modes."
     (setq helixel--block-chosen-spec nil)))
 
 
+(defun helixel--find-quote-pair (quote-char dir)
+  "Find matching quote pair for QUOTE-CHAR in direction DIR.
+DIR = -1: find opening unescaped quote before point, set `match-data', return 0.
+DIR = +1: find matching closing unescaped quote, set `match-data', return 0.
+Returns non-zero on failure.
+Handles backslash-escaped quotes via `helixel--preceded-by-odd-backslashes-p'."
+  (let ((qstr (char-to-string quote-char)))
+    (if (> dir 0)
+        ;; Forward balanced search: count depth, stop at 0.
+        (let ((depth 1))
+          (while (and (> depth 0) (re-search-forward qstr nil t))
+            (unless (helixel--preceded-by-odd-backslashes-p (1- (point)))
+              (setq depth (1- depth))))
+          (if (zerop depth) 0 1))
+      ;; Backward: find the first unescaped quote before point.
+      (if (and (re-search-backward qstr nil t)
+               (not (helixel--preceded-by-odd-backslashes-p (point))))
+          0
+        1))))
+
 (defun helixel--make-pair-delimiter (open close)
   "Create a pair delimiter for OPEN and CLOSE characters."
   (let ((equal-p (= open close)))
-    (list :type (if equal-p 'quote 'pair)
+    (list :type 'pair
           :open open :close close
           :finder (if equal-p
-                      `(lambda (dir) (helixel--find-equal-char ,open dir))
+                      `(lambda (dir)
+                         (helixel--find-quote-pair ,open dir))
                     `(lambda (dir) (helixel-up-paren ,open ,close dir)))
+          :adjust-for-jump
+          (unless equal-p
+            `(lambda () (when (eq (char-after) ,open) (forward-char))))
           :nl-p nil)))
 
 (defun helixel--make-tag-delimiter ()
   "Create a tag delimiter."
   (list :type 'tag
-        :finder (lambda (dir) (helixel-up-xml-tag dir))
+        :open "<"
+        :finder (lambda (dir)
+                  (helixel--tag-move-past-markup dir)
+                  (if (< dir 0)
+                      (helixel--tag-find-opener-backward)
+                    (helixel-up-xml-tag dir)))
+        :match-close #'helixel--find-matching-tag-close
+        :adjust-for-jump #'helixel--tag-adjust-for-jump
         :nl-p t))
 
 (defun helixel--make-block-delimiter (&optional open close)
   "Create a block delimiter for OPEN and CLOSE strings.
-If OPEN/CLOSE are nil, the finder resolves the spec at runtime."
-  (list :type 'block
-        :open open :close close
+OPEN and CLOSE are display/accessor values; the actual finder always
+resolves the spec from `helixel-block-textobj-alist' for the current
+mode at call time (via `helixel-up-block-at-point')."
+  (list :type 'regex
+        :open (or open
+                  (let ((specs (cl-remove-if-not
+                                (lambda (e) (derived-mode-p (car e)))
+                                helixel-block-textobj-alist)))
+                    (when specs (nth 0 (cdr (car specs))))))
+        :close (or close
+                  (let ((specs (cl-remove-if-not
+                                (lambda (e) (derived-mode-p (car e)))
+                                helixel-block-textobj-alist)))
+                    (when specs (nth 1 (cdr (car specs))))))
         :finder (lambda (dir) (helixel-up-block-at-point dir))
+        :adjust-for-jump #'helixel--block-adjust-for-jump
         :nl-p t))
 
 (defun helixel--make-regex-delimiter (begin-re end-re &optional name-group)
@@ -1785,6 +2026,9 @@ Optional NAME-GROUP specifies the match group index for the name."
         :name-group name-group
         :finder `(lambda (dir)
                    (helixel-up-regex-block ,begin-re ,end-re dir ,name-group))
+        :adjust-for-jump
+        `(lambda ()
+           (helixel--regex-adjust-for-jump ,begin-re ,end-re))
         :nl-p t))
 
 
@@ -1864,7 +2108,9 @@ NAME is the name of the quote character.  QUOTE-CHAR is the
 quotation character.  DOC is a description of the quote.
 INNER-P non-nil means inner, nil means a."
   (declare (indent defun))
-  `(helixel--define-mark-delimited :quote ,name ,quote-char ,quote-char ,doc ,inner-p))
+  `(helixel--define-mark-delimited :quote ,name
+                                     ,quote-char ,quote-char
+                                     ,doc ,inner-p))
 
 (defmacro helixel-define-mark-object
     (name thing doc subcat &optional restricted-p)
@@ -2062,6 +2308,23 @@ Example:
 (helixel-define-mark-object "sentence" 'helixel-sentence "sentence" 'sentence)
 (helixel-define-mark-object "paragraph" 'helixel-paragraph
                             "paragraph" 'paragraph)
+
+;; ============================================================================
+;; Function Text Objects
+;; ============================================================================
+
+(defun helixel--forward-function (&optional count)
+  "Move forward COUNT functions.
+Moves point COUNT functions forward or (- COUNT) functions
+backward if COUNT is negative.  A function is defined via
+`beginning-of-defun' and `end-of-defun'."
+  (helixel-motion-loop (dir (or count 1))
+    (ignore-errors
+      (if (< dir 0) (beginning-of-defun) (end-of-defun)))))
+(put 'helixel-function 'forward-op #'helixel--forward-function)
+
+(helixel-define-mark-object "function" 'helixel-function
+                            "function" 'function)
 
 (helixel-define-mark-pair "paren" ?\( ?\) "parenthesis" t)
 (helixel-define-mark-pair "paren" ?\( ?\) "parenthesis" nil)

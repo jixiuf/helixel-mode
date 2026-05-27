@@ -41,7 +41,7 @@
     (should (eq (helixel-event-subcat helixel--live-event) 'line))
     (should (null helixel--action-pos))
     (let ((mark-pos (marker-position
-                     (helixel-event-marker helixel--live-event))))
+                     (car (helixel-event-mark-region helixel--live-event)))))
       (setq last-command 'helixel-next-line
             this-command 'helixel-next-line)
       (helixel-next-line)
@@ -59,14 +59,14 @@
     (should (eq (helixel-event-category (car helixel--event-ring))
                 'find-char))
     (let ((mark1 (marker-position
-                  (helixel-event-marker (car helixel--event-ring)))))
+                  (car (helixel-event-mark-region (car helixel--event-ring))))))
       (setq last-command 'helixel-find-next-char
             this-command 'helixel-forward-char)
       (helixel-forward-char)
       (should (eq (helixel-event-category helixel--live-event) 'movement))
       (should (eq (helixel-event-subcat helixel--live-event) 'char))
       (should (not (eq (marker-position
-                        (helixel-event-marker helixel--live-event))
+                        (car (helixel-event-mark-region helixel--live-event)))
                        mark1)))
       (should (= (length helixel--event-ring) 1))
       (should (eq (helixel-event-category (nth 0 helixel--event-ring))
@@ -96,7 +96,7 @@
     (setq last-command 'helixel-forward-char
           this-command 'helixel-forward-char)
     (helixel-forward-char)
-    (helixel-action-cycle)
+    (helixel--action-cycle)
     (should (= (length helixel--event-ring) 2))
     (should (= helixel--action-pos 1))
     (should (= (region-beginning) 1))))
@@ -110,13 +110,13 @@
     (goto-char 1)
     (helixel-forward-char)
     (let ((mark1 (marker-position
-                  (helixel-event-marker helixel--live-event))))
+                  (car (helixel-event-mark-region helixel--live-event)))))
       (setq last-command 'helixel-forward-char
             this-command 'helixel-next-line)
       (goto-char 5)
       (helixel-next-line)
       (should (= (length helixel--event-ring) 1))
-      (helixel-action-cycle)
+      (helixel--action-cycle)
       (should (eq helixel--action-pos 0))
       (should (use-region-p)))))
 
@@ -141,7 +141,7 @@
   "Test action-cycle with no sessions shows message."
   (let ((helixel--event-ring nil) (helixel--live-event nil)
         (helixel--action-pos nil))
-    (helixel-action-cycle)
+    (helixel--action-cycle)
     t))
 
 (ert-deftest helixel-test-action-cycle-forward ()
@@ -155,12 +155,12 @@
           this-command 'helixel-next-line)
     (goto-char 5)
     (helixel-next-line)
-    (helixel-action-cycle)
+    (helixel--action-cycle)
     (should (eq helixel--action-pos 0))
     (should (= (region-beginning) 5))
-    (helixel-action-cycle)
+    (helixel--action-cycle)
     (should (eq helixel--action-pos 1))
-    (helixel-action-cycle t)
+    (helixel--action-cycle t)
     (should (eq helixel--action-pos 0))))
 
 (ert-deftest helixel-test-action-same-subcat-continues ()
@@ -172,7 +172,7 @@
     (helixel-forward-word-start)
     (should (eq (helixel-event-subcat helixel--live-event) 'word))
     (let ((mark-pos (marker-position
-                     (helixel-event-marker helixel--live-event))))
+                     (car (helixel-event-mark-region helixel--live-event)))))
       (setq last-command 'helixel-forward-word-start
             this-command 'helixel-forward-word-end)
       (helixel-forward-word-end)
@@ -187,7 +187,7 @@
     (helixel-forward-word-start)
     (should (eq (helixel-event-subcat helixel--live-event) 'word))
     (let ((word-mark (marker-position
-                      (helixel-event-marker helixel--live-event))))
+                      (car (helixel-event-mark-region helixel--live-event)))))
       (setq last-command 'helixel-forward-word-start
             this-command 'helixel-next-line)
       (helixel-next-line)
@@ -205,7 +205,7 @@
     (should helixel--live-event)
     (should (eq (helixel-event-subcat helixel--live-event) 'goto))
     (should (= (marker-position
-                (helixel-event-marker helixel--live-event)) 10))))
+                (car (helixel-event-mark-region helixel--live-event))) 10))))
 
 (ert-deftest helixel-test-action-wrapper-commands ()
   "Test goto-line starts action correctly."
@@ -349,24 +349,25 @@
       (should (= (length helixel--event-ring) 2))
       (should (eq (helixel-event-category (car helixel--event-ring)) 'search))
       (should (eq (helixel-event-subcat (car helixel--event-ring)) 'search))
-      (should (helixel-event-marker (car helixel--event-ring))))))
+      (should (car (helixel-event-mark-region (car helixel--event-ring)))))))
 
 ;;; C-g session cancel test
 
 (ert-deftest helixel-test-c-g-cancels-session ()
   "Test C-g breaks session and pushes cancel sentinel."
+  (let ((helixel-semicolon-mark-thing nil))
   (helixel-test-with-buffer "hello world test extra"
     (setq helixel--event-ring nil helixel--live-event nil
           helixel--action-pos nil
           last-command nil this-command 'helixel-forward-word-start)
     (helixel-forward-word-start)
     (let ((mark1 (marker-position
-                  (helixel-event-marker helixel--live-event))))
+                  (car (helixel-event-mark-region helixel--live-event)))))
       (setq last-command 'helixel-forward-word-start
             this-command 'helixel-forward-word-start)
       (helixel-forward-word-start)
       (should-not (= (marker-position
-                      (helixel-event-marker helixel--live-event))
+                      (car (helixel-event-mark-region helixel--live-event)))
                      mark1))
       (helixel--cancel-action)
       (should (= (length helixel--event-ring) 3))
@@ -377,17 +378,17 @@
       (helixel-forward-word-start)
       (should helixel--live-event)
       (should (= (marker-position
-                  (helixel-event-marker helixel--live-event)) 7))
-      (helixel-action-cycle)
+                  (car (helixel-event-mark-region helixel--live-event))) 7))
+      (helixel--action-cycle)
       (should (= (length helixel--event-ring) 4))
       (should (eq (helixel-event-category
                    (nth helixel--action-pos helixel--event-ring))
                   'movement))
-      (helixel-action-cycle)
+      (helixel--action-cycle)
       (should (eq (helixel-event-category
                    (nth helixel--action-pos helixel--event-ring))
                   'movement))
-      (should (= (region-beginning) 1)))))
+      (should (= (region-beginning) 1))))))
 
 (provide 'helixel-test-action)
 ;;; helixel-test-action.el ends here

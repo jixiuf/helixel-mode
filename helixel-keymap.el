@@ -221,6 +221,7 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-textobj-outer-map "<"  #'helixel-mark-a-angle)
 (define-key helixel-textobj-outer-map ">"  #'helixel-mark-a-angle)
 (define-key helixel-textobj-outer-map "t"  #'helixel-mark-a-tag)
+(define-key helixel-textobj-outer-map "f"  #'helixel-mark-a-function)
 (define-key helixel-textobj-outer-map "c"  #'helixel-mark-a-block)
 (define-key helixel-textobj-outer-map "\`" #'helixel-mark-a-back-quote)
 (define-key helixel-textobj-outer-map "'"  #'helixel-mark-a-single-quote)
@@ -243,6 +244,7 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-textobj-inner-map "<"  #'helixel-mark-inner-angle)
 (define-key helixel-textobj-inner-map ">"  #'helixel-mark-inner-angle)
 (define-key helixel-textobj-inner-map "t"  #'helixel-mark-inner-tag)
+(define-key helixel-textobj-inner-map "f"  #'helixel-mark-inner-function)
 (define-key helixel-textobj-inner-map "c"  #'helixel-mark-inner-block)
 (define-key helixel-textobj-inner-map "\`" #'helixel-mark-inner-back-quote)
 (define-key helixel-textobj-inner-map "'"  #'helixel-mark-inner-single-quote)
@@ -251,10 +253,102 @@ to composed keymaps with mode overrides on top of the base maps."
 (set-keymap-parent helixel-textobj-map helixel-textobj-inner-map)
 (define-key helixel-textobj-map "i" helixel-textobj-inner-map)
 (define-key helixel-textobj-map "a" helixel-textobj-outer-map)
+(define-key helixel-textobj-map "h" #'mark-whole-buffer)
 (define-key helixel-textobj-map "s" #'helixel-surround-add)
 (define-key helixel-textobj-map "t" #'helixel-surround-add-tag)
 (define-key helixel-textobj-map "d" #'helixel-surround-delete)
 (define-key helixel-textobj-map "r" #'helixel-surround-replace)
+
+;; ── [ ] { } prefix keymaps ──
+;; [ key → outer (a) textobj, outward to opening
+;; ] key → outer (a) textobj, forward to closing end
+;; { key → inner (i) textobj, outward to opening
+;; } key → inner (i) textobj, forward to closing end
+
+(defvar-keymap helixel-right-map
+  :doc "Keymap for `]' prefix."
+  "d" #'flymake-goto-next-error
+  "p" #'helixel-forward-paragraph-end
+  "s" #'helixel-forward-sentence-end
+  "f" #'helixel-forward-function-end
+  ;; outer textobj → forward to closing end
+  "("  #'helixel-next-paren-end
+  ")"  #'helixel-next-paren-end
+  "b"  #'helixel-next-paren-end
+  "["  #'helixel-next-bracket-end
+  "]"  #'helixel-next-bracket-end
+  "B"  #'helixel-next-brace-end
+  "{"  #'helixel-next-brace-end
+  "}"  #'helixel-next-brace-end
+  "<"  #'helixel-next-angle-end
+  ">"  #'helixel-next-angle-end
+  "\"" #'helixel-next-double-quote-end
+  "'"  #'helixel-next-single-quote-end
+  "`"  #'helixel-next-back-quote-end
+  "t"  #'helixel-next-tag-end
+  "c"  #'helixel-next-block-end)
+
+(defvar-keymap helixel-left-map
+  :doc "Keymap for `[' prefix."
+  "d" #'flymake-goto-prev-error
+  "p" #'helixel-backward-paragraph-start
+  "s" #'helixel-backward-sentence-start
+  "f" #'helixel-backward-function-start
+  ;; outer textobj → outward to opening
+  "("  #'helixel-outer-paren
+  ")"  #'helixel-outer-paren
+  "b"  #'helixel-outer-paren
+  "["  #'helixel-outer-bracket
+  "]"  #'helixel-outer-bracket
+  "B"  #'helixel-outer-brace
+  "{"  #'helixel-outer-brace
+  "}"  #'helixel-outer-brace
+  "<"  #'helixel-outer-angle
+  ">"  #'helixel-outer-angle
+  "\"" #'helixel-outer-double-quote
+  "'"  #'helixel-outer-single-quote
+  "`"  #'helixel-outer-back-quote
+  "t"  #'helixel-outer-tag
+  "c"  #'helixel-outer-block)
+
+(defvar-keymap helixel-inner-right-map
+  :doc "Keymap for `}' prefix."
+  ;; inner textobj → forward to closing end
+  "("  #'helixel-inner-next-paren-end
+  ")"  #'helixel-inner-next-paren-end
+  "b"  #'helixel-inner-next-paren-end
+  "["  #'helixel-inner-next-bracket-end
+  "]"  #'helixel-inner-next-bracket-end
+  "B"  #'helixel-inner-next-brace-end
+  "{"  #'helixel-inner-next-brace-end
+  "}"  #'helixel-inner-next-brace-end
+  "<"  #'helixel-inner-next-angle-end
+  ">"  #'helixel-inner-next-angle-end
+  "\"" #'helixel-inner-next-double-quote-end
+  "'"  #'helixel-inner-next-single-quote-end
+  "`"  #'helixel-inner-next-back-quote-end
+  "t"  #'helixel-inner-next-tag-end
+  "c"  #'helixel-inner-next-block-end)
+
+(defvar-keymap helixel-inner-left-map
+  :doc "Keymap for `{' prefix."
+  ;; inner textobj → outward to opening
+  "("  #'helixel-inner-outer-paren
+  ")"  #'helixel-inner-outer-paren
+  "b"  #'helixel-inner-outer-paren
+  "["  #'helixel-inner-outer-bracket
+  "]"  #'helixel-inner-outer-bracket
+  "B"  #'helixel-inner-outer-brace
+  "{"  #'helixel-inner-outer-brace
+  "}"  #'helixel-inner-outer-brace
+  "<"  #'helixel-inner-outer-angle
+  ">"  #'helixel-inner-outer-angle
+  "\"" #'helixel-inner-outer-double-quote
+  "'"  #'helixel-inner-outer-single-quote
+  "`"  #'helixel-inner-outer-back-quote
+  "t"  #'helixel-inner-outer-tag
+  "c"  #'helixel-inner-outer-block)
+
 ;; ── State keymaps ──
 
 ;; helixel-normal-map
@@ -297,7 +391,7 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-normal-map "J" #'helixel-join-lines)
 (define-key helixel-normal-map "k" #'helixel-previous-line)
 (define-key helixel-normal-map "G" #'helixel-goto-line)
-(define-key helixel-normal-map "%" #'mark-whole-buffer)
+(define-key helixel-normal-map "%" #'helixel-jump-to-match)
 (define-key helixel-normal-map ";" #'helixel-action-cycle)
 (define-key helixel-normal-map "\C-o" #'helixel-jump-backward)
 (define-key helixel-normal-map "\C-i" #'helixel-jump-forward)
@@ -323,9 +417,14 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-normal-map "E" #'helixel-forward-WORD-end)
 (define-key helixel-normal-map "b" #'helixel-backward-word-start)
 (define-key helixel-normal-map "B" #'helixel-backward-WORD)
-;; Unimpaired
-(define-key helixel-normal-map "] d" #'flymake-goto-next-error)
-(define-key helixel-normal-map "[ d" #'flymake-goto-prev-error)
+;; Paragraph / Sentence / Function movement
+(define-key helixel-normal-map "}" #'helixel-forward-paragraph-start)
+(define-key helixel-normal-map "{" #'helixel-backward-paragraph-start)
+;; Unimpaired — [ ] { } as textobj prefix keymaps
+(define-key helixel-normal-map "]" helixel-right-map)
+(define-key helixel-normal-map "[" helixel-left-map)
+(define-key helixel-normal-map "}" helixel-inner-right-map)
+(define-key helixel-normal-map "{" helixel-inner-left-map)
 ;; Prefix maps
 (define-key helixel-normal-map "m" helixel-textobj-map)
 

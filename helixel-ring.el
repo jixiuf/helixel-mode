@@ -78,9 +78,10 @@ Releases markers of evicted entries to prevent leaks."
   (when (> (length helixel--event-ring) helixel-event-ring-max)
     (let ((tail (nthcdr helixel-event-ring-max helixel--event-ring)))
       (dolist (e tail)
-        (when-let* ((m (helixel-event-marker e))
-                    ((markerp m)))
-          (set-marker m nil))))
+        (when-let* ((mr (helixel-event-mark-region e))
+                    ((consp mr)))
+          (set-marker (car mr) nil)
+          (set-marker (cdr mr) nil))))
     (setcdr (nthcdr (1- helixel-event-ring-max)
                     helixel--event-ring)
             nil)))
@@ -116,7 +117,8 @@ and clears the live state."
         (make-helixel-event
          :category 'state
          :subcat 'cancel
-         :marker (point-marker)
+         :mark-region (let ((pm (point-marker)))
+                         (cons pm (copy-marker pm t)))
          :timestamp (float-time)
          :buffer (current-buffer)))
   (helixel-event-commit))
@@ -153,7 +155,8 @@ Does NOT commit the new event — caller is responsible for eventual commit."
            :op op
            :category category
            :subcat subcat
-           :marker (point-marker)
+           :mark-region (let ((pm (point-marker)))
+                           (cons pm (copy-marker pm t)))
            :timestamp (float-time)
            :buffer (current-buffer))
           helixel--action-pos nil)))
@@ -184,8 +187,9 @@ Only categories listed here are shown when pressing
 
 (defvar helixel--global-jump-log nil
   "Global jump entries, most recent first.
-Each entry: (:marker M :buffer BUF :category CAT :subcat SUBCAT).
-Lightweight — no full event payload, sel struct, or closures.")
+Each entry: (:mark-region (START . END) :buffer BUF :category CAT
+:subcat SUBCAT).  Lightweight — no full event payload, sel struct,
+or closures.")
 
 (defvar helixel--jump-pos nil
   "Current position in `helixel--global-jump-log' for jump cycling.
@@ -198,10 +202,12 @@ Compares :buffer, :category, :subcat, and marker position."
        (eq (plist-get a :buffer) (plist-get b :buffer))
        (eq (plist-get a :category) (plist-get b :category))
        (equal (plist-get a :subcat) (plist-get b :subcat))
-       (let ((m1 (plist-get a :marker))
-             (m2 (plist-get b :marker)))
-         (if (and (markerp m1) (markerp m2))
-             (= (marker-position m1) (marker-position m2))
+       (let ((mr-a (plist-get a :mark-region))
+             (mr-b (plist-get b :mark-region)))
+         (if (and (consp mr-a) (consp mr-b)
+                  (markerp (car mr-a)) (markerp (car mr-b)))
+             (= (marker-position (car mr-a))
+                (marker-position (car mr-b)))
            t))))
 
 (defun helixel--jump-log-cap ()
@@ -209,9 +215,10 @@ Compares :buffer, :category, :subcat, and marker position."
   (when (> (length helixel--global-jump-log) helixel-jump-log-max)
     (let ((tail (nthcdr helixel-jump-log-max helixel--global-jump-log)))
       (dolist (e tail)
-        (when-let* ((m (plist-get e :marker))
-                    ((markerp m)))
-          (set-marker m nil))))
+        (when-let* ((mr (plist-get e :mark-region))
+                    ((consp mr)))
+          (set-marker (car mr) nil)
+          (set-marker (cdr mr) nil))))
     (setcdr (nthcdr (1- helixel-jump-log-max)
                     helixel--global-jump-log)
             nil)))
@@ -222,13 +229,13 @@ Only pushes if EVENT's :category is in `helixel-jump-categories'.
 Creates independent marker copy; the jump-log entry is lightweight."
   (when (and event
              (memq (helixel-event-category event) helixel-jump-categories))
-    (let* ((src-m (helixel-event-marker event))
-           (buf (or (when (markerp src-m) (marker-buffer src-m))
-                    (current-buffer)))
-           (entry `(:marker ,(if (markerp src-m)
-                                 (copy-marker src-m
-                                              (marker-insertion-type src-m))
-                               src-m)
+    (let* ((src-mr (helixel-event-mark-region event))
+           (buf (if (and (consp src-mr) (markerp (car src-mr)))
+                    (marker-buffer (car src-mr))
+                  (current-buffer)))
+           (entry `(:mark-region ,(when (consp src-mr)
+                                    (cons (copy-marker (car src-mr))
+                                          (copy-marker (cdr src-mr) t)))
                     :buffer ,buf
                     :category ,(helixel-event-category event)
                     :subcat ,(helixel-event-subcat event))))

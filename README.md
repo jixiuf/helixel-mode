@@ -50,6 +50,10 @@ helixel-repeat-edit-pick
 | `g` | Goto prefix |
 | `SPC` | Space prefix (LSP / project) |
 | `C-w` | Window prefix |
+| `m` | Text-object prefix (`mi` inner, `ma` outer, `mh` whole buffer, surround `ms`/`mt`/`md`/`mr`) |
+| `[` / `]` / `{` / `}` | Pair & structure movement prefixes (see below) |
+| `;` | Cycle action history; after pair movement: mark the thing |
+| `%` | Jump to matching bracket |
 | `:` | ex commands |
 | `ESC` | Normal mode |
 
@@ -59,6 +63,37 @@ helixel-repeat-edit-pick
 |-------|-------------|
 | normal | Default editing state |
 | insert | Text input |
+
+### Pair & Structure Movement (`[` `]` `{` `}`)
+
+These prefixes mirror the text-object keys.  Each key in
+`helixel-textobj-inner-map` / `helixel-textobj-outer-map` has a
+corresponding binding.
+
+| Prefix | Textobj | Direction | Jumps to |
+|--------|---------|-----------|----------|
+| `[` key | outer (a) | outward | enclosing pair's opening delimiter |
+| `]` key | outer (a) | forward | next pair's closing end |
+| `{` key | inner (i) | outward | enclosing inner opening |
+| `}` key | inner (i) | forward | next inner closing end |
+
+Structure sub-keys (also on `[` / `]`):
+
+| Key | `[` | `]` |
+|-----|-----|-----|
+| `d` | prev flymake error | next flymake error |
+| `p` | prev paragraph start | next paragraph end |
+| `s` | prev sentence start | next sentence end |
+| `f` | prev function start | next function end |
+
+**Examples:**
+
+- `[ (` — jump outward to the nearest enclosing `(`.
+- `] (` — jump forward to the end of the next `(...)` pair.
+- Press `;` after a pair movement to select the full text-object (mark-thing).
+  Set `helixel-semicolon-mark-thing` to nil to disable.
+- `%` — jump to matching bracket/paren/quote/tag/block.
+
 | visual | Selection mode |
 | motion | Read-only navigation |
 
@@ -67,7 +102,7 @@ helixel-repeat-edit-pick
 `m i` (inner) and `m a` (a / around) select text objects.  Supports
 word (`w`), WORD (`W`), symbol (`o`), sentence (`s`), paragraph (`p`),
 pairs (`(` `[` `{` `<`), quotes (`\"` `'` `` \` ``), tags (`t`),
-and block (`c`).
+function (`f`), and block (`c`).
 
 **Region-aware selection** — in normal mode when a region is already
 active, the first press selects the text object **within the highlighted

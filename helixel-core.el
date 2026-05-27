@@ -706,6 +706,14 @@ Copies the ctx plist so the copy is independent."
 ;;   :display       — string or function (TX) -> string for history
 ;;   :repeat-advance — nil, `line', or function for `.` auto-advance
 ;;
+;;     nil    = no advance (op moves point itself: kill, change, join-lines)
+;;     `line' = advance using the sel kind's advance fn:
+;;              line→line-advance, movement→movement-advance, etc.
+;;              In line-pass (all-buffer/all-dir), `line' vs nil also
+;;              controls the stepping algorithm:
+;;                `line' → simple forward-line (op doesn't move point)
+;;                nil    → check bol/eol first (op may have moved point)
+;;
 ;; Modules define ops at load-time via `helixel-register-op'.
 
 (defvar helixel--op-registry (make-hash-table :test #'eq)
@@ -719,6 +727,7 @@ PROPS is a plist with keys:
   :runner           — function (TX) -> nil for `.` replay
   :display          — string or function (TX) -> string for history
   :repeat-advance   — nil, `line', or function for `.` auto-advance
+                       See the comment block above for semantics.
   :strategy-builder — function (event &optional reverse-p)
                        → helixel-repeat-strategy or nil
 

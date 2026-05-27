@@ -166,14 +166,26 @@ The `helixel-define-command' macro handles this automatically."
 
 (defun helixel--execute-keys (keys)
   "Execute recorded KEYS (a key vector).
-For printable characters, uses `insert-char' directly.
+For printable characters, uses `insert-char' directly then runs
+`post-self-insert-hook' (for `electric-pair-mode' etc.) with
+`last-command-event' bound to the character.
 For non-printable keys, uses `execute-kbd-macro'."
   (let ((helixel--inhibit-repeat-record t)
         (helixel--inhibit-action-track t))
     (when (and keys (> (length keys) 0))
       (dolist (key (append keys nil))
         (if (and (characterp key) (>= key 32) (/= key 127))
-            (insert-char key 1 t)
+            ;; Printable char: direct insertion + post-self-insert-hook.
+            ;; Using `insert-char' preserves the region (unlike
+            ;; `self-insert-command') while binding `last-command-event'
+            ;; lets `electric-pair-mode' and other hook functions work.
+            ;; Deactivate mark first so hooks see the same region
+            ;; state as during manual insertion (no accidental wrapping).
+            (let ((last-command-event key))
+              (insert-char key 1 t)
+              (deactivate-mark)
+              (run-hooks 'post-self-insert-hook))
+          ;; Non-printable key: use execute-kbd-macro.
           (let ((win (selected-window)))
             (if (and win (not (eq (window-buffer win)
                                   (current-buffer))))
@@ -197,7 +209,15 @@ For non-printable keys, uses `execute-kbd-macro'."
   "Process one line per step from START-POS in direction DIR.
 TX is the edit transaction, SEL the selection descriptor.
 ADVANCE is the operator advance tag, CNT the starting count.
-If PREVIEW-P is non-nil, only recreate selections without executing edits."
+If PREVIEW-P is non-nil, only recreate selections without executing edits.
+
+ADVANCE controls two things:
+  1. Whether to auto-advance at all (nil = recreate at point only).
+  2. The stepping algorithm when doing all-buffer/all-dir line passes:
+     \=`line' → simple `forward-line' (op doesn't move point, e.g. insert,
+              surround, indent).
+     nil     → bol/eol check before `forward-line' (op may have moved
+              point, e.g. kill, change)."
   (save-excursion
     (goto-char start-pos)
     (forward-line dir)

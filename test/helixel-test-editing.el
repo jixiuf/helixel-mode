@@ -630,6 +630,52 @@ wrong-type-argument."
       (error nil))  ;; other errors (unbound key) are OK
     (should t)))
 
+(ert-deftest helixel-test-execute-keys-electric-pair-paren ()
+  "`helixel--execute-keys' triggers `electric-pair-mode' for \=\\`(\='.
+When electric-pair-mode is enabled, replaying \='\='(\=' via
+`helixel--execute-keys' should also insert the matching \=')'."
+  (require 'elec-pair)
+  (helixel-test-with-buffer "hello"
+    (electric-pair-mode 1)
+    (goto-char 1)
+    (helixel--execute-keys [?\(])
+    (should (string= (buffer-string) "()hello"))))
+
+(ert-deftest helixel-test-execute-keys-electric-pair-brace ()
+  "`helixel--execute-keys' triggers `electric-pair-mode' for \='{'.
+Similar to paren test but with curly braces."
+  (require 'elec-pair)
+  (helixel-test-with-buffer "hello"
+    (electric-pair-mode 1)
+    (goto-char 1)
+    (helixel--execute-keys [?\{])
+    (should (string= (buffer-string) "{}hello"))))
+
+(ert-deftest helixel-test-execute-keys-electric-pair-no-wrapping ()
+  "`helixel--execute-keys' does NOT wrap active region via electric-pair.
+The mark is deactivated before running `post-self-insert-hook',
+so `electric-pair-mode' sees the same state as during manual
+insertion and inserts the pair without wrapping the region."
+  (require 'elec-pair)
+  (helixel-test-with-buffer "hello"
+    (electric-pair-mode 1)
+    (goto-char 1)
+    ;; Simulate an active region (as dot-repeat advance would create)
+    (push-mark (point-max) t t)
+    (goto-char 1)
+    (helixel--execute-keys [?\(])
+    ;; Should be ()hello (pair at point), NOT (hello) (wrapping)
+    (should (string= (buffer-string) "()hello"))))
+
+(ert-deftest helixel-test-execute-keys-electric-pair-no-mode ()
+  "`helixel--execute-keys' works without `electric-pair-mode' enabled.
+Inserting \='(' without electric-pair should only insert \='('."
+  (helixel-test-with-buffer "hello"
+    (electric-pair-mode -1)
+    (goto-char 1)
+    (helixel--execute-keys [?\(])
+    (should (string= (buffer-string) "(hello"))))
+
 ;; ============================================================================
 ;; Cross-buffer repeat tests (Item 5)
 ;; ============================================================================

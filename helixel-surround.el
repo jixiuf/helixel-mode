@@ -417,6 +417,7 @@ so the user can select a target with one keypress."
   :display (lambda (tx)
              (let ((c (plist-get (helixel-event-payload tx) :char)))
                (if c (format "ms[%c]" c) "ms")))
+  :repeat-advance 'line
   :runner (lambda (tx)
             (when-let* ((char (plist-get (helixel-event-payload tx) :char))
                         (pair (helixel--surround-lookup char)))
@@ -426,6 +427,7 @@ so the user can select a target with one keypress."
   :display (lambda (tx)
              (let ((tag (plist-get (helixel-event-payload tx) :tag)))
                (if tag (format "mt[%s]" tag) "mt")))
+  :repeat-advance 'line
   :runner (lambda (tx)
             (helixel--surround-add-tag
              (plist-get (helixel-event-payload tx) :tag))))

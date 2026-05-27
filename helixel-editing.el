@@ -696,8 +696,8 @@ Set by the op runner from the transaction's :multiplier payload.")
 ;; ── Case operations ──
 
 (helixel-define-operator helixel-toggle-case
-    (:op toggle-case :display "~" :subcat case
-     :params (&optional count))
+    (:op toggle-case :display "~" :repeat-advance 'line
+     :subcat case :params (&optional count))
   (interactive "p")
   (helixel--record-edit 'toggle-case :count (or count 1))
   (if (use-region-p)
@@ -736,7 +736,8 @@ Set by the op runner from the transaction's :multiplier payload.")
 ;; ── Comment toggle ──
 
 (helixel-define-operator helixel-comment-toggle
-    (:op comment-toggle :display "gc" :subcat comment)
+    (:op comment-toggle :display "gc" :repeat-advance 'line
+     :subcat comment)
   (helixel--record-edit 'comment-toggle)
   (if (use-region-p)
       (comment-or-uncomment-region (region-beginning) (region-end))

@@ -70,7 +70,8 @@ Set at command start, committed to ring when complete.")
 (defvar helixel--last-event nil
   "Pointer to the most recent committed event in the ring.
 Consumed by `.` and `,` for repeat.
-Global — mirrors `helixel--last-tx' for cross-buffer replay.")
+Global — the single source of truth for the most recent edit.
+Used by `.` and `,` for cross-buffer replay.")
 
 (defun helixel-event--ring-cap ()
   "Truncate `helixel--event-ring' to `helixel-event-ring-max' entries.

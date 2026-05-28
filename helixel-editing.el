@@ -172,8 +172,8 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
                       (buffer-substring
                        helixel--change-track-marker (point))))))
     (unless executing-kbd-macro
-      (when helixel--last-tx
-        (let ((tx helixel--last-tx))
+      (when helixel--last-event
+        (let ((tx helixel--last-event))
           ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
             (setq tx (helixel--tx-with-payload tx :keys keys)))
@@ -183,7 +183,7 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
             (when (eq (helixel-event-op tx) 'change)
               (setq tx (helixel--tx-with-payload tx
                                                   :inserted-text text))))
-          (helixel--update-last-tx tx))))
+          (helixel--update-last-event tx))))
     (when helixel--change-track-marker
       (set-marker helixel--change-track-marker nil)
       (setq helixel--change-track-marker nil))
@@ -622,8 +622,9 @@ Set by the op runner from the transaction's :multiplier payload.")
          (consecutive-p nil))
     (unless (use-region-p)
       ;; Consecutive (same op): reuse selection, indent 1 level,
-      ;; amalgamate multiplier into the last tx.
-      (when-let* ((tx helixel--last-tx)
+      ;; Consecutive (same op): reuse selection, indent 1 level,
+      ;; amalgamate multiplier into the last event.
+      (when-let* ((tx helixel--last-event)
                   (sel (helixel-event-sel tx)))
         (when (eq (helixel-event-op tx) 'indent-left)
           (when-let* ((m (car (helixel-event-mark-region tx)))
@@ -634,7 +635,7 @@ Set by the op runner from the transaction's :multiplier payload.")
           (indent-rigidly (region-beginning) (region-end) (- 1))
           (let* ((payload (helixel-event-payload tx))
                  (mult (or (plist-get payload :multiplier) 1)))
-            (helixel--update-last-tx
+            (helixel--update-last-event
              (helixel--tx-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
@@ -662,8 +663,9 @@ Set by the op runner from the transaction's :multiplier payload.")
          (consecutive-p nil))
     (unless (use-region-p)
       ;; Consecutive (same op): reuse selection, indent 1 level,
-      ;; amalgamate multiplier into the last tx.
-      (when-let* ((tx helixel--last-tx)
+      ;; Consecutive (same op): reuse selection, indent 1 level,
+      ;; amalgamate multiplier into the last event.
+      (when-let* ((tx helixel--last-event)
                   (sel (helixel-event-sel tx)))
         (when (eq (helixel-event-op tx) 'indent-right)
           (when-let* ((m (car (helixel-event-mark-region tx)))
@@ -674,7 +676,7 @@ Set by the op runner from the transaction's :multiplier payload.")
           (indent-rigidly (region-beginning) (region-end) 1)
           (let* ((payload (helixel-event-payload tx))
                  (mult (or (plist-get payload :multiplier) 1)))
-            (helixel--update-last-tx
+            (helixel--update-last-event
              (helixel--tx-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))

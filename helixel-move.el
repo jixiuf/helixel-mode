@@ -666,13 +666,12 @@ for unmatched bracket characters."
     (setq helixel--raw-selection-type 'line)
     (let* ((prev-count (helixel-sel-count (helixel--pending-sel-get)))
            (new-count (if extending (+ prev-count n) n)))
-      (helixel--pending-sel-set
-            (helixel-sel-create 'line `( :count ,new-count)
-                                #'helixel--recreate-line
-                                (if (> new-count 1)
-                                    (format "Lx%d" new-count)
-                                  "L")
-                                :advance #'helixel--repeat-advance-line)))))
+      (helixel--push-selection 'line `(:count ,new-count)
+                               #'helixel--recreate-line
+                               (if (> new-count 1)
+                                   (format "Lx%d" new-count)
+                                 "L")
+                               :advance #'helixel--repeat-advance-line))))
 
 (helixel-define-command helixel-select-line-up
     (:category movement :subcat lineselect
@@ -694,13 +693,12 @@ for unmatched bracket characters."
     (setq helixel--raw-selection-type 'line)
     (let* ((prev-count (helixel-sel-count helixel--pending-sel))
            (new-count (if extending (+ prev-count n) n)))
-      (helixel--pending-sel-set
-            (helixel-sel-create 'line `( :count ,new-count)
-                                #'helixel--recreate-line
-                                (if (> new-count 1)
-                                    (format "L^x%d" new-count)
-                                  "L^")
-                                :advance #'helixel--repeat-advance-line)))))
+      (helixel--push-selection 'line `(:count ,new-count)
+                               #'helixel--recreate-line
+                               (if (> new-count 1)
+                                   (format "L^x%d" new-count)
+                                 "L^")
+                               :advance #'helixel--repeat-advance-line))))
 
 (helixel-define-command helixel-select-rectangle
     (:category movement :subcat rectselect
@@ -726,13 +724,12 @@ for unmatched bracket characters."
     (setq helixel--raw-selection-type 'rect)
     (let* ((prev-count (helixel-sel-count (helixel--pending-sel-get)))
            (new-count (if extending (+ prev-count n) n)))
-      (helixel--pending-sel-set
-            (helixel-sel-create 'rect `(:count ,new-count)
-                                #'helixel--recreate-rect
-                                (if (> new-count 1)
-                                    (format "rx%d" new-count)
-                                  "r")
-                                :advance #'helixel--repeat-advance-line)))))
+      (helixel--push-selection 'rect `(:count ,new-count)
+                               #'helixel--recreate-rect
+                               (if (> new-count 1)
+                                   (format "rx%d" new-count)
+                                 "r")
+                               :advance #'helixel--repeat-advance-line))))
 
 
 ;; ── Line / Rect recreate functions ──

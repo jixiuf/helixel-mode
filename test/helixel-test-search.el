@@ -230,8 +230,8 @@ exact-case 'Hello' still matches 'Hello'."
 (ert-deftest helixel-test-search-repeat-next-case-sensitive ()
   "n after case-sensitive search (?Hello) respects case."
   (helixel-test-with-buffer "hello Hello hello"
-    (setq helixel--active-search '(:category search :pattern "Hello" :dir forward))
-    (setq helixel--active-search (plist-put (or (copy-sequence helixel--active-search) (list :dir 'backward)) :dir 'backward))
+    (setq helixel--active-search (make-helixel-active-search :category 'search :pattern "Hello" :dir 'forward))
+    (helixel-search--set-dir 'backward)
     ;; Simulate isearch state for a case-sensitive backward search
     (let ((isearch-string "Hello")
           (isearch-regexp t)
@@ -252,8 +252,8 @@ exact-case 'Hello' still matches 'Hello'."
 (ert-deftest helixel-test-search-repeat-next-case-fold-insensitive ()
   "n after case-insensitive search (?hello) matches any case."
   (helixel-test-with-buffer "foo Hello bar HELLO baz"
-    (setq helixel--active-search '(:category search :pattern "hello" :dir forward))
-    (setq helixel--active-search (plist-put (or (copy-sequence helixel--active-search) (list :dir 'backward)) :dir 'backward))
+    (setq helixel--active-search (make-helixel-active-search :category 'search :pattern "hello" :dir 'forward))
+    (helixel-search--set-dir 'backward)
     ;; Simulate isearch state for case-insensitive backward search
     (let ((isearch-string "hello")
           (isearch-regexp t)
@@ -285,7 +285,7 @@ exact-case 'Hello' still matches 'Hello'."
         (helixel--tracking-open 'find-char 'next)
         (setf (helixel-event-sel helixel--live-event) sel)
         (helixel-event-commit))
-      (setq helixel--active-search '(:category find-char :type 'next :char ?b :dir forward))
+      (setq helixel--active-search (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'forward))
       (cl-letf (((symbol-function 'completing-read)
                  (lambda (_prompt _collection &rest _)
                    (helixel-action-display (car helixel--event-ring))))
@@ -417,7 +417,7 @@ For find-char events, the stored direction comes from
 `helixel--active-search', not the sel's :dir."
   (let ((helixel--event-ring nil) (helixel--live-event nil)
         (helixel--active-search
-         '(:category find-char :type 'next :char ?b :dir backward)))
+         (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'backward)))
     (helixel-test-with-buffer "axb axb axb"
       (goto-char 8)
       (let ((sel (helixel-sel-create 'find-char
@@ -459,7 +459,7 @@ For find-char events, the stored direction comes from
   "C-u N with a forward find-char entry toggles direction to backward."
   (let ((helixel--event-ring nil) (helixel--live-event nil)
         (helixel--active-search
-         '(:category find-char :type 'next :char ?b :dir forward)))
+         (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'forward)))
     (helixel-test-with-buffer "axb axb axb"
       (goto-char 8)
       (let ((sel (helixel-sel-create 'find-char
@@ -499,7 +499,7 @@ For find-char events, the stored direction comes from
 (ert-deftest helixel-test-search-from-history-no-direction-flip ()
   "C-u n does NOT flip the active-search direction."
   (let ((helixel--event-ring nil) (helixel--live-event nil)
-        (helixel--active-search '(:category find-char :type 'next :char ?b :dir forward)))
+        (helixel--active-search (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'forward)))
     (helixel-test-with-buffer "axb axb axb"
       (let ((sel (helixel-sel-create 'find-char
                    '(:char ?b :type next :dir forward :inline-advance t)
@@ -520,7 +520,7 @@ When isearch-repeat is used (search, not find-char), the live event
 is committed by action-start but gets category search/subcat repeat.
 This test verifies no stray search wrappers accumulate."
   (let ((helixel--event-ring nil) (helixel--live-event nil)
-        (helixel--active-search '(:category search :pattern "hello" :dir forward))
+        (helixel--active-search (make-helixel-active-search :category 'search :pattern "hello" :dir 'forward))
         (helixel--action-pos nil))
     (helixel-test-with-buffer "hello world hello"
       ;; Simulate isearch state for search-repeat-next

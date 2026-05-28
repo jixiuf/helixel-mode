@@ -55,7 +55,7 @@
     (helixel-toggle-case)
     (should (string= (buffer-string) "hello"))
     (should (= (point) 2))
-    (let ((tx helixel--last-tx))
+    (let ((tx helixel--last-event))
       (funcall (helixel--op-runner (helixel-event-op tx)) tx))
     (should (string= (buffer-string) "hEllo"))
     (should (= (point) 3))))

@@ -170,13 +170,12 @@ So the next edit command (c/d/y) records it for `.` and `,` repeat."
   (when-let* ((s helixel--active-search)
               (pat (helixel-search--active-pattern))
               (dir (helixel-search--current-dir)))
-    (helixel--pending-sel-set
-          (helixel-sel-create
-           'search `(:pattern ,pat :dir ,dir)
-           #'helixel--recreate-search
-           (lambda (c)
-             (concat "/" (or (helixel-sel-search-pattern c) "?")))
-           :advance #'helixel--repeat-advance-search))))
+    (helixel--push-selection
+     'search `(:pattern ,pat :dir ,dir)
+     #'helixel--recreate-search
+     (lambda (c)
+       (concat "/" (or (helixel-sel-search-pattern c) "?")))
+     :advance #'helixel--repeat-advance-search)))
 
 (defun helixel-search--done-hook ()
   "Hook called at the end of isearch to mark the match."

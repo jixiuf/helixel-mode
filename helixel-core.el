@@ -338,6 +338,21 @@ previous selection command."
   (prog1 helixel--pending-sel
     (setq helixel--pending-sel nil)))
 
+;; ── Convenience: push a freshly created selection ──
+
+(defun helixel--push-selection (kind ctx recreate-fn &optional display &rest extras)
+  "Create a `helixel-sel' and push it as the pending selection.
+KIND, CTX, RECREATE-FN, DISPLAY — see `helixel-sel-create'.
+EXTRAS is a plist passed to `helixel-sel-create' (e.g. :advance).
+Returns the created `helixel-sel' struct.
+
+This combines the two-step pattern:
+  (helixel--pending-sel-set (helixel-sel-create ...))
+into a single call, reducing boilerplate in selection commands."
+  (let ((sel (apply #'helixel-sel-create kind ctx recreate-fn display extras)))
+    (helixel--pending-sel-set sel)
+    sel))
+
 
 ;; ----------------------------------------------------------------------
 ;; Part 2 — Delimiter Protocol
@@ -621,13 +636,7 @@ Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored."
 ;; ----------------------------------------------------------------------
 ;;
 ;; Dot-repeat transactions are `helixel-event' structs.  These helpers
-;; replaces the old `helixel-edit` API.
-
-(defvar helixel--last-tx nil
-  "The most recent edit transaction (a `helixel-event' struct).
-Cross-buffer: `.` replays the last edit regardless of which buffer
-it was recorded in.  May be re-pointed by `helixel-repeat-edit-pick'
-to replay an older entry.")
+;; replace the old `helixel-edit` API.
 
 (defun helixel--make-tx (op sel-ctx &rest payload-kv)
   "Create a `helixel-event' transaction for dot-repeat.

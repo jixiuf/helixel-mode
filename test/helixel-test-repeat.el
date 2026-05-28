@@ -43,7 +43,7 @@
     ;; insert-text inserts at point (which helixel-select-line
     ;; leaves at eol after recreating).  The key test: `.`
     ;; should advance point to line 2 before executing.
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create 'line '(:dir forward :count 1)
                                 #'helixel--recreate-line "L")
@@ -135,7 +135,7 @@
   (helixel-test-with-buffer "line1\nline2\nline3\n"
     (goto-char 10)
     ;; Simulate Xihello<ESC>: insert-text on backward line sel.
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create 'line '(:dir backward :count 1)
                                 #'helixel--recreate-line "L")
@@ -159,8 +159,8 @@ Verifies: sel kind stays `line' through insert recording,
                '(:dir forward :count 1 :entry-kind insert)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "hello"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "hello"))
     (let ((old-line (line-number-at-pos)))
       (should (= old-line 1))
       (helixel-repeat-edit)
@@ -184,8 +184,8 @@ selected line)."
                '(:dir forward :count 2 :entry-kind insert)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "hello"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "hello"))
     ;; Point on line 1 before dot-repeat.
     (should (= (line-number-at-pos) 1))
     (helixel-repeat-edit)
@@ -205,8 +205,8 @@ Second `. ` advances from line 3 to line 5."
                '(:dir forward :count 2 :entry-kind insert)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "hello"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "hello"))
     (helixel-repeat-edit)               ; insert on lines 3-4 target
     (should (string= (buffer-string)
                      "line1\nline2\nhelloline3\nline4\nline5\nline6\nline7\n"))
@@ -233,8 +233,8 @@ line's EOL overshoots and selects lines 4-5 instead of 3-4."
                '(:dir forward :count 2 :entry-kind append)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "foo"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "foo"))
     ;; Point at EOL of line 2 before dot-repeat (where a leaves it).
     (should (= (line-number-at-pos) 2))
     (helixel-repeat-edit)
@@ -254,8 +254,8 @@ line's EOL overshoots and selects lines 4-5 instead of 3-4."
                '(:dir forward :count 2 :entry-kind append)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "foo"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "foo"))
     (helixel-repeat-edit)               ; append on line 4 (lines 3-4 target)
     (should (string= (buffer-string)
                      "line1\nline2\nline3\nline4foo\nline5\nline6\nline7\n"))
@@ -272,7 +272,7 @@ key-binding dispatch, not insert-char, in `helixel--execute-keys'."
     (goto-char 3)
     ;; Build tx simulating xi + <M-f> + foo + <ESC>
     ;; :keys captures the full kmacro (M-f + f + o + o).
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'line
@@ -297,7 +297,7 @@ Kmacro captures cursor movement keys; test uses text fallback."
   (helixel-test-with-buffer "hello world\nline2\n"
     (goto-char 1)
     ;; Build tx: line sel + append + text "foobar"
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'line
@@ -319,7 +319,7 @@ Kmacro captures cursor movement keys; test uses text fallback."
   (helixel-test-with-buffer "hello world\nline2\n"
     (goto-char 1)
     ;; Build tx: line sel + insert + text "AAA"
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'line
@@ -340,7 +340,7 @@ Kmacro captures cursor keys; test uses text fallback."
     (goto-char (point-min))
     (forward-line 1)
     ;; Build tx: backward line sel + append + text
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'line
@@ -356,7 +356,7 @@ Kmacro captures cursor keys; test uses text fallback."
   "`. ` after x on a non-blank line skips blank lines on advance."
   (helixel-test-with-buffer "line1\n   \nline3\n"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create 'line '(:dir forward :count 1)
                                 #'helixel--recreate-line "L")
@@ -369,7 +369,7 @@ Kmacro captures cursor keys; test uses text fallback."
   (helixel-test-with-buffer "line1\n   \nline3\n"
     (goto-char (point-min))
     (forward-line 2)              ;; go to line 3
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create 'line '(:dir backward :count 1)
                                 #'helixel--recreate-line "L")
@@ -394,8 +394,8 @@ After `-.' a plain `.` continues backward.  `-.' again flips back."
                '(:dir forward :count 1 :entry-kind append)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "X"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "X"))
     ;; Verify sel direction is forward
     (should (not helixel--repeat-permanent-flip))
     ;; `-.' — flip direction forward→backward, then 1 repeat
@@ -427,7 +427,7 @@ After `-.' a plain `.` continues backward.  `-.' again flips back."
 Still does 1 repeat normally (movement selections have no :dir)."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'movement
@@ -453,8 +453,8 @@ Like 3N for search — negative count also permanently flips."
                '(:dir forward :count 1 :entry-kind append)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "X"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "X"))
     (should (not helixel--repeat-permanent-flip))
     ;; -3. flips to backward + 3 repeats
     ;; From EOL of line 2: backward appends at EOL of lines 1 (skip: at edge)
@@ -489,8 +489,8 @@ After `-,' a plain `.` uses the preview position (helixel--repeat-has-preview)."
                '(:dir forward :count 1 :entry-kind append)
                #'helixel--recreate-line "L")))
       (helixel--record-edit 'insert-text))
-    (setq helixel--last-tx
-          (helixel--tx-with-payload helixel--last-tx :text "X"))
+    (setq helixel--last-event
+          (helixel--tx-with-payload helixel--last-event :text "X"))
     ;; `-,' flips dir and previews
     (helixel-repeat-selection '-)
     ;; Should now be on line 1 (previewed backward from line 2)
@@ -514,7 +514,7 @@ than call-interactively (which triggers mode-specific side effects)."
     (delay-mode-hooks (org-mode))
     ;; Simulate keys recorded in org-mode (self-insert is remapped)
     ;; :commands layer removed — keys-only replay is the primary path
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text nil
             :keys (kbd "foo")
             :text "foo"))
@@ -730,13 +730,13 @@ Verifies that event ring head carries the inserted text in its payload."
     ;; Replay from event ring (simulating pick)
     (goto-char 4)
     (let ((front-event (car helixel--event-ring)))
-      (setq helixel--last-tx front-event))
+      (setq helixel--last-event front-event))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "X X foo"))))
 
 (ert-deftest helixel-test-repeat-pick-insert-end-to-end ()
   "After iZ<esc>, ring head has :text payload; pick replays correctly."
-  (let ((helixel--last-tx nil)
+  (let ((helixel--last-event nil)
         (helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "abc"
       (set-match-data nil) ; clear stale match data from prior tests
@@ -755,7 +755,7 @@ Verifies that event ring head carries the inserted text in its payload."
         ;; Replay from event ring (simulating pick)
         (goto-char 4)
         (let ((front-event (car helixel--event-ring)))
-          (setq helixel--last-tx front-event))
+          (setq helixel--last-event front-event))
         (helixel-repeat-edit)
         (should (string= (buffer-string) "aZbZc")))))
 
@@ -811,7 +811,7 @@ modify `helixel--pending-sel'."
     ;; After kill, remaining is "foo bar"
     (should (string= (buffer-string) "foo bar"))
     ;; Save the stored sel-ctx
-    (let ((stored-sel (copy-sequence (helixel-event-sel helixel--last-tx))))
+    (let ((stored-sel (copy-sequence (helixel-event-sel helixel--last-event))))
       ;; Replay
       (goto-char 1)
       (helixel-repeat-edit)
@@ -820,7 +820,7 @@ modify `helixel--pending-sel'."
       ;; Should be "bar" after second kill (killed "foo ")
       (should (string= (buffer-string) "bar"))
       ;; The stored tx should be unchanged
-      (should (equal (helixel-event-sel helixel--last-tx) stored-sel)))))
+      (should (equal (helixel-event-sel helixel--last-event) stored-sel)))))
 
 ;; ============================================================================
 ;; P1.2: rect change replay does not switch state
@@ -869,7 +869,7 @@ Cursor-offset is set manually in sel ctx to simulate forward-char."
       (helixel-search--handle-done nil))
     ;; Build tx with entry-kind=insert, cursor-offset=1 (C-f),
     ;; and text=foo.  sel ctx records the offset within the match.
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'search
@@ -899,7 +899,7 @@ Cursor-offset is set manually; kmacro captures keys in real flow."
       (helixel-search--handle-done nil))
     ;; Build tx: insert kind=search, entry-kind=insert, offset=1
     ;; simulates /hello + i + C-f + hi<ESC>
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'search
@@ -937,7 +937,7 @@ Insert-after with cursor-movement-left; offset set manually."
       (helixel-search--handle-done nil))
     ;; Build tx: append kind, entry-kind=append, cursor-offset=-2
     ;; simulates /hello + a + <left><left> + ww<ESC>
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'search
@@ -987,9 +987,9 @@ Cursor-offset is 0 (first insertion at region-end)."
       (helixel-insert-exit)
       ;; Buffer after edit: "hellofoo world hello"
       (should (string= (buffer-string) "hellofoo world hello"))
-      (should (string= (plist-get (helixel-event-payload helixel--last-tx) :text)
+      (should (string= (plist-get (helixel-event-payload helixel--last-event) :text)
                        "foo"))
-      (let ((sel (helixel-event-sel helixel--last-tx)))
+      (let ((sel (helixel-event-sel helixel--last-event)))
         (should (eq (helixel-sel-get-kind sel) 'search))
         (should (eq (helixel-sel-search-entry-kind sel) 'append)))
       ;; . — repeat (searches for next "hello" and applies "foo" at end)
@@ -1027,7 +1027,7 @@ only matched at match-start, missing the match-end case for append."
       (helixel-insert-exit)
       ;; Buffer after edit: "hello world hellofoo"
       (should (string= (buffer-string) "hello world hellofoo"))
-      (let ((sel (helixel-event-sel helixel--last-tx)))
+      (let ((sel (helixel-event-sel helixel--last-event)))
         (should (eq (helixel-sel-get-kind sel) 'search))
         (should (eq (helixel-sel-search-entry-kind sel) 'append)))
       ;; . — should find first "hello" (backward) and append "foo"
@@ -1126,7 +1126,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
       (insert "X")
       (helixel-insert-exit)
       (should (string= (buffer-string) "Xhello world hello"))
-      (let ((sel (helixel-event-sel helixel--last-tx)))
+      (let ((sel (helixel-event-sel helixel--last-event)))
         (should (eq (helixel-sel-get-kind sel) 'search))
         (should (eq (helixel-sel-search-entry-kind sel) 'insert)))
       (helixel-repeat-edit)
@@ -1192,7 +1192,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "hello world foo bar"
       (goto-char 1)
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx 'kill
               (helixel-sel-create 'movement
                 '(:moves ((helixel-forward-word-start . 1)))
@@ -1205,7 +1205,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "hello world foo bar"
       (goto-char 1)
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx 'kill
               (helixel-sel-create 'movement
                 '(:moves ((helixel-forward-word-start . 1)))
@@ -1221,7 +1221,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "hello world foo bar"
       (goto-char 1)
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx 'kill
               (helixel-sel-create 'movement
                 '(:moves ((helixel-forward-word-start . 2)))
@@ -1236,7 +1236,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "aaa\nbbb\nccc"
       (goto-char 1)
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx
              'kill
              (helixel-sel-create 'line
@@ -1255,7 +1255,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "aaa\nbbb\nccc\nddd"
       (goto-char 1)
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx
              'kill
              (helixel-sel-create 'line
@@ -1273,7 +1273,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "hello world"
       (goto-char 1)
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx
              'kill
              (helixel-sel-create 'movement
@@ -1293,7 +1293,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   :tags '(repeat comma)
   (helixel-test-with-buffer "line one\nline two\nline three\n"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx
            'insert-text
            (helixel-sel-create
@@ -1314,7 +1314,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   :tags '(repeat comma)
   (helixel-test-with-buffer "line one\nline two\nline three\nline four\n"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx
            'insert-text
            (helixel-sel-create
@@ -1335,7 +1335,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   :tags '(repeat comma)
   (helixel-test-with-buffer "line one\nline two\nline three\n"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx
            'insert-text
            (helixel-sel-create
@@ -1354,7 +1354,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
   (helixel-test-with-buffer
       "line one\nline two\nline three\nline four\nline five\n"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx
            'insert-text
            (helixel-sel-create
@@ -1395,7 +1395,7 @@ With kmacro recording, keys capture the full sequence."
     ;; Text records the concatenated text; sel tracks entry-kind.
     (let ((m-beg (match-beginning 0))
           (m-end (match-end 0)))
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx 'insert-text
               (helixel-sel-create
                'search
@@ -1737,7 +1737,7 @@ entry-kind=insert means insert at match-beginning, not match-end."
           (isearch-other-end (match-beginning 0)))
       (helixel-search--handle-done nil))
     ;; Build tx with entry-kind=insert (i before match)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'search
@@ -2006,7 +2006,7 @@ entry-kind=insert means insert at match-beginning, not match-end."
   (let ((helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "line1\nline2\nline3\n"
       (goto-char 1)
-      (setq helixel--last-tx
+      (setq helixel--last-event
             (helixel--make-tx 'kill
               (helixel-sel-create 'line
                 '(:dir forward :count 2)
@@ -2106,7 +2106,7 @@ After `-1 .' a plain `.` continues in the flipped direction."
           (isearch-forward t)
           (isearch-other-end (match-beginning 0)))
       (helixel-search--handle-done nil))
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'insert-text
             (helixel-sel-create
              'search
@@ -2156,7 +2156,7 @@ After `-1 .' a plain `.` continues in the flipped direction."
 Verifies nil-advance ops (change,kill) don't loop forever."
   (helixel-test-with-buffer "hello\nhello\nhello\nxibar\n"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'change
             (helixel-sel-create 'line '(:dir forward :count 1)
                                 #'helixel--recreate-line "L")
@@ -2178,7 +2178,7 @@ Note: C-u . AFTER a kill skips the new current line because
 kill naturally moved point — use a single xd prefix for bulk kill."
   (helixel-test-with-buffer "line1\nline2\nline3\nline4\n"
     (goto-char 1)
-    (setq helixel--last-tx
+    (setq helixel--last-event
           (helixel--make-tx 'kill
             (helixel-sel-create 'line '(:dir forward :count 1)
                                 #'helixel--recreate-line "L")))

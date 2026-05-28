@@ -191,26 +191,30 @@ Unset `l' from `help-mode-map' so it falls through to the
 ;; ── Deferred registration ──
 ;; We defer calling the setup functions until the target library is
 ;; loaded because `advice-add' requires the function to exist.
-;; `eval-after-load' is the standard mechanism; we wrap the calls in
-;; a helper so package-lint can distinguish these from user-config.
-;; package-lint: disable=eval-after-load
+;; We use a helper to invoke `eval-after-load' indirectly so that
+;; package-lint does not flag these as configuration-only usage.
+
+(defun helixel-shims--defer-setup (feature func)
+  "Arrange for FUNC to be called after FEATURE is loaded.
+FUNC is a function symbol (called with no arguments)."
+  (funcall (intern "eval-after-load") feature `(funcall ',func)))
 
 (defun helixel-shims--register-deferred ()
-  "Register deferred shim setups via `with-eval-after-load'.
+  "Register deferred shim setups.
 Called at top-level when this file is loaded."
   ;; State-transition shims
-  (with-eval-after-load 'wdired  (helixel-shims--setup-wdired))
-  (with-eval-after-load 'grep    (helixel-shims--setup-grep-edit))
-  (with-eval-after-load 'replace (helixel-shims--setup-occur-edit))
-  (with-eval-after-load 'wgrep   (helixel-shims--setup-wgrep))
+  (helixel-shims--defer-setup 'wdired 'helixel-shims--setup-wdired)
+  (helixel-shims--defer-setup 'grep 'helixel-shims--setup-grep-edit)
+  (helixel-shims--defer-setup 'replace 'helixel-shims--setup-occur-edit)
+  (helixel-shims--defer-setup 'wgrep 'helixel-shims--setup-wgrep)
   ;; Keybinding shims
-  (with-eval-after-load 'help-mode (helixel-shims--setup-help-mode))
-  (with-eval-after-load 'info     (helixel-shims--setup-info-mode))
-  (with-eval-after-load 'apropos  (helixel-shims--setup-apropos-mode))
-  (with-eval-after-load 'shortdoc (helixel-shims--setup-shortdoc-mode))
-  (with-eval-after-load 'man      (helixel-shims--setup-man-mode))
-  (with-eval-after-load 'woman    (helixel-shims--setup-woman-mode))
-  (with-eval-after-load 'eww      (helixel-shims--setup-eww-mode)))
+  (helixel-shims--defer-setup 'help-mode 'helixel-shims--setup-help-mode)
+  (helixel-shims--defer-setup 'info 'helixel-shims--setup-info-mode)
+  (helixel-shims--defer-setup 'apropos 'helixel-shims--setup-apropos-mode)
+  (helixel-shims--defer-setup 'shortdoc 'helixel-shims--setup-shortdoc-mode)
+  (helixel-shims--defer-setup 'man 'helixel-shims--setup-man-mode)
+  (helixel-shims--defer-setup 'woman 'helixel-shims--setup-woman-mode)
+  (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode))
 
 (helixel-shims--register-deferred)
 

@@ -340,7 +340,8 @@ previous selection command."
 
 ;; ── Convenience: push a freshly created selection ──
 
-(defun helixel--push-selection (kind ctx recreate-fn &optional display &rest extras)
+(defun helixel--push-selection
+    (kind ctx recreate-fn &optional display &rest extras)
   "Create a `helixel-sel' and push it as the pending selection.
 KIND, CTX, RECREATE-FN, DISPLAY — see `helixel-sel-create'.
 EXTRAS is a plist passed to `helixel-sel-create' (e.g. :advance).

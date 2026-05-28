@@ -838,7 +838,7 @@ and back."
     (push-mark (point) t t)
     (goto-char 5)
     (rectangle-mark-mode 1)
-    (setq helixel--selection-type 'rect)
+    (setq helixel--raw-selection-type 'rect)
     (setq last-command nil this-command 'helixel-change-thing-at-point)
     (helixel-change-thing-at-point)
     (insert "X")
@@ -2016,7 +2016,7 @@ entry-kind=insert means insert at match-beginning, not match-end."
                     (goto-char
                      (line-beginning-position (1+ cnt)))
                     (setq mark-active t))
-                  (setq helixel--selection-type 'line))
+                  (setq helixel--raw-selection-type 'line))
                 "2lines")))
       ;; First . kills line1+line2, leaving line3
       (helixel-repeat-edit)

@@ -197,8 +197,10 @@ Old registers shift: slot N-1 → N, ..., slot 1 → 2."
     (when (> count 1)
       (cl-loop for i from (- count 2) downto 0
                for src = (+ start i)
-               do (set-register (1+ src) (get-register src)))
-    (set-register start text))))
+               do (set-register (1+ src) (get-register src))))
+    ;; Always store the new text in the first (start) slot,
+    ;; even when count is 1 (no rotation needed).
+    (set-register start text)))
 
 (defun helixel--kill-new (text &optional kind)
   "Like `kill-new', but also populates numbered registers.

@@ -663,7 +663,7 @@ for unmatched bracket characters."
       (dotimes (_ (1- n))
         (call-interactively #'next-line)
         (end-of-line)))
-    (setq helixel--selection-type 'line)
+    (setq helixel--raw-selection-type 'line)
     (let* ((prev-count (helixel-sel-count (helixel--pending-sel-get)))
            (new-count (if extending (+ prev-count n) n)))
       (helixel--pending-sel-set
@@ -691,7 +691,7 @@ for unmatched bracket characters."
       (dotimes (_ (1- n))
         (call-interactively #'previous-line)
         (beginning-of-line)))
-    (setq helixel--selection-type 'line)
+    (setq helixel--raw-selection-type 'line)
     (let* ((prev-count (helixel-sel-count helixel--pending-sel))
            (new-count (if extending (+ prev-count n) n)))
       (helixel--pending-sel-set
@@ -723,7 +723,7 @@ for unmatched bracket characters."
       (dotimes (_ (1- n))
         (forward-line 1)
         (rectangle--reset-point-crutches)))
-    (setq helixel--selection-type 'rect)
+    (setq helixel--raw-selection-type 'rect)
     (let* ((prev-count (helixel-sel-count (helixel--pending-sel-get)))
            (new-count (if extending (+ prev-count n) n)))
       (helixel--pending-sel-set
@@ -781,7 +781,7 @@ at the appropriate offset on the selected line:
     (dotimes (_ (1- n))
       (forward-line 1)
       (rectangle--reset-point-crutches))
-    (setq helixel--selection-type 'rect)))
+    (setq helixel--raw-selection-type 'rect)))
 
 (defun helixel--recreate-movement (ctx)
   "Replay movement selection from CTX.

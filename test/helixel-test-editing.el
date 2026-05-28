@@ -380,7 +380,7 @@
     (setq last-command nil this-command 'helixel-yank)
     (helixel-yank)
     (helixel-repeat-edit)
-    (should (null helixel--selection-type))))
+    (should (null helixel--raw-selection-type))))
 
 (ert-deftest helixel-test-repeat-edit-copy ()
   "Test repeat copy (yank)."

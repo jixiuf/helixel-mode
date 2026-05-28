@@ -146,9 +146,9 @@ No-op when `helixel--inhibit-action-track' is non-nil (dot-repeat).
 Does NOT commit the new event — caller is responsible for eventual commit."
   (unless helixel--inhibit-action-track
     ;; Clear textobj selection state on non-textobj actions
-    (when (and (eq helixel--selection-type 'textobj)
+    (when (and (eq helixel--raw-selection-type 'textobj)
                (not (eq category 'textobj)))
-      (setq helixel--selection-type nil))
+      (setq helixel--raw-selection-type nil))
     (helixel-event-commit)
     (setq helixel--live-event
           (make-helixel-event

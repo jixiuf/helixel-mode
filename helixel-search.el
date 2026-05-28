@@ -424,7 +424,7 @@ at the appropriate offset within the match for insert-text ops."
          (user-error "Search pattern not found: %s" pat))))
     (push-mark (match-beginning 0) t t)
     (goto-char (match-end 0))
-    (setq helixel--selection-type 'char)
+    (setq helixel--raw-selection-type 'char)
     (when-let* ((entry-kind (helixel-sel-search-entry-kind ctx)))
       (let* ((base (if (eq entry-kind 'append)
                        (match-end 0)

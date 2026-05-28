@@ -1286,7 +1286,7 @@ the same multiplier."
     (let ((cmd this-command)
           (n (or count 1))
           (delim delimiter))
-      (setq helixel--selection-type 'textobj)
+      (setq helixel--raw-selection-type 'textobj)
       (helixel--pending-sel-set
        (helixel-sel-create
         'textobj `(:command ,cmd :count ,n :delimiter ,delim
@@ -2373,7 +2373,7 @@ Signals errors when no more targets exist."
            (when (= (point) orig)
              (forward-char 1))
            (funcall command cnt))))))
-  (setq helixel--selection-type 'textobj))
+  (setq helixel--raw-selection-type 'textobj))
 
 
 ;; ── Textobj advance (from helixel-repeat.el) ──

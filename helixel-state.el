@@ -237,7 +237,7 @@ Also preserve highlights when `rectangle-mark-mode' is active."
     (when rectangle-mark-mode
       (rectangle-mark-mode -1))
     (helixel--switch-state 'visual)
-    (setq helixel--selection-type nil)
+    (setq helixel--raw-selection-type nil)
     (push-mark-command t t)))
 
 ;; ── Minor modes ──

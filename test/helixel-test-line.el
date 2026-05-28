@@ -76,7 +76,7 @@
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
     (push-mark (point) t t)
     (end-of-line)
-    (setq helixel--selection-type 'line)
+    (setq helixel--raw-selection-type 'line)
     (should (eq (helixel--selection-type) 'line))))
 
 (ert-deftest helixel-test-selection-type-line-invalidated ()
@@ -86,27 +86,27 @@
     (goto-char 3)
     (push-mark (point) t t)
     (end-of-line)
-    (setq helixel--selection-type 'line)
+    (setq helixel--raw-selection-type 'line)
     (should-not (helixel--selection-type))))
 
 ;;; helixel-select-line sets selection type
 
 (ert-deftest helixel-test-select-line-sets-type ()
-  "Test `helixel-select-line' sets `helixel--selection-type' to line."
+  "Test `helixel-select-line' sets `helixel--raw-selection-type' to line."
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
-    (setq helixel--selection-type nil)
+    (setq helixel--raw-selection-type nil)
     (helixel-select-line)
-    (should (eq helixel--selection-type 'line))
+    (should (eq helixel--raw-selection-type 'line))
     (should (region-active-p))))
 
 ;;; helixel--clear-data resets selection type
 
 (ert-deftest helixel-test-clear-data-resets-type ()
-  "Test `helixel--clear-data' resets `helixel--selection-type'."
+  "Test `helixel--clear-data' resets `helixel--raw-selection-type'."
   (helixel-test-with-buffer "hello"
-    (setq helixel--selection-type 'line)
+    (setq helixel--raw-selection-type 'line)
     (helixel--clear-data)
-    (should-not helixel--selection-type)))
+    (should-not helixel--raw-selection-type)))
 
 ;;; helixel--line-bounds-of-region tests
 
@@ -167,7 +167,7 @@
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--selection-type nil)
+      (setq helixel--raw-selection-type nil)
       (helixel-kill-ring-save)
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (car kill-ring) "hello")))))
@@ -213,7 +213,7 @@
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--selection-type nil)
+      (setq helixel--raw-selection-type nil)
       (helixel-kill-thing-at-point)
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (buffer-string) " world")))))
@@ -312,7 +312,7 @@
     (kill-new (helixel--linewise-text "REPLACED\n"))
     (push-mark (point) t t)
     (goto-char 6)
-    (setq helixel--selection-type nil)
+    (setq helixel--raw-selection-type nil)
     (helixel-replace)
     ;; Line-wise kill should be stripped of trailing newline for inline replace
     (should (string= (buffer-string) "REPLACED world"))))
@@ -322,14 +322,14 @@
   (helixel-test-with-buffer "hello"
     (let ((helixel-replace-delete-char-p t))
       (kill-new "X")
-      (setq helixel--selection-type nil)
+      (setq helixel--raw-selection-type nil)
       (helixel-replace)
       (should (string= (buffer-string) "Xello"))))
 
   (helixel-test-with-buffer "hello"
     (let ((helixel-replace-delete-char-p nil))
       (kill-new "X")
-      (setq helixel--selection-type nil)
+      (setq helixel--raw-selection-type nil)
       (helixel-replace)
       (should (string= (buffer-string) "Xhello")))))
 
@@ -379,7 +379,7 @@
       ;; Select "brave"
       (push-mark 7 t t)
       (goto-char 12)
-      (setq helixel--selection-type nil)
+      (setq helixel--raw-selection-type nil)
       (setq last-command nil)
       (helixel-replace)
       (should (string= (buffer-string) "hello cruel world"))
@@ -481,7 +481,7 @@
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--selection-type nil)
+      (setq helixel--raw-selection-type nil)
       (helixel-kill-thing-at-point)
       (should (string= (car kill-ring) "hello"))
       (should-not (helixel--linewise-kill-p (car kill-ring)))
@@ -494,8 +494,8 @@
 (ert-deftest helixel-test-begin-selection-clears-line-type ()
   "Test that `helixel-begin-selection' clears line selection type."
   (helixel-test-with-buffer "hello"
-    (setq helixel--selection-type 'line)
+    (setq helixel--raw-selection-type 'line)
     (helixel-begin-selection)
-    (should-not helixel--selection-type)))
+    (should-not helixel--raw-selection-type)))
 
 ;;; helixel-test-line.el ends here

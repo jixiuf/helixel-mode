@@ -802,9 +802,11 @@ Shows operator name, display label, and advance tag."
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
 
-(defvar-local helixel--selection-type nil
-  "Current selection type.
-nil means charwise, `line' means linewise, `rect' means rectangle.")
+(defvar-local helixel--raw-selection-type nil
+  "Internal flag: raw selection type before validation.
+Set by selection commands (line, rect, textobj, char).
+nil means charwise, `line' means linewise, `rect' means rectangle.
+Use `helixel--selection-type' for the validated version.")
 
 (defun helixel--swap-source-type ()
   "Return the swap-source type for the current selection.
@@ -812,8 +814,8 @@ Returns nil (char), \=`line', or \=`rect'.
 More permissive than `helixel--selection-type' — detects
 `rectangle-mark-mode' directly."
   (cond
-   ((eq helixel--selection-type 'rect) 'rect)
-   ((eq helixel--selection-type 'line) 'line)
+   ((eq helixel--raw-selection-type 'rect) 'rect)
+   ((eq helixel--raw-selection-type 'line) 'line)
    ((bound-and-true-p rectangle-mark-mode) 'rect)
    (t nil)))
 
@@ -857,12 +859,12 @@ falls back to the operator registry."
 
 
 
-(defvar helixel--action-pos)  ; defined in helixel-ring.el
+(defvar-local helixel--action-pos nil)  ; defined in helixel-ring.el
 
 (defun helixel--clear-data ()
   "Clear any intermediate data, e.g. selections/mark.
 Used by state machine, surround, and jump navigation."
-  (setq helixel--selection-type nil)
+  (setq helixel--raw-selection-type nil)
   (setq helixel--action-pos nil)
   (when rectangle-mark-mode
     (rectangle-mark-mode -1))
@@ -874,15 +876,15 @@ Validates that the region actually matches the claimed type.
 Supports `line', `rect' and `textobj'."
   (when (region-active-p)
     (cond
-     ((eq helixel--selection-type 'rect)
+     ((eq helixel--raw-selection-type 'rect)
       (when rectangle-mark-mode 'rect))
-     ((eq helixel--selection-type 'line)
+     ((eq helixel--raw-selection-type 'line)
       (let ((beg (region-beginning))
             (end (region-end)))
         (when (and (save-excursion (goto-char beg) (bolp))
                    (save-excursion (goto-char end) (or (eolp) (eobp))))
           'line)))
-     ((eq helixel--selection-type 'textobj)
+     ((eq helixel--raw-selection-type 'textobj)
       'textobj))))
 
 (provide 'helixel-core)

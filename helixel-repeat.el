@@ -148,11 +148,10 @@ The `helixel-define-command' macro handles this automatically."
       (helixel-event-commit))))
 
 (defun helixel--update-last-tx (new-tx)
-  "Sync last-tx, last-event, and event ring front to NEW-TX."
+  "Sync `helixel--last-tx' and `helixel--last-event' to NEW-TX."
   (setq helixel--last-tx new-tx)
-  (when-let* ((front (car helixel--event-ring)))
-    (helixel--live-edit-set new-tx))
-  ;; Keep last-event payload in sync so repeat-edit sees inserted text.
+  ;; Keep last-event in sync so repeat-edit sees updated payload
+  ;; (e.g. inserted text, keys, multiplier).
   (when (and helixel--last-event (helixel-event-p helixel--last-event))
     (setf (helixel-event-payload helixel--last-event)
           (helixel-event-payload new-tx))))
@@ -438,14 +437,17 @@ The chosen event's edit data becomes the new `helixel--last-tx'."
            (choice (completing-read "Repeat edit: " collection nil t))
            (event (cdr (assoc choice items))))
       (when event
-        ;; Reconstruct old-style tx from event for helixel--last-tx
+        ;; Reconstruct tx from event for helixel--last-tx.
+        ;; helixel--make-tx signature: (op sel-ctx &rest payload-kv)
+        ;; so sel-ctx is the second positional arg, then
+        ;; remaining payload plist keys are spread via apply.
         (helixel--update-last-tx
-         (helixel--make-tx
-          (helixel-event-op event)
-          :display (helixel-event-display-format event)
-          :sel (helixel-event-sel event)
-          :payload (helixel-event-payload event)
-          :runner (helixel-event-runner event)))
+         (apply #'helixel--make-tx
+                (helixel-event-op event)
+                (helixel-event-sel event)
+                :display (helixel-event-display-format event)
+                :runner (helixel-event-runner event)
+                (helixel-event-payload event)))
         (helixel-repeat-edit)))))
 
 (defun helixel-repeat-debug ()

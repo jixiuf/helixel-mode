@@ -748,7 +748,7 @@ On a single-char symbol at eob, w selects it."
     (helixel-find-next-char ?b)
     (should (eql (point) 8))       ; after second b
     (helixel-search-repeat-reverse)
-    (should (eq (plist-get helixel--active-search :dir) 'backward))
+    (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
     (should (< (point) 8))))
 
 ;;; Pair delimiter movement tests — [ ] { } prefixes

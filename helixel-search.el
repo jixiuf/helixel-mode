@@ -75,56 +75,60 @@ Supported values: `search' and `find-char'."
 ;; snapshots and never store mutable state.
 
 (defvar-local helixel--active-search nil
-  "Active repeat target as a plist with keys:
-:category — `search' or `find-char'
-:pattern  — regexp string (search only)
-:dir      — `forward' or `backward' (mutable — N flips it)
-:type     — `next' or `till' (find-char only)
-:char     — character (find-char only)
-:entry-kind — `insert' / `append' / nil")
+  "Active repeat target as a `helixel-active-search' struct.
+Set by \=/, \=?, \=*, \=#, f, F, t, T.
+Read by n/N commands and `.` / `,` repeat.
+The :dir slot is MUTABLE — N flips it.
+Event-ring entries are immutable snapshots and never store
+mutable state.")
 
 ;; ── Active-search accessors (delegate to `helixel--active-search') ──
 ;;
-;; All access to `helixel--active-search' plist goes through these
-;; functions — no raw `plist-get' outside this block.  This keeps
-;; ctx-lint clean and makes refactoring to a struct trivial.
+;; All access to `helixel--active-search' goes through these
+;; functions or direct struct accessors — no raw `plist-get'.
 
 (defsubst helixel-search--active-category ()
-  "Return :category from `helixel--active-search'."
-  (plist-get helixel--active-search :category))
+  "Return the category slot from `helixel--active-search'."
+  (and helixel--active-search
+       (helixel-active-search--category helixel--active-search)))
 
 (defsubst helixel-search--active-pattern ()
-  "Return :pattern from `helixel--active-search'."
-  (plist-get helixel--active-search :pattern))
+  "Return the pattern slot from `helixel--active-search'."
+  (and helixel--active-search
+       (helixel-active-search--pattern helixel--active-search)))
 
 (defsubst helixel-search--active-type ()
-  "Return :type from `helixel--active-search'."
-  (plist-get helixel--active-search :type))
+  "Return the type slot from `helixel--active-search'."
+  (and helixel--active-search
+       (helixel-active-search--type helixel--active-search)))
 
 (defsubst helixel-search--active-char ()
-  "Return :char from `helixel--active-search'."
-  (plist-get helixel--active-search :char))
+  "Return the char slot from `helixel--active-search'."
+  (and helixel--active-search
+       (helixel-active-search--char helixel--active-search)))
 
 (defsubst helixel-search--current-dir ()
   "Return current repeat direction from `helixel--active-search'.
 Defaults to \='forward' when the search state has no direction set."
-  (or (plist-get helixel--active-search :dir) 'forward))
+  (if helixel--active-search
+      (or (helixel-active-search--dir helixel--active-search) 'forward)
+    'forward))
 
 (defun helixel-search--flip-dir ()
   "Toggle repeat direction in `helixel--active-search'."
-  (let* ((old (helixel-search--current-dir))
-         (new (if (eq old 'forward) 'backward 'forward)))
-    (setq helixel--active-search
-          (plist-put (or (copy-sequence helixel--active-search)
-                         (list :dir new))
-                     :dir new))))
+  (let ((new (if (eq (helixel-search--current-dir) 'forward)
+                 'backward 'forward)))
+    (if helixel--active-search
+        (setf (helixel-active-search--dir helixel--active-search) new)
+      (setq helixel--active-search
+            (make-helixel-active-search :dir new)))))
 
 (defun helixel-search--set-dir (dir)
   "Set DIR in `helixel--active-search'."
-  (setq helixel--active-search
-        (plist-put (or (copy-sequence helixel--active-search)
-                       (list :dir dir))
-                   :dir dir)))
+  (if helixel--active-search
+      (setf (helixel-active-search--dir helixel--active-search) dir)
+    (setq helixel--active-search
+          (make-helixel-active-search :dir dir))))
 
 
 ;; ---------------------------------------------------------------------------
@@ -183,7 +187,8 @@ So the next edit command (c/d/y) records it for `.` and `,` repeat."
       (helixel-event-commit)
       
       (setq helixel--active-search
-            `(:category search :pattern ,isearch-string :dir ,dir))))
+            (make-helixel-active-search
+             :category 'search :pattern isearch-string :dir dir))))
   (helixel-search--handle-done helixel-search--had-region)
   (helixel-search--set-sel-ctx))
 
@@ -328,7 +333,8 @@ Reads pattern from `helixel--active-search'."
     (let ((dir (if forwardp 'forward 'backward)))
       (helixel-search--set-dir dir)
       (setq helixel--active-search
-            `(:category find-char :type ,type :char ,char :dir ,dir)))))
+            (make-helixel-active-search
+             :category 'find-char :type type :char char :dir dir)))))
 
 (defun helixel-search--find-char-core (&optional _action dir)
   "Execute find-char in direction DIR.
@@ -541,7 +547,8 @@ Returns the chosen action plist or nil."
          (helixel--tracking-open cat (helixel-event-subcat event))
          
          (setq helixel--active-search
-               `(:category find-char :type ,type :char ,char :dir ,use-dir))
+               (make-helixel-active-search
+                :category 'find-char :type type :char char :dir use-dir))
          (helixel-search--find-char-core event use-dir)))
        ('search
         (let* ((sel (helixel-event-sel event))
@@ -555,7 +562,8 @@ Returns the chosen action plist or nil."
           (helixel-event-commit)
           
           (setq helixel--active-search
-                `(:category search :pattern ,pattern :dir ,use-dir))
+                (make-helixel-active-search
+                 :category 'search :pattern pattern :dir use-dir))
           (condition-case nil
               (helixel-search--search pattern use-dir)
             (search-failed (message "Search failed: %s" pattern)))

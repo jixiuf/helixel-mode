@@ -467,6 +467,31 @@ Returns (OPEN-END . CLOSE-BEG)."
 
 
 ;; ----------------------------------------------------------------------
+;; Part 2b — Active Search State (mutable, per-buffer)
+;; ----------------------------------------------------------------------
+;;
+;; Replaces the old raw plist for `helixel--active-search'.
+;; Defined here (zero deps) so both helixel-search.el and
+;; helixel-repeat.el can access its fields via struct accessors.
+
+(cl-defstruct (helixel-active-search (:conc-name helixel-active-search--)
+                                      (:copier copy-helixel-active-search))
+  "Mutable active search state — set by \=/, \=?, \=*, \=#, f, F, t, T.
+Slots:
+  CATEGORY  — \='search or \='find-char
+  PATTERN   — regexp string (search only)
+  DIR       — \='forward or \='backward (mutable — N flips it)
+  TYPE      — \='next or \='till (find-char only)
+  CHAR      — character (find-char only)
+  ENTRY-KIND — \='insert, \='append, or nil"
+  (category nil :read-only t)
+  (pattern  nil :read-only t)
+  dir
+  (type    nil :read-only t)
+  (char    nil :read-only t)
+  entry-kind)
+
+;; ----------------------------------------------------------------------
 ;; Part 3 — Kind Registry (centralised kind protocol)
 ;; ----------------------------------------------------------------------
 ;;

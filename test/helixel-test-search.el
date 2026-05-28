@@ -100,10 +100,10 @@ exact-case 'Hello' still matches 'Hello'."
         (helixel--tracking-open 'search 'search)
         (helixel-search--done-hook))
       ;; Verify repeat state
-      (should (eq (plist-get helixel--active-search :category) 'search))
-      (should (string= (plist-get helixel--active-search :pattern)
+      (should (eq (helixel-active-search--category helixel--active-search) 'search))
+      (should (string= (helixel-active-search--pattern helixel--active-search)
                        "hello"))
-      (should (eq (plist-get helixel--active-search :dir) 'forward))
+      (should (eq (helixel-active-search--dir helixel--active-search) 'forward))
       ;; Verify selection context for . repeat
       (let ((sel helixel--pending-sel))
         (should sel)
@@ -132,10 +132,10 @@ exact-case 'Hello' still matches 'Hello'."
         (helixel--tracking-open 'search 'search)
         (helixel-search--done-hook))
       ;; Verify repeat preserves case-sensitive pattern
-      (should (eq (plist-get helixel--active-search :category) 'search))
-      (should (string= (plist-get helixel--active-search :pattern)
+      (should (eq (helixel-active-search--category helixel--active-search) 'search))
+      (should (string= (helixel-active-search--pattern helixel--active-search)
                        "Hello"))
-      (should (eq (plist-get helixel--active-search :dir) 'backward))
+      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
       ;; Verify selection context
       (let ((sel helixel--pending-sel))
         (should sel)
@@ -155,7 +155,7 @@ exact-case 'Hello' still matches 'Hello'."
     (let ((pt (point))
           (mk (mark)))
       (helixel-search-repeat-reverse)
-      (should (eq (or (plist-get helixel--active-search :dir) (quote forward)) 'backward))
+      (should (eq (or (helixel-active-search--dir helixel--active-search) (quote forward)) 'backward))
       (should (= (point) mk))
       (should (= (mark) pt)))))
 
@@ -307,7 +307,7 @@ exact-case 'Hello' still matches 'Hello'."
     (should (= (length helixel--event-ring) 1))
     (setq last-command 'helixel-forward-char this-command 'helixel-search-repeat-next)
     (helixel-search-repeat-next)
-    (should (plist-get helixel--active-search :type))))
+    (should (helixel-active-search--type helixel--active-search))))
 
 ;;; History collection and display
 

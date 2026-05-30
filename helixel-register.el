@@ -210,6 +210,18 @@ a delete (rotates registers 1-9, sets register - for small deletes).
 When a named register is active, TEXT is also stored there.
 Does NOT clear the register -- callers should call
 `helixel--register-consume' separately when done."
+  ;; Save external clipboard/selection content to kill ring before
+  ;; a delete overwrites it.  This ensures `helixel-replace-pop' can
+  ;; cycle back to externally-copied content (e.g. from outside Emacs).
+  ;; Copy operations (:copy kind) don't need this — they preserve
+  ;; the clipboard rather than overwriting it.
+  (unless (eq kind :copy)
+    (when interprogram-paste-function
+      (let ((clip (funcall interprogram-paste-function)))
+        (when (and clip (> (length clip) 0)
+                   (or (null kill-ring)
+                       (not (string= clip (car kill-ring)))))
+          (kill-new clip)))))
   ;; Always push to kill-ring (unnamed register).
   (kill-new text)
   ;; Numbered / special registers.

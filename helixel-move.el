@@ -740,16 +740,18 @@ for unmatched bracket characters."
 When :entry-kind is present (insert ops), position cursor
 at the appropriate offset on the selected line:
   :entry-kind insert \=`region-beginning' + cursor-offset
-  :entry-kind append \=`region-end' + cursor-offset"
+  :entry-kind append \=`region-end' + cursor-offset
+When :span is set, extends region back to the pre-recreate origin."
   (let ((n (helixel-sel-line-count ctx))
         (entry-kind (plist-get ctx :entry-kind)))
-    (if (eq (helixel-sel-line-dir ctx) 'backward)
-        (helixel-select-line-up n)
-      (helixel-select-line n))
-    ;; Signal error when buffer is empty (nothing to select).
-    ;; The strategy catches this to stop iteration.
-    (when (and (bobp) (eobp))
-      (user-error "No more targets"))
+    (helixel--with-span ctx
+      (if (eq (helixel-sel-line-dir ctx) 'backward)
+          (helixel-select-line-up n)
+        (helixel-select-line n))
+      ;; Signal error when buffer is empty (nothing to select).
+      ;; The strategy catches this to stop iteration.
+      (when (and (bobp) (eobp))
+        (user-error "No more targets")))
     (when entry-kind
       ;; Position cursor for key/text insertion.
       ;; Use region-beginning/region-end because helixel-select-line
@@ -769,8 +771,16 @@ at the appropriate offset on the selected line:
         (when off (forward-char off))))))
 
 (defun helixel--recreate-rect (ctx)
-  "Replay a rectangular selection from CTX."
-  (let ((n (helixel-sel-rect-count ctx)))
+  "Replay a rectangular selection from CTX.
+When :span is set, extends region back to the pre-recreate origin
+without disturbing the rectangle's own mark.
+
+NOTE: Does NOT use `helixel--with-span' because `push-mark' inside
+`rectangle-mark-mode' behaves differently — we must deactivate the
+rectangle mark, push the span origin, then reactivate.  The macro's
+simple `push-mark' would interact poorly with the rect-mode mark."
+  (let ((n (helixel-sel-rect-count ctx))
+        (span-origin (when (plist-get ctx :span) (point))))
     (unless rectangle-mark-mode
       (helixel--switch-state 'visual)
       (push-mark (point) t t)
@@ -778,6 +788,10 @@ at the appropriate offset on the selected line:
     (dotimes (_ (1- n))
       (forward-line 1)
       (rectangle--reset-point-crutches))
+    (when span-origin
+      (deactivate-mark)
+      (push-mark span-origin t t)
+      (activate-mark))
     (setq helixel--raw-selection-type 'rect)))
 
 (defun helixel--recreate-movement (ctx)
@@ -785,16 +799,20 @@ at the appropriate offset on the selected line:
 By default, the region accumulates across all commands (visual-mode
 behaviour for e.g. `v w w d .`).  When :normal-mode is non-nil in
 CTX, each movement resets the selection (normal-mode behaviour).
+When :span is set (from `;' push), `normal-mode' is ignored so
+\=`; d .' replays the full movement span correctly.
 Signals `user-error' when point does not move (no more targets)."
-  (let ((saved-pos (point)))
-    (unless (helixel-sel-movement-normal-mode-p ctx)
-      (setq helixel--current-state 'visual))
-    (dolist (m (reverse (helixel-sel-movement-moves ctx)))
-      (dotimes (_ (cdr m))
-        (funcall (car m))))
-    ;; Signal error when movement commands produced no displacement.
-    (when (= (point) saved-pos)
-      (user-error "No more targets"))))
+  ;; :span forces visual-mode accumulation regardless of :normal-mode.
+  (unless (and (helixel-sel-movement-normal-mode-p ctx)
+               (not (plist-get ctx :span)))
+    (setq helixel--current-state 'visual))
+  (helixel--with-span ctx
+    (let ((saved-pos (point)))
+      (dolist (m (reverse (helixel-sel-movement-moves ctx)))
+        (dotimes (_ (cdr m))
+          (funcall (car m))))
+      (when (= (point) saved-pos)
+        (user-error "No more targets")))))
 
 
 ;; ── Line and movement advance functions (from helixel-repeat.el) ──

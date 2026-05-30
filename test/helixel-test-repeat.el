@@ -2195,3 +2195,225 @@ kill naturally moved point — use a single xd prefix for bulk kill."
 ;;; helixel-test-jump.el ends here
 
 ;;; helixel-test-repeat-new.el ends here
+
+
+;;; ── ; + . repeat: span extension across movement/search/find-char/textobj ──
+
+(ert-deftest helixel-test-repeat-semicolon-movement-ww-dot ()
+  "ww ; d . deletes the full 2-word span on each line."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--current-state 'normal
+          helixel--event-ring nil
+          helixel--live-event nil
+          helixel--pending-sel nil
+          helixel--action-pos nil
+          helixel--inhibit-repeat-record nil
+          helixel--inhibit-action-track nil
+          helixel--search-advance-done nil
+          helixel--advance-search-last-pos nil
+          helixel--advance-search-edge-seen nil
+          helixel--repeat-has-preview nil
+          helixel--repeat-permanent-flip nil)
+    (insert "hello world foo bar baz qux")
+    (goto-char 1)
+    (deactivate-mark)
+    ;; w w — two word movements
+    (setq last-command nil this-command 'helixel-forward-word-start)
+    (helixel-forward-word-start)
+    (setq last-command 'helixel-forward-word-start
+          this-command 'helixel-forward-word-start)
+    (helixel-forward-word-start)
+    ;; ; — session mark (marks start of session, extends region)
+    (helixel--action-cycle)
+    ;; d — delete the full span (hello world)
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    (should (string= (buffer-string) "foo bar baz qux"))
+    ;; . — repeat: advance 2 words + full span → deletes "foo bar"
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "baz qux"))
+    ;; . — again: advance 2 words → deletes "baz "
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "qux"))))
+
+(ert-deftest helixel-test-repeat-semicolon-search-n-dot ()
+  "/hello RET n ; d . deletes from match1 to match2, then repeat."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil
+          helixel--live-event nil
+          helixel--pending-sel nil
+          helixel--action-pos nil
+          helixel--inhibit-repeat-record nil
+          helixel--inhibit-action-track nil
+          helixel--search-advance-done nil
+          helixel--advance-search-last-pos nil
+          helixel--advance-search-edge-seen nil
+          helixel--repeat-has-preview nil
+          helixel--repeat-permanent-flip nil)
+    (insert "x hello y hello z hello w")
+    (goto-char 1)
+    (deactivate-mark)
+    ;; Simulate /hello RET — find first match
+    (re-search-forward "hello")
+    (let ((isearch-success t)
+          (isearch-string "hello")
+          (isearch-regexp t)
+          (isearch-forward t)
+          (isearch-other-end (match-beginning 0)))
+      ;; Create a live-event so the hook can set mark-region and commit
+      (setq helixel--live-event
+            (make-helixel-event
+             :category 'search :subcat 'search
+             :mark-region (let ((pm (point-marker)))
+                             (cons pm (copy-marker pm t)))
+             :timestamp (float-time)
+             :buffer (current-buffer)))
+      (helixel-search--done-hook))
+    ;; n — next match (second hello)
+    (goto-char (point-min))
+    (re-search-forward "hello")
+    (re-search-forward "hello")
+    (let ((isearch-success t)
+          (isearch-string "hello")
+          (isearch-other-end (match-beginning 0)))
+      (helixel-search--handle-done nil)
+      (helixel-search--set-sel-ctx))
+    ;; ; — session mark
+    (helixel--action-cycle)
+    ;; d — delete from session-start to current (first to second hello)
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    ;; After deletion: "x  z hello w" (first two hellos gone)
+    (should (string= (buffer-string) "x  z hello w"))
+    ;; . — advance search, n-count=1 extra, span → deletes " z hello"
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "x  w"))))
+
+(ert-deftest helixel-test-repeat-semicolon-findchar-nn-dot ()
+  "f x n n ; d . deletes from first x to third x, then repeat."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil helixel--live-event nil
+          helixel--pending-sel nil helixel--action-pos nil
+          helixel--inhibit-repeat-record nil
+          helixel--inhibit-action-track nil
+          helixel--search-advance-done nil
+          helixel--advance-search-last-pos nil
+          helixel--advance-search-edge-seen nil
+          helixel--repeat-has-preview nil
+          helixel--repeat-permanent-flip nil
+          helixel--active-search nil)
+    (insert "a x b x c x d x e")
+    (goto-char 1)
+    (deactivate-mark)
+    ;; f x — find first x
+    (setq last-command nil this-command 'helixel-find-next-char)
+    (helixel-find-next-char ?x)
+    ;; n — second x
+    (setq last-command 'helixel-find-repeat
+          this-command 'helixel-find-repeat)
+    (helixel-find-repeat)
+    ;; n — third x
+    (helixel-find-repeat)
+    ;; ; — session mark
+    (helixel--action-cycle)
+    ;; d — delete from session-start to current (first to third x)
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    ;; After: "a  d x e" (first three x's and text between gone)
+    (should (string= (buffer-string) " d x e"))
+    ;; . — advance find-char + 2 extra n + span → deletes " d x"
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) " e"))))
+
+(ert-deftest helixel-test-repeat-semicolon-textobj-iw-iw-iw-dot ()
+  "miw miw miw ; d . deletes from 1st to 3rd word, then repeat."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--event-ring nil helixel--live-event nil
+          helixel--pending-sel nil helixel--action-pos nil
+          helixel--inhibit-repeat-record nil
+          helixel--inhibit-action-track nil
+          helixel--search-advance-done nil
+          helixel--advance-search-last-pos nil
+          helixel--advance-search-edge-seen nil
+          helixel--repeat-has-preview nil
+          helixel--repeat-permanent-flip nil)
+    (insert "hello world foo bar baz qux")
+    (goto-char 1)
+    (deactivate-mark)
+    ;; miw — select first inner word (hello)
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    ;; miw — second word (world)
+    (setq last-command 'helixel-mark-inner-word
+          this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    ;; miw — third word (foo)
+    (helixel-mark-inner-word)
+    ;; ; — session mark
+    (helixel--action-cycle)
+    ;; d — delete from session-start to current
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    ;; After: " bar baz qux" (hello world foo deleted)
+    (should (string= (buffer-string) " bar baz qux"))
+    ;; . — textobj count=3 + span → deletes "bar baz qux"
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) " qux"))))
+
+;; ── , all-buffer reverse preview (C-u - ,) ──
+
+(ert-deftest helixel-test-repeat-selection-all-buffer-reverse-search ()
+  "C-u - , after /search d previews all matches from bottom.
+Tests the generic `helixel--repeat-preview' reverse path."
+  :tags '(repeat comma)
+  (helixel-test-with-buffer "hello A hello B hello C"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'kill
+            (helixel-sel-create 'search
+              '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search "/hello/")))
+    ;; C-u - , → scan from point-max backward, end at first (top) match
+    (helixel-repeat-selection '(-4))
+    (should (region-active-p))
+    ;; Last advance lands on first match ("hello A" at pos 1–6)
+    (should (= (region-beginning) 1))
+    (should (= (match-beginning 0) 1))))
+
+(ert-deftest helixel-test-repeat-selection-all-buffer-reverse-line ()
+  "C-u - , after x d previews all lines from bottom.
+Tests the line-specific `helixel--repeat-line-pass' reverse branch."
+  :tags '(repeat comma)
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'kill
+            (helixel-sel-create 'line
+              '(:dir forward :count 1)
+              #'helixel--recreate-line "x")))
+    ;; C-u - , → scan from point-max backward, end at top line
+    (helixel-repeat-selection '(-4))
+    (should (region-active-p))
+    (should (= (line-number-at-pos) 1))
+    (should (= (region-beginning) 1))))
+
+(ert-deftest helixel-test-repeat-selection-all-buffer-reverse-search-insert ()
+  "C-u - , after /search c<ESC> previews all matches from bottom with entry-kind."
+  :tags '(repeat comma)
+  (helixel-test-with-buffer "hello A hello B hello C"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'insert-text
+            (helixel-sel-create 'search
+              '(:pattern "hello" :dir forward :entry-kind insert)
+              #'helixel--recreate-search "/hello/")
+            :text "X"))
+    ;; C-u - , → scan from point-max backward, end at first (top) match
+    (helixel-repeat-selection '(-4))
+    (should (region-active-p))
+    (should (= (region-beginning) 1))
+    (should (= (match-beginning 0) 1))))

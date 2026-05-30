@@ -1277,19 +1277,24 @@ preceeding (or following) whitespace is added to the range."
 
 (defun helixel--activate-textobj-range (range &optional delimiter count)
   "Activate RANGE as a textobj selection with optional DELIMITER and COUNT.
-RANGE may be a cons (BEG . END) or a list (BEG END ...).
-COUNT (default 1) is stored in the descriptor so dot-repeat replays
-the same multiplier."
+If an existing textobj sel of the same command is pending, accumulates
+the count so `.' repeats the full chain of textobj selections."
   (when range
     (push-mark (car range) nil t)
     (goto-char (if (consp (cdr range)) (cadr range) (cdr range)))
-    (let ((cmd this-command)
-          (n (or count 1))
-          (delim delimiter))
+    (let* ((cmd this-command)
+           (n (or count 1))
+           (delim delimiter)
+           (prev (helixel--pending-sel-get))
+           (total-n (if (and prev
+                             (eq (helixel-sel-get-kind prev) 'textobj)
+                             (eq (helixel-sel-textobj-command prev) cmd))
+                        (+ (helixel-sel-textobj-count prev) n)
+                      n)))
       (setq helixel--raw-selection-type 'textobj)
       (helixel--pending-sel-set
        (helixel-sel-create
-        'textobj `(:command ,cmd :count ,n :delimiter ,delim
+        'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
                     :inline-advance t)
              #'helixel--recreate-textobj
              ;; display closure
@@ -2347,32 +2352,34 @@ backward if COUNT is negative.  A function is defined via
   "Replay a textobj selection from CTX.
 Skips past the current target (if cursor is inside one), then
 skips whitespace, then re-executes the textobj command.
+When :span is set, extends region back to the pre-recreate origin.
 Signals errors when no more targets exist."
   (when-let* ((command (helixel-sel-textobj-command ctx))
               (cnt (helixel-sel-textobj-count ctx)))
-    (unless (region-active-p)
-      ;; Skip past the current target if cursor is inside one.
-      ;; This handles ciw→. where the inserted text becomes
-      ;; the new current target.
+    (helixel--with-span ctx
+      (unless (region-active-p)
+        ;; Skip past the current target if cursor is inside one.
+        ;; This handles ciw→. where the inserted text becomes
+        ;; the new current target.
+        (condition-case nil
+            (save-excursion
+              (funcall command 1)
+              (when (and (use-region-p)
+                         (<= (region-beginning) (point))
+                         (< (point) (region-end)))
+                (goto-char (region-end))))
+          (error nil))
+        (when (looking-at-p "[ \t\n\r\f]")
+          (skip-chars-forward " \t\n\r\f")))
       (condition-case nil
-          (save-excursion
-            (funcall command 1)
-            (when (and (use-region-p)
-                       (<= (region-beginning) (point))
-                       (< (point) (region-end)))
-              (goto-char (region-end))))
-        (error nil))
-      (when (looking-at-p "[ \t\n\r\f]")
-        (skip-chars-forward " \t\n\r\f")))
-    (condition-case nil
-        (funcall command cnt)
-      (error
-       (save-match-data
-         (let ((orig (point)))
-           (forward-word 1)
-           (when (= (point) orig)
-             (forward-char 1))
-           (funcall command cnt))))))
+          (funcall command cnt)
+        (error
+         (save-match-data
+           (let ((orig (point)))
+             (forward-word 1)
+             (when (= (point) orig)
+               (forward-char 1))
+             (funcall command cnt)))))))
   (setq helixel--raw-selection-type 'textobj))
 
 

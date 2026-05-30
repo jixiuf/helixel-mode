@@ -127,6 +127,19 @@ EXTRAS is an optional plist with keys:
            :advance adv
            rest)))
 
+;; ── Span extension helper ──
+
+(defmacro helixel--with-span (ctx &rest body)
+  "Execute BODY with `:span' region extension.
+If CTX plist has `:span', captures point before BODY
+as the span origin and extends the mark back to it after BODY.
+For `;' + `.' repeating the full session-start-to-point span."
+  (declare (indent 1))
+  `(let ((span-origin (when (plist-get ,ctx :span) (point))))
+     (prog1 (progn ,@body)
+       (when span-origin
+         (push-mark span-origin t t)))))
+
 ;; ── Core accessors ──
 
 (defun helixel-sel-call-recreate (sel)
@@ -277,6 +290,23 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
   "Return :cursor-offset (integer) from search ctx, or nil.
 OBJ is a `helixel-sel' struct or raw ctx plist."
   (plist-get (helixel-sel--ctx-ensure obj) :cursor-offset))
+
+;;;; find-char
+
+(defsubst helixel-sel-find-char-dir (obj)
+  "Return :dir (`forward' or `backward') from find-char ctx.
+OBJ is a `helixel-sel' struct or raw ctx plist."
+  (or (plist-get (helixel-sel--ctx-ensure obj) :dir) 'forward))
+
+(defsubst helixel-sel-find-char-type (obj)
+  "Return :type (`next' or `till') from find-char ctx.
+OBJ is a `helixel-sel' struct or raw ctx plist."
+  (plist-get (helixel-sel--ctx-ensure obj) :type))
+
+(defsubst helixel-sel-find-char-char (obj)
+  "Return :char (character) from find-char ctx.
+OBJ is a `helixel-sel' struct or raw ctx plist."
+  (plist-get (helixel-sel--ctx-ensure obj) :char))
 
 ;;;; surround
 

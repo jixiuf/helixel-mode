@@ -73,6 +73,12 @@ Consumed by `.` and `,` for repeat.
 Global — the single source of truth for the most recent edit.
 Used by `.` and `,` for cross-buffer replay.")
 
+(defconst helixel--sel-categories '(movement search find-char textobj)
+  "Event categories that carry a selection descriptor.
+Used by `helixel-event-commit' to sync `helixel--pending-sel'
+into the committed event's :sel slot when the event's own :sel
+is nil.  Categories not listed here never carry a pending-sel.")
+
 (defun helixel-event--ring-cap ()
   "Truncate `helixel--event-ring' to `helixel-event-ring-max' entries.
 Releases markers of evicted entries to prevent leaks."
@@ -95,6 +101,16 @@ Also mirrors to `helixel--global-jump-log'.
 Sets `helixel--last-event' to the committed entry.
 Returns the committed entry or nil."
   (when helixel--live-event
+    ;; Sync pending-sel into the live-event so movement/search
+    ;; events in the ring carry their selection descriptor.
+    ;; Only for selection-creating categories; edits already set
+    ;; sel via `helixel--live-edit-set'.
+    (when (and helixel--pending-sel
+               (not (helixel-event-sel helixel--live-event))
+               (memq (helixel-event-category helixel--live-event)
+                     helixel--sel-categories))
+      (setf (helixel-event-sel helixel--live-event)
+            (helixel-sel--copy helixel--pending-sel)))
     (let ((entry (helixel-event--copy helixel--live-event)))
       (unless (and (car helixel--event-ring)
                    (helixel-event--same-content-p

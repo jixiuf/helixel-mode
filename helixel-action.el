@@ -216,6 +216,30 @@ element returning non-nil when the entry is visible."
     (format "[%d/%d] %s" display-pos total
             (helixel-event-display-format event))))
 
+(defun helixel-action--push-sel-from-event (event)
+  "Push a `helixel-sel' from EVENT for `.' repeat.
+Preserves current \=`n\=' count by preferring
+`helixel--pending-sel' \(which has up-to-date :n-count) over
+the selection descriptor stored in EVENT.
+Adds `:span t' so the strategy builder extends the region
+to session-start, matching `;''s behaviour."
+  (let ((pending (helixel--pending-sel-get))
+        (event-sel (helixel-event-sel event))
+        sel)
+    (cond
+     ((and pending event-sel
+           (eq (helixel-sel-get-kind pending)
+               (helixel-sel-get-kind event-sel)))
+      (setq sel (helixel-sel--copy pending)))
+     (event-sel
+      (setq sel (helixel-sel--copy event-sel))))
+    (when sel
+      ;; Add :span for all kinds so recreates extend the region.
+      ;; Movement handles :normal-mode internally when :span is set.
+      (setq sel (helixel-sel-update-ctx sel :span t))
+      (helixel--sel-push sel))
+    sel))
+
 (defun helixel-action--cycle-show (pos ring)
   "Show the group-start entry for the group containing RING[POS].
 If the event has a non-degenerate \=:mark-region and
@@ -226,6 +250,8 @@ If the jump results in no useful region change and no marking
 was performed, automatically advance to the next older event."
   (let* ((gpos (helixel-action--cycle-group-start pos ring))
          (event (nth gpos ring))
+         (newest-pos (helixel-action--cycle-group-newest pos ring))
+         (sel-event (if (= newest-pos gpos) event (nth newest-pos ring)))
          (first-call (null helixel--action-pos))
          (did-mark nil))
     (setq helixel--action-pos gpos)
@@ -240,6 +266,7 @@ was performed, automatically advance to the next older event."
               (activate-mark)
               (setq did-mark t)))
         (push-mark a t t)))
+    (helixel-action--push-sel-from-event sel-event)
     (message "%s" (helixel-action--cycle-display event gpos ring))
     ;; Auto-advance: skip events that produce no useful region change.
     (helixel-action--cycle-auto-advance did-mark first-call)))
@@ -265,9 +292,9 @@ Uses `helixel-action--same-group-p' as the grouping predicate."
     #'helixel-action--same-group-p))
 
 (defun helixel-action--cycle-auto-advance (did-mark first-call)
-  "Auto-advance the action cycle when \=`;\=' produced no useful change.
+  "Auto-advance the action cycle when `;' produced no useful change.
 DID-MARK is non-nil when mark-thing selected a region.
-FIRST-CALL is non-nil when this is the first \=`;\=' after a movement.
+FIRST-CALL is non-nil when this is the first `;' after a movement.
 
 When the current event doesn't change point or the region, skip
 forward to the next older event to avoid cycling through dead spots."

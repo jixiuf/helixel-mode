@@ -29,6 +29,8 @@
 (require 'thingatpt)
 (require 'helixel-core)
 
+(declare-function helixel--set-mark-region "helixel-action")
+
 (defvar helixel-textobj-visual-state-p-function nil
   "If non-nil, called with no args, return t when in visual state.")
 
@@ -1282,6 +1284,11 @@ the count so `.' repeats the full chain of textobj selections."
   (when range
     (push-mark (car range) nil t)
     (goto-char (if (consp (cdr range)) (cadr range) (cdr range)))
+    ;; Update the live event's mark-region so `;' can mark the full
+    ;; textobj selection (helixel-semicolon-mark-thing).
+    (helixel--set-mark-region
+     (cons (car range)
+           (if (consp (cdr range)) (cadr range) (cdr range))))
     (let* ((cmd this-command)
            (n (or count 1))
            (delim delimiter)

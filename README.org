@@ -94,8 +94,42 @@ Structure sub-keys (also on ~[~ / ~]~):
 
 - ~[ (~ — jump outward to the nearest enclosing ~(~.
 - ~] (~ — jump forward to the end of the next ~(...)~ pair.
-- Press ~;~ after a pair movement to select the full text-object (mark-thing).
-  Set =helixel-semicolon-mark-thing= to nil to disable.
+- Press ~;~ after a movement to select the full thing (mark-thing).
+  Customize =helixel-semicolon-mark-thing=: a list of categories or
+  ~(category . subcat)~ conses (e.g. ~'((movement . pair) textobj)~).
+  Set to nil to disable.  Available categories and subcats:
+
+  | category   | subcat      | example keys                |
+  |------------+-------------+-----------------------------|
+  | movement   | word        | w b e                       |
+  |            | WORD        | W B E                       |
+  |            | symbol      | o (symbol start/end)        |
+  |            | pair        | [ { ( ] ) }                 |
+  |            | match       | %                           |
+  |            | paragraph   |                             |
+  |            | sentence    |                             |
+  |            | function    |                             |
+  | textobj    | word        | m i w / m a w              |
+  |            | WORD        | m i W / m a W              |
+  |            | symbol      | m i o / m a o              |
+  |            | pair        | m i ( / m a (  [ { < ...   |
+  |            | quote       | m i " / m a "  ' ` ...    |
+  |            | sentence    | m i s / m a s              |
+  |            | paragraph   | m i p / m a p              |
+  |            | function    | m i f / m a f              |
+  |            | tag         | m i t / m a t              |
+  |            | block       | m i c / m a c              |
+  |            | treesit     | (tree-sitter textobj)       |
+  | search     | search      | / ? n N                     |
+  | find-char  | next        | f F                         |
+  |            | till        | t T                         |
+  | edit       | change      | c d                         |
+  |            | case        | ~                           |
+  |            | comment     |                             |
+  |            | swap        |                             |
+  |            | fill        | g q                         |
+  |            | join-lines  | J                           |
+
 - ~%~ — jump to matching bracket/paren/quote/tag/block.
 
 *** Text Objects

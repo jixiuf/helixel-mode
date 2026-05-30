@@ -103,13 +103,31 @@ Categories not listed here are invisible during cycling."
   :type '(repeat symbol)
   :group 'helixel)
 
-(defcustom helixel-semicolon-mark-thing t
-  "Select the full thing on first `;' after a movement/seek command.
-When non-nil, the first `;' selects the full thing (word, paren,
-paragraph, etc.) instead of starting the action cycle.  The next `;' does
-the normal action cycle."
-  :type 'boolean
+(defcustom helixel-semicolon-mark-thing
+  '(movement textobj search find-char edit)
+  "List controlling when the first `;' marks the full thing.
+Each element is either a category symbol (matches all subcats)
+or a cons (CATEGORY . SUBCAT) for precise matching.
+The first `;' selects the full thing (word, pair, etc.) instead of
+starting the action cycle.  The next `;' does the normal cycle.
+
+Examples:
+  \='(movement textobj)              -> all movement + textobj subcats
+  \='((movement . pair) textobj)     -> only pair movements + all textobj
+Set to nil to disable entirely."
+  :type '(repeat (choice symbol (cons symbol symbol)))
   :group 'helixel)
+
+(defun helixel--semicolon-mark-thing-p (event)
+  "Return non-nil if mark-thing should fire for EVENT.
+Consults `helixel-semicolon-mark-thing'."
+  (cl-some
+   (lambda (entry)
+     (if (consp entry)
+         (and (eq (helixel-event-category event) (car entry))
+              (eq (helixel-event-subcat event) (cdr entry)))
+       (eq (helixel-event-category event) entry)))
+   helixel-semicolon-mark-thing))
 
 ;; ----------------------------------------------------------------------
 ;; State variables
@@ -243,7 +261,7 @@ to session-start, matching `;''s behaviour."
 (defun helixel-action--cycle-show (pos ring)
   "Show the group-start entry for the group containing RING[POS].
 If the event has a non-degenerate \=:mark-region and
-`helixel-semicolon-mark-thing' is non-nil, mark the region
+`helixel-semicolon-mark-thing' matches the event, mark the region
 using the pre-computed markers.
 
 If the jump results in no useful region change and no marking
@@ -259,7 +277,9 @@ was performed, automatically advance to the next older event."
            (a (marker-position (car mr)))
            (b (marker-position (cdr mr)))
            (degenerate (= a b)))
-      (if (and helixel-semicolon-mark-thing first-call (not degenerate))
+      (if (and (helixel--semicolon-mark-thing-p event)
+               first-call
+               (not degenerate))
           (progn
             (let ((p (point)))
               (push-mark (if (> (abs (- p a)) (abs (- p b))) a b) t t)

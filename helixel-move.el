@@ -601,7 +601,7 @@ for unmatched bracket characters."
                (equalp (eq open-char close-char)))
           (when on-opener (forward-char))
           (when-let* ((result (helixel--jump-target-for-delimiter
-                              d orig (and on-opener equalp))))
+                              d orig (and on-opener equalp) t)))
             (goto-char (car result))
             (throw 'done t))))
       ;; ── Syntax-table fallback (innermost bracket from any pos) ──

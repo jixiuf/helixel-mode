@@ -262,5 +262,21 @@ Creates independent marker copy; the jump-log entry is lightweight."
         (setq helixel--jump-pos nil)
         (helixel--jump-log-cap)))))
 
+
+;; ----------------------------------------------------------------------
+;; Shared cleanup (moved from helixel-core.el — ring owns action-pos)
+;; ----------------------------------------------------------------------
+
+(defvar rectangle-mark-mode)            ; defined in rect.el
+
+(defun helixel--clear-data ()
+  "Clear any intermediate data, e.g. selections/mark.
+Used by state machine, surround, and jump navigation."
+  (setq helixel--raw-selection-type nil)
+  (setq helixel--action-pos nil)
+  (when rectangle-mark-mode
+    (rectangle-mark-mode -1))
+  (deactivate-mark))
+
 (provide 'helixel-ring)
 ;;; helixel-ring.el ends here

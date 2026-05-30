@@ -924,17 +924,6 @@ falls back to the operator registry."
 
 
 
-(defvar-local helixel--action-pos nil)  ; defined in helixel-ring.el
-
-(defun helixel--clear-data ()
-  "Clear any intermediate data, e.g. selections/mark.
-Used by state machine, surround, and jump navigation."
-  (setq helixel--raw-selection-type nil)
-  (setq helixel--action-pos nil)
-  (when rectangle-mark-mode
-    (rectangle-mark-mode -1))
-  (deactivate-mark))
-
 (defun helixel--selection-type ()
   "Return current selection type, or nil.
 Validates that the region actually matches the claimed type.

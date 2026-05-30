@@ -237,34 +237,6 @@ automatically, so this macro only does `push-mark' + activate."
 ;; [key → outer textobj opening,  ]key → outer textobj closing
 ;; {key → inner textobj opening,  }key → inner textobj closing
 
-;; Helpers to construct delimiter objects on demand.
-(defun helixel--delimiter-pair-factory (open-char close-char)
-  "Return a pair delimiter for OPEN-CHAR and CLOSE-CHAR."
-  (helixel--make-pair-delimiter open-char close-char))
-
-(defun helixel--delimiter-tag-factory ()
-  "Return a tag delimiter."
-  (helixel--make-tag-delimiter))
-
-(defun helixel--delimiter-block-factory ()
-  "Return a block delimiter."
-  (helixel--make-block-delimiter))
-
-(defun helixel--delimiter-bounds-at (open-char close-char &optional inner-p)
-  "Return (BEG . END) of enclosing pair delimited by OPEN-CHAR and CLOSE-CHAR.
-If INNER-P is non-nil, exclude the delimiters from the bounds.
-Convenience wrapper around `helixel--generic-bounds-at' for pair delimiters."
-  (helixel--generic-bounds-at
-   (helixel--make-pair-delimiter open-char close-char) inner-p))
-
-(defun helixel--delimiter-bounds-next (open-char close-char &optional inner-p)
-  "Skip past current pair of OPEN-CHAR/CLOSE-CHAR, find next pair.
-Return (BEG . END) of the found pair.
-If INNER-P is non-nil, exclude delimiters from bounds.
-Delegates to `helixel--generic-bounds-next' for consistent behavior."
-  (helixel--generic-bounds-next
-   (helixel--make-pair-delimiter open-char close-char) inner-p))
-
 (defmacro helixel--define-delimiter-movement (name outer-p forward-p
                                                    factory &rest factory-args)
   "Define a delimiter movement command NAME.
@@ -290,134 +262,92 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
 ;; ── Pair delimiters (parens, brackets, braces, angle, quotes) ──
 
 (helixel--define-delimiter-movement helixel-outer-paren t nil
-  helixel--delimiter-pair-factory ?\( ?\))
+  helixel--make-pair-delimiter ?\( ?\))
 (helixel--define-delimiter-movement helixel-next-paren-end t t
-  helixel--delimiter-pair-factory ?\( ?\))
+  helixel--make-pair-delimiter ?\( ?\))
 (helixel--define-delimiter-movement helixel-inner-outer-paren nil nil
-  helixel--delimiter-pair-factory ?\( ?\))
+  helixel--make-pair-delimiter ?\( ?\))
 (helixel--define-delimiter-movement helixel-inner-next-paren-end nil t
-  helixel--delimiter-pair-factory ?\( ?\))
+  helixel--make-pair-delimiter ?\( ?\))
 
 (helixel--define-delimiter-movement helixel-outer-bracket t nil
-  helixel--delimiter-pair-factory ?\[ ?\])
+  helixel--make-pair-delimiter ?\[ ?\])
 (helixel--define-delimiter-movement helixel-next-bracket-end t t
-  helixel--delimiter-pair-factory ?\[ ?\])
+  helixel--make-pair-delimiter ?\[ ?\])
 (helixel--define-delimiter-movement helixel-inner-outer-bracket nil nil
-  helixel--delimiter-pair-factory ?\[ ?\])
+  helixel--make-pair-delimiter ?\[ ?\])
 (helixel--define-delimiter-movement helixel-inner-next-bracket-end nil t
-  helixel--delimiter-pair-factory ?\[ ?\])
+  helixel--make-pair-delimiter ?\[ ?\])
 
 (helixel--define-delimiter-movement helixel-outer-brace t nil
-  helixel--delimiter-pair-factory ?{ ?})
+  helixel--make-pair-delimiter ?{ ?})
 (helixel--define-delimiter-movement helixel-next-brace-end t t
-  helixel--delimiter-pair-factory ?{ ?})
+  helixel--make-pair-delimiter ?{ ?})
 (helixel--define-delimiter-movement helixel-inner-outer-brace nil nil
-  helixel--delimiter-pair-factory ?{ ?})
+  helixel--make-pair-delimiter ?{ ?})
 (helixel--define-delimiter-movement helixel-inner-next-brace-end nil t
-  helixel--delimiter-pair-factory ?{ ?})
+  helixel--make-pair-delimiter ?{ ?})
 
 (helixel--define-delimiter-movement helixel-outer-angle t nil
-  helixel--delimiter-pair-factory ?< ?>)
+  helixel--make-pair-delimiter ?< ?>)
 (helixel--define-delimiter-movement helixel-next-angle-end t t
-  helixel--delimiter-pair-factory ?< ?>)
+  helixel--make-pair-delimiter ?< ?>)
 (helixel--define-delimiter-movement helixel-inner-outer-angle nil nil
-  helixel--delimiter-pair-factory ?< ?>)
+  helixel--make-pair-delimiter ?< ?>)
 (helixel--define-delimiter-movement helixel-inner-next-angle-end nil t
-  helixel--delimiter-pair-factory ?< ?>)
+  helixel--make-pair-delimiter ?< ?>)
 
 (helixel--define-delimiter-movement helixel-outer-double-quote t nil
-  helixel--delimiter-pair-factory ?\" ?\")
+  helixel--make-pair-delimiter ?\" ?\")
 (helixel--define-delimiter-movement helixel-next-double-quote-end t t
-  helixel--delimiter-pair-factory ?\" ?\")
+  helixel--make-pair-delimiter ?\" ?\")
 (helixel--define-delimiter-movement helixel-inner-outer-double-quote nil nil
-  helixel--delimiter-pair-factory ?\" ?\")
+  helixel--make-pair-delimiter ?\" ?\")
 (helixel--define-delimiter-movement helixel-inner-next-double-quote-end nil t
-  helixel--delimiter-pair-factory ?\" ?\")
+  helixel--make-pair-delimiter ?\" ?\")
 
 (helixel--define-delimiter-movement helixel-outer-single-quote t nil
-  helixel--delimiter-pair-factory ?' ?')
+  helixel--make-pair-delimiter ?' ?')
 (helixel--define-delimiter-movement helixel-next-single-quote-end t t
-  helixel--delimiter-pair-factory ?' ?')
+  helixel--make-pair-delimiter ?' ?')
 (helixel--define-delimiter-movement helixel-inner-outer-single-quote nil nil
-  helixel--delimiter-pair-factory ?' ?')
+  helixel--make-pair-delimiter ?' ?')
 (helixel--define-delimiter-movement helixel-inner-next-single-quote-end nil t
-  helixel--delimiter-pair-factory ?' ?')
+  helixel--make-pair-delimiter ?' ?')
 
 (helixel--define-delimiter-movement helixel-outer-back-quote t nil
-  helixel--delimiter-pair-factory ?` ?`)
+  helixel--make-pair-delimiter ?` ?`)
 (helixel--define-delimiter-movement helixel-next-back-quote-end t t
-  helixel--delimiter-pair-factory ?` ?`)
+  helixel--make-pair-delimiter ?` ?`)
 (helixel--define-delimiter-movement helixel-inner-outer-back-quote nil nil
-  helixel--delimiter-pair-factory ?` ?`)
+  helixel--make-pair-delimiter ?` ?`)
 (helixel--define-delimiter-movement helixel-inner-next-back-quote-end nil t
-  helixel--delimiter-pair-factory ?` ?`)
+  helixel--make-pair-delimiter ?` ?`)
 
 ;; ── Tag delimiter movement ──
 
 (helixel--define-delimiter-movement helixel-outer-tag t nil
-  helixel--delimiter-tag-factory)
+  helixel--make-tag-delimiter)
 (helixel--define-delimiter-movement helixel-next-tag-end t t
-  helixel--delimiter-tag-factory)
+  helixel--make-tag-delimiter)
 (helixel--define-delimiter-movement helixel-inner-outer-tag nil nil
-  helixel--delimiter-tag-factory)
+  helixel--make-tag-delimiter)
 (helixel--define-delimiter-movement helixel-inner-next-tag-end nil t
-  helixel--delimiter-tag-factory)
+  helixel--make-tag-delimiter)
 
 ;; ── Block delimiter movement ──
 
 (helixel--define-delimiter-movement helixel-outer-block t nil
-  helixel--delimiter-block-factory)
+  helixel--make-block-delimiter)
 (helixel--define-delimiter-movement helixel-next-block-end t t
-  helixel--delimiter-block-factory)
+  helixel--make-block-delimiter)
 (helixel--define-delimiter-movement helixel-inner-outer-block nil nil
-  helixel--delimiter-block-factory)
+  helixel--make-block-delimiter)
 (helixel--define-delimiter-movement helixel-inner-next-block-end nil t
-  helixel--delimiter-block-factory)
+  helixel--make-block-delimiter)
 
-;; ── Generic bounds helpers (used by the macro above) ──
-
-(defun helixel--generic-bounds-next (d &optional inner-p)
-  "Skip past current delimiter D, find next, return (BEG . END).
-If INNER-P is non-nil, exclude delimiters from bounds.
-If no next opening delimiter exists, falls back to the current
-pair's bounds so callers can still move to that closing."
-  (save-excursion
-    (let* ((orig-pt (point))
-           (cur-bounds (save-excursion
-                         (condition-case nil
-                             (helixel--generic-bounds-at d inner-p)
-                           (error nil))))
-           (open (helixel-delimiter-open d))
-           (open-str (and open (if (characterp open)
-                                   (char-to-string open)
-                                 open)))
-           (tag-p (eq (helixel-delimiter-type d) 'tag)))
-      ;; Step 1: skip past current enclosing pair (or climb outward
-      ;; if already at its closing edge).
-      (when cur-bounds
-        (setq cur-bounds
-              (condition-case nil
-                  (pcase-let* ((`(,_ob ,_oe ,cb ,ce)
-                                (helixel-delimiter-bounds-flat d))
-                               (at-closing
-                                (>= orig-pt cb)))
-                    (if at-closing
-                        (save-excursion
-                          (goto-char ce)
-                          (helixel--generic-bounds-at d inner-p t))
-                      (goto-char ce)
-                      cur-bounds))
-                (error cur-bounds))))
-      ;; Step 2: return enclosing pair's bounds, or search forward
-      ;; for the first opening delimiter if not inside any pair.
-      (or cur-bounds
-          (when open-str
-            (when (search-forward open-str nil t)
-              (goto-char (1+ (match-beginning 0)))
-              (when tag-p (search-forward ">" nil t))
-              (helixel--generic-bounds-at d inner-p t)))))))
-
-;; ── Paragraph / Sentence / Function movement ──
+;; `helixel--generic-bounds-at' / `helixel--generic-bounds-next'
+;; are defined in helixel-core.el.
 
 (helixel-define-command helixel-forward-paragraph-start
     (:category movement :subcat paragraph

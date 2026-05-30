@@ -511,6 +511,47 @@ Returns (OPEN-END . CLOSE-BEG)."
   (cons (if (eq (char-after open-end) ?\n) (1+ open-end) open-end)
         (if (eq (char-before close-beg) ?\n) (1- close-beg) close-beg)))
 
+(defun helixel--generic-bounds-next (d &optional inner-p)
+  "Skip past current delimiter D, find next, return (BEG . END).
+If INNER-P is non-nil, exclude delimiters from bounds.
+If no next opening delimiter exists, falls back to the current
+pair's bounds so callers can still move to that closing."
+  (save-excursion
+    (let* ((orig-pt (point))
+           (cur-bounds (save-excursion
+                         (condition-case nil
+                             (helixel--generic-bounds-at d inner-p)
+                           (error nil))))
+           (open (helixel-delimiter-open d))
+           (open-str (and open (if (characterp open)
+                                   (char-to-string open)
+                                 open)))
+           (tag-p (eq (helixel-delimiter-type d) 'tag)))
+      ;; Step 1: skip past current enclosing pair (or climb outward
+      ;; if already at its closing edge).
+      (when cur-bounds
+        (setq cur-bounds
+              (condition-case nil
+                  (pcase-let* ((`(,_ob ,_oe ,cb ,ce)
+                                (helixel-delimiter-bounds-flat d))
+                               (at-closing
+                                (>= orig-pt cb)))
+                    (if at-closing
+                        (save-excursion
+                          (goto-char ce)
+                          (helixel--generic-bounds-at d inner-p t))
+                      (goto-char ce)
+                      cur-bounds))
+                (error cur-bounds))))
+      ;; Step 2: return enclosing pair's bounds, or search forward
+      ;; for the first opening delimiter if not inside any pair.
+      (or cur-bounds
+          (when open-str
+            (when (search-forward open-str nil t)
+              (goto-char (1+ (match-beginning 0)))
+              (when tag-p (search-forward ">" nil t))
+              (helixel--generic-bounds-at d inner-p t)))))))
+
 
 ;; ----------------------------------------------------------------------
 ;; Part 2b — Active Search State (mutable, per-buffer)

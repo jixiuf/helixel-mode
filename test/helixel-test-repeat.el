@@ -2417,3 +2417,123 @@ Tests the line-specific `helixel--repeat-line-pass' reverse branch."
     (should (region-active-p))
     (should (= (region-beginning) 1))
     (should (= (match-beginning 0) 1))))
+
+;; ── Forward , all-buffer preview ──
+
+(ert-deftest helixel-test-repeat-selection-all-buffer-forward-search ()
+  "C-u , after /search d previews all matches from top.
+Tests the forward `helixel--repeat-preview' path."
+  :tags '(repeat comma)
+  (helixel-test-with-buffer "hello A hello B hello C"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'kill
+            (helixel-sel-create 'search
+              '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search "/hello/")))
+    ;; C-u , → scan from point-min forward, end at last match
+    (helixel-repeat-selection '(4))
+    (should (region-active-p))
+    ;; Last advance lands on third match ("hello C")
+    (should (>= (region-beginning) 14))
+    (should (string= (match-string 0) "hello"))))
+
+(ert-deftest helixel-test-repeat-selection-all-buffer-forward-line ()
+  "C-u , after x d previews all lines from top.
+Tests the line-specific `helixel--repeat-line-pass' forward branch.
+After preview, `save-excursion' restores point to original position."
+  :tags '(repeat comma)
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'kill
+            (helixel-sel-create 'line
+              '(:dir forward :count 1)
+              #'helixel--recreate-line "x")))
+    ;; C-u , → scan from point-min forward.
+    ;; line-pass starts at line 2 (after initial forward-line),
+    ;; finding 2 remaining non-blank lines.
+    (helixel-repeat-selection '(4))
+    ;; After preview, last advance creates an active region.
+    (should (region-active-p))))
+
+;; ── normal-mode + :span interaction ──
+
+(ert-deftest helixel-test-repeat-semicolon-movement-normalmode-span ()
+  "ww ; d . with normal-mode movements: span forces visual accumulation.
+When :span is set, `helixel--recreate-movement' ignores :normal-mode
+so `; d .' replays the full two-word span rather than resetting
+the selection on each word."
+  :tags '(repeat semicolon span)
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--current-state 'normal
+          helixel--event-ring nil
+          helixel--live-event nil
+          helixel--pending-sel nil
+          helixel--action-pos nil
+          helixel--inhibit-repeat-record nil
+          helixel--inhibit-action-track nil
+          helixel--search-advance-done nil
+          helixel--advance-search-last-pos nil
+          helixel--advance-search-edge-seen nil
+          helixel--repeat-has-preview nil
+          helixel--repeat-permanent-flip nil)
+    (insert "hello world foo bar baz qux")
+    (goto-char 1)
+    (deactivate-mark)
+    ;; w w — two normal-mode word movements
+    (setq last-command nil this-command 'helixel-forward-word-start)
+    (helixel-forward-word-start)
+    (setq last-command 'helixel-forward-word-start
+          this-command 'helixel-forward-word-start)
+    (helixel-forward-word-start)
+    ;; ; — pushes sel with :span t, :normal-mode from the original sel
+    (helixel--action-cycle)
+    ;; d — delete full span from session-start (hello world)
+    (setq last-command nil this-command 'helixel-kill-thing-at-point)
+    (helixel-kill-thing-at-point)
+    (should (string= (buffer-string) "foo bar baz qux"))
+    ;; . — normal-mode + span → should still use visual accumulation
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "baz qux"))))
+
+;; ── , n-times preview ──
+
+(ert-deftest helixel-test-repeat-selection-n-times-search ()
+  "3, after /search d previews 3 matches forward.
+Tests the n-times branch of `helixel--repeat-preview'."
+  :tags '(repeat comma)
+  (helixel-test-with-buffer "hello A hello B hello C hello D"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'kill
+            (helixel-sel-create 'search
+              '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search "/hello/")))
+    ;; 3, → advance 3 times, land on third match
+    (helixel-repeat-selection 3)
+    (should (region-active-p))
+    ;; Should be on third match ("hello C")
+    (should (>= (region-beginning) 14))
+    (should (string= (match-string 0) "hello"))))
+
+;; ── , all-dir preview ──
+
+(ert-deftest helixel-test-repeat-selection-all-dir-search ()
+  "0, after /search d previews all remaining matches.
+Tests the all-dir branch of `helixel--repeat-preview'."
+  :tags '(repeat comma)
+  (helixel-test-with-buffer "hello A hello B hello C"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'kill
+            (helixel-sel-create 'search
+              '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search "/hello/")))
+    ;; 0, → scan all remaining matches from current position
+    (helixel-repeat-selection 0)
+    (should (region-active-p))
+    ;; Last advance lands on last match ("hello C")
+    (should (>= (region-beginning) 14))
+    (should (string= (match-string 0) "hello"))))

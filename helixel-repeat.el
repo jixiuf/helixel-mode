@@ -260,6 +260,58 @@ Derives the op advance tag from TX internally."
                  start dir cnt t)))
     (helixel--repeat-echo cnt)))
 
+;; ── All-buffer / all-dir line handlers ──
+;; Registered via the kind registry in helixel-move.el.
+
+(defun helixel--all-buffer-line (edit prefix)
+  "All-buffer repeat handler for line selections, for EDIT and PREFIX.
+Forward pass then backward pass from the marker position.
+For chain ops, does a single pass from the buffer edge."
+  (let* ((sel (helixel-event-sel edit))
+         (op (helixel-event-op edit))
+         (reverse-p (helixel-repeat-prefix-reverse-p prefix))
+         (marker (car (helixel-event-mark-region edit)))
+         (chain-p (eq op 'chain)))
+    (if chain-p
+        (let* ((dir (if reverse-p -1
+                     (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
+               (start (if (> dir 0) (point-min) (point-max)))
+               (cnt 0))
+          (save-excursion
+            (goto-char start)
+            (unless (helixel--blank-line-p)
+              (helixel--execute-edit edit)))
+          (setq cnt (helixel--repeat-line-pass
+                     edit sel (or (helixel--op-advance op) 'line)
+                     start dir cnt))
+          (helixel--repeat-echo cnt))
+      (let* ((first-dir (if reverse-p -1
+                          (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
+             (cnt 0)
+             (start-pos (and marker (marker-position marker))))
+        (when start-pos
+          (goto-char start-pos)
+          (beginning-of-line)
+          (setq start-pos (point)))
+        (setq cnt (helixel--repeat-line-pass
+                   edit sel (helixel--op-advance op)
+                   start-pos first-dir cnt))
+        (setq cnt (helixel--repeat-line-pass
+                   edit sel (helixel--op-advance op)
+                   start-pos (- first-dir) cnt))
+        (helixel--repeat-echo cnt)))))
+
+(defun helixel--all-dir-line (edit)
+  "All-dir repeat handler for line selections, for EDIT.
+Uses `helixel--repeat-line-pass' for proper cursor advance."
+  (let* ((sel (helixel-event-sel edit))
+         (op (helixel-event-op edit))
+         (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
+         (adv (or (helixel--op-advance op) 'line))
+         (cnt 0))
+    (setq cnt (helixel--repeat-line-pass edit sel adv (point) dir cnt))
+    (helixel--repeat-echo cnt)))
+
 ;; ── Search advance state (reset per repeat-edit/repeat-selection) ──
 
 (defvar helixel--search-advance-done nil

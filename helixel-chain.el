@@ -197,7 +197,7 @@ transaction, or `helixel-repeat-chain-cancel' to discard."
   (deactivate-mark)
   (add-hook 'pre-command-hook #'helixel--chain-pre-cmd nil t)
   (add-hook 'post-command-hook #'helixel--chain-post-cmd nil t)
-  (message "Chain rec • Q to finish"))
+  (message "Chain rec • esc to finish"))
 
 ;;;###autoload
 (defun helixel-repeat-chain-end ()
@@ -254,7 +254,7 @@ Determines advance behavior from the initial selection context
           (setq helixel--chain-in-edit-phase nil)
           (setq helixel--chain-move-keys nil)
           (setq helixel--chain-edit-keys nil)
-          (helixel--update-last-event tx)
+          (setq helixel--last-event (helixel--copy-tx tx))
           (helixel-with-edit-tracking
               (:op 'chain :category 'edit :subcat 'chain)
             (helixel--live-edit-set tx))

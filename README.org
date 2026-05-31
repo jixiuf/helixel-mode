@@ -348,16 +348,16 @@ Examples:
 
 *** Chain Recording (~.~ Advance)
 
-~q~ / ~Q~ record a compound editing sequence and create
-a repeatable transaction.  ~.~ advances to the next target and replays
+~q~ starts recording, ~ESC~ finishes and creates a repeatable
+compound transaction.  ~.~ advances to the next target and replays
 the entire sequence.
 
-| Key | Action                                                                       |
-|-----|------------------------------------------------------------------------------|
-| ~q~ | Start chain recording (snapshots selection context, starts key recording)    |
-| ~Q~ | End chain, create repeatable compound transaction                            |
-| ~.~ | Advance to next target and replay the recorded sequence                      |
-| ~,~ | Preview the next target without editing                                      |
+| Key   | Action                                                                       |
+|-------|------------------------------------------------------------------------------|
+| ~q~   | Start chain recording (snapshots selection context, starts key recording)    |
+| ~ESC~ | End chain, create repeatable compound transaction                            |
+| ~.~   | Advance to next target and replay the recorded sequence                      |
+| ~,~   | Preview the next target without editing                                      |
 
 *How it works:*
 
@@ -366,7 +366,7 @@ the entire sequence.
 2. Press ~q~ — starts key recording, snapshots the selection.
 3. Perform any editing operations (insert, normal-mode commands, etc.)
    — all keystrokes are captured.
-4. Press ~Q~ — stops recording, creates a chain transaction.
+4. Press ~ESC~ — stops recording, creates a chain transaction.
 5. ~.~ advances to the *next* target and replays the recorded sequence.
 6. ~.~ again — advance further, replay again.
 
@@ -378,7 +378,7 @@ the entire sequence.
 | Search (~/~)    | Next match                                                      |
 | None            | Default line advance                                            |
 
-Cursor position at ~Q~ time: if the cursor has left the original
+Cursor position at ~ESC~ time: if the cursor has left the original
 target range (e.g. moved to a different line), advance is *disabled*
 and ~.~ replays in-place.
 
@@ -389,21 +389,21 @@ and ~.~ replays in-place.
   q             start chain
   vbb           select 2 words backward (v enters visual, bb extends)
   d             kill
-  Q             end chain
+  ESC           end chain
   .             next line: select 2 words backward, kill
   .             next line, repeat again
 
   /foo<RET>     search for "foo" (advance by search match)
   q             start chain
   cbar<ESC>     change to "bar" (selection from search)
-  Q             end chain
+  ESC           end chain
   .             next "foo" match: change to "bar"
   .             next "foo" match, repeat
 
   f x           find-char to next "x"
   q             start chain
   d             delete up to "x"
-  Q             end chain
+  ESC           end chain
   .             next "x" match: delete up to it
 #+end_example
 

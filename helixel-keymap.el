@@ -353,7 +353,6 @@ to composed keymaps with mode overrides on top of the base maps."
 
 ;; helixel-normal-map
 (define-key helixel-normal-map "q" #'helixel-repeat-chain-start)
-(define-key helixel-normal-map "Q" #'helixel-repeat-chain-end)
 (define-key helixel-normal-map "." #'helixel-repeat-edit)
 (define-key helixel-normal-map "," #'helixel-repeat-selection)
 
@@ -383,7 +382,7 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-normal-map "a" #'helixel-insert-after)
 (define-key helixel-normal-map "A" #'helixel-insert-after-end-line)
 (define-key helixel-normal-map ":" #'helixel-execute-command)
-(define-key helixel-normal-map [escape] #'keyboard-quit)
+(define-key helixel-normal-map [escape] #'helixel-normal-escape)
 (define-key helixel-normal-map [delete] #'ignore)
 (define-key helixel-normal-map "h" #'helixel-backward-char)
 (define-key helixel-normal-map "l" #'helixel-forward-char)
@@ -460,6 +459,18 @@ to composed keymaps with mode overrides on top of the base maps."
         (space . ,helixel-space-map)))
 
 ;; ── Colon commands ──
+
+(defun helixel-normal-escape ()
+  "End repeat chain if recording, otherwise signal `keyboard-quit'.
+When `helixel--repeat-chaining' is non-nil, calls
+`helixel-repeat-chain-end' to finish the compound chain.
+Otherwise behaves like `keyboard-quit' to abort any
+pending operation."
+  (interactive)
+  (if (and (boundp 'helixel--repeat-chaining)
+           helixel--repeat-chaining)
+      (helixel-repeat-chain-end)
+    (keyboard-quit)))
 
 (defun helixel-quit (&optional force)
   "Kill Emacs if only one window, otherwise quit current window.

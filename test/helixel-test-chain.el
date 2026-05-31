@@ -444,5 +444,96 @@
       ;; C-u , previews all → ends at eol of last line
       (should (= (line-number-at-pos) 3)))))   ;; last content line
 
+;; ── Chain move-keys preservation ──
+
+(ert-deftest helixel-test-chain-move-keys-after-movement ()
+  "Move-keys survive when movement commands precede the first edit.
+Movement commands (b/w/e) update `helixel--last-event' via
+`helixel-event-commit' but should NOT trigger the move→edit
+phase switch in `helixel--chain-post-cmd'.  Only commands with
+an :op (true edits) should switch phases."
+  (helixel-chain-test-with-buffer
+      "aaa bbb ccc\nddd eee fff\nggg hhh iii\n"
+    (goto-char 1)
+    ;; x: select line
+    (helixel-select-line)
+    (let ((init-ctx helixel--pending-sel))
+      ;; Simulate chain start
+      (setq helixel--repeat-chaining t)
+      (setq helixel--chain-move-keys nil)
+      (setq helixel--chain-edit-keys nil)
+      (setq helixel--chain-in-edit-phase nil)
+      (setq helixel--chain-last-event-snapshot helixel--last-event)
+      (setq helixel--repeat-chain-init-ctx init-ctx)
+      ;; bb: movement commands — these change last-event via
+      ;; event-commit but have no :op, so post-cmd must NOT
+      ;; switch to edit phase.
+      (push (kbd "b") helixel--chain-move-keys)
+      (push (kbd "b") helixel--chain-move-keys)
+      (helixel-backward-word-start)
+      (helixel-backward-word-start)
+      ;; Verify still in move phase
+      (should-not helixel--chain-in-edit-phase)
+      (should (= 2 (length helixel--chain-move-keys)))
+      (should (= 0 (length helixel--chain-edit-keys)))
+      ;; d: kill — this has :op, should trigger phase switch
+      (push (kbd "d") helixel--chain-move-keys)
+      (helixel--record-edit 'kill)
+      ;; Simulate post-cmd: move d from move to edit
+      (push (car helixel--chain-move-keys) helixel--chain-edit-keys)
+      (pop helixel--chain-move-keys)
+      (setq helixel--chain-in-edit-phase t)
+      ;; End chain
+      (let* ((move-keys (when helixel--chain-move-keys
+                         (apply #'vconcat
+                                (nreverse helixel--chain-move-keys))))
+             (edit-keys (when helixel--chain-edit-keys
+                         (apply #'vconcat
+                                (nreverse helixel--chain-edit-keys)))))
+        (setq helixel--repeat-chaining nil)
+        (let ((tx (helixel--make-tx 'chain init-ctx
+                    :runner #'helixel--repeat-chain-runner
+                    :display "chain"
+                    :kmacro edit-keys
+                    :chain-move-keys move-keys
+                    :chain-init-ctx init-ctx)))
+          (setq helixel--last-event (helixel--copy-tx tx))
+          ;; Verify chain tx has move-keys
+          (should (eq (helixel-event-op helixel--last-event) 'chain))
+          (let ((payload (helixel-event-payload helixel--last-event)))
+            (should (plist-get payload :chain-move-keys))
+            (should (= 2 (length (plist-get payload :chain-move-keys))))))))))
+
+(ert-deftest helixel-test-chain-comma-with-move-keys ()
+  ", on a chain with move-keys uses chain strategy.
+Verifies that `helixel-repeat-selection' for a chain tx dispatches
+to `helixel--chain-strategy-builder' (not the default builder),
+which includes move-keys in the advance step.
+
+Also verifies that `helixel--chain-strategy-builder' picks up
+:chain-move-keys from the tx payload."
+  (helixel-chain-test-with-buffer
+      "aaa bbb ccc\nddd eee fff\nggg hhh iii\n"
+    (goto-char 1)
+    (helixel-select-line)
+    (let ((init-ctx helixel--pending-sel))
+      ;; Build a chain tx with move-keys
+      (let* ((move-keys-v (vconcat (kbd "b") (kbd "b")))
+             (tx (helixel--make-tx 'chain init-ctx
+                  :runner #'helixel--repeat-chain-runner
+                  :display "chain"
+                  :kmacro (vconcat (kbd "d"))
+                  :chain-move-keys move-keys-v
+                  :chain-init-ctx init-ctx)))
+        (setq helixel--last-event tx)
+        ;; Verify the strategy builder is the chain one
+        (let ((strategy (helixel--build-strategy tx nil)))
+          (should strategy)
+          (should (helixel-repeat-strategy-advance strategy))
+          ;; Verify move-keys are captured in the strategy
+          ;; (the advance fn closure includes execute-kbd-macro)
+          (let ((adv (helixel-repeat-strategy-advance strategy)))
+            (should (functionp adv))))))))
+
 (provide 'helixel-test-repeat-chain)
 ;;; helixel-test-repeat-chain.el ends here

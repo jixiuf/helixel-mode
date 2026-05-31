@@ -85,11 +85,13 @@ Skips chain start/end/cancel commands."
 
 (defun helixel--chain-post-cmd ()
   "Post-command-hook: detect first edit, switch from move to edit phase.
-Once `helixel--last-event' changes (meaning `helixel--record-edit' was
-called), all subsequent keys go to edit-keys."
+Once `helixel--last-event' changes AND carries an :op (meaning
+`helixel--record-edit' was called, not a mere movement commit),
+all subsequent keys go to edit-keys."
   (when (and helixel--repeat-chaining
              (not helixel--chain-in-edit-phase)
              helixel--last-event
+             (helixel-event-op helixel--last-event)
              (not (eq helixel--last-event helixel--chain-last-event-snapshot)))
     ;; Move the edit command's own key from move-keys to edit-keys.
     (when helixel--chain-move-keys
@@ -195,7 +197,7 @@ transaction, or `helixel-repeat-chain-cancel' to discard."
           (cons (copy-marker (region-beginning))
                 (copy-marker (region-end)))))
   (deactivate-mark)
-  (add-hook 'pre-command-hook #'helixel--chain-pre-cmd nil t)
+  (add-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
   (add-hook 'post-command-hook #'helixel--chain-post-cmd nil t)
   (message "Chain rec • esc to finish"))
 

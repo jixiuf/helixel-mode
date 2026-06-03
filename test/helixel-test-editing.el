@@ -465,9 +465,9 @@
       (should (string= (buffer-string) "aZbZc")))))
 
 (ert-deftest helixel-test-edit-ring-push-and-dedup ()
-  "Edits are stored as :edit entries in the unified action ring.
-The action ring stores all action types (textobj, edit, etc.);
-eduplication is against the ring front by content."
+  "Edits are stored as :edit entries in the unified event ring.
+The event ring stores all action types (textobj, edit, etc.);
+deduplication is against the ring front by content."
   (helixel-test-with-buffer "hello world"
     (setq helixel--last-event nil)
     (goto-char 1)
@@ -548,7 +548,7 @@ eduplication is against the ring front by content."
     (should (null helixel--pending-sel))))
 
 (ert-deftest helixel-test-repeat-invariant-repeat-no-pollute-ring ()
-  "Test repeat-edit does not add extra entries to the action ring beyond record-edit."
+  "Test repeat-edit does not add extra entries to the event ring beyond record-edit."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
     (setq last-command nil this-command 'helixel-mark-inner-word)

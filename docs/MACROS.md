@@ -37,7 +37,7 @@ and the jump list (`C-o` / `C-i`).
 ### Auto-Injected Behavior
 
 **All commands:**
-- `(helixel-action-start CAT SUBCAT)` — records action in the action ring for `;` / `C-o` / `C-i`
+- `(helixel--tracking-open CAT SUBCAT)` — records event in the event ring for `;` / `C-o` / `C-i`
 
 **`:category movement` commands (additional):**
 - `(helixel--clear-highlights)` — clears active highlights/mark (unless `:clear-highlights nil`)

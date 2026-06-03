@@ -59,9 +59,9 @@
   "When non-nil, dot-repeat permanently uses reversed direction.
 Toggled by `-.' — resets on each new `helixel--record-edit'.")
 
-;; Edit transactions are stored in the unified action ring
+;; Edit transactions are stored in the unified event ring
 ;; (`helixel--event-ring') as `:edit' entries.  No separate edit ring.
-;; `helixel-repeat-edit-pick' filters the action ring for entries
+;; `helixel-repeat-edit-pick' filters the event ring for entries
 ;; that carry `:edit' data.
 
 
@@ -126,8 +126,8 @@ pending selection).  Looks up the runner and display from the operator
 registry and stores them in the transaction so `helixel--execute-edit'
 can dispatch without registry lookups.
 Builds a transaction via `helixel--make-tx', pushes it onto
-the action ring, and stores the most recent edit in `helixel--last-event'.
-Also notifies the action ring so `;' jumping picks up the new edit.
+the event ring, and stores the most recent edit in `helixel--last-event'.
+Also notifies the event ring so `;' jumping picks up the new edit.
 
 NOTE: Caller is responsible for calling `helixel--tracking-open' first.
 The `helixel-define-command' macro handles this automatically."

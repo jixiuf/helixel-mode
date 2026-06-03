@@ -63,7 +63,7 @@ Set by `helixel--chain-post-cmd'.  Before this, keys go into
   "Snapshot of `helixel--last-event' at chain-start.
 Used by `helixel--chain-post-cmd' to detect the first edit
 command by checking whether `helixel--last-event' changed.
-More reliable than checking `:category' on `helixel--action'.")
+More reliable than checking `:category' on `helixel-event'.")
 
 
 ;; ── Key recording (pre-command-hook, no kmacro) ──

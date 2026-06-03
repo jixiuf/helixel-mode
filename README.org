@@ -285,7 +285,7 @@ Structure sub-keys (also on ~[~ / ~]~):
 
 ~N~ flips the search direction; subsequent ~n~ continues in the new direction.
 
-The history ring (=helixel--action-ring=) merges search regexps (~/ ? * #~)
+The history ring (=helixel--event-ring=) merges search regexps (~/ ? * #~)
 and find-char entries (~f F t T~) into one list.  Entries appear as =/pattern/=
 for searches, or =f→X= / =F→X= / =t→X= / =T→X= for find-char (case indicates
 original direction: lowercase = forward, uppercase = backward).
@@ -295,7 +295,7 @@ Selecting a find-char entry replays it with =next=/=till= semantics.
 - ~C-u N~ toggles the stored direction, then executes.
 - When ~N~ or ~C-u N~ toggles the direction of the most recent entry,
   the ring entry is also flipped to reflect the new direction.
-- Ring size is controlled by =helixel-action-ring-max= (default 50).
+- Ring size is controlled by =helixel-event-ring-max= (default 50).
 
 Examples:
 

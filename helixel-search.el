@@ -540,8 +540,8 @@ Updates n-count in the pending sel so . repeats the full sequence."
 ;; C-u N picks from history → executes in opposite of stored direction.
 ;; Both update `helixel--repeat-data' so subsequent n repeats the pick.
 ;;
-;; Direction lives in `helixel--repeat-dir', never in `helixel--action :dir'.
-;; `helixel--action :dir' is a historical record set at action creation.
+;; Direction lives in `helixel--repeat-dir', never in the event.
+;; The event `:dir' is a historical record set at creation.
 
 ;; ── n ──
 

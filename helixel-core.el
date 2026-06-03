@@ -633,8 +633,7 @@ to walking the kind's :advance function from `point-min'."
 ;; Part 4 — helixel-event: Unified Event Struct
 ;; ----------------------------------------------------------------------
 ;;
-;; Replaces the old `helixel--action' plist system.
-;; A single struct serves dot-repeat (`.`) replay, `;` jumping,
+;; Unified event struct for dot-repeat (`.`) replay, `;` jumping,
 ;; and history selection.
 
 (cl-defstruct (helixel-event (:conc-name helixel-event-)
@@ -753,7 +752,7 @@ All other keys form the :payload plist."
   "Return a shallow copy of transaction TX."
   (helixel-event--shallow-copy tx))
 
-;; ── Equality (for action ring dedup) ──
+;; ── Equality (for event ring dedup) ──
 
 (defun helixel--tx-equal-p (tx1 tx2)
   "Return non-nil if TX1 and TX2 represent the same editing operation.

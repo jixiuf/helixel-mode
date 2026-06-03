@@ -48,6 +48,9 @@
 (require 'helixel-surround)
 (require 'helixel-swap)
 (require 'helixel-search)
+(require 'helixel-mc-core)
+(require 'helixel-mc-spawn)
+(require 'helixel-mc-integrate)
 
 ;; ── Keymap management ──
 
@@ -428,14 +431,59 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-normal-map "m" helixel-textobj-map)
 
 (define-key helixel-normal-map "g" helixel-goto-map)
-;; Chain recording for compound dot-repeat
-(define-key helixel-normal-map "z" helixel-view-map)
-(define-key helixel-normal-map " " helixel-space-map)
+(define-key helixel-normal-map "z"    helixel-view-map)
+(define-key helixel-normal-map " "    helixel-space-map)
 (define-key helixel-normal-map "\C-w" helixel-window-map)
+
+;; M-s prefix: incremental multi-cursor commands
+(defvar-keymap helixel-mc-map
+  :doc "Keymap for helixel multi-cursor `s' prefix.
+Helix-style top-level keys live directly in `helixel-normal-map'
+\(`(' `)' `M-(' `M-)') because they are typically pressed in
+rapid succession (rotating through cursors).  Less frequently
+used selection management lives here under `s'."
+  "s"   #'helixel-mc-toggle
+  "x"   #'helixel-mc-edit-lines
+  "a"   #'helixel-mc-add-cursor-here
+  "A"   #'helixel-mc-add-cursor-here-up
+  "n"   #'helixel-mc-mark-next-like-this
+  "p"   #'helixel-mc-mark-previous-like-this
+  "N"   #'helixel-mc-skip-next
+  "P"   #'helixel-mc-skip-previous
+  "u"   #'helixel-mc-unmark-next
+  "U"   #'helixel-mc-unmark-previous
+  "."   #'helixel-mc-apply-last-edit
+  ;; Helix-style selection ops
+  ","   #'helixel-mc-clear-all       ; Helix `,' = remove fakes
+  "v"   #'helixel-mc-restore-cursors ; like Helix gv
+  "k"   #'helixel-mc-keep-matching   ; like Helix `K'
+  "K"   #'helixel-mc-remove-matching ; like Helix `M-K'
+  "-"   #'helixel-mc-merge           ; like Helix `M--'
+  "&"   #'helixel-mc-align           ; like Helix `&'
+  "_"   #'helixel-mc-trim            ; like Helix `_'
+  "S"   #'helixel-mc-split-on-regex) ; like Helix `S'
+
+(define-key helixel-normal-map "s" helixel-mc-map)
+(define-key helixel-goto-map   "v" #'helixel-mc-restore-cursors)
+;; Top-level Helix-style rotation: typically pressed repeatedly
+;; to cycle through cursors.
+(define-key helixel-normal-map "K"    #'helixel-mc-keep-matching)
+(define-key helixel-normal-map "\M-k" #'helixel-mc-remove-matching)
+(define-key helixel-normal-map "&"    #'helixel-mc-align)
+(define-key helixel-normal-map "_"    #'helixel-mc-trim)
+(define-key helixel-normal-map "\M--" #'helixel-mc-merge)
+(define-key helixel-normal-map "C"    #'helixel-mc-add-cursor-here)
+(define-key helixel-normal-map "\M-c" #'helixel-mc-add-cursor-here-up)
+(define-key helixel-normal-map "("    #'helixel-mc-rotate-primary-backward)
+(define-key helixel-normal-map ")"    #'helixel-mc-rotate-primary-forward)
+(define-key helixel-normal-map "\M-," #'helixel-mc-remove-primary)  ; Helix A-,
+(define-key helixel-normal-map "\M-(" #'helixel-mc-rotate-content-backward)
+(define-key helixel-normal-map "\M-)" #'helixel-mc-rotate-content-forward)
+
 
 ;; helixel-visual-map (inherits normal-map)
 (set-keymap-parent helixel-visual-map helixel-normal-map)
-(define-key helixel-visual-map "v" #'helixel-visual-exit)
+(define-key helixel-visual-map "v"    #'helixel-visual-exit)
 (define-key helixel-visual-map [escape] #'helixel-visual-exit)
 
 ;; helixel-motion-map stays empty (full t, user adds bindings)
@@ -461,16 +509,21 @@ to composed keymaps with mode overrides on top of the base maps."
 ;; ── Colon commands ──
 
 (defun helixel-normal-escape ()
-  "End repeat chain if recording, otherwise signal `keyboard-quit'.
-When `helixel--repeat-chaining' is non-nil, calls
-`helixel-repeat-chain-end' to finish the compound chain.
-Otherwise behaves like `keyboard-quit' to abort any
-pending operation."
+  "Escape handler: chain end → clear cursors → `keyboard-quit'.
+When `helixel--repeat-chaining' is non-nil, finishes the chain
+\(which may also apply the chain at every fake cursor via the
+mc integration advice).
+Else, when any fake cursors are visible, clear them.
+Else fall back to `keyboard-quit'."
   (interactive)
-  (if (and (boundp 'helixel--repeat-chaining)
-           helixel--repeat-chaining)
-      (helixel-repeat-chain-end)
-    (keyboard-quit)))
+  (cond
+   ((and (boundp 'helixel--repeat-chaining)
+         helixel--repeat-chaining)
+    (helixel-repeat-chain-end))
+   ((and (boundp 'helixel-multi-cursor-mode)
+         helixel-multi-cursor-mode)
+    (helixel-mc-clear-all))
+   (t (keyboard-quit))))
 
 (defun helixel-quit (&optional force)
   "Kill Emacs if only one window, otherwise quit current window.

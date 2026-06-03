@@ -47,7 +47,18 @@
 (require 'helixel-surround)
 (require 'helixel-swap)
 (require 'helixel-keymap)
+(require 'helixel-mc-core)
+(require 'helixel-mc-spawn)
+(require 'helixel-mc-integrate)
 (require 'helixel-shims)
+
+;; All helixel modules are loaded — NOW we can safely walk the obarray
+;; and bulk-whitelist every helixel interactive command for multi-
+;; cursor dispatch.  Doing this from `helixel-mc-integrate' itself is
+;; too early: that module only requires core/mc-core/repeat/chain, so
+;; ~80% of modal commands (defined in state/move/editing/textobj/…)
+;; would be missed.
+(helixel-mc--whitelist-helixel-commands)
 
 (provide 'helixel)
 ;;; helixel.el ends here

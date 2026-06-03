@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-register.el helixel-action.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-shims.el helixel.el
-ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-register.elc helixel-action.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-shims.elc helixel.elc
+FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-register.el helixel-action.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-mc-core.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel.el
+ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-register.elc helixel-action.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 

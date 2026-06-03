@@ -245,7 +245,11 @@ Compares :buffer, :category, :subcat, and marker position."
 Only pushes if EVENT's :category is in `helixel-jump-categories'.
 Creates independent marker copy; the jump-log entry is lightweight."
   (when (and event
-             (memq (helixel-event-category event) helixel-jump-categories))
+             (memq (helixel-event-category event) helixel-jump-categories)
+             ;; Don't pollute the global (cross-buffer) jump log
+             ;; with events committed during fake-cursor dispatch.
+             (not (bound-and-true-p
+                   helixel-mc-executing-command-for-fake-cursor)))
     (let* ((src-mr (helixel-event-mark-region event))
            (buf (if (and (consp src-mr) (markerp (car src-mr)))
                     (marker-buffer (car src-mr))

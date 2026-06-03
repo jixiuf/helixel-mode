@@ -293,7 +293,8 @@ helixel-core (cl-lib only)
 
 ## Test Architecture
 
-570 ERT tests across 16 test files. Key conventions:
+817 ERT tests across 17 test files (mc layer adds
+`test/helixel-test-mc.el`). Key conventions:
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions

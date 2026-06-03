@@ -76,7 +76,8 @@ Skips chain start/end/cancel commands."
   (unless (memq this-command
                 '(helixel-repeat-chain-start
                   helixel-repeat-chain-end
-                  helixel-repeat-chain-cancel))
+                  helixel-repeat-chain-cancel
+                  helixel-normal-escape))
     (if helixel--chain-in-edit-phase
         (push (this-single-command-keys) helixel--chain-edit-keys)
       (push (this-single-command-keys) helixel--chain-move-keys))))

@@ -68,70 +68,6 @@ Requires Emacs >= 29.1.
 | visual | Selection mode         |
 | motion | Read-only navigation   |
 
-*** Pair & Structure Movement (~[~ ~]~ ~{~ ~}~)
-
-These prefixes mirror the text-object keys.  Each key in
-=helixel-textobj-inner-map= / =helixel-textobj-outer-map= has a
-corresponding binding.
-
-| Prefix    | Textobj   | Direction | Jumps to                         |
-|-----------|-----------|-----------|----------------------------------|
-| ~[~ key   | outer (a) | outward   | enclosing pair's opening delimiter |
-| ~]~ key   | outer (a) | forward   | next pair's closing end          |
-| ~{~ key   | inner (i) | outward   | enclosing inner opening          |
-| ~}~ key   | inner (i) | forward   | next inner closing end           |
-
-Structure sub-keys (also on ~[~ / ~]~):
-
-| Key | ~[~                     | ~]~                   |
-|-----|--------------------------|------------------------|
-| ~d~ | prev flymake error       | next flymake error     |
-| ~p~ | prev paragraph start     | next paragraph end     |
-| ~s~ | prev sentence start      | next sentence end      |
-| ~f~ | prev function start      | next function end      |
-
-*Examples:*
-
-- ~[ (~ — jump outward to the nearest enclosing ~(~.
-- ~] (~ — jump forward to the end of the next ~(...)~ pair.
-- Press ~;~ after a movement to select the full thing (mark-thing).
-  Customize =helixel-semicolon-mark-thing=: a list of categories or
-  ~(category . subcat)~ conses (e.g. ~'((movement . pair) textobj)~).
-  Set to nil to disable.  Available categories and subcats:
-
-  | category   | subcat      | example keys                |
-  |------------+-------------+-----------------------------|
-  | movement   | word        | w b e                       |
-  |            | WORD        | W B E                       |
-  |            | symbol      | o (symbol start/end)        |
-  |            | pair        | [ { ( ] ) }                 |
-  |            | match       | %                           |
-  |            | paragraph   |                             |
-  |            | sentence    |                             |
-  |            | function    |                             |
-  | textobj    | word        | m i w / m a w              |
-  |            | WORD        | m i W / m a W              |
-  |            | symbol      | m i o / m a o              |
-  |            | pair        | m i ( / m a (  [ { < ...   |
-  |            | quote       | m i " / m a "  ' ` ...    |
-  |            | sentence    | m i s / m a s              |
-  |            | paragraph   | m i p / m a p              |
-  |            | function    | m i f / m a f              |
-  |            | tag         | m i t / m a t              |
-  |            | block       | m i c / m a c              |
-  |            | treesit     | (tree-sitter textobj)       |
-  | search     | search      | / ? n N                     |
-  | find-char  | next        | f F                         |
-  |            | till        | t T                         |
-  | edit       | change      | c d                         |
-  |            | case        | ~                           |
-  |            | comment     |                             |
-  |            | swap        |                             |
-  |            | fill        | g q                         |
-  |            | join-lines  | J                           |
-
-- ~%~ — jump to matching bracket/paren/quote/tag/block.
-
 *** Text Objects
 
 ~m i~ (inner) and ~m a~ (a / around) select text objects.  Supports
@@ -170,523 +106,6 @@ entries for the same MODE are tried; the tightest enclosing block wins.
 =NAME-GROUP= nil means counter-based balancing (fences), an integer
 means name-based (org blocks).  Fallback patterns can be added via
 =helixel-block-textobj-fallback-alist=.
-
-*** Swap
-
-~S~ swaps the active region with a *swap source* — text that was previously
-copied with ~y~.  The swap source carries position metadata as a text property
-on the kill-ring entry, so swaps are position-aware.
-
-*Basic flow*:
-
-1. Select some text (e.g. ~vw~ to visually select a word)
-2. ~y~ to copy it (automatically stores position metadata)
-3. Select other text (or move to a new location)
-4. ~S~ to swap the two regions
-
-| Key | Behavior                                                        |
-|-----|-----------------------------------------------------------------|
-| ~y~ | Copy selection to =kill-ring= *and* store as swap source        |
-| ~S~ | Swap active region with swap source (position-aware)            |
-
-**** Implied region
-
-When ~S~ is pressed without an active region, a target region is *implied*
-starting at point.  The implied region's shape depends on the swap-source type:
-
-| Source type     | Implied region                                            |
-|-----------------|-----------------------------------------------------------|
-| character-wise  | Same character-length range starting at point             |
-| line-wise       | Same number of *full lines* starting from current line    |
-| rect-wise       | Same column span × same line count, starting from current column |
-
-Example: ~3x y~ to yank 3 lines line-wise, then move elsewhere and ~S~ —
-3 full lines starting at the current line are swapped.
-
-**** Rectangle swap
-
-Rectangle selections swap line-by-line.  Each line pair is exchanged
-independently via =helixel--replace-region=, which skips common
-prefix/suffix characters to preserve column alignment where possible.
-
-*Line count differences*: by default the shorter rectangle is *extended*
-downward to match the longer one (new lines use the same column span).
-~C-u S~ does the opposite — it *truncates* to ~min(N,M)~ lines.
-
-|                        | Default                         | ~C-u S~                          |
-|------------------------|---------------------------------|----------------------------------|
-| Line counts differ     | ~max(N,M)~ — extend shorter     | ~min(N,M)~ — truncate longer     |
-
-*Width differences*: each line pair is swapped independently.  Matching
-leading/trailing characters (e.g. whitespace) are preserved; the varying
-middle portion naturally expands or shrinks the buffer.  No arbitrary padding
-or truncation is applied.
-
-**** Register integration
-
-| Key   | Behavior                                                     |
-|-------|--------------------------------------------------------------|
-| ~"aS~ | Swap with register ~a~ (position-aware if stored by ~"a y~) |
-| ~"0S~ | Swap with last yanked text (register 0)                     |
-| ~"1S~ | Swap with last deleted text (register 1)                    |
-
-Registered text carries the same position metadata as the =kill-ring=, so
-~"aS~ is also position-aware — the underlying swap logic is identical.
-The only difference is *which source* is read.
-
-**** Edge cases
-
-- *Cross-buffer*: ~S~ works across buffers.  The swap source markers carry
-  their native buffer; ~S~ reads the source text from that buffer and writes
-  the current region's text back to the same marker positions.  The removed
-  text becomes the new swap source (in the current buffer), so pressing ~S~
-  in the source buffer completes the exchange.
-- *Overlapping regions*: signal a =user-error=.
-- *No source*: signal a =user-error= — use ~y~ first to create one.
-- *Rectangle at buffer end*: the implied rect extension stops at the
-  last line; if there aren't enough lines, ~S~ signals an error.
-
-*** Surround
-
-~m s~ (surround-add) and ~m t~ (surround-add-tag) wrap the active
-selection with delimiter pairs.  ~m d~ (delete) removes surrounding
-delimiters.  ~m r~ (replace) replaces them with new ones.
-
-~m s~ reads a character and looks it up first in
-=helixel-surround-block-alist= (per-mode string pairs like
-~#+begin_src~/~#+end_src~), then in =helixel--surround-pairs= (char
-pairs like ~()~ ~[]~ ~{}~ ~<>~ and quotes).
-
-~m t~ reads a tag name string and wraps the selection in XML tags.
-
-~m d~ and ~m r~ read delimiter info from the previous text object
-selection (mi / ma), so no extra input is needed — just select a text
-object then press ~m d~ or ~m r~.
-
-| Key        | Selection type            | Behavior                                  |
-|------------|---------------------------|-------------------------------------------|
-| ~m s~ ~(~ | Active region             | Wrap region in ~( )~                      |
-| ~m s~ ~[~ | Active region             | Wrap region in ~[ ]~                      |
-| ~m s~ ~{~ | Active region             | Wrap region in ~{ }~                      |
-| ~m s~ ~<~ | Active region             | Wrap region in ~< >~                      |
-| ~m s~ ~'~ | Active region             | Wrap region in ~' '~                      |
-| ~m s~ ~"~ | Active region             | Wrap region in ~" "~                      |
-| ~m s~ ~`~ | Active region             | Wrap region in ~` `~                      |
-| ~m s~ ~s~ | Active region (org)       | Wrap in ~#+begin_src~ / ~#+end_src~       |
-| ~m s~ ~e~ | Active region (org)       | Wrap in ~#+begin_example~ / ~#+end_example~ |
-| ~m s~ ~q~ | Active region (org)       | Wrap in ~#+begin_quote~ / ~#+end_quote~   |
-| ~m s~ ~`~ | Active region (markdown)  | Wrap in ~```~ / ~```~                     |
-| ~m t~     | Active region             | Wrap in ~<tag>~ / ~</tag>~                |
-| ~m d~     | After mi/ma               | Delete surrounding delimiters             |
-| ~m r~     | After mi/ma               | Replace surrounding delimiters            |
-
-After ~m s~ or ~m r~, the new region (including delimiters) stays
-selected so you can chain ~m d~ or ~m r~ immediately.
-
-**** Custom Block Pairs
-
-Add major-mode-specific block surround pairs via
-=helixel-surround-block-alist=:
-
-#+begin_src elisp
-  (setq helixel-surround-block-alist
-        '((org-mode
-           (?s . ("#+begin_src " . "#+end_src"))
-           (?e . ("#+begin_example " . "#+end_example"))
-           (?q . ("#+begin_quote " . "#+end_quote")))
-          (markdown-mode
-           (?\` . ("```" . "```")))))
-#+end_src
-
-The first element of each entry is the key character pressed after
-~m s~.  The second is ~(OPEN-STRING . CLOSE-STRING)~.
-
-*** Search & Repeat
-
-*~n~ / ~N~* — repeat search or find-char.
-*~C-u n~ / ~C-u N~* — pick from combined search/find-char history.
-
-| Key          | Context                 | Behavior                                         |
-|--------------|-------------------------|--------------------------------------------------|
-| ~n~          | After ~/~ or ~?~        | Repeat search forward                            |
-| ~N~          | After ~/~ or ~?~        | Reverse direction then repeat                    |
-| ~n~          | After ~f~/~F~/~t~/~T~   | Repeat find-char forward                         |
-| ~N~          | After ~f~/~F~/~t~/~T~   | Reverse direction then repeat find-char          |
-| ~C-u n~      | anytime                 | Pick from combined history & execute             |
-| ~C-u N~      | anytime                 | Toggle direction + pick from history             |
-
-~N~ flips the search direction; subsequent ~n~ continues in the new direction.
-
-The history ring (=helixel--action-ring=) merges search regexps (~/ ? * #~)
-and find-char entries (~f F t T~) into one list.  Entries appear as =/pattern/=
-for searches, or =f→X= / =F→X= / =t→X= / =T→X= for find-char (case indicates
-original direction: lowercase = forward, uppercase = backward).
-Selecting a find-char entry replays it with =next=/=till= semantics.
-
-- ~C-u n~ executes in the entry's stored direction.
-- ~C-u N~ toggles the stored direction, then executes.
-- When ~N~ or ~C-u N~ toggles the direction of the most recent entry,
-  the ring entry is also flipped to reflect the new direction.
-- Ring size is controlled by =helixel-action-ring-max= (default 50).
-
-Examples:
-
-#+begin_example
-  /foo<RET>   search "foo"
-  n           next match forward
-  n           next match forward
-  N           reverse direction, go back to previous match
-  n           continue backward (next in reversed direction)
-
-  fb          find next "b"
-  n           find next "b" again
-  N           reverse direction, find previous "b"
-  n           continue backward
-
-  C-u n       pick a past search/find-char from history
-#+end_example
-
-*** Chain Recording (~.~ Advance)
-
-~q~ starts recording, ~ESC~ finishes and creates a repeatable
-compound transaction.  ~.~ advances to the next target and replays
-the entire sequence.
-
-| Key   | Action                                                                       |
-|-------|------------------------------------------------------------------------------|
-| ~q~   | Start chain recording (snapshots selection context, starts key recording)    |
-| ~ESC~ | End chain, create repeatable compound transaction                            |
-| ~.~   | Advance to next target and replay the recorded sequence                      |
-| ~,~   | Preview the next target without editing                                      |
-
-*How it works:*
-
-1. Select a target (line with ~x~, search match with ~/~) — this
-   establishes the /advance context/.
-2. Press ~q~ — starts key recording, snapshots the selection.
-3. Perform any editing operations (insert, normal-mode commands, etc.)
-   — all keystrokes are captured.
-4. Press ~ESC~ — stops recording, creates a chain transaction.
-5. ~.~ advances to the *next* target and replays the recorded sequence.
-6. ~.~ again — advance further, replay again.
-
-*Advance behavior:*
-
-| Init ctx        | Advance                                                         |
-|-----------------|-----------------------------------------------------------------|
-| Line (~x~)      | Next line (EOL positioning matches recording context)           |
-| Search (~/~)    | Next match                                                      |
-| None            | Default line advance                                            |
-
-Cursor position at ~ESC~ time: if the cursor has left the original
-target range (e.g. moved to a different line), advance is *disabled*
-and ~.~ replays in-place.
-
-*Examples:*
-
-#+begin_example
-  x             select line (advance by line)
-  q             start chain
-  vbb           select 2 words backward (v enters visual, bb extends)
-  d             kill
-  ESC           end chain
-  .             next line: select 2 words backward, kill
-  .             next line, repeat again
-
-  /foo<RET>     search for "foo" (advance by search match)
-  q             start chain
-  cbar<ESC>     change to "bar" (selection from search)
-  ESC           end chain
-  .             next "foo" match: change to "bar"
-  .             next "foo" match, repeat
-
-  f x           find-char to next "x"
-  q             start chain
-  d             delete up to "x"
-  ESC           end chain
-  .             next "x" match: delete up to it
-#+end_example
-
-*** Dot-Repeat (~.~) and Repeat-Selection (~,~)
-
-After an edit, ~.~ repeats the edit at the next target.
-~,~ repeats the selection only (preview, no edit) — same prefixes.
-
-| Prefix          | Behavior                                                         |
-|-----------------|------------------------------------------------------------------|
-| ~.~ ~,~         | Repeat once in stored direction                                  |
-| ~3.~ ~3,~       | Repeat 3 times in stored direction                               |
-| ~0.~ ~0,~       | Repeat all remaining targets in stored direction                 |
-| ~C-u .~ ~C-u ,~ | Repeat all targets, entire buffer (point-min → forward)          |
-| ~-.~ ~-,~       | *Permanently* reverse direction, then 1 repeat                   |
-| ~-3.~ ~-3,~     | *Permanently* reverse direction, then 3 repeats                  |
-| ~C-u - 3 .~     | 3 times in opposite direction (one-time, C-u)                    |
-
-- ~0.~/~0,~ stop silently when no more targets are found.
-- ~C-u .~/~C-u ,~ start from =point-min= and process every target forward.
-- ~-.~/~-N.~ *permanently* flip direction (like ~N~ for search).  ~-.~ again flips back.
-- ~C-u - N .~ is a one-time reverse (does NOT permanently flip).
-- All selection kinds support all prefix modes (line, search, movement, textobj, find-char).
-
-**** Examples
-
-Search-based repeat (advances to next match):
-
-#+begin_example
-  /hello<RET>   search "hello"
-  cWORLD<ESC>   change to "WORLD"
-  .             change next "hello" → "WORLD"
-  .             change next "hello" → "WORLD"
-  3.            change next 3 "hello"s → "WORLD"
-#+end_example
-
-Line-based repeat (~.~ auto-advances to next line):
-
-#+begin_example
-  x             select line
-  >             indent right
-  .             indent next line (auto-advance)
-  .             indent next line again
-  3.            indent next 3 lines
-
-  x             select line
-  ihello<ESC>   insert "hello" at bol
-  .             insert "hello" on next line (auto-advance)
-  .             insert "hello" on next line
-#+end_example
-
-Line kill (no auto-advance — deletion already moved point):
-
-#+begin_example
-  x             select line
-  d             kill line (point moves to next line's bol)
-  .             kill next line (already at point)
-  .             kill next line
-#+end_example
-
-Movement-based repeat (w/e/b — selects next word each time):
-
-#+begin_example
-  w             select forward word
-  d             delete
-  .             delete next word
-  .             delete next word
-  vww           visual + w + w: select 2 forward words
-  d             delete both
-  .             delete next 2 words
-#+end_example
-
-Textobj-based repeat (iw/aw — selects next textobj each time):
-
-#+begin_example
-  miw           select inner word
-  cXXX<ESC>     change to "XXX"
-  .             change next inner word to "XXX"
-  .             change next inner word to "XXX"
-#+end_example
-
-Find-char repeat (f/t — finds next char each time):
-
-#+begin_example
-  fx            find-char to next "x"
-  d             delete up to "x"
-  .             delete up to next "x"
-  .             delete up to next "x"
-  tx            find-till-char up to "x" (exclusive)
-  d             delete up to (not including) "x"
-  .             repeat same operation
-#+end_example
-
-Prefixes:
-
-#+begin_example
-  0.            repeat all remaining matches/lines in stored direction
-  C-u .         repeat all matches, entire buffer (point-min → forward)
-  C-u - 3 .     repeat 3 times in opposite direction
-#+end_example
-
-*** Session Mark (~;~)
-
-~;~ sets the mark at where a movement sequence started. Point stays
-in place — the region shows where you came from. Same-type movements
-share a session; different types start new ones.
-
-| Key               | Behavior                                                   |
-|-------------------|------------------------------------------------------------|
-| ~;~               | Set mark to start of current session (push live → ring, show ring[0]) |
-| ~;~ again         | Set mark to older session start                            |
-| ~;~ again         | Set mark further back ...                                 |
-| ~C-u ;~           | Set mark to newer session start                            |
-| ~C-u ;~ (at newest) | Restore live session mark                               |
-
-*Session types* (pressing ~;~ sets mark to independent start positions):
-
-| Category          | Session type        | Keys                                              |
-|-------------------|---------------------|---------------------------------------------------|
-| char              | =movement-char=     | ~h~ ~l~                                           |
-| line              | =movement-line=     | ~j~ ~k~                                           |
-| word              | =movement-word=     | ~w~ ~e~ ~b~                                       |
-| WORD              | =movement-WORD=     | ~W~ ~E~ ~B~                                       |
-| symbol            | =movement-symbol=   | (unbound)                                         |
-| goto              | =movement-goto=     | ~g~ prefix, ~G~                                   |
-| scroll            | =movement-scroll=   | ~C-f~ ~C-b~                                       |
-| line select       | =movement-lineselect= | ~x~ ~X~                                         |
-| textobj-word      | =textobj-word=      | ~miw~ ~maw~                                       |
-| textobj-WORD      | =textobj-WORD=      | ~miW~ ~maW~                                       |
-| textobj-symbol    | =textobj-symbol=    | ~mio~ ~mao~                                       |
-| textobj-sentence  | =textobj-sentence=  | ~mis~ ~mas~                                       |
-| textobj-paragraph | =textobj-paragraph= | ~mip~ ~map~                                       |
-| textobj-pair      | =textobj-pair=      | ~mi(~ ~ma(~ ~mi[~ ~ma[~ ~mi{~ ~ma{~ ~mi<~ ~ma<~   |
-| textobj-quote     | =textobj-quote=     | ~mi"~ ~ma"~ ~mi'~ ~ma'~ ~mi`~ ~ma`~              |
-| textobj-tag       | =textobj-tag=       | ~mit~ ~mat~                                       |
-| search            | =search=            | ~/~ ~?~ ~*~ ~#~ then ~n~/~N~                       |
-| find-char         | =find-char=         | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~M-.~                 |
-
-~C-g~ cancels the current session — the next command starts a fresh session
-even if the type matches. The cancelled session is preserved in the ring for
-~;~ to jump back to.
-
-Examples:
-
-#+begin_example
-  w w         move forward two words
-  ;           mark start of this w w session
-
-  j j         move down two lines
-  ;           mark start of j j (NOT the w w start!)
-  ;           again: mark start of w w
-  C-u ;       back to j j mark
-
-  f x         find char "x"
-  n           next "x"
-  n           next "x"
-  ;           mark start of this find session
-
-  ;           again: older session ...
-
-  w w         move two words (same session, shared start position)
-  C-g         cancel session — next command starts fresh
-  w           new session, new start position
-  ;           mark start of this new w
-  ;           again: mark start of the old w w
-#+end_example
-
-*** Jump Navigation (~C-o~ / ~C-i~)
-
-~C-o~ jumps to older positions in the global jump list, ~C-i~ jumps to newer
-ones.  Unlike ~;~ which only sets the mark, jump commands *move point* and
-support *cross-buffer* navigation.
-
-Every action recorded for ~;~ (movement, search, find-char, textobj, edit) is
-also recorded in the jump list.  The same session types and group-skipping
-logic apply.
-
-| Key                  | Behavior                                                   |
-|----------------------|------------------------------------------------------------|
-| ~C-o~                | Jump to the previous (older) position, switching buffers if needed |
-| ~C-i~                | Jump to the next (newer) position                          |
-| ~C-o~ (at oldest)    | "At oldest" — no more positions                            |
-| ~C-i~ (at newest)    | "At newest" — no more positions                            |
-
-Cross-buffer: when a jump takes you to a different buffer, a return point is
-automatically recorded so ~C-i~ brings you back.
-
-**** Registering jump commands
-
-External commands like =xref-find-definitions= (~g d~) automatically register
-their start position via advice.  To register your own commands:
-
-#+begin_src elisp
-  ;; Method 1: one line — adds :before advice
-  (helixel-define-jump-command 'my-goto-command)
-
-  ;; Method 2: call from inside your command body
-  (defun my-command ()
-    (interactive)
-    (helixel-register-jump 'goto 'my-cmd)
-    ...)
-#+end_src
-
-**** Configuration
-
-#+begin_src elisp
-  ;; Max entries in the global jump list (default 100)
-  (setq helixel-jump-list-max 200)
-
-  ;; Categories that are recorded (default: all)
-  (setq helixel-jump-categories '(movement search find-char edit goto))
-
-  ;; Categories visible during C-o / C-i cycling (default: same as above)
-  ;; Narrow this to exclude basic movements for a tighter jumplist:
-  (setq helixel-jump-cycle-categories '(search find-char edit goto))
-#+end_src
-
-*** Ex Commands
-
-~:w~ write, ~:q~ quit, ~:wq~ write-quit, ~:o~ open file, ~:n~ scratch buffer,
-~:vs~ vsplit, ~:hs~ hsplit, ~:rl~ reload buffer, ~:reload-all~ reload all,
-~:pwd~ show directory, ~:config-open~ open init.el.
-
-** Extend
-
-*** Defining Commands
-
-Use =helixel-define-command= to define new commands with automatic session
-tracking, repeat recording, and highlight clearing.  The macro expands all
-tracking boilerplate at compile time — your body only contains business logic.
-
-#+begin_src elisp
-  ;; Movement command — auto-tracks ; and C-o/C-i sessions
-  (helixel-define-command my-forward-two-words
-    (:category movement :subcat word :dir forward)
-    (helixel-forward-word-start)
-    (helixel-forward-word-start))
-
-  (helixel-define-key 'normal "W" #'my-forward-two-words)
-
-  ;; Edit command — auto-records for . repeat
-  (helixel-define-command my-delete-line
-    (:category edit :subcat kill :edit-op kill)
-    (beginning-of-line)
-    (push-mark (pos-eol) t t)
-    (kill-region (region-beginning) (region-end)))
-
-  (helixel-define-key 'normal "D" #'my-delete-line)
-#+end_src
-
-Metadata plist keys:
-
-| Key                  | Purpose                                                         |
-|----------------------|-----------------------------------------------------------------|
-| ~:category~          | Action category for ~;~ / ~C-o~/~C-i~ (movement, edit, search, state) |
-| ~:subcat~            | Action subcategory (word, kill, insert, etc.)                   |
-| ~:dir~               | Direction for n/N repeat context (forward, backward)            |
-| ~:edit-op~           | Operator symbol for ~.~ repeat recording                       |
-| ~:clear-highlights~  | Clear highlights before body (default t for movement, nil otherwise) |
-| ~:params~            | Optional function parameter list, e.g. ~(&optional count)~      |
-
-*** Wrapping Builtins
-
-To wrap an existing Emacs movement command with tracking:
-
-#+begin_src elisp
-  ;; Wrapper mode — creates a new command
-  (helixel-define-movement helixel-forward-paragraph forward-paragraph movement-goto)
-  (helixel-define-key 'normal "]" #'helixel-forward-paragraph)
-
-  ;; Advice mode — injects :before advice directly into the builtin
-  (helixel-define-movement nil forward-char char :dir forward :advice)
-#+end_src
-
-*** Keybindings & Ex Commands
-
-#+begin_src elisp
-  ;; Add a keybinding
-  (helixel-define-key 'space "w" #'my-command)
-
-  ;; Add a typable command
-  (helixel-define-ex-command "format" #'format-all-buffer)
-#+end_src
 
 *** Custom Text Object
 
@@ -786,3 +205,762 @@ queries for user-defined text objects:
         (python-ts-mode . "((import_statement) @import)")
         (rust-mode . "((use_declaration) @import)"))))
 #+end_src
+*** Pair & Structure Movement (~[~ ~]~ ~{~ ~}~)
+
+These prefixes mirror the text-object keys.  Each key in
+=helixel-textobj-inner-map= / =helixel-textobj-outer-map= has a
+corresponding binding.
+
+| Prefix  | Textobj   | Direction | Jumps to                           |
+|---------+-----------+-----------+------------------------------------|
+| ~[~ key | outer (a) | outward   | enclosing pair's opening delimiter |
+| ~]~ key | outer (a) | forward   | next pair's closing end            |
+| ~{~ key | inner (i) | outward   | enclosing inner opening            |
+| ~}~ key | inner (i) | forward   | next inner closing end             |
+
+Structure sub-keys (also on ~[~ / ~]~):
+
+| Key | ~[~                  | ~]~                |
+|-----+----------------------+--------------------|
+| ~d~ | prev flymake error   | next flymake error |
+| ~p~ | prev paragraph start | next paragraph end |
+| ~s~ | prev sentence start  | next sentence end  |
+| ~f~ | prev function start  | next function end  |
+
+*Examples:*
+
+- ~[ (~ — jump outward to the nearest enclosing ~(~.
+- ~] (~ — jump forward to the end of the next ~(...)~ pair.
+- Press ~;~ after a movement to select the full thing (mark-thing).
+  Customize =helixel-semicolon-mark-thing=: a list of categories or
+  ~(category . subcat)~ conses (e.g. ~'((movement . pair) textobj)~).
+  Set to nil to disable.  Available categories and subcats:
+
+  | category  | subcat     | example keys             |
+  |-----------+------------+--------------------------|
+  | movement  | word       | w b e                    |
+  |           | WORD       | W B E                    |
+  |           | symbol     | o (symbol start/end)     |
+  |           | pair       | [ { ( ] ) }              |
+  |           | match      | %                        |
+  |           | paragraph  |                          |
+  |           | sentence   |                          |
+  |           | function   |                          |
+  | textobj   | word       | m i w / m a w            |
+  |           | WORD       | m i W / m a W            |
+  |           | symbol     | m i o / m a o            |
+  |           | pair       | m i ( / m a (  [ { < ... |
+  |           | quote      | m i " / m a "  ' ` ...   |
+  |           | sentence   | m i s / m a s            |
+  |           | paragraph  | m i p / m a p            |
+  |           | function   | m i f / m a f            |
+  |           | tag        | m i t / m a t            |
+  |           | block      | m i c / m a c            |
+  |           | treesit    | (tree-sitter textobj)    |
+  | search    | search     | / ? n N                  |
+  | find-char | next       | f F                      |
+  |           | till       | t T                      |
+  | edit      | change     | c d                      |
+  |           | case       | ~                        |
+  |           | comment    |                          |
+  |           | swap       |                          |
+  |           | fill       | g q                      |
+  |           | join-lines | J                        |
+
+- ~%~ — jump to matching bracket/paren/quote/tag/block.
+
+*** Search & Repeat
+
+*~n~ / ~N~* — repeat search or find-char.
+*~C-u n~ / ~C-u N~* — pick from combined search/find-char history.
+
+| Key          | Context                 | Behavior                                         |
+|--------------|-------------------------|--------------------------------------------------|
+| ~n~          | After ~/~ or ~?~        | Repeat search forward                            |
+| ~N~          | After ~/~ or ~?~        | Reverse direction then repeat                    |
+| ~n~          | After ~f~/~F~/~t~/~T~   | Repeat find-char forward                         |
+| ~N~          | After ~f~/~F~/~t~/~T~   | Reverse direction then repeat find-char          |
+| ~C-u n~      | anytime                 | Pick from combined history & execute             |
+| ~C-u N~      | anytime                 | Toggle direction + pick from history             |
+
+~N~ flips the search direction; subsequent ~n~ continues in the new direction.
+
+The history ring (=helixel--action-ring=) merges search regexps (~/ ? * #~)
+and find-char entries (~f F t T~) into one list.  Entries appear as =/pattern/=
+for searches, or =f→X= / =F→X= / =t→X= / =T→X= for find-char (case indicates
+original direction: lowercase = forward, uppercase = backward).
+Selecting a find-char entry replays it with =next=/=till= semantics.
+
+- ~C-u n~ executes in the entry's stored direction.
+- ~C-u N~ toggles the stored direction, then executes.
+- When ~N~ or ~C-u N~ toggles the direction of the most recent entry,
+  the ring entry is also flipped to reflect the new direction.
+- Ring size is controlled by =helixel-action-ring-max= (default 50).
+
+Examples:
+
+#+begin_example
+  /foo<RET>   search "foo"
+  n           next match forward
+  n           next match forward
+  N           reverse direction, go back to previous match
+  n           continue backward (next in reversed direction)
+
+  fb          find next "b"
+  n           find next "b" again
+  N           reverse direction, find previous "b"
+  n           continue backward
+
+  C-u n       pick a past search/find-char from history
+#+end_example
+
+*** Swap
+
+~S~ swaps the active region with a *swap source* — text that was previously
+copied with ~y~.  The swap source carries position metadata as a text property
+on the kill-ring entry, so swaps are position-aware.
+
+*Basic flow*:
+
+1. Select some text (e.g. ~vw~ to visually select a word)
+2. ~y~ to copy it (automatically stores position metadata)
+3. Select other text (or move to a new location)
+4. ~S~ to swap the two regions
+
+| Key | Behavior                                                        |
+|-----|-----------------------------------------------------------------|
+| ~y~ | Copy selection to =kill-ring= *and* store as swap source        |
+| ~S~ | Swap active region with swap source (position-aware)            |
+
+**** Implied region
+
+When ~S~ is pressed without an active region, a target region is *implied*
+starting at point.  The implied region's shape depends on the swap-source type:
+
+| Source type    | Implied region                                                   |
+|----------------+------------------------------------------------------------------|
+| character-wise | Same character-length range starting at point                    |
+| line-wise      | Same number of *full lines* starting from current line           |
+| rect-wise      | Same column span × same line count, starting from current column |
+
+Example: ~3x y~ to yank 3 lines line-wise, then move elsewhere and ~S~ —
+3 full lines starting at the current line are swapped.
+
+**** Rectangle swap
+
+Rectangle selections swap line-by-line.  Each line pair is exchanged
+independently via =helixel--replace-region=, which skips common
+prefix/suffix characters to preserve column alignment where possible.
+
+*Line count differences*: by default the shorter rectangle is *extended*
+downward to match the longer one (new lines use the same column span).
+~C-u S~ does the opposite — it *truncates* to ~min(N,M)~ lines.
+
+|                        | Default                         | ~C-u S~                          |
+|------------------------|---------------------------------|----------------------------------|
+| Line counts differ     | ~max(N,M)~ — extend shorter     | ~min(N,M)~ — truncate longer     |
+
+*Width differences*: each line pair is swapped independently.  Matching
+leading/trailing characters (e.g. whitespace) are preserved; the varying
+middle portion naturally expands or shrinks the buffer.  No arbitrary padding
+or truncation is applied.
+
+**** Register integration
+
+| Key   | Behavior                                                    |
+|-------+-------------------------------------------------------------|
+| ~"aS~ | Swap with register ~a~ (position-aware if stored by ~"a y~) |
+| ~"0S~ | Swap with last yanked text (register 0)                     |
+| ~"1S~ | Swap with last deleted text (register 1)                    |
+
+Registered text carries the same position metadata as the =kill-ring=, so
+~"aS~ is also position-aware — the underlying swap logic is identical.
+The only difference is *which source* is read.
+
+**** Edge cases
+
+- *Cross-buffer*: ~S~ works across buffers.  The swap source markers carry
+  their native buffer; ~S~ reads the source text from that buffer and writes
+  the current region's text back to the same marker positions.  The removed
+  text becomes the new swap source (in the current buffer), so pressing ~S~
+  in the source buffer completes the exchange.
+- *Overlapping regions*: signal a =user-error=.
+- *No source*: signal a =user-error= — use ~y~ first to create one.
+- *Rectangle at buffer end*: the implied rect extension stops at the
+  last line; if there aren't enough lines, ~S~ signals an error.
+
+*** Surround
+
+~m s~ (surround-add) and ~m t~ (surround-add-tag) wrap the active
+selection with delimiter pairs.  ~m d~ (delete) removes surrounding
+delimiters.  ~m r~ (replace) replaces them with new ones.
+
+~m s~ reads a character and looks it up first in
+=helixel-surround-block-alist= (per-mode string pairs like
+~#+begin_src~/~#+end_src~), then in =helixel--surround-pairs= (char
+pairs like ~()~ ~[]~ ~{}~ ~<>~ and quotes).
+
+~m t~ reads a tag name string and wraps the selection in XML tags.
+
+~m d~ and ~m r~ read delimiter info from the previous text object
+selection (mi / ma), so no extra input is needed — just select a text
+object then press ~m d~ or ~m r~.
+
+| Key       | Selection type           | Behavior                                    |
+|-----------+--------------------------+---------------------------------------------|
+| ~m s~ ~(~ | Active region            | Wrap region in ~( )~                        |
+| ~m s~ ~[~ | Active region            | Wrap region in ~[ ]~                        |
+| ~m s~ ~{~ | Active region            | Wrap region in ~{ }~                        |
+| ~m s~ ~<~ | Active region            | Wrap region in ~< >~                        |
+| ~m s~ ~'~ | Active region            | Wrap region in ~' '~                        |
+| ~m s~ ~"~ | Active region            | Wrap region in ~" "~                        |
+| ~m s~ ~`~ | Active region            | Wrap region in ~` `~                        |
+| ~m s~ ~s~ | Active region (org)      | Wrap in ~#+begin_src~ / ~#+end_src~         |
+| ~m s~ ~e~ | Active region (org)      | Wrap in ~#+begin_example~ / ~#+end_example~ |
+| ~m s~ ~q~ | Active region (org)      | Wrap in ~#+begin_quote~ / ~#+end_quote~     |
+| ~m s~ ~`~ | Active region (markdown) | Wrap in ~```~ / ~```~                       |
+| ~m t~     | Active region            | Wrap in ~<tag>~ / ~</tag>~                  |
+| ~m d~     | After mi/ma              | Delete surrounding delimiters               |
+| ~m r~     | After mi/ma              | Replace surrounding delimiters              |
+
+After ~m s~ or ~m r~, the new region (including delimiters) stays
+selected so you can chain ~m d~ or ~m r~ immediately.
+
+**** Custom Block Pairs
+
+Add major-mode-specific block surround pairs via
+=helixel-surround-block-alist=:
+
+#+begin_src elisp
+  (setq helixel-surround-block-alist
+        '((org-mode
+           (?s . ("#+begin_src " . "#+end_src"))
+           (?e . ("#+begin_example " . "#+end_example"))
+           (?q . ("#+begin_quote " . "#+end_quote")))
+          (markdown-mode
+           (?\` . ("```" . "```")))))
+#+end_src
+
+The first element of each entry is the key character pressed after
+~m s~.  The second is ~(OPEN-STRING . CLOSE-STRING)~.
+
+*** Dot-Repeat (~.~) and Repeat-Selection (~,~)
+
+After an edit, ~.~ repeats the edit at the next target.
+~,~ repeats the selection only (preview, no edit) — same prefixes.
+
+| Prefix          | Behavior                                                         |
+|-----------------|------------------------------------------------------------------|
+| ~.~ ~,~         | Repeat once in stored direction                                  |
+| ~3.~ ~3,~       | Repeat 3 times in stored direction                               |
+| ~0.~ ~0,~       | Repeat all remaining targets in stored direction                 |
+| ~C-u .~ ~C-u ,~ | Repeat all targets, entire buffer (point-min → forward)          |
+| ~-.~ ~-,~       | *Permanently* reverse direction, then 1 repeat                   |
+| ~-3.~ ~-3,~     | *Permanently* reverse direction, then 3 repeats                  |
+| ~C-u - 3 .~     | 3 times in opposite direction (one-time, C-u)                    |
+
+- ~0.~/~0,~ stop silently when no more targets are found.
+- ~C-u .~/~C-u ,~ start from =point-min= and process every target forward.
+- ~-.~/~-N.~ *permanently* flip direction (like ~N~ for search).  ~-.~ again flips back.
+- ~C-u - N .~ is a one-time reverse (does NOT permanently flip).
+- All selection kinds support all prefix modes (line, search, movement, textobj, find-char).
+
+**** Examples
+
+Search-based repeat (advances to next match):
+
+#+begin_example
+  /hello<RET>   search "hello"
+  cWORLD<ESC>   change to "WORLD"
+  .             change next "hello" → "WORLD"
+  .             change next "hello" → "WORLD"
+  3.            change next 3 "hello"s → "WORLD"
+#+end_example
+
+Line-based repeat (~.~ auto-advances to next line):
+
+#+begin_example
+  x             select line
+  >             indent right
+  .             indent next line (auto-advance)
+  .             indent next line again
+  3.            indent next 3 lines
+
+  x             select line
+  ihello<ESC>   insert "hello" at bol
+  .             insert "hello" on next line (auto-advance)
+  .             insert "hello" on next line
+#+end_example
+
+Line kill (no auto-advance — deletion already moved point):
+
+#+begin_example
+  x             select line
+  d             kill line (point moves to next line's bol)
+  .             kill next line (already at point)
+  .             kill next line
+#+end_example
+
+Movement-based repeat (w/e/b — selects next word each time):
+
+#+begin_example
+  w             select forward word
+  d             delete
+  .             delete next word
+  .             delete next word
+  vww           visual + w + w: select 2 forward words
+  d             delete both
+  .             delete next 2 words
+#+end_example
+
+Textobj-based repeat (iw/aw — selects next textobj each time):
+
+#+begin_example
+  miw           select inner word
+  cXXX<ESC>     change to "XXX"
+  .             change next inner word to "XXX"
+  .             change next inner word to "XXX"
+#+end_example
+
+Find-char repeat (f/t — finds next char each time):
+
+#+begin_example
+  fx            find-char to next "x"
+  d             delete up to "x"
+  .             delete up to next "x"
+  .             delete up to next "x"
+  tx            find-till-char up to "x" (exclusive)
+  d             delete up to (not including) "x"
+  .             repeat same operation
+#+end_example
+
+Prefixes:
+
+#+begin_example
+  0.            repeat all remaining matches/lines in stored direction
+  C-u .         repeat all matches, entire buffer (point-min → forward)
+  C-u - 3 .     repeat 3 times in opposite direction
+#+end_example
+
+*** Chain Recording (~.~ Advance)
+
+~q~ starts recording, ~ESC~ finishes and creates a repeatable
+compound transaction.  ~.~ advances to the next target and replays
+the entire sequence.
+
+| Key   | Action                                                                       |
+|-------|------------------------------------------------------------------------------|
+| ~q~   | Start chain recording (snapshots selection context, starts key recording)    |
+| ~ESC~ | End chain, create repeatable compound transaction                            |
+| ~.~   | Advance to next target and replay the recorded sequence                      |
+| ~,~   | Preview the next target without editing                                      |
+
+*How it works:*
+
+1. Select a target (line with ~x~, search match with ~/~) — this
+   establishes the /advance context/.
+2. Press ~q~ — starts key recording, snapshots the selection.
+3. Perform any editing operations (insert, normal-mode commands, etc.)
+   — all keystrokes are captured.
+4. Press ~ESC~ — stops recording, creates a chain transaction.
+5. ~.~ advances to the *next* target and replays the recorded sequence.
+6. ~.~ again — advance further, replay again.
+
+*Advance behavior:*
+
+| Init ctx        | Advance                                                         |
+|-----------------|-----------------------------------------------------------------|
+| Line (~x~)      | Next line (EOL positioning matches recording context)           |
+| Search (~/~)    | Next match                                                      |
+| None            | Default line advance                                            |
+
+Cursor position at ~ESC~ time: if the cursor has left the original
+target range (e.g. moved to a different line), advance is *disabled*
+and ~.~ replays in-place.
+
+*Examples:*
+
+#+begin_example
+  x             select line (advance by line)
+  q             start chain
+  vbb           select 2 words backward (v enters visual, bb extends)
+  d             kill
+  ESC           end chain
+  .             next line: select 2 words backward, kill
+  .             next line, repeat again
+
+  /foo<RET>     search for "foo" (advance by search match)
+  q             start chain
+  cbar<ESC>     change to "bar" (selection from search)
+  ESC           end chain
+  .             next "foo" match: change to "bar"
+  .             next "foo" match, repeat
+
+  f x           find-char to next "x"
+  q             start chain
+  d             delete up to "x"
+  ESC           end chain
+  .             next "x" match: delete up to it
+#+end_example
+
+*** Session Mark (~;~)
+
+~;~ sets the mark at where a movement sequence started. Point stays
+in place — the region shows where you came from. Same-type movements
+share a session; different types start new ones.
+
+| Key                 | Behavior                                                              |
+|---------------------+-----------------------------------------------------------------------|
+| ~;~                 | Set mark to start of current session (push live → ring, show ring[0]) |
+| ~;~ again           | Set mark to older session start                                       |
+| ~;~ again           | Set mark further back ...                                             |
+| ~C-u ;~             | Set mark to newer session start                                       |
+| ~C-u ;~ (at newest) | Restore live session mark                                             |
+
+*Session types* (pressing ~;~ sets mark to independent start positions):
+
+| Category          | Session type          | Keys                                            |
+|-------------------+-----------------------+-------------------------------------------------|
+| char              | =movement-char=       | ~h~ ~l~                                         |
+| line              | =movement-line=       | ~j~ ~k~                                         |
+| word              | =movement-word=       | ~w~ ~e~ ~b~                                     |
+| WORD              | =movement-WORD=       | ~W~ ~E~ ~B~                                     |
+| symbol            | =movement-symbol=     | (unbound)                                       |
+| goto              | =movement-goto=       | ~g~ prefix, ~G~                                 |
+| scroll            | =movement-scroll=     | ~C-f~ ~C-b~                                     |
+| line select       | =movement-lineselect= | ~x~ ~X~                                         |
+| textobj-word      | =textobj-word=        | ~miw~ ~maw~                                     |
+| textobj-WORD      | =textobj-WORD=        | ~miW~ ~maW~                                     |
+| textobj-symbol    | =textobj-symbol=      | ~mio~ ~mao~                                     |
+| textobj-sentence  | =textobj-sentence=    | ~mis~ ~mas~                                     |
+| textobj-paragraph | =textobj-paragraph=   | ~mip~ ~map~                                     |
+| textobj-pair      | =textobj-pair=        | ~mi(~ ~ma(~ ~mi[~ ~ma[~ ~mi{~ ~ma{~ ~mi<~ ~ma<~ |
+| textobj-quote     | =textobj-quote=       | ~mi"~ ~ma"~ ~mi'~ ~ma'~ ~mi`~ ~ma`~             |
+| textobj-tag       | =textobj-tag=         | ~mit~ ~mat~                                     |
+| search            | =search=              | ~/~ ~?~ ~*~ ~#~ then ~n~/~N~                    |
+| find-char         | =find-char=           | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~M-.~              |
+
+~C-g~ cancels the current session — the next command starts a fresh session
+even if the type matches. The cancelled session is preserved in the ring for
+~;~ to jump back to.
+
+Examples:
+
+#+begin_example
+  w w         move forward two words
+  ;           mark start of this w w session
+
+  j j         move down two lines
+  ;           mark start of j j (NOT the w w start!)
+  ;           again: mark start of w w
+  C-u ;       back to j j mark
+
+  f x         find char "x"
+  n           next "x"
+  n           next "x"
+  ;           mark start of this find session
+
+  ;           again: older session ...
+
+  w w         move two words (same session, shared start position)
+  C-g         cancel session — next command starts fresh
+  w           new session, new start position
+  ;           mark start of this new w
+  ;           again: mark start of the old w w
+#+end_example
+
+*** Jump Navigation (~C-o~ / ~C-i~)
+
+~C-o~ jumps to older positions in the global jump list, ~C-i~ jumps to newer
+ones.  Unlike ~;~ which only sets the mark, jump commands *move point* and
+support *cross-buffer* navigation.
+
+Every action recorded for ~;~ (movement, search, find-char, textobj, edit) is
+also recorded in the jump list.  The same session types and group-skipping
+logic apply.
+
+| Key               | Behavior                                                           |
+|-------------------+--------------------------------------------------------------------|
+| ~C-o~             | Jump to the previous (older) position, switching buffers if needed |
+| ~C-i~             | Jump to the next (newer) position                                  |
+| ~C-o~ (at oldest) | "At oldest" — no more positions                                    |
+| ~C-i~ (at newest) | "At newest" — no more positions                                    |
+
+Cross-buffer: when a jump takes you to a different buffer, a return point is
+automatically recorded so ~C-i~ brings you back.
+
+**** Registering jump commands
+
+External commands like =xref-find-definitions= (~g d~) automatically register
+their start position via advice.  To register your own commands:
+
+#+begin_src elisp
+  ;; Method 1: one line — adds :before advice
+  (helixel-define-jump-command 'my-goto-command)
+
+  ;; Method 2: call from inside your command body
+  (defun my-command ()
+    (interactive)
+    (helixel-register-jump 'goto 'my-cmd)
+    ...)
+#+end_src
+
+**** Configuration
+
+#+begin_src elisp
+  ;; Max entries in the global jump list (default 100)
+  (setq helixel-jump-list-max 200)
+
+  ;; Categories that are recorded (default: all)
+  (setq helixel-jump-categories '(movement search find-char edit goto))
+
+  ;; Categories visible during C-o / C-i cycling (default: same as above)
+  ;; Narrow this to exclude basic movements for a tighter jumplist:
+  (setq helixel-jump-cycle-categories '(search find-char edit goto))
+#+end_src
+
+*** Multi-Cursor (~s~ prefix, Helix-style)
+
+~s~ is the multi-cursor prefix.  ~s s~ toggles spawning from the most
+recent selection or last edit.  When multi-cursor is active, fake
+cursors carry their *own* point, mark, =mark-active=, =kill-ring=
+and helixel state — any whitelisted command (movement, edit, insert,
+textobj…) runs at every cursor through a =post-command-hook=
+dispatcher, with all dispatches amalgamated into a single undo step.
+
+**Spawning cursors** (~s s~ pulls the current selection):
+
+| Selection kind           | Cursor layout                                |
+|--------------------------+----------------------------------------------|
+| line / rect              | column cursors at =current-column= per line  |
+| search (~/~ ~?~ ~*~ ~#~) | one cursor per match in the whole buffer     |
+| textobj (~miw~ ~maw~ …)  | one cursor per same-kind thing in the buffer |
+| find-char (~f~ ~t~ …)    | one cursor per occurrence                    |
+| movement (~w~ ~e~ ~b~ …) | one cursor per advance step                  |
+
+**~s~ prefix** — cursor management:
+
+| Key           | Action                                                               |
+|---------------+----------------------------------------------------------------------|
+| ~s s~         | Toggle (spawn from last selection / clear)                           |
+| ~s ,~         | Clear all fake cursors (Helix ~,~ — keep primary only)               |
+| ~s a~ / ~s A~ | Add a fake cursor at point, move real to next / previous line        |
+| ~s x~         | Per-line cursors: line-mode → full-line REGION on each line          |
+|               | (Helix ~Alt-s~); char-mode → POINT at current column on each line    |
+| ~s n~ / ~s p~ | Add cursor at next / previous occurrence of region text              |
+| ~s N~ / ~s P~ | Skip next / previous match without adding a cursor                   |
+| ~s u~ / ~s U~ | Unmark next / previous fake cursor                                   |
+| ~s .~         | Apply =helixel--last-event= at every fake cursor                     |
+| ~s k~ / ~s K~ | Keep / remove cursors whose region matches a regex (Helix ~K~ ~M-K~) |
+| ~s S~         | Split each selection on regex (Helix ~S~)                            |
+| ~s -~         | Merge all cursors into one big region (Helix ~M--~)                  |
+| ~s &~         | Column-align cursors by padding with spaces (Helix ~&~)              |
+| ~s _~         | Trim leading / trailing whitespace from each region (Helix ~_~)      |
+
+**Top-level rotation keys** (rapid-repeat, Helix-style):
+
+| Key       | Action                                                          |
+|-----------|-----------------------------------------------------------------|
+| ~(~ / ~)~     | Rotate primary cursor backward / forward                        |
+| ~M-,~        | Remove primary cursor, promote nearest (Helix ~A-,~)          |
+| ~M-(~ / ~M-)~ | Rotate selection /content/ backward / forward                |
+| ~g v~     | Restore last cursor layout (history stack, depth 16)            |
+
+**~s .~ — Apply last edit to all cursors**
+
+=helixel-mc-apply-last-edit= replays =helixel--last-event= (the most
+recent edit you performed on the real cursor) at *every* fake cursor.
+
+Use this when you spawned cursors AFTER an edit and want to retro-fit
+that edit onto the new positions.  Typical flow:
+
+  1. Select and edit something at real cursor (e.g. ~miw c FOO <ESC>~).
+  2. ~s s~ — spawn cursors from the selection.
+  3. ~s .~ — broadcast and apply that edit at every fake cursor.
+
+Note: ~.~ (dot-repeat) already replays each cursor's own last event
+independently via the dispatcher.  ~s .~ is specifically for the
+"edit first, then spawn" pattern.
+
+**Common multi-cursor workflows**
+
+Edit every occurrence of a word:
+#+begin_example
+  miw c FOO <ESC> ss s.
+  # select word → change to FOO → spawn cursors → apply to all
+#+end_example
+
+Per-line editing:
+#+begin_example
+  x x x ss i // <ESC>
+  # line-select 3 lines → spawn column cursors → insert // on each
+#+end_example
+
+Search-and-replace at every match:
+#+begin_example
+  /foo<RET> ss c bar <ESC>
+  # search foo → spawn cursors → change to bar
+#+end_example
+
+Delete until a character at every cursor:
+#+begin_example
+  /foo<RET> ss fx d
+  # search foo → spawn → find-char 'x' at each → delete span
+#+end_example
+
+Chain on N cursors (~q~)(maybe mc don't need q):
+#+begin_example
+  /TODO<RET> ss q miw c BUG <ESC> A ! <ESC> ESC
+  # spawn at TODO → start chain → change to BUG → append ! → end chain
+  # (applied at each TODO in one undo step)
+#+end_example
+
+**~;~ (action cycle) with multi-cursor**
+
+Each fake cursor owns its own =helixel--event-ring=, =--live-event=,
+and =--action-pos=.  When ~;~ broadcasts, every cursor
+cycles its OWN history through the standard cycle-show code path.
+
+Motion then select and delete at every cursor:
+#+begin_example
+  /foobar<RET> ss www; d
+  # search → spawn → 3 words forward at each → ; selects the traversed
+  # span at each cursor → d deletes each cursor's selected span
+#+end_example
+
+#+begin_example
+xxx ss gh www; d
+# select 3 lines -> spawn ->  goto bol -> select 3 words  -> delete 3 words
+#+end_example
+
+#+begin_example
+xxx ss gh fx nn ; d
+# select 3 lines -> spawn ->  goto bol -> find-char x -> repeat twice of find-char -> select from bol to current pos  -> delete
+#+end_example
+
+Select a pair and surround it at every cursor:
+
+#+begin_example
+/func<RET> ss j % ; d
+# search->spawn → move cursor one line down → goto start of { → select pair -> delete
+#+end_example
+#+begin_src go
+func (d Demo) Func1() bool {
+	return resp.Code == 10108
+}
+func (d Demo) Func2() bool {
+	return resp.Code == 10109
+}
+// transform to:
+func (d Demo) Func1() bool
+func (d Demo) Func2() bool
+#+end_src
+
+Caveats:
+- A fake spawned with empty history shows "No saved actions" on ~;~
+  until its ring is populated by later commands.
+- ~C-o~ / ~C-i~ (jump backward/forward) are real-only — the global
+  cross-buffer jump log is not polluted by fake commits.
+
+**Integration with ~.~ and ~q~ chain:**
+
+- ~.~ replays each cursor's own last edit independently — the dispatcher
+  restores the cursor's snapshotted state before invocation.
+- ~q ... ESC~ while multi-cursor is active: the resulting chain
+  transaction is broadcast to every fake cursor and immediately applied
+  once at each position (one undo step).
+- ~ESC~ in normal state: if chaining → finish chain; else if cursors
+  visible → clear them; else =keyboard-quit=.
+- ~C-g~ always clears fake cursors before propagating.
+
+**Whitelist** — =(get CMD 'multiple-cursors)= controls dispatch:
+
+#+begin_src elisp
+  (helixel-mc-mark-all-for-multi-cursors '(my-edit-cmd))
+  (helixel-mc-mark-all-for-real-cursor-only '(my-global-cmd))
+  ;; Or set the default policy:
+  (setq helixel-mc-default-policy 'all)   ;; 'all | 'once | 'prompt
+#+end_src
+
+#+begin_example
+  # Search-and-edit at every match
+  /foo<RET>  ss  c bar <ESC>             # all foo → bar in one shot
+
+  # Per-line edit, then keep extending
+  xxx      ss  i // <ESC>              # comment 3 lines
+
+  # Chain on N cursors
+  /TODO<RET> ss  q miw cBUG<ESC> A!<ESC> ESC
+  # → every TODO occurrence is changed to BUG with `!` appended
+
+  # multiple-cursors-style add-next-like-this
+  miw         sn  sn  c NEW <ESC>
+#+end_example
+
+*** Ex Commands
+
+~:w~ write, ~:q~ quit, ~:wq~ write-quit, ~:o~ open file, ~:n~ scratch buffer,
+~:vs~ vsplit, ~:hs~ hsplit, ~:rl~ reload buffer, ~:reload-all~ reload all,
+~:pwd~ show directory, ~:config-open~ open init.el.
+
+** Extend
+
+*** Keybindings & Ex Commands
+
+#+begin_src elisp
+  ;; Add a keybinding
+  (helixel-define-key 'space "w" #'my-command)
+
+  ;; Add a typable command
+  (helixel-define-ex-command "format" #'format-all-buffer)
+#+end_src
+
+*** Defining Commands
+
+Use =helixel-define-command= to define new commands with automatic session
+tracking, repeat recording, and highlight clearing.  The macro expands all
+tracking boilerplate at compile time — your body only contains business logic.
+
+#+begin_src elisp
+  ;; Movement command — auto-tracks ; and C-o/C-i sessions
+  (helixel-define-command my-forward-two-words
+    (:category movement :subcat word :dir forward)
+    (helixel-forward-word-start)
+    (helixel-forward-word-start))
+
+  (helixel-define-key 'normal "W" #'my-forward-two-words)
+
+  ;; Edit command — auto-records for . repeat
+  (helixel-define-command my-delete-line
+    (:category edit :subcat kill :edit-op kill)
+    (beginning-of-line)
+    (push-mark (pos-eol) t t)
+    (kill-region (region-beginning) (region-end)))
+
+  (helixel-define-key 'normal "D" #'my-delete-line)
+#+end_src
+
+Metadata plist keys:
+
+| Key                 | Purpose                                                               |
+|---------------------+-----------------------------------------------------------------------|
+| ~:category~         | Action category for ~;~ / ~C-o~/~C-i~ (movement, edit, search, state) |
+| ~:subcat~           | Action subcategory (word, kill, insert, etc.)                         |
+| ~:dir~              | Direction for n/N repeat context (forward, backward)                  |
+| ~:edit-op~          | Operator symbol for ~.~ repeat recording                              |
+| ~:clear-highlights~ | Clear highlights before body (default t for movement, nil otherwise)  |
+| ~:params~           | Optional function parameter list, e.g. ~(&optional count)~            |
+
+*** Wrapping Builtins
+
+To wrap an existing Emacs movement command with tracking:
+
+#+begin_src elisp
+  ;; Wrapper mode — creates a new command
+  (helixel-define-movement helixel-forward-paragraph forward-paragraph movement-goto)
+  (helixel-define-key 'normal "]" #'helixel-forward-paragraph)
+
+  ;; Advice mode — injects :before advice directly into the builtin
+  (helixel-define-movement nil forward-char char :dir forward :advice)
+#+end_src
+

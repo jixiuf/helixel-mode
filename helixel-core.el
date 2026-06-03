@@ -616,6 +616,14 @@ PROPS is a keyword plist."
   "Return the :all-buffer-fn for KIND from the registry, or nil."
   (plist-get (gethash kind helixel--kind-registry) :all-buffer-fn))
 
+(defun helixel--kind-mc-spawn-fn (kind)
+  "Return the :mc-spawn-fn for KIND from the registry, or nil.
+The spawn function takes one argument SEL (a `helixel-sel') and
+returns a list of (POINT . MARK) marker pairs — one fake cursor
+target per element.  When nil, the multi-cursor module falls back
+to walking the kind's :advance function from `point-min'."
+  (plist-get (gethash kind helixel--kind-registry) :mc-spawn-fn))
+
 (defun helixel--kind-all-dir-fn (kind)
   "Return the :all-dir-fn for KIND from the registry, or nil."
   (plist-get (gethash kind helixel--kind-registry) :all-dir-fn))

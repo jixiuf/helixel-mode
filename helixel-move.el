@@ -129,13 +129,20 @@ thingatpt.  Defaults to \\='word."
   "Create a region around movement defined in BODY.
 If a region is already active, no new region is created.
 
+Movement commands redefine the selection, so they reset
+`helixel--raw-selection-type' to nil — a previous `line' / `rect'
+label from `x' / `v' must not bleed into the new region (which
+would make `y' tag the kill as line-wise even when the user
+selected a word).
+
 Note: `helixel-define-command' handles `clear-highlights'
 and `track-visual-move'
 automatically, so this macro only does `push-mark' + activate."
   `(let ((current (point)))
      ,@body
      (unless (use-region-p)
-       (push-mark current t 'activate))))
+       (push-mark current t 'activate))
+     (setq helixel--raw-selection-type nil)))
 
 (helixel-define-command helixel-forward-word-start
     (:category movement :subcat word

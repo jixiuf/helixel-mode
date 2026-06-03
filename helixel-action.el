@@ -326,7 +326,7 @@ forward to the next older event to avoid cycling through dead spots."
 (defun helixel-action-cycle (&optional arg)
   "Cycle through `helixel--event-ring' entries with `;'.
 If a pair-movement was the last command, the first `;' jumps to
-the event and marks the full thing (meep-style).
+the event and marks the full span (first-`;'-after-motion style).
 Second `;' does the normal action cycle.
 
 Optional prefix ARG is passed to the underlying commands."
@@ -373,7 +373,7 @@ Optional prefix ARG is passed to the underlying commands."
         (if pos
             (helixel-action--cycle-show pos helixel--event-ring)
           ;; No older group: jump to current group-start marker
-          ;; to expand the visible region (meep-style wrap).
+          ;; to expand the visible region (first-`;' span wrap).
           (let ((gpos (helixel-action--cycle-group-start
                        helixel--action-pos helixel--event-ring)))
             (push-mark (car (helixel-event-mark-region

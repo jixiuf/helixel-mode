@@ -19,8 +19,11 @@
 | `helixel-textobj.el` | Text object command macros + concretions + keymaps + recreate. |
 | `helixel-surround.el` | Surround add/delete/replace. |
 | `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
+| `helixel-mc-core.el` | **Multi-cursor core**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook`, whitelist policy, `helixel-multi-cursor-mode`. |
+| `helixel-mc-spawn.el` | Spawn cursors from selections / column / next-like-this; high-level `helixel-mc-toggle`. |
+| `helixel-mc-integrate.el` | Glue: dot-repeat / chain / insert per-cursor execution + atomic undo. |
 | `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww). 29 `declare-function` (all third-party). |
-| `helixel.el` | Package entry point. Requires all 15 domain files. |
+| `helixel.el` | Package entry point. Requires all 18 domain files. |
 
 ### Test Files
 
@@ -42,6 +45,7 @@
 | `test/helixel-test-register.el` | Register |
 | `test/helixel-test-ring.el` | Event ring + jump log |
 | `test/helixel-test-jump.el` | Jump navigation + all-buffer/all-dir repeat tests |
+| `test/helixel-test-mc.el` | Multi-cursor: create/clear, whitelist, with-each-cursor isolation, dispatch insert, spawn-from-line, edit-lines, add-cursor-here, mark-next-like-this, apply-last-edit, kill-ring isolation |
 
 ## Deps (one-way, compile-time — actual `require` graph)
 
@@ -60,6 +64,10 @@ helixel-core (cl-lib only, zero helixel deps)
   ├── helixel-repeat (→ core + action)   [action→ring→core]
   │     └── helixel-chain (→ core + macros + repeat)
   │
+  ├── helixel-mc-core (→ core)
+  │     ├── helixel-mc-spawn (→ core + mc-core)
+  │     └── helixel-mc-integrate (→ core + mc-core + repeat + chain)
+  │
   └── helixel-state (→ core + ring + macros + register + action
                       + repeat + textobj + surround)
         │
@@ -74,8 +82,9 @@ helixel-core (cl-lib only, zero helixel deps)
         │           ├── helixel-swap (→ state + macros + editing)
         │           │
         │           └── helixel-keymap (→ state + move + editing
-        │                               + chain + surround + swap
-        │                               + search)
+                                          + chain + surround + swap
+                                          + search + mc-core + mc-spawn
+                                          + mc-integrate)
         │
         └── helixel-shims (→ state + keymap)
 ```
@@ -184,6 +193,24 @@ Notes:
 
 ;; ── Chain ──
 (helixel-repeat-chain-start/end/cancel)  ; interactive commands
+;;   q = start, ESC = end (normal map), C-g = cancel
+
+;; ── Multi-cursor (`s' prefix + top-level) ──
+(helixel-mc-toggle)              ; s s  toggle (spawn from sel / clear)
+(helixel-mc-clear-all)           ; s SPC / s ,
+(helixel-mc-add-cursor-here)     ; s a / s A
+(helixel-mc-edit-lines)          ; s x  line-mode → region / char-mode → col
+(helixel-mc-mark-next-like-this) ; s n / s p / s N / s P / s u / s U
+(helixel-mc-apply-last-edit)     ; s .
+(helixel-mc-remove-primary)      ; M-,  remove primary cursor (Helix A-,)
+(helixel-mc-keep-matching REGEX) ; s k  / s K  (remove-matching)
+(helixel-mc-rotate-primary-fwd)  ; ) / ( (rotate-primary-backward)
+(helixel-mc-rotate-content-fwd)  ; M-) / M-(
+(helixel-mc-merge / -align / -trim / -split-on-regex)  ; s - / s & / s _ / s S
+(helixel-mc-restore-cursors)     ; g v  (history stack, depth 16)
+
+;; Hook for layout snapshotting / pre-clear cleanup:
+(add-hook 'helixel-mc-before-clear-hook #'my-callback)
 ```
 
 ## Build & Test
@@ -231,6 +258,40 @@ When `transient-mark-mode` is on, `helixel-select-line-up`/`helixel-select-line`
 
 ### Strategy all-buffer-fn recursion
 `helixel--all-buffer-search` for non-entry-kind must NOT call `helixel--repeat-all-buffer` with a strategy that has `:all-buffer-fn` set (would recurse). Instead it does the scan inline.
+
+### Multi-cursor (mc) — fake cursor model
+`helixel-mc-core.el` provides REAL fake cursors with per-cursor state
+(point/mark/mark-active + kill-ring, pending-sel, last-event,
+active-search, **event-ring, live-event, action-pos**).  Per-cursor
+state is registered via `helixel-mc-register-cursor-var'; the dispatcher
+snapshots/restores it around each fake's body via `--enter-cursor' /
+`--leave-cursor'.  `post-command-hook` dispatches `this-command` at each
+fake cursor when the command's `multiple-cursors` symbol property is t
+(or default policy is `all`).  All N dispatches are wrapped in a single
+`undo-amalgamate-change-group`.  `with-each-cursor` also binds
+`inhibit-message t' so chatty commands (e.g. `;') don't echo N times.
+`mark-active' must NOT be in `helixel-mc-cursor-vars' — it would
+clobber the per-cursor flag set at creation time; it lives on the
+overlay as a property.
+
+### `;' multi-cursor: per-fake event ring
+Each fake owns its own `helixel--event-ring' / `--live-event' /
+`--action-pos' (registered as cursor-vars).  When `;' broadcasts, each
+fake runs `helixel-action--cycle-show' against its OWN ring —
+first-press span selection, prev/next cycling, and group-start logic all
+work via the real cycle code path with no mc-specific bookkeeping.
+Caveats: fakes inherit NO history at spawn time; the ring populates
+from commands run AFTER spawn.  `helixel--global-jump-log-push' is a
+no-op during fake dispatch (cross-buffer state must not be polluted).
+C-o / C-i remain real-only.
+
+### Multi-cursor + `.` / `q` integration
+`helixel-repeat-edit' is whitelisted ON for multi-cursors: each
+cursor's snapshotted `helixel--last-event' is replayed at its own
+position.  After `helixel-repeat-chain-end' an `:after' advice
+broadcasts the new chain tx to every fake cursor and applies it once
+immediately — so `q ... ESC' on N cursors gives N parallel chain
+applications, all in one undo step.
 
 ### ctx-lint keys
 CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-get-field`, `helixel-sel-textobj-command`, etc.).

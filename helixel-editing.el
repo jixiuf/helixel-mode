@@ -103,7 +103,34 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
 (defun helixel--recreate-insert-search-offset (ctx)
   "Replay insert-search-offset.  CTX holds :offset (integer)."
   (let ((offset (helixel-sel-insert-offset ctx)))
-    (goto-char (+ (match-beginning 0) offset)))
+    (goto-char (+ (match-beginning 0) offset))))
+
+;; ── Insert-entry tail helper ──
+;;
+;; Every insert variant command ends with the same three steps:
+;;   1. Record 'insert-text as the operation
+;;   2. Snap `helixel--change-track-marker' at point
+;;   3. Enter insert mode
+;;
+;; `helixel--prepare-insert-entry' encapsulates this tail.
+;; Commands that have already called `helixel--record-edit' earlier
+;; (to interleave setup between record and marker snap) pass nil for
+;; RECORD-P to skip the redundant record call.
+
+(defun helixel--prepare-insert-entry (&optional record-p)
+  "Prepare for insert-mode entry: record, snap marker, enter insert.
+Calls `helixel--record-edit' (unless RECORD-P is nil).
+After recording, snaps `helixel--change-track-marker' at point
+and enters insert mode.
+
+Pass nil for RECORD-P when the caller has already called
+`helixel--record-edit' earlier (e.g. `helixel-insert-newline').
+Otherwise RECORD-P defaults to t via the wrapper body."
+  (setq record-p (or record-p t))
+  (when record-p
+    (helixel--record-edit 'insert-text))
+  (setq helixel--change-track-marker (point-marker))
+  (helixel--enter-insert))
 
 ;; ── Insert-* kind registrations ──
 ;; Recreate functions defined here; advance functions in helixel-repeat.el.
@@ -131,21 +158,21 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
 (helixel-register-kind insert-search-offset
   :recreate #'helixel--recreate-insert-search-offset
   :advance  #'helixel--repeat-advance-search
-  :display  "s"))
+  :display  "s")
 
 (helixel-define-command helixel-insert
     (:category state :subcat insert)
   (cond
    ;; Search context: refine the search sel with entry-kind
    ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'search))
+         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'search))
      (helixel--pending-sel-set
           (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'insert))
     (goto-char (region-beginning)))
    ;; Line selection: preserve sel for `.` auto-advance
    ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'line))
+         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'line))
      (helixel--pending-sel-set
           (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'insert))
@@ -160,9 +187,7 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
    ;; No context
    (t
     (helixel--pending-sel-clear)))
-  (helixel--record-edit 'insert-text)
-  (setq helixel--change-track-marker (point-marker))
-  (helixel--enter-insert))
+  (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-exit
     (:category state :subcat exit)
@@ -201,14 +226,14 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
   (cond
    ;; Search context: refine the search sel with entry-kind
    ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'search))
+         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'search))
      (helixel--pending-sel-set
           (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'append))
     (goto-char (region-end)))
    ;; Line selection: preserve sel for `.` auto-advance
    ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-get-kind (helixel--pending-sel-get)) 'line))
+         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'line))
      (helixel--pending-sel-set
           (helixel-sel-update-ctx (helixel--pending-sel-get)
                                   :entry-kind 'append))
@@ -225,9 +250,7 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
     (unless (helixel--end-of-line-p)
       (forward-char))
     (helixel--pending-sel-clear)))
-  (helixel--record-edit 'insert-text)
-  (setq helixel--change-track-marker (point-marker))
-  (helixel--enter-insert))
+  (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-beginning-line
     (:category state :subcat insert)
@@ -236,9 +259,7 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
         (helixel-sel-create
          'insert-beginning-line nil
          #'helixel--recreate-insert-beginning-line "I"))
-  (helixel--record-edit 'insert-text)
-  (setq helixel--change-track-marker (point-marker))
-  (helixel--enter-insert))
+  (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-after-end-line
     (:category state :subcat insert)
@@ -247,9 +268,7 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
         (helixel-sel-create
          'insert-end-line nil
          #'helixel--recreate-insert-end-line "A"))
-  (helixel--record-edit 'insert-text)
-  (setq helixel--change-track-marker (point-marker))
-  (helixel--enter-insert))
+  (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-newline
     (:category state :subcat insert)
@@ -257,8 +276,7 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
   (helixel--clear-data)
   (end-of-line)
   (newline-and-indent)
-  (setq helixel--change-track-marker (point-marker))
-  (helixel--enter-insert))
+  (helixel--prepare-insert-entry nil))
 
 (helixel-define-command helixel-insert-prevline
     (:category state :subcat insert)
@@ -269,8 +287,7 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
     (newline nil t)
     (call-interactively #'previous-line)
     (indent-according-to-mode))
-  (setq helixel--change-track-marker (point-marker))
-  (helixel--enter-insert))
+  (helixel--prepare-insert-entry nil))
 
 
 ;; ── Edit-op change runner ──

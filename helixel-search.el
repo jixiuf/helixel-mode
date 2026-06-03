@@ -173,7 +173,7 @@ matches to match the original n count."
               (pat (helixel-search--active-pattern))
               (dir (helixel-search--current-dir)))
     ;; Read previous n-count from existing pending-sel and increment.
-    (let* ((prev-n (plist-get (helixel-sel-get-ctx
+    (let* ((prev-n (plist-get (helixel-sel-ctx
                                (helixel--pending-sel-get))
                               :n-count))
            (n-count (if prev-n (1+ prev-n) 0)))
@@ -318,9 +318,9 @@ Reads pattern from `helixel--active-search'."
 Tracks how many times n was pressed so . repeats the full sequence."
   (let* ((prev-pending (helixel--pending-sel-get))
          (prev-n (when (and prev-pending
-                            (eq (helixel-sel-get-kind prev-pending)
+                            (eq (helixel-sel-kind prev-pending)
                                 'find-char))
-                   (plist-get (helixel-sel-get-ctx prev-pending)
+                   (plist-get (helixel-sel-ctx prev-pending)
                               :n-count)))
          (n-count (if prev-n (1+ prev-n) 0)))
     (helixel--sel-push
@@ -606,7 +606,7 @@ Returns the chosen action plist or nil."
     (pcase cat
       ('find-char
        (let* ((sel (helixel-event-sel event))
-              (ctx (and sel (helixel-sel-get-ctx sel)))
+              (ctx (and sel (helixel-sel-ctx sel)))
               (type (helixel-sel-find-char-type ctx))
               (char (helixel-sel-find-char-char ctx)))
          (helixel--tracking-open cat (helixel-event-subcat event))
@@ -739,9 +739,9 @@ otherwise cause infinite loops at buffer edges."
           (setq helixel--search-advance-done t)
           (setq helixel--advance-search-last-pos (match-beginning 0))
           (helixel-search--advance-n-count
-           (helixel-sel-get-ctx sel)
+           (helixel-sel-ctx sel)
            (lambda () (helixel-search--search pat dir)))
-          (helixel--with-span (helixel-sel-get-ctx sel)
+          (helixel--with-span (helixel-sel-ctx sel)
             (helixel--recreate-selection sel))
           t)
       (search-failed nil))))

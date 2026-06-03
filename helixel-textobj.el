@@ -1294,7 +1294,7 @@ the count so `.' repeats the full chain of textobj selections."
            (delim delimiter)
            (prev (helixel--pending-sel-get))
            (total-n (if (and prev
-                             (eq (helixel-sel-get-kind prev) 'textobj)
+                             (eq (helixel-sel-kind prev) 'textobj)
                              (eq (helixel-sel-textobj-command prev) cmd))
                         (+ (helixel-sel-textobj-count prev) n)
                       n)))

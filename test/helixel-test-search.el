@@ -107,7 +107,7 @@ exact-case 'Hello' still matches 'Hello'."
       ;; Verify selection context for . repeat
       (let ((sel helixel--pending-sel))
         (should sel)
-        (should (eq (helixel-sel-get-kind sel) 'search))
+        (should (eq (helixel-sel-kind sel) 'search))
         (should (string= (helixel-sel-search-pattern sel) "hello"))
         (should (eq (helixel-sel-search-dir sel) 'forward)))
       ;; Verify region is active on the match
@@ -139,7 +139,7 @@ exact-case 'Hello' still matches 'Hello'."
       ;; Verify selection context
       (let ((sel helixel--pending-sel))
         (should sel)
-        (should (eq (helixel-sel-get-kind sel) 'search))
+        (should (eq (helixel-sel-kind sel) 'search))
         (should (string= (helixel-sel-search-pattern sel) "Hello"))
         (should (eq (helixel-sel-search-dir sel) 'backward)))
       ;; Verify region active on last Hello (13-18)

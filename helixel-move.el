@@ -767,7 +767,7 @@ Deactivates any prior region so `helixel-select-line-up' starts
 fresh rather than extending a stale mark."
   (let* ((sel (helixel-event-sel tx))
          (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
-         (entry-kind (plist-get (helixel-sel-get-ctx sel) :entry-kind))
+         (entry-kind (plist-get (helixel-sel-ctx sel) :entry-kind))
          (count (if (eq entry-kind 'append) 1
                   (helixel-sel-line-count sel)))
          (lines-left count))
@@ -831,7 +831,7 @@ No-op during dot-repeat replay, or when no region is active."
            (entry (cons cmd 1)))
       (cond
        ;; Update: extend existing movement sel.
-       ((and ctx (eq (helixel-sel-get-kind ctx) 'movement))
+       ((and ctx (eq (helixel-sel-kind ctx) 'movement))
         (let* ((moves (helixel-sel-movement-moves ctx))
                (last (car moves)))
           (if (and last (eq (car last) cmd))

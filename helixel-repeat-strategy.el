@@ -62,7 +62,7 @@ the selection kind has a `:flip-dir-fn' registered, build a copy
 of EDIT whose sel has been flipped by that function.  Otherwise
 return EDIT unchanged."
   (let* ((sel (helixel-event-sel edit))
-         (kind (and sel (helixel-sel-get-kind sel)))
+         (kind (and sel (helixel-sel-kind sel)))
          (flip-fn (and kind (helixel--kind-flip-dir-fn kind)))
          (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
     (if (and effective-reverse sel flip-fn)
@@ -96,7 +96,7 @@ When the operator has no :repeat-advance tag, the advance
 just recreates the selection at the current position
 \(no actual advancing — e.g. kill auto-moves point)."
   (let* ((sel (helixel-event-sel edit))
-         (kind (and sel (helixel-sel-get-kind sel)))
+         (kind (and sel (helixel-sel-kind sel)))
          (op (helixel-event-op edit))
          (adv-tag (helixel--op-advance op))
          (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p))

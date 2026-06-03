@@ -49,21 +49,21 @@
     (should (string= (helixel-sel--display sel) "L"))))
 
 (ert-deftest helixel-test-sel-get-kind ()
-  "`helixel-sel-get-kind' works for struct."
+  "`helixel-sel-kind' works for struct."
   (let ((struct (helixel-sel-create 'line nil (lambda (_) nil))))
-    (should (eq (helixel-sel-get-kind struct) 'line))
-    (should (eq (helixel-sel-get-kind (helixel-sel-create 'rect '(:count 2) #'helixel--recreate-rect "r")) 'rect))
-    (should (null (helixel-sel-get-kind nil)))))
+    (should (eq (helixel-sel-kind struct) 'line))
+    (should (eq (helixel-sel-kind (helixel-sel-create 'rect '(:count 2) #'helixel--recreate-rect "r")) 'rect))
+    (should (null (helixel-sel-kind nil)))))
 
 (ert-deftest helixel-test-sel-get-field ()
-  "`helixel-sel-get-field' extracts from ctx."
+  "`helixel-sel-field' extracts from ctx."
   (let ((struct (helixel-sel-create 'line '(:count 3 :dir backward)
                                     (lambda (_) nil))))
-    (should (= (helixel-sel-get-field struct :count) 3))
-    (should (eq (helixel-sel-get-field struct :dir) 'backward))
-    (should (null (helixel-sel-get-field struct :missing)))
-    (should (null (helixel-sel-get-field nil :count)))
-    (should (= (helixel-sel-get-field (helixel-sel-create 'line '(:count 5) #'helixel--recreate-line "L") :count) 5))))
+    (should (= (helixel-sel-field struct :count) 3))
+    (should (eq (helixel-sel-field struct :dir) 'backward))
+    (should (null (helixel-sel-field struct :missing)))
+    (should (null (helixel-sel-field nil :count)))
+    (should (= (helixel-sel-field (helixel-sel-create 'line '(:count 5) #'helixel--recreate-line "L") :count) 5))))
 
 (ert-deftest helixel-test-sel-count ()
   "`helixel-sel-count' returns :count from ctx or 0."
@@ -78,8 +78,8 @@
   "`helixel-sel-update-ctx' returns a new sel with updated ctx."
   (let* ((s1 (helixel-sel-create 'line '(:count 3) (lambda (_) nil)))
          (s2 (helixel-sel-update-ctx s1 :count 5)))
-    (should (= (helixel-sel-get-field s1 :count) 3))
-    (should (= (helixel-sel-get-field s2 :count) 5))
+    (should (= (helixel-sel-field s1 :count) 3))
+    (should (= (helixel-sel-field s2 :count) 5))
     (should (helixel-sel-p s2))
     (should (eq (helixel-sel--kind s2) 'line))
     (let ((p2 (helixel-sel-update-ctx (helixel-sel-create 'line '(:count 1) #'helixel--recreate-line "L") :count 9)))
@@ -132,7 +132,7 @@
   (let ((sel (helixel-sel-create
               'insert-selection-start nil
               #'helixel--recreate-insert-selection-start "is")))
-    (should (eq (helixel-sel-get-kind sel) 'insert-selection-start))
+    (should (eq (helixel-sel-kind sel) 'insert-selection-start))
     (should (string= (helixel-sel-call-display sel) "is"))
     (should (helixel-sel-p sel))))
 
@@ -141,7 +141,7 @@
   (let ((sel (helixel-sel-create
               'insert-selection-end nil
               #'helixel--recreate-insert-selection-end "ie")))
-    (should (eq (helixel-sel-get-kind sel) 'insert-selection-end))
+    (should (eq (helixel-sel-kind sel) 'insert-selection-end))
     (should (string= (helixel-sel-call-display sel) "ie"))
     (should (helixel-sel-p sel))))
 
@@ -150,7 +150,7 @@
   (let ((sel (helixel-sel-create
               'insert-beginning-line nil
               #'helixel--recreate-insert-beginning-line "I")))
-    (should (eq (helixel-sel-get-kind sel) 'insert-beginning-line))
+    (should (eq (helixel-sel-kind sel) 'insert-beginning-line))
     (should (string= (helixel-sel-call-display sel) "I"))
     (should (helixel-sel-p sel))))
 
@@ -159,7 +159,7 @@
   (let ((sel (helixel-sel-create
               'insert-end-line nil
               #'helixel--recreate-insert-end-line "A")))
-    (should (eq (helixel-sel-get-kind sel) 'insert-end-line))
+    (should (eq (helixel-sel-kind sel) 'insert-end-line))
     (should (string= (helixel-sel-call-display sel) "A"))
     (should (helixel-sel-p sel))))
 
@@ -168,7 +168,7 @@
   (let ((sel (helixel-sel-create
               'insert-search-offset '(:offset 3)
               #'helixel--recreate-insert-search-offset "io")))
-    (should (eq (helixel-sel-get-kind sel) 'insert-search-offset))
+    (should (eq (helixel-sel-kind sel) 'insert-search-offset))
     (should (string= (helixel-sel-call-display sel) "io"))
     (should (= (helixel-sel-insert-offset sel) 3))
     (should (helixel-sel-p sel))))

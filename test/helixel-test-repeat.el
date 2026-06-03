@@ -990,7 +990,7 @@ Cursor-offset is 0 (first insertion at region-end)."
       (should (string= (plist-get (helixel-event-payload helixel--last-event) :text)
                        "foo"))
       (let ((sel (helixel-event-sel helixel--last-event)))
-        (should (eq (helixel-sel-get-kind sel) 'search))
+        (should (eq (helixel-sel-kind sel) 'search))
         (should (eq (helixel-sel-search-entry-kind sel) 'append)))
       ;; . — repeat (searches for next "hello" and applies "foo" at end)
       (helixel-repeat-edit)
@@ -1028,7 +1028,7 @@ only matched at match-start, missing the match-end case for append."
       ;; Buffer after edit: "hello world hellofoo"
       (should (string= (buffer-string) "hello world hellofoo"))
       (let ((sel (helixel-event-sel helixel--last-event)))
-        (should (eq (helixel-sel-get-kind sel) 'search))
+        (should (eq (helixel-sel-kind sel) 'search))
         (should (eq (helixel-sel-search-entry-kind sel) 'append)))
       ;; . — should find first "hello" (backward) and append "foo"
       (helixel-repeat-edit)
@@ -1127,7 +1127,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
       (helixel-insert-exit)
       (should (string= (buffer-string) "Xhello world hello"))
       (let ((sel (helixel-event-sel helixel--last-event)))
-        (should (eq (helixel-sel-get-kind sel) 'search))
+        (should (eq (helixel-sel-kind sel) 'search))
         (should (eq (helixel-sel-search-entry-kind sel) 'insert)))
       (helixel-repeat-edit)
       (should (string= (buffer-string) "Xhello world Xhello")))))

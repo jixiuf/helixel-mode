@@ -288,7 +288,7 @@ No-op for movement, textobj, or nil selections.
 Returns t on success, nil otherwise."
   (when-let* ((tx helixel--last-event)
               (sel (helixel-event-sel tx))
-              (kind (helixel-sel-get-kind sel)))
+              (kind (helixel-sel-kind sel)))
     (when (memq kind '(line search))
       (setq helixel--repeat-permanent-flip
             (not helixel--repeat-permanent-flip))
@@ -439,7 +439,7 @@ preview position."
                  (n (helixel-repeat-prefix-n prefix))
                  (sel (helixel-event-sel tx)))
             (if (and (eq mode :all-buffer)
-                     (eq (helixel-sel-get-kind sel) 'line))
+                     (eq (helixel-sel-kind sel) 'line))
                 ;; Line needs per-line stepping via
                 ;; `helixel--repeat-line-pass' (different from generic
                 ;; advance loop due to operator advance tag handling).

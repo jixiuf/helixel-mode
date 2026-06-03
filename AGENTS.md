@@ -138,7 +138,7 @@ Notes:
 ```elisp
 ;; ── Selection ──
 (helixel-sel-create kind ctx recreate &optional display &rest extras) → struct
-(helixel-sel-get-kind sel)          → symbol
+(helixel-sel-kind sel)          → symbol
 (helixel-sel-call-recreate sel)     → recreates region
 (helixel-sel-update-ctx sel k v)    → new sel
 (helixel-sel-count sel)             → :count or 0
@@ -301,7 +301,7 @@ immediately — so `q ... ESC' on N cursors gives N parallel chain
 applications, all in one undo step.
 
 ### ctx-lint keys
-CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-get-field`, `helixel-sel-textobj-command`, etc.).
+CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-field`, `helixel-sel-textobj-command`, etc.).
 
 ### Design notes
 - `:repeat-advance` tag on ops gates auto-advance. nil = no advance (kill, change); 'line = line advance (insert-text).
@@ -310,3 +310,35 @@ CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use r
 - `helixel-repeat-selection` (`,`) uses the same strategy + preview path.
 - Kind-specific all-buffer/all-dir logic lives in `helixel-repeat.el` via `:all-buffer-fn`/`:all-dir-fn` in the kind registry.
 - `helixel--advance-search-last-pos` and `helixel--advance-search-edge-seen` are reset per `helixel-repeat-edit` / `helixel-repeat-selection` call.
+
+### Naming Convention for `helixel-sel` Accessors
+
+All `helixel-sel` accessors follow a uniform pattern — no `get-` prefix:
+
+- **Struct-slot accessors**: `helixel-sel-kind`, `helixel-sel-ctx`,
+  `helixel-sel-advance`, `helixel-sel-count`
+- **Kind-specific ctx accessors**: `helixel-sel-line-dir`,
+  `helixel-sel-search-pattern`, `helixel-sel-textobj-command`, etc.
+- **Closure-call accessors**: `helixel-sel-call-recreate`,
+  `helixel-sel-call-display` (the `call-` prefix signals side-effect)
+- **Generic ctx key accessor**: `helixel-sel-field`
+
+The kind-specific accessors accept either a `helixel-sel` struct or a
+raw ctx plist (for use inside recreate closures).  They are the
+preferred way to read ctx fields.
+
+### `defsubst` Compilation Order
+
+Several `defsubst` functions in `helixel-core.el` are inlined across
+module boundaries.  The Makefile `FILES` order ensures that every file
+that calls a `defsubst` defined in `helixel-core.el` is compiled AFTER
+`helixel-core.elc`.  When adding a new file, place it after
+`helixel-core.el` in the `FILES` list if it uses core accessors.
+
+### Macro Definition Documentation
+
+`helixel-define-command`, `helixel-define-operator`, and
+`helixel-with-edit-tracking` are documented in detail in
+[docs/MACROS.md](docs/MACROS.md) — including auto-injected behavior
+(`helixel--tracking-open`, highlight clearing, visual-move tracking)
+and a decision flowchart for choosing the right macro.

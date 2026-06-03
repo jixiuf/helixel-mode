@@ -301,3 +301,53 @@ helixel-core (cl-lib only)
 - For dot-repeat tests: build tx with `helixel--make-tx` and set `helixel--last-tx`
 - For chain tests: use `helixel-chain--make-test-tx` helper
 - Max 12s timeout per test run; zero hangs expected
+
+---
+
+## Dot-Repeat (`.`) End-to-End Data Flow
+
+When the user presses `.` (bound to `helixel-repeat-edit`), here is the
+complete flow through the module graph:
+
+```
+User presses `.`
+  │
+  ▼
+helixel-repeat.el:helixel-repeat-edit
+  ├── Resolves helixel--last-event (global, cross-buffer)
+  ├── Decodes prefix via helixel-repeat-prefix.el
+  │
+  ▼
+helixel-repeat-strategy.el:helixel--build-strategy(edit, reverse-p)
+  ├── Checks op registry for :strategy-builder (chain uses this)
+  ├── Falls back to helixel--default-strategy-builder:
+  │     ├── Reads :repeat-advance tag from op registry
+  │     │     (nil=no advance, 'line=line-advance, fn=custom)
+  │     ├── Reads :advance/:recreate from kind registry
+  │     └── Reads :all-buffer-fn/:all-dir-fn from kind registry
+  │
+  ▼
+helixel-repeat.el:advance+apply loop (with helixel-with-replay-context)
+  ├── Advance: recreate sel at next target
+  │     ├── helixel-core.el:helixel-sel-call-recreate → struct closure
+  │     └── (recreate functions live in helixel-move.el,
+  │          helixel-search.el, helixel-textobj.el)
+  │
+  ├── Apply: execute edit at current position
+  │     ├── helixel-core.el:helixel--execute-edit(tx)
+  │     │     └── calls helixel-event-runner(tx) — closure stored at record time
+  │     └── (runners live in helixel-editing.el, registered via
+  │          helixel-register-op / helixel-define-operator)
+  │
+  └── All-buffer/all-dir: scan from point-min or marker
+        └── kind-specific handlers from helixel-repeat.el
+              (line:line-pass, search:inline scan, others:generic loop)
+```
+
+Key invariants:
+- Both `helixel--inhibit-repeat-record` and `helixel--inhibit-action-track`
+  are bound to t during replay (via `helixel-with-replay-context`).
+- `helixel--last-event` is NOT buffer-local — `.` replays cross-buffer.
+- The runner closure stored in the event struct was captured at record time
+  from the op registry, so replay never queries the registry.
+- All iterations within a single `.` press are wrapped in one undo step.

@@ -110,13 +110,83 @@ EXTRAS is a keyword plist."
            unless (eq k :advance)
            append (list k v)))
 
+;; ── CTX schema validation ──
+;;
+;; `helixel--ctx-schema' is the machine-readable counterpart to the
+;; comment table above.  `helixel--validate-ctx' checks a (kind . ctx-plist)
+;; pair against this schema.  It never runs in production — gated by
+;; `helixel--ctx-validation-enabled'.
+
+(defvar helixel--ctx-schema
+  '((line         :required (:count :dir) :optional (:entry-kind :span))
+    (rect         :required (:count) :optional ())
+    (movement     :required (:moves)
+                  :optional (:inline-advance :normal-mode))
+    (textobj      :required (:command :count :delimiter)
+                  :optional (:inline-advance))
+    (search       :required (:pattern :dir)
+                  :optional (:entry-kind :n-count :cursor-offset))
+    (find-char    :required (:char :type :dir)
+                  :optional (:inline-advance))
+    (surround     :required (:delimiter) :optional ())
+    (insert-selection-start
+     :required () :optional (:cursor-offset :entry-kind))
+    (insert-selection-end
+     :required () :optional (:cursor-offset :entry-kind))
+    (insert-beginning-line   :required () :optional ())
+    (insert-end-line         :required () :optional ())
+    (insert-search-offset    :required (:offset) :optional ()))
+  "Per-kind schema: (KIND :required (KEYS…) :optional (KEYS…)).
+Must match the CTX schema comment table exactly.")
+
+(defvar helixel--ctx-validation-enabled nil
+  "When non-nil, `helixel--validate-ctx' checks ctx against the schema.
+Enabled during `make lint' and in test suites.
+Never set in production — ctx are validated at author time only.")
+
+(defun helixel--validate-ctx (kind ctx-plist)
+  "Validate CTX-PLIST against the schema for KIND.
+Returns t if valid.  When `helixel--ctx-validation-enabled' is nil,
+returns t immediately (no-op).
+
+Checks:
+  1. All :required keys present in CTX-PLIST.
+  2. No keys outside the union of :required and :optional.
+Signals `helixel-ctx-error' on mismatch with details."
+  (or (not helixel--ctx-validation-enabled)
+      (let ((entry (assq kind helixel--ctx-schema)))
+        (unless entry
+          (signal 'helixel-ctx-error
+                  (list (format "Unknown kind: %s" kind))))
+        (let* ((spec (cdr entry))
+               (required (plist-get spec :required))
+               (optional (plist-get spec :optional))
+               (allowed (append required optional)))
+          (dolist (key required)
+            (unless (plist-member ctx-plist key)
+              (signal 'helixel-ctx-error
+                      (list (format "Kind %s: missing required key :%s"
+                                    kind key)))))
+          (cl-loop for (k _v) on ctx-plist by #'cddr
+                   unless (memq k allowed)
+                   do (signal 'helixel-ctx-error
+                              (list (format
+                                     "Kind %s: unknown key :%s in ctx"
+                                     kind k))))
+          t))))
+
 (defun helixel-sel-create (kind ctx recreate &optional display &rest extras)
   "Create a `helixel-sel' struct for selection KIND.
 CTX is a plist of extra data.
 RECREATE is a function (CTX) that recreates the selection at point.
 DISPLAY is an optional string or function (CTX) → string.
 EXTRAS is an optional plist with keys:
-  :advance — function (TX TAG) → boolean, positions cursor at next target."
+  :advance — function (TX TAG) → boolean, positions cursor at next target.
+
+When `helixel--ctx-validation-enabled' is non-nil (test/lint only),
+validates CTX against the schema registered for KIND."
+  (when helixel--ctx-validation-enabled
+    (helixel--validate-ctx kind ctx))
   (let* ((adv (helixel-sel--extras-advance extras))
          (rest (helixel-sel--extras-strip-advance extras)))
     (apply #'helixel-sel--internal
@@ -155,7 +225,7 @@ Evaluates the DISPLAY field (string or function)."
     (let ((d (helixel-sel--display sel)))
       (if (functionp d) (funcall d (helixel-sel--ctx sel)) d))))
 
-(defun helixel-sel-get-kind (sel)
+(defun helixel-sel-kind (sel)
   "Return the :kind from `helixel-sel' struct SEL."
   (when (helixel-sel-p sel)
     (helixel-sel--kind sel)))
@@ -165,30 +235,30 @@ Evaluates the DISPLAY field (string or function)."
   (when (helixel-sel-p sel)
     (helixel-sel--advance sel)))
 
-(defun helixel-sel-get-ctx (sel)
+(defun helixel-sel-ctx (sel)
   "Return the CTX (data plist) from `helixel-sel' struct SEL."
   (when (helixel-sel-p sel)
     (helixel-sel--ctx sel)))
 
-(defun helixel-sel-get-field (sel key)
+(defun helixel-sel-field (sel key)
   "Get KEY from `helixel-sel' struct SEL's ctx.
 Returns nil if SEL is nil."
   (when sel
-    (plist-get (helixel-sel-get-ctx sel) key)))
+    (plist-get (helixel-sel-ctx sel) key)))
 
 (defun helixel-sel-count (sel)
   "Return :count from `helixel-sel' struct SEL's ctx, or 0 if absent.
 Returns 0 if SEL is nil."
   (if (null sel) 0
-    (or (plist-get (helixel-sel-get-ctx sel) :count) 0)))
+    (or (plist-get (helixel-sel-ctx sel) :count) 0)))
 
 (defun helixel-sel-equal-p (s1 s2)
   "Return non-nil if S1 and S2 represent the same selection.
 Compares kind and ctx.  Returns t when both are nil."
   (if (or (null s1) (null s2))
       (eq s1 s2)
-    (and (eq (helixel-sel-get-kind s1) (helixel-sel-get-kind s2))
-         (equal (helixel-sel-get-ctx s1) (helixel-sel-get-ctx s2)))))
+    (and (eq (helixel-sel-kind s1) (helixel-sel-kind s2))
+         (equal (helixel-sel-ctx s1) (helixel-sel-ctx s2)))))
 
 (defun helixel-sel-update-ctx (sel key value)
   "Return a new `helixel-sel' struct from SEL with CTX updated.

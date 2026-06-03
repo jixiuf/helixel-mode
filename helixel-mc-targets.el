@@ -167,7 +167,7 @@ capture `this-command') would clobber `helixel--last-event'
 with a sel whose `:command' is the outer mc command (e.g.
 `helixel-mc-toggle' with an accumulated `:count' equal to the
 number of walk iterations), breaking dot-repeat at fake cursors."
-  (let* ((kind (helixel-sel-get-kind sel))
+  (let* ((kind (helixel-sel-kind sel))
          (advance-fn (helixel--kind-advance kind))
          (limit (or helixel-mc-max-cursors 1000))
          (targets nil)
@@ -292,7 +292,7 @@ for the subsequent `i' / `a' / operator to land in the same
 region-relative position as on every fake."
   (unless (helixel-sel-p sel)
     (user-error "No selection to spawn from"))
-  (let* ((kind (helixel-sel-get-kind sel))
+  (let* ((kind (helixel-sel-kind sel))
          (spawn-fn (helixel--kind-mc-spawn-fn kind))
          ;; Snapshot real cursor BEFORE the walk so we can restore
          ;; the region if the chosen target ends up degenerate.
@@ -360,7 +360,7 @@ cursor lands AFTER the match (mimicking `fx' which leaves point
 past the char); for `:type till' each cursor lands ON the char.
 No mark / region — the user typically follows up with their own
 motion or operator."
-  (let* ((ctx (helixel-sel-get-ctx sel))
+  (let* ((ctx (helixel-sel-ctx sel))
          (char (plist-get ctx :char))
          (type (or (plist-get ctx :type) 'next))
          (case-fold-search (if (and char (char-uppercase-p char))

@@ -246,8 +246,8 @@ to session-start, matching `;''s behaviour."
         sel)
     (cond
      ((and pending event-sel
-           (eq (helixel-sel-get-kind pending)
-               (helixel-sel-get-kind event-sel)))
+           (eq (helixel-sel-kind pending)
+               (helixel-sel-kind event-sel)))
       (setq sel (helixel-sel--copy pending)))
      (event-sel
       (setq sel (helixel-sel--copy event-sel))))

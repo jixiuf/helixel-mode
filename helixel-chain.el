@@ -114,7 +114,7 @@ where `helixel-insert' calls `(goto-char (region-beginning))'."
       ;; Reposition cursor at match-beginning for search sel chains.
       ;; The advance fn leaves point at match-end, but the original
       ;; recording started at match-beginning (via region-beginning).
-      (when (and sel (eq (helixel-sel-get-kind sel) 'search)
+      (when (and sel (eq (helixel-sel-kind sel) 'search)
                  (match-beginning 0))
         (goto-char (match-beginning 0)))
       (execute-kbd-macro edit-keys)))))
@@ -131,7 +131,7 @@ Advance: sel advance + move-keys + edit-keys.
 Apply: edit-keys only.
 Reset: goto marker."
   (let* ((sel (helixel-event-sel edit))
-         (kind (and sel (helixel-sel-get-kind sel)))
+         (kind (and sel (helixel-sel-kind sel)))
          (advance-fn (helixel--kind-advance kind))
          (payload (helixel-event-payload edit))
          (move-keys (plist-get payload :chain-move-keys))
@@ -155,7 +155,7 @@ Reset: goto marker."
   "Build a preview-only repeat strategy for chain EDIT and REVERSE-P.
 Same as chain strategy but uses `ignore' for apply (no edit execution)."
   (let* ((sel (helixel-event-sel edit))
-         (kind (and sel (helixel-sel-get-kind sel)))
+         (kind (and sel (helixel-sel-kind sel)))
          (advance-fn (helixel--kind-advance kind))
          (payload (helixel-event-payload edit))
          (move-keys (plist-get payload :chain-move-keys))
@@ -248,7 +248,7 @@ Determines advance behavior from the initial selection context
          ;; Merge entry-kind from live ctx (i/a updates it after snapshot)
          (live-ctx helixel--pending-sel)
          (init-ctx (if (and init-ctx live-ctx
-                            (eq (helixel-sel-get-kind init-ctx)
+                            (eq (helixel-sel-kind init-ctx)
                                 'search)
                             (not (helixel-sel-search-entry-kind
                                   init-ctx))

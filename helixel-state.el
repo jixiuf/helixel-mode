@@ -198,9 +198,7 @@ and commits the event.  This is called from `post-command-hook'."
 ;; Wire textobj hooks for action recording and visual state detection.
 (setq helixel-textobj-action-function #'helixel--tracking-open)
 (setq helixel-textobj-visual-state-p-function
-      (lambda ()
-        (and (eq helixel--current-state 'visual)
-             (not (memq (helixel--selection-type) '(line rect))))))
+      #'helixel--pure-visual-state-p)
 (setq helixel-jump-cleanup-function #'helixel--clear-data)
 
 (defun helixel--unload-current-state ()
@@ -221,8 +219,10 @@ and commits the event.  This is called from `post-command-hook'."
 (defun helixel--clear-highlights ()
   "Clear any active highlight, unless in visual state.
 Also preserve highlights when `rectangle-mark-mode' is active."
-  (unless (or (eq helixel--current-state 'visual) rectangle-mark-mode)
+  (unless (or (helixel--pure-visual-state-p) rectangle-mark-mode)
     (deactivate-mark)))
+
+(declare-function rectangle-exchange-point-and-mark "rect")
 
 ;; ── Visual state ──
 
@@ -241,6 +241,29 @@ Also preserve highlights when `rectangle-mark-mode' is active."
     (helixel--switch-state 'visual)
     (setq helixel--raw-selection-type nil)
     (push-mark-command t t)))
+
+(defun helixel-visual-exchange-point-and-mark ()
+  "Exchange point and mark, preserving selection-type semantics.
+
+- For rect selections (`rectangle-mark-mode' active), delegates to
+  `rectangle-exchange-point-and-mark' which preserves the rectangle
+  corner positions correctly.
+- For line selections, exchanges point/mark AND flips `:dir' in
+  the pending selection context.
+- For char visual selections, delegates to plain
+  `exchange-point-and-mark'."
+  (interactive)
+  (cond
+   (rectangle-mark-mode
+    (rectangle-exchange-point-and-mark))
+   ((and (eq helixel--raw-selection-type 'line)
+         helixel--pending-sel
+         (eq (helixel-sel-kind helixel--pending-sel) 'line))
+    (exchange-point-and-mark)
+    (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
+      (helixel--pending-sel-set (funcall fn helixel--pending-sel))))
+   (t
+    (exchange-point-and-mark))))
 
 ;; ── Minor modes ──
 
@@ -341,6 +364,14 @@ Safe for use in hooks and `:after' advice."
 (defun helixel-visual-state-p ()
   "Return non-nil if the current Helixel state is visual."
   (eq helixel--current-state 'visual))
+
+(defun helixel--pure-visual-state-p ()
+  "Return non-nil if in pure visual state (not entered via line/rect).
+Line and rect selections are in `visual' state but should NOT behave
+like pure visual for highlight clearing, textobj expansion, or
+search mark handling."
+  (and (eq helixel--current-state 'visual)
+       (not (memq (helixel--selection-type) '(line rect)))))
 
 ;; ── Motion-state keymap parent patching ──
 ;; Extend major-mode keymaps with `helixel-normal-map' as fallback

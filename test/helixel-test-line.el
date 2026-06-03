@@ -498,4 +498,289 @@
     (helixel-begin-selection)
     (should-not helixel--raw-selection-type)))
 
+;;; Direction flip / shrink tests
+
+(ert-deftest helixel-test-line-select-enters-visual ()
+  "`x' enters visual state."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line)
+    (should (eq helixel--current-state 'visual))
+    (should (eq helixel--raw-selection-type 'line))
+    (should (use-region-p))))
+
+(ert-deftest helixel-test-line-select-up-enters-visual ()
+  "`X' enters visual state."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (goto-char 5)
+    (helixel-select-line-up)
+    (should (eq helixel--current-state 'visual))
+    (should (eq helixel--raw-selection-type 'line))
+    (should (use-region-p))))
+
+(ert-deftest helixel-test-line-dir-stored-in-ctx ()
+  "`:dir' is stored in pending-sel ctx for line selections."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line)
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (helixel-enter-normal-state)
+    (goto-char 5)
+    (helixel-select-line-up)
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-neg-prefix-flips-dir ()
+  "`-x' flips `:dir' permanently like `N' for search."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\nddd\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line 2)          ; 2 lines, forward
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; -x: flip backward + shrink 1
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line -1)))
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-neg-flips-then-extend ()
+  "`-x' flips dir and extends in new direction; second `-x' flips back."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line 3)          ; 3 lines, forward
+    ;; -x: flip backward, shrink 1 → 2 lines
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line -1)))
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    ;; -x again: flip forward, extend 1 → 3 lines
+    (call-interactively (lambda () (interactive) (helixel-select-line -1)))
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-shrink-boundary ()
+  "At 1-line boundary, plain `x' crosses over; next `x' extends from top."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\nddd\n"
+    (helixel-enter-normal-state)
+    (goto-char 5)                    ; bol of line 2
+    (helixel-select-line 2)          ; 2 lines forward (lines 2-3)
+    ;; -x: flip backward, shrink → 1 line (line 2)
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line -1)))
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; x at boundary: cross over, still 1 line (point moves to eol)
+    (helixel-select-line 1)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; x again: now extend from top → 2 lines
+    (helixel-select-line 1)
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; x again: extend from top but at buffer top → no-op → 2 lines
+    (helixel-select-line 1)
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-extend-after-flip ()
+  "After flip, `x' extends in current direction (shrink if backward)."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line 3)          ; 3 lines, forward
+    ;; -x: flip backward, shrink from bottom → 2 lines
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line -1)))
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; x: backward+eolp → continue shrink → 1 line
+    (helixel-select-line 1)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-up-neg-shrink-from-top ()
+  "`-X' shrinks selection from top."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\n"
+    (helixel-enter-normal-state)
+    (goto-char (point-max))
+    (forward-line -1)                ; on line4
+    (helixel-select-line-up 3)       ; select 3 lines up (line2..line4)
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))
+    ;; -X: flip forward + shrink from top → 2 lines
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line-up -1)))
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-movement-does-not-extend ()
+  "Movement keys (h/l/j/k) do NOT extend a line selection in visual state."
+  (helixel-test-with-buffer "line1\nline2\nline3\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line)
+    (let ((region-beg (region-beginning))
+          (region-end (region-end)))
+      ;; Moving char should deactivate mark, not extend line selection.
+      (helixel-forward-char)
+      (should-not (use-region-p))
+      ;; Region should be gone — movement moved point without extending.
+      (should (not (= region-end (region-end)))))))
+
+(ert-deftest helixel-test-line-o-flips-dir ()
+  "`o' swaps point/mark AND flips :dir for line selections."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line 2)
+    (should (eq 'forward (helixel-sel-line-dir helixel--pending-sel)))
+    (let ((pt (point)) (mk (mark)))
+      (helixel-visual-exchange-point-and-mark)
+      (should (= pt (mark)))          ; point → mark
+      (should (= mk (point)))         ; mark → point
+      (should (eq 'backward
+                  (helixel-sel-line-dir helixel--pending-sel))))
+    ;; o again flips back
+    (helixel-visual-exchange-point-and-mark)
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-o-rect-no-flip ()
+  "`o' for rect selection does NOT touch :dir (nonexistent)."
+  (helixel-test-with-buffer "aaa\nbbb\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (helixel-begin-selection)
+    (helixel-select-rectangle)
+    (should rectangle-mark-mode)
+    (let ((pt (point)) (mk (mark)))
+      (helixel-visual-exchange-point-and-mark)
+      (should (= pt (mark)))
+      (should (= mk (point)))
+      ;; rect has no :dir — just verify no error
+      (should-not (eq helixel--raw-selection-type 'line)))))
+
+(ert-deftest helixel-test-line-auto-reverse-at-boundary ()
+  "At boundary, plain `x' crosses over; `-x' just shrinks (no switch)."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\nddd\n"
+    (helixel-enter-normal-state)
+    (goto-char 5)                    ; bol of line 2
+    (helixel-select-line 2)          ; 2 lines forward
+    ;; -x: flip backward, shrink → 1 line, no boundary switch
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line -1)))
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; x at boundary: cross over, still 1 line
+    (helixel-select-line 1)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; x again: extend from top → 2 lines
+    (helixel-select-line 1)
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-up-auto-reverse-at-top ()
+  "At top boundary, `X' crosses over; `-X' just shrinks."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\nddd\n"
+    (helixel-enter-normal-state)
+    (goto-char 6)                    ; eol of line 2
+    (helixel-select-line-up 2)       ; 2 lines backward (lines 1-2)
+    ;; -X: flip forward, shrink → 1 line, no switch
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line-up -1)))
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; X at boundary: cross over, still 1 line
+    (helixel-select-line-up 1)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; X again: extend → 2
+    (helixel-select-line-up 1)
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; X again: continue → 3
+    (helixel-select-line-up 1)
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-shrink-then-cross-over ()
+  "Full scenario: -x flips dir, x shrinks, cross-over at 1 line, then extend.
+Start with backward selection (point<mark, point at bol).
+-x: flip dir to forward, shrink from top, point stays at bol.
+x x: continue shrinking until 1 line.
+x: cross over (exchange), point moves to eol.
+x x x: continue extending forward."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5\n"
+    (helixel-enter-normal-state)
+    ;; Create 3-line backward selection (lines 2-4).
+    ;; Point at bol of line 2, mark at eol of line 4.
+    (goto-char (point-min))
+    (forward-line 3)                ; go to line 4
+    (end-of-line)
+    (helixel-select-line-up 3)
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))
+    ;; -x: flip dir to forward, shrink from top → 2 lines (lines 2-3).
+    (setq current-prefix-arg nil)
+    (call-interactively (lambda () (interactive) (helixel-select-line -1)))
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; x: continue shrink → 1 line (line 3).
+    (helixel-select-line 1)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; x: at boundary, cross over → still 1 line, point>mark.
+    (helixel-select-line 1)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    ;; x: extend forward → 2 lines (lines 3-4).
+    (helixel-select-line 1)
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; x: continue extend → 3 lines (lines 3-5).
+    (helixel-select-line 1)
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))
+    ;; x: continue extend → 3 lines (lines 3-5).
+    (helixel-select-line 1)
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))
+    ;; x: at buffer end, forward-line no-op → still 3 lines.
+    (helixel-select-line 1)
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-fresh-extend-no-cross-over ()
+  "Fresh 1-line selection extends directly, no spurious cross-over.
+-x on a fresh selection with no existing line sel is a no-op
+(since there is no pending-sel to flip)."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    ;; x: fresh forward 1-line selection.
+    (helixel-select-line)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    (should (eq 'forward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    ;; x: extend to 2 lines (not cross-over).
+    (helixel-select-line 1)
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; x: extend to 3 lines.
+    (helixel-select-line 1)
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))))
+
+(ert-deftest helixel-test-line-fresh-X-extend-no-cross-over ()
+  "Fresh 1-line backward selection (X) extends directly, no cross-over."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (goto-char (point-max))
+    ;; X: fresh backward 1-line selection.
+    (helixel-select-line-up)
+    (should (= 1 (helixel-sel-count helixel--pending-sel)))
+    (should (eq 'backward
+                (helixel-sel-line-dir helixel--pending-sel)))
+    ;; X: extend to 2 lines (not cross-over).
+    (helixel-select-line-up 1)
+    (should (= 2 (helixel-sel-count helixel--pending-sel)))
+    ;; X: extend to 3 lines.
+    (helixel-select-line-up 1)
+    (should (= 3 (helixel-sel-count helixel--pending-sel)))))
+
+(provide 'helixel-test-line)
 ;;; helixel-test-line.el ends here

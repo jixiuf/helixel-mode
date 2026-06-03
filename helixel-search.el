@@ -209,7 +209,7 @@ matches to match the original n count."
 Always activates the mark on the match for visual feedback.
 _HAD-REGION is ignored (kept for signature compatibility)."
   (when (and isearch-success isearch-other-end)
-    (unless (eq helixel--current-state 'visual)
+    (unless (helixel--pure-visual-state-p)
       (set-marker (mark-marker) isearch-other-end))
     (activate-mark)
     (setq transient-mark-mode (cons 'only t))))

@@ -145,6 +145,7 @@ ADVANCE controls two things:
           (when (if (eq dir -1) (bobp) (eobp))
             (signal 'user-error nil))
           (setq cnt (1+ cnt))
+          (deactivate-mark)
           (helixel--recreate-selection sel)
           (unless preview-p
             (helixel--execute-edit tx))

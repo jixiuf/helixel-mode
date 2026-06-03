@@ -485,7 +485,7 @@ used selection management lives here under `s'."
 ;; helixel-visual-map (inherits normal-map)
 (set-keymap-parent helixel-visual-map helixel-normal-map)
 (define-key helixel-visual-map "v"    #'helixel-visual-exit)
-(define-key helixel-visual-map "o"    #'exchange-point-and-mark)
+(define-key helixel-visual-map "o"    #'helixel-visual-exchange-point-and-mark)
 (define-key helixel-visual-map [escape] #'helixel-visual-exit)
 
 ;; helixel-motion-map stays empty (full t, user adds bindings)

@@ -80,9 +80,6 @@ Also bound in compound commands (e.g. `helixel-replace' calling
 `helixel-yank') to avoid double-recording.")
 
 ;; ---------------------------------------------------------------------------
-;; Insert-mode recording moved to helixel-insert-record.el
-
-;; ---------------------------------------------------------------------------
 ;; Recording (called by editing commands in helixel-editing)
 
 ;; ── Record & replay entries ──
@@ -118,9 +115,6 @@ The `helixel-define-command' macro handles this automatically."
       (setq helixel--last-event tx)
       (helixel-event-commit))))
 
-
-;; ---------------------------------------------------------------------------
-;; Insert-keys accessor and key replayer moved to helixel-insert-record.el
 
 ;; ---------------------------------------------------------------------------
 ;; Auto-advance — per-selection-kind advance for `.` replay.
@@ -343,8 +337,8 @@ default implementation is skipped; a nil return value means fall through
 to the default.
 
 Used by `helixel-mc-integrate' to collapse `.' to apply-once-at-point
-under multi-cursor mode without `advice-add'.  See the rationale in
-docs/REFACTOR_PLAN.md step 7.")
+under multi-cursor mode without `advice-add'.  See
+`helixel-mc-integrate.el' for details.")
 
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
@@ -527,10 +521,7 @@ The chosen event's edit data becomes the new `helixel--last-event'."
 
 
 ;; ----------------------------------------------------------------------
-;; Prefix parsing moved to helixel-repeat-prefix.el
-;; Strategy struct + builders + generic loops moved to
-;; helixel-repeat-strategy.el
-;; ----------------------------------------------------------------------
+
 
 (provide 'helixel-repeat)
 ;;; helixel-repeat.el ends here

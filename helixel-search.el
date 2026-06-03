@@ -64,8 +64,7 @@ Supported values: `search' and `find-char'."
 ;; ---------------------------------------------------------------------------
 ;; Active Search — single mutable search state
 ;;
-;; `helixel--active-search' replaces the old `helixel--repeat-data' +
-;; `helixel--repeat-dir' pair.  It's the single source of truth for
+;; `helixel--active-search' is the single source of truth for
 ;; what n/N repeats and in which direction.
 ;;
 ;; Set by /, ?, *, #, f, F, t, T, C-u n/N

@@ -28,7 +28,6 @@
 ;;   helixel--execute-keys
 ;;   helixel--repeat-get-keys
 ;;
-;; Step 3 of docs/REFACTOR_PLAN.md (extracted from helixel-repeat.el).
 
 ;;; Code:
 

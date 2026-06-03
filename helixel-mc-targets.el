@@ -19,8 +19,6 @@
 
 ;; Target-computation layer for multi-cursor spawning.
 ;;
-;; Extracted from helixel-mc-spawn.el in step 13 of
-;; docs/REFACTOR_PLAN.md so that the high-level user commands
 ;; (toggle, add-here, mark-next-like-this, rotate, merge, …) live
 ;; in mc-spawn.el and depend on the smaller surface here.
 ;;

@@ -20,7 +20,6 @@
 ;; `helixel-repeat-prefix' struct and `helixel--decode-repeat-prefix'.
 ;; Pure data; zero side effects.
 ;;
-;; Step 3 of docs/REFACTOR_PLAN.md (extracted from helixel-repeat.el).
 
 ;;; Code:
 

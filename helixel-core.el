@@ -26,9 +26,6 @@
 ;; all helixel modules.  It has ZERO dependencies on other helixel
 ;; modules and NO side effects.
 ;;
-;; Event storage moved to `helixel-ring', macros to `helixel-macros',
-;; named registers to `helixel-register'.
-;;
 ;; Contents:
 ;;   Part 1 — helixel-sel          : selection descriptor + pending-sel
 ;;   Part 2 — Delimiter Protocol   : delimiter plist accessors
@@ -627,7 +624,6 @@ pair's bounds so callers can still move to that closing."
 ;; Part 2b — Active Search State (mutable, per-buffer)
 ;; ----------------------------------------------------------------------
 ;;
-;; Replaces the old raw plist for `helixel--active-search'.
 ;; Defined here (zero deps) so both helixel-search.el and
 ;; helixel-repeat.el can access its fields via struct accessors.
 
@@ -796,8 +792,7 @@ Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored."
 ;; Part 5 — Transaction helpers (build on `helixel-event')
 ;; ----------------------------------------------------------------------
 ;;
-;; Dot-repeat transactions are `helixel-event' structs.  These helpers
-;; replace the old `helixel-edit` API.
+;; Dot-repeat transactions are `helixel-event' structs.
 
 (defun helixel--make-tx (op sel-ctx &rest payload-kv)
   "Create a `helixel-event' transaction for dot-repeat.
@@ -1120,8 +1115,6 @@ to inject replay metadata into an existing event in-place."
 ;; `,` (selection-repeat) consume.  It is global (NOT buffer-local)
 ;; so `.` replays the last edit cross-buffer.  Multi-cursor snapshots
 ;; the global value into each fake cursor's overlay.
-;;
-;; Moved here from helixel-last-edit.el (now deleted).
 
 (defvar helixel--last-event nil
   "Pointer to the most recent committed event in the ring.
@@ -1154,8 +1147,6 @@ it was already committed."
 ;; `this-single-command-keys' onto a reversed list, then concatenate
 ;; at the end.  These two functions isolate the one operation they
 ;; unambiguously share.
-;;
-;; Moved here from helixel-keyrec.el (now deleted).
 
 (defsubst helixel-keyrec-capture ()
   "Return the current single-command key sequence for hook capture.

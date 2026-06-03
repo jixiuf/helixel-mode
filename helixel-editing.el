@@ -40,7 +40,7 @@
 (require 'helixel-macros)
 (require 'helixel-search)
 
-;; ── Shared kill core (moved from helixel-state.el) ──
+;; ── Shared kill core ──
 
 (defun helixel--delete-selection ()
   "Delete current region or char at point, pushing to `kill-ring'.

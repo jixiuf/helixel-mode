@@ -19,9 +19,7 @@
 
 ;; Real fake-cursor multi-cursor implementation, inspired by
 ;; `multiple-cursors.el' (hel-multiple-cursors-core) and
-;; `meow-beacons.el'.  Unlike the old `helixel-cursor.el' (which
-;; only provided overlay previews intercepted via :before-until
-;; advice), this module gives each fake cursor real state — point,
+;; `meow-beacons.el'.  Each fake cursor has real state — point,
 ;; mark, mark-active, and helixel-specific data (pending-sel,
 ;; last-event, active-search) — and dispatches commands at every
 ;; cursor via `post-command-hook'.
@@ -483,8 +481,7 @@ Keyword options:
      FN so insert-entry commands stage fakes before broadcast.
 
 Replaces three separate calls (`put', `add-to-list', another
-`put') at every dispatch site with one declarative form.
-See step 6 of docs/REFACTOR_PLAN.md."
+`put') at every dispatch site with one declarative form."
   (declare (indent 1))
   (let ((real-only (eq policy 'real)))
     `(progn
@@ -652,9 +649,7 @@ No-op when:
   - we are replaying or recording a keyboard macro
     (caller is expected to handle iteration manually).
 
-This is the SINGLE dispatcher used in all situations — step 10
-of docs/REFACTOR_PLAN.md merged the previous basic / amalgamated
-variants into this one function."
+This is the SINGLE dispatcher used in all situations."
   ;; Pre-position fakes for insert-entry commands first.
   (helixel-mc--maybe-preposition)
   (when (and helixel-multi-cursor-mode

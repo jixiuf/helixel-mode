@@ -156,9 +156,7 @@ Legacy entry point; prefer `put' + `helixel-mc--maybe-preposition'."
 
 ;; ── Atomic undo around mc dispatch ──
 ;;
-;; Step 10: the dispatcher (single, unified) now lives in
-;; helixel-mc-core.el as `helixel-mc--post-command'.  No rewire is
-;; needed at mode toggle; the basic vs amalgamated split is gone.
+;; The dispatcher lives in helixel-mc-core.el as `helixel-mc--post-command'.
 
 
 ;; ── Chain end: broadcast the new chain tx ──

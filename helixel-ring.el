@@ -67,7 +67,7 @@ Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
   "The currently in-progress `helixel-event'.
 Set at command start, committed to ring when complete.")
 
-;; `helixel--last-event' now lives in helixel-core.el.
+;; `helixel--last-event' is defined in helixel-core.el.
 ;; It is available transitively through the require chain.
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
@@ -265,8 +265,8 @@ Creates independent marker copy; the jump-log entry is lightweight."
 
 
 ;; ----------------------------------------------------------------------
-;; Shared cleanup (moved from helixel-core.el — ring owns action-pos)
-;; ----------------------------------------------------------------------
+;; Shared cleanup
+;;
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
 

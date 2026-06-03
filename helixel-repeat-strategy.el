@@ -26,7 +26,6 @@
 ;; kind registry exposes.  Per-kind line / search / textobj behaviour
 ;; lives in the kind registry slots `:all-buffer-fn', `:all-dir-fn'.
 ;;
-;; Step 3 of docs/REFACTOR_PLAN.md (extracted from helixel-repeat.el).
 
 ;;; Code:
 

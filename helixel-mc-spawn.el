@@ -37,8 +37,6 @@
 ;;   helixel-mc-split-on-regex
 ;;   helixel-mc-restore-cursors       — g v history
 ;;
-;; Step 13 of docs/REFACTOR_PLAN.md split the original 1316-line
-;; helixel-mc-spawn.el into mc-targets (target computation) and
 ;; this file (user-facing commands).
 
 ;;; Code:

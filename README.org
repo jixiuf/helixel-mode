@@ -200,7 +200,7 @@ starting at point.  The implied region's shape depends on the swap-source type:
 | line-wise       | Same number of *full lines* starting from current line    |
 | rect-wise       | Same column span × same line count, starting from current column |
 
-Example: ~x j j y~ to yank 3 lines line-wise, then move elsewhere and ~S~ —
+Example: ~3x y~ to yank 3 lines line-wise, then move elsewhere and ~S~ —
 3 full lines starting at the current line are swapped.
 
 **** Rectangle swap

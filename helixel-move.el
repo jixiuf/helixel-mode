@@ -800,6 +800,10 @@ advance functions to avoid double-moving."
   :advance  #'helixel--repeat-advance-line
   :all-buffer-fn #'helixel--all-buffer-line
   :all-dir-fn #'helixel--all-dir-line
+  :flip-dir-fn (lambda (sel)
+                 (helixel-sel-update-ctx
+                  sel :dir (helixel--flip-dir
+                            (helixel-sel-line-dir sel))))
   :display  (lambda (ctx)
               (format "%dL" (or (helixel-sel-count ctx) 1))))
 

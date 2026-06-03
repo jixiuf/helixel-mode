@@ -501,19 +501,18 @@ at the appropriate offset within the match for insert-text ops."
 Does :n-count extra searches after finding the char, so . repeats
 the full f x n n sequence.  Extends region back to origin when
 :span is set (from ; push)."
-  (let ((helixel--inhibit-repeat-record t)
-        (helixel--inhibit-action-track t)
-        (n (or (plist-get ctx :n-count) 0))
+  (let ((n (or (plist-get ctx :n-count) 0))
         (dir (or (helixel-sel-find-char-dir ctx)
                  (helixel-search--current-dir))))
-    (helixel--with-span ctx
+    (helixel-with-replay-context
+     (helixel--with-span ctx
       (helixel-search--find-char-core nil dir)
       (when (> n 0)
         (condition-case nil
             (dotimes (_ n)
               (helixel-search--find-char-core nil dir))
           (search-failed nil))))
-    t))
+     t)))
 
 (defun helixel-find-repeat ()
   "Repeat the last find-char in the current direction.
@@ -623,7 +622,7 @@ Returns the chosen action plist or nil."
                (isearch-success nil)
                (isearch-other-end nil))
           (unless pattern
-            (setq pattern (plist-get (helixel-event-payload event) :pattern)))
+            (setq pattern (helixel-event-payload-get event :pattern)))
           (helixel--tracking-open cat (helixel-event-subcat event))
           (helixel-event-commit)
           
@@ -754,8 +753,8 @@ For `insert-search-offset' and `insert-selection-*' entry-kinds."
     (goto-char start-pos)
     (let* ((pat (helixel-sel-search-pattern sel))
            (entry-kind (helixel-sel-search-entry-kind sel))
-           (txt (or (plist-get (helixel-event-payload tx) :inserted-text)
-                    (plist-get (helixel-event-payload tx) :text)
+           (txt (or (helixel-event-payload-get tx :inserted-text)
+                    (helixel-event-payload-get tx :text)
                     ""))
            (last-pos nil)
            (cnt 0))
@@ -821,6 +820,10 @@ using advance+apply without recursion."
   :recreate #'helixel--recreate-search
   :advance  #'helixel--repeat-advance-search
   :all-buffer-fn #'helixel--all-buffer-search
+  :flip-dir-fn (lambda (sel)
+                 (helixel-sel-update-ctx
+                  sel :dir (helixel--flip-dir
+                            (helixel-sel-search-dir sel))))
   :display  (lambda (ctx)
               (format "/%s/" (or (helixel-sel-search-pattern ctx) "?"))))
 

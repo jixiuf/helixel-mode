@@ -43,6 +43,9 @@
 (require 'cl-lib)
 (require 'helixel-action)
 (require 'helixel-core)
+(require 'helixel-insert-record)
+(require 'helixel-repeat-prefix)
+(require 'helixel-repeat-strategy)
 
 ;; ── State variables ──
 (defvar helixel--inhibit-action-track)
@@ -77,43 +80,7 @@ Also bound in compound commands (e.g. `helixel-replace' calling
 `helixel-yank') to avoid double-recording.")
 
 ;; ---------------------------------------------------------------------------
-;; Insert-mode recording
-;;
-;; Records key sequences via `pre-command-hook' during insert mode.
-;; Uses `this-single-command-keys' (not kmacro) to avoid breaking
-;; `sit-for' which eglot's LSP completion depends on.
-;;
-;; Two-layer fallback: keys (primary) → text (last resort for tests).
-;; The `:commands' layer was removed — never proven necessary in practice.
-
-(defvar-local helixel--insert-keys nil
-  "List of key vectors collected during insert-mode recording.
-Each element is the return value of `this-single-command-keys'
-from one command execution.
-Collected by `helixel--on-insert-command' via `pre-command-hook'.
-Cleared and vconcat'd by `helixel--insert-finish'.")
-
-;; ── Insert recording (pre-command-hook based) ──
-(defun helixel--on-insert-command ()
-  "Pre-command-hook: record key sequence via `this-single-command-keys'.
-Skips `helixel-insert-exit' (the exit command itself)."
-  (unless (eq this-command 'helixel-insert-exit)
-    (push (this-single-command-keys) helixel--insert-keys)))
-
-(defun helixel--insert-begin ()
-  "Start insert-mode recording.
-Records key sequences via `pre-command-hook'.
-Does NOT call `helixel--switch-state' -- that stays in helixel-editing.el."
-  (setq helixel--insert-keys nil)
-  (add-hook 'pre-command-hook #'helixel--on-insert-command nil t))
-
-(defun helixel--insert-finish ()
-  "End insert-mode recording.  Returns the key vector or nil."
-  (remove-hook 'pre-command-hook #'helixel--on-insert-command t)
-  (let ((keys (when helixel--insert-keys
-                (apply #'vconcat (nreverse helixel--insert-keys)))))
-    (setq helixel--insert-keys nil)
-    keys))
+;; Insert-mode recording moved to helixel-insert-record.el
 
 ;; ---------------------------------------------------------------------------
 ;; Recording (called by editing commands in helixel-editing)
@@ -151,51 +118,9 @@ The `helixel-define-command' macro handles this automatically."
       (setq helixel--last-event tx)
       (helixel-event-commit))))
 
-(defun helixel--update-last-event (new-tx)
-  "Update `helixel--last-event' payload to NEW-TX."
-  (when (and helixel--last-event (helixel-event-p helixel--last-event))
-    (setf (helixel-event-payload helixel--last-event)
-          (helixel-event-payload new-tx))))
 
 ;; ---------------------------------------------------------------------------
-;; Insert-keys accessor (consumed by helixel-editing.el's op runners)
-
-(defsubst helixel--repeat-get-keys (tx)
-  "Return the :keys key-sequence vector from TX payload, or nil."
-  (plist-get (helixel-event-payload tx) :keys))
-
-(defun helixel--execute-keys (keys)
-  "Execute recorded KEYS (a key vector).
-For printable characters, uses `insert-char' directly then runs
-`post-self-insert-hook' (for `electric-pair-mode' etc.) with
-`last-command-event' bound to the character.
-For non-printable keys, uses `execute-kbd-macro'."
-  (let ((helixel--inhibit-repeat-record t)
-        (helixel--inhibit-action-track t))
-    (when (and keys (> (length keys) 0))
-      (dolist (key (append keys nil))
-        (if (and (characterp key) (>= key 32) (/= key 127))
-            ;; Printable char: direct insertion + post-self-insert-hook.
-            ;; Using `insert-char' preserves the region (unlike
-            ;; `self-insert-command') while binding `last-command-event'
-            ;; lets `electric-pair-mode' and other hook functions work.
-            ;; Deactivate mark first so hooks see the same region
-            ;; state as during manual insertion (no accidental wrapping).
-            (let ((last-command-event key))
-              (insert-char key 1 t)
-              (deactivate-mark)
-              (run-hooks 'post-self-insert-hook))
-          ;; Non-printable key: use execute-kbd-macro.
-          (let ((win (selected-window)))
-            (if (and win (not (eq (window-buffer win)
-                                  (current-buffer))))
-                (let ((prev-buf (window-buffer win)))
-                  (unwind-protect
-                      (progn
-                        (set-window-buffer win (current-buffer))
-                        (execute-kbd-macro (vector key) 1))
-                    (set-window-buffer win prev-buf)))
-              (execute-kbd-macro (vector key) 1))))))))
+;; Insert-keys accessor and key replayer moved to helixel-insert-record.el
 
 ;; ---------------------------------------------------------------------------
 ;; Auto-advance — per-selection-kind advance for `.` replay.
@@ -331,7 +256,28 @@ end-of-buffer or `^' at beginning-of-buffer.")
 (defvar-local helixel--repeat-has-preview nil
   "Set to t by `helixel-repeat-selection', consumed by `helixel-repeat-edit'.
 When t, `helixel-repeat-edit' uses the active region directly
-instead of recreating the selection, so the preview is honoured.")
+instead of recreating the selection, so the preview is honoured.
+
+Cleared automatically by `helixel--repeat-preview-stale-clear' on the
+next command boundary that is not itself `helixel-repeat-selection'
+or `helixel-repeat-edit', so a stale preview never leaks past one
+command pair.")
+
+(defun helixel--repeat-preview-stale-clear ()
+  "Clear stale `helixel--repeat-has-preview' after non-repeat commands.
+Runs in `post-command-hook'.  The flag is set by `,'
+\(`helixel-repeat-selection') and is meant to survive ONLY until the
+immediately-following `.' (`helixel-repeat-edit') consumes it.  If any
+other command runs in between, the cached preview position is no
+longer meaningful — clear the flag so the next `.' does a normal
+recreate."
+  (when (and helixel--repeat-has-preview
+             (not (memq this-command
+                        '(helixel-repeat-selection
+                          helixel-repeat-edit))))
+    (setq helixel--repeat-has-preview nil)))
+
+(add-hook 'post-command-hook #'helixel--repeat-preview-stale-clear)
 
 
 
@@ -388,8 +334,31 @@ Signals `user-error' when no edit is available."
       (list tx prefix saved-state))))
 
 ;; ── Interactive entry points ──
+
+(defvar helixel-repeat-edit-function nil
+  "Override hook for `helixel-repeat-edit'.
+When non-nil, called with RAW-PREFIX before the default implementation.
+A non-nil return value means the override handled the call and the
+default implementation is skipped; a nil return value means fall through
+to the default.
+
+Used by `helixel-mc-integrate' to collapse `.' to apply-once-at-point
+under multi-cursor mode without `advice-add'.  See the rationale in
+docs/REFACTOR_PLAN.md step 7.")
+
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
+
+RAW-PREFIX is the raw prefix argument.  Delegates to
+`helixel-repeat-edit-function' first; falls back to
+`helixel--repeat-edit-default' if that hook is unset or returns nil."
+  (interactive "P")
+  (unless (and helixel-repeat-edit-function
+               (funcall helixel-repeat-edit-function raw-prefix))
+    (helixel--repeat-edit-default raw-prefix)))
+
+(defun helixel--repeat-edit-default (&optional raw-prefix)
+  "Default implementation of `.' (`helixel-repeat-edit').
 
 Prefix RAW-PREFIX semantics:
   3.     -> 3 times in stored direction
@@ -407,13 +376,12 @@ All iterations are amalgamated into a single undo step."
     (user-error "No previous edit to repeat (kmacro playback)"))
   (cl-destructuring-bind (tx prefix saved-state)
       (helixel--repeat-setup raw-prefix)
-    (let* ((helixel--inhibit-repeat-record t)
-           (helixel--inhibit-action-track t)
-           (use-preview helixel--repeat-has-preview)
+    (let* ((use-preview helixel--repeat-has-preview)
            (mode (helixel-repeat-prefix-mode prefix))
            (sel (helixel-event-sel tx)))
       (setq helixel--repeat-has-preview nil)
-      (unwind-protect
+      (helixel-with-replay-context
+       (unwind-protect
           (condition-case err
               (undo-amalgamate-change-group
                 (let ((strategy
@@ -439,7 +407,7 @@ All iterations are amalgamated into a single undo step."
             ((error quit)
              (message "helixel-repeat-edit aborted: %s"
                       (error-message-string err))))
-        (setq helixel--current-state saved-state)))))
+        (setq helixel--current-state saved-state))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Repeat Selection (bound to `,`)
@@ -460,8 +428,7 @@ preview position."
   (interactive "P")
   (cl-destructuring-bind (tx prefix saved-state)
       (helixel--repeat-setup raw-prefix)
-    (let* ((helixel--inhibit-repeat-record t)
-           (helixel--inhibit-action-track t))
+    (helixel-with-replay-context
       (unless (helixel-event-sel tx)
         (user-error (concat "Previous edit has no selection to repeat."
                             "  Use a textobj (e.g. ciw)"
@@ -560,217 +527,13 @@ The chosen event's edit data becomes the new `helixel--last-event'."
 
 
 ;; ----------------------------------------------------------------------
-;; Prefix parsing
+;; Prefix parsing moved to helixel-repeat-prefix.el
+;; Strategy struct + builders + generic loops moved to
+;; helixel-repeat-strategy.el
 ;; ----------------------------------------------------------------------
-
-(cl-defstruct helixel-repeat-prefix
-  "Decoded dot-repeat prefix argument."
-  mode      ;; :all-buffer | :all-dir | :n-times
-  n         ;; integer count (>= 1)
-  reverse-p ;; boolean
-  raw)      ;; original raw-prefix
-
-(defun helixel--decode-repeat-prefix (raw-prefix)
-  "Parse RAW-PREFIX into a `helixel-repeat-prefix' struct.
-
-Semantics:
-  \\[universal-argument] .    → :all-buffer, forward
-  \\[universal-argument] - .  → :all-buffer, reverse
-  0 .           → :all-dir, forward
-  - .           → :n-times 1 (caller flips direction permanently)
-  -3 .          → :n-times 3 (caller flips direction permanently)
-  3 .           → :n-times 3, forward
-  \\[universal-argument] -3 . → :n-times 3, reverse (one-time)
-  \\[universal-argument] 3 .  → :all-buffer (n=3 ignored)
-
-Bare '-' (raw-prefix = symbol \\='-) is detected by the caller
-to permanently flip the stored direction (like N for search)."
-  (let* ((all-buffer-p (consp raw-prefix))
-         (all-dir-p (and (integerp raw-prefix) (eql raw-prefix 0)))
-         (n (cond ((not raw-prefix) 1)
-                  ((consp raw-prefix)
-                   (abs (prefix-numeric-value raw-prefix)))
-                  ((integerp raw-prefix) (abs raw-prefix))
-                  (t 1)))
-         (reverse-p (and (consp raw-prefix)
-                        (< (prefix-numeric-value raw-prefix) 0)))
-         (mode (cond (all-buffer-p :all-buffer)
-                     (all-dir-p    :all-dir)
-                     (t            :n-times))))
-    (make-helixel-repeat-prefix
-     :mode mode :n n :reverse-p reverse-p :raw raw-prefix)))
-
-
-;; ----------------------------------------------------------------------
-;; Repeat strategy struct
-;; ----------------------------------------------------------------------
-
-(cl-defstruct helixel-repeat-strategy
-  "Self-contained repeat strategy.
-ADVANCE:      fn(edit) → t|nil — move to next target, create region.
-APPLY:        fn(edit) → nil   — execute edit at current position.
-RESET:        fn(edit) → nil   — return to start position (all-buffer).
-ALL-BUFFER-FN: fn(edit prefix) → nil — custom all-buffer scan.
-ALL-DIR-FN:    fn(edit) → nil — custom all-dir scan, or nil.
-  When non-nil, `helixel--repeat-all-dir' delegates to this
-  instead of the generic advance/apply loop."
-  (advance nil :read-only t)
-  (apply   nil :read-only t)
-  (reset   nil :read-only t)
-  (all-buffer-fn nil :read-only t)
-  (all-dir-fn nil :read-only t))
-
-
-;; ----------------------------------------------------------------------
-;; Shared direction-flip helper (used by all strategy builders)
-;; ----------------------------------------------------------------------
-
-(defun helixel--maybe-flip-dir-edit (edit reverse-p)
-  "Return EDIT with :dir flipped for line/search selections, or EDIT unchanged.
-When REVERSE-P or `helixel--repeat-permanent-flip' is non-nil and the
-selection kind is `line' or `search', creates a copy of EDIT with
-:dir flipped.  Otherwise returns EDIT unchanged."
-  (let* ((sel (helixel-event-sel edit))
-         (kind (and sel (helixel-sel-get-kind sel)))
-         (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
-    (if (and effective-reverse sel (memq kind '(line search)))
-        (let* ((current-dir (if (eq kind 'search)
-                                (helixel-sel-search-dir sel)
-                              (helixel-sel-line-dir sel)))
-               (reversed-sel (helixel-sel-update-ctx
-                              sel :dir (helixel--flip-dir current-dir)))
-               (new-edit (helixel--copy-tx edit)))
-          (setf (helixel-event-sel new-edit) reversed-sel)
-          new-edit)
-      edit)))
-
-;; ----------------------------------------------------------------------
-;; Strategy builder — dispatches on op
-;; ----------------------------------------------------------------------
-
-(defun helixel--build-strategy (edit &optional reverse-p)
-  "Return a `helixel-repeat-strategy' for EDIT.
-If the operator has a :strategy-builder in the op registry, use it.
-Otherwise fall back to `helixel--default-strategy-builder'.
-If REVERSE-P is non-nil, flip :dir in the selection ctx
-for line/search kinds."
-  (let* ((op (helixel-event-op edit))
-         (custom-builder (helixel--op-strategy-builder op)))
-    (if custom-builder
-        (funcall custom-builder edit reverse-p)
-      (helixel--default-strategy-builder edit reverse-p))))
-
-
-;; ----------------------------------------------------------------------
-;; Default strategy builder — selection-kind driven
-;; ----------------------------------------------------------------------
-
-(defun helixel--default-strategy-builder (edit &optional reverse-p)
-  "Build a default repeat strategy for EDIT.
-If REVERSE-P is non-nil, flip :dir for line/search kinds.
-Looks up the advance function from the kind registry.
-When the operator has no :repeat-advance tag, the advance
-just recreates the selection at the current position
-\(no actual advancing — e.g. kill auto-moves point)."
-  (let* ((sel (helixel-event-sel edit))
-         (kind (and sel (helixel-sel-get-kind sel)))
-         (op (helixel-event-op edit))
-         (adv-tag (helixel--op-advance op))
-         (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p))
-         (advance-fn
-          (cond
-           ;; Advance tag present: use the kind's advance function
-           ((and adv-tag (helixel--kind-advance kind))
-            (helixel--kind-advance kind))
-           ;; No advance tag (e.g. kill): just recreate at point
-           ;; Catches errors = no more targets at buffer edge
-           (t
-            (lambda (ed)
-              (condition-case nil
-                  (progn
-                    (helixel-sel-call-recreate
-                     (helixel-event-sel ed))
-                    t)
-                (error nil)))))))
-    (make-helixel-repeat-strategy
-     :advance (lambda (_ed) (funcall advance-fn effective-edit))
-     :apply   (lambda (_ed) (helixel--execute-edit effective-edit))
-     :reset   (lambda (_ed)
-                (when-let* ((m (car (helixel-event-mark-region
-                                       effective-edit))))
-                  (goto-char (marker-position m))))
-     :all-buffer-fn (helixel--kind-all-buffer-fn kind)
-     :all-dir-fn (helixel--kind-all-dir-fn kind))))
-
-
-;; ----------------------------------------------------------------------
-;; Generic repeat loops
-;; ----------------------------------------------------------------------
-
-(defun helixel--repeat-all-buffer (strategy edit prefix)
-  "Use STRATEGY over the entire buffer from EDIT.
-If STRATEGY has a custom `all-buffer-fn', delegate to it.
-Otherwise: reset to start, then advance+apply from point-min
-\(or point-max if PREFIX is reverse)."
-  (if-let* ((custom-fn (helixel-repeat-strategy-all-buffer-fn strategy)))
-      (funcall custom-fn edit prefix)
-    (funcall (helixel-repeat-strategy-reset strategy) edit)
-    (save-excursion
-      (goto-char (if (helixel-repeat-prefix-reverse-p prefix)
-                     (point-max)
-                   (point-min)))
-      (let ((cnt 0))
-        (while (funcall (helixel-repeat-strategy-advance strategy) edit)
-          (cl-incf cnt)
-          (funcall (helixel-repeat-strategy-apply strategy) edit))
-        (helixel--repeat-echo cnt)))))
-
-(defun helixel--repeat-all-dir (strategy edit)
-  "Use STRATEGY on EDIT over all remaining targets from current position.
-If STRATEGY has a custom `all-dir-fn', delegate to it."
-  (if-let* ((custom-fn (helixel-repeat-strategy-all-dir-fn strategy)))
-      (funcall custom-fn edit)
-    (let ((cnt 0))
-      (while (funcall (helixel-repeat-strategy-advance strategy) edit)
-        (cl-incf cnt)
-        (funcall (helixel-repeat-strategy-apply strategy) edit))
-      (helixel--repeat-echo cnt))))
-
-(defun helixel--repeat-n (strategy edit n)
-  "Use STRATEGY on EDIT N times from current position."
-  (dotimes (_ n)
-    (unless (funcall (helixel-repeat-strategy-advance strategy) edit)
-      (user-error "No more targets for dot-repeat"))
-    (funcall (helixel-repeat-strategy-apply strategy) edit))
-  (helixel--repeat-echo n))
-
-(defun helixel--repeat-preview (strategy edit mode n &optional reverse-p)
-  "Preview STRATEGY over EDIT — advance only, no apply.
-MODE is :all-buffer, :all-dir, or :n-times.
-N is the repeat count for :n-times mode.
-When REVERSE-P is non-nil, for :all-buffer start from `point-max'
-instead of `point-min' so backward scans work correctly.
-For :all-dir and :n-times, the direction is already flipped in
-the strategy via `helixel--build-strategy'."
-  (pcase mode
-    (:all-buffer
-     (funcall (helixel-repeat-strategy-reset strategy) edit)
-     (goto-char (if reverse-p (point-max) (point-min)))
-     (let ((cnt 0))
-       (while (funcall (helixel-repeat-strategy-advance strategy) edit)
-         (cl-incf cnt))
-       (helixel--repeat-echo cnt)))
-    (:all-dir
-     (let ((cnt 0))
-       (while (funcall (helixel-repeat-strategy-advance strategy) edit)
-         (cl-incf cnt))
-       (helixel--repeat-echo cnt)))
-    (:n-times
-     (dotimes (_ n)
-       (unless (funcall (helixel-repeat-strategy-advance strategy) edit)
-         (user-error "No more targets for dot-repeat")))
-     (helixel--repeat-echo n))))
-
 
 (provide 'helixel-repeat)
 ;;; helixel-repeat.el ends here
+
+
+

@@ -67,11 +67,8 @@ Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
   "The currently in-progress `helixel-event'.
 Set at command start, committed to ring when complete.")
 
-(defvar helixel--last-event nil
-  "Pointer to the most recent committed event in the ring.
-Consumed by `.` and `,` for repeat.
-Global — the single source of truth for the most recent edit.
-Used by `.` and `,` for cross-buffer replay.")
+;; `helixel--last-event' now lives in helixel-core.el.
+;; It is available transitively through the require chain.
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
   "Event categories that carry a selection descriptor.

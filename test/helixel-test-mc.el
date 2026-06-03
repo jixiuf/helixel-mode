@@ -898,7 +898,7 @@ Fix: the sync only acts on transitions INTO / OUT OF `visual'."
     ;; i: real-side body + :after advice pre-positions each fake.
     (let ((this-command 'helixel-insert))
       (call-interactively 'helixel-insert)
-      (helixel-mc--post-command-amalgamated))
+      (helixel-mc--post-command))
     ;; Real moved to its match-begin (1).
     (should (= 1 (point)))
     ;; Each fake moved to ITS match-begin (7, 13).
@@ -913,7 +913,7 @@ Fix: the sync only acts on transitions INTO / OUT OF `visual'."
       (let ((last-command-event c)
             (this-command 'self-insert-command))
         (call-interactively 'self-insert-command)
-        (helixel-mc--post-command-amalgamated)))
+        (helixel-mc--post-command)))
     (should (equal "foohello\nfoohello\nfoohello\n"
                    (buffer-string)))
     (helixel-mc-clear-all)))
@@ -1142,7 +1142,7 @@ same char from its own position, using the substitute mechanism."
     (helixel-find-next-char ?-)
     ;; Drive the substituted dispatcher by simulating post-command:
     (let ((this-command 'helixel-find-next-char))
-      (helixel-mc--post-command-amalgamated))
+      (helixel-mc--post-command))
     ;; Real is past first `-'.
     (should (= 3 (point)))
     ;; Each fake advanced to the next `-' after its starting pos.
@@ -1165,7 +1165,7 @@ must be silently dropped instead of aborting the batch."
     (helixel-mc-create-fake-cursor 9)   ; before 'e' — NO '-' ahead
     (helixel-find-next-char ?-)
     (let ((this-command 'helixel-find-next-char))
-      (helixel-mc--post-command-amalgamated))
+      (helixel-mc--post-command))
     ;; The fake at 9 (no '-' ahead) is dropped; the one at 5 survived
     ;; and advanced to the '-' at column 7.
     (should (= 1 (length (helixel-mc-all-cursors))))
@@ -1184,7 +1184,7 @@ must apply with or without the substitute mechanism active)."
     (helixel-mc-create-fake-cursor 5)
     (let ((this-command 'forward-char))
       (helixel-mc-with-each-cursor (goto-char 8))
-      (helixel-mc--post-command-amalgamated))
+      (helixel-mc--post-command))
     (should (= 1 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
@@ -1653,30 +1653,24 @@ exactly N cursors (one per word) and every word becomes FOO."
       (helixel-mc-spawn-from-sel sel)
       ;; 5 words → 1 real + 4 fakes (NOT 5 fakes / 6 cursors).
       (should (= 4 (length (helixel-mc-all-cursors))))
-      (helixel-mc--repeat-edit-apply-only (lambda (&optional _) nil))
+      (helixel-mc--repeat-edit-apply-only nil)
       (helixel-mc-with-each-cursor
-        (helixel-mc--repeat-edit-apply-only (lambda (&optional _) nil)))
+        (helixel-mc--repeat-edit-apply-only nil))
       (should (string= "FOO FOO FOO FOO FOO\n\n" (buffer-string)))
       (helixel-mc-clear-all))))
 
 (ert-deftest helixel-test-mc-dot-advice-falls-through-without-cursors ()
-  "Without fake cursors the advice must call ORIG-FN (normal `.' path)."
+  "Without fake cursors the override hook returns nil (fall through)."
   (helixel-test-with-buffer "abc\n"
-    (let ((called 0)
-          (helixel--last-event nil))
-      (helixel-mc--repeat-edit-apply-only
-       (lambda (&optional _) (cl-incf called)))
-      (should (= 1 called)))))
+    (let ((helixel--last-event nil))
+      (should-not (helixel-mc--repeat-edit-apply-only nil)))))
 
 (ert-deftest helixel-test-mc-dot-advice-falls-through-without-last-event ()
-  "With fake cursors but no last-event, the advice still defers to ORIG-FN."
+  "With fake cursors but no last-event, the override returns nil."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
-    (let ((called 0)
-          (helixel--last-event nil))
-      (helixel-mc--repeat-edit-apply-only
-       (lambda (&optional _) (cl-incf called)))
-      (should (= 1 called)))
+    (let ((helixel--last-event nil))
+      (should-not (helixel-mc--repeat-edit-apply-only nil)))
     (helixel-mc-clear-all)))
 
 ;; ── End-to-end regression: `m i w c FOO <ESC> s s .' ──

@@ -25,7 +25,7 @@
 
 ;;; Code:
 
-(require 'helixel-core)                  ; for helixel--make-tx
+(require 'helixel-core)                  ; for helixel--make-tx, keyrec helpers
 (require 'helixel-macros)                ; for helixel-with-edit-tracking
 (require 'helixel-repeat)                ; for helixel--last-event, etc.
 
@@ -79,8 +79,8 @@ Skips chain start/end/cancel commands."
                   helixel-repeat-chain-cancel
                   helixel-normal-escape))
     (if helixel--chain-in-edit-phase
-        (push (this-single-command-keys) helixel--chain-edit-keys)
-      (push (this-single-command-keys) helixel--chain-move-keys))))
+        (push (helixel-keyrec-capture) helixel--chain-edit-keys)
+      (push (helixel-keyrec-capture) helixel--chain-move-keys))))
 
 ;; ── Runner ──
 
@@ -108,9 +108,8 @@ before replay, matching the behaviour of the original recording
 where `helixel-insert' calls `(goto-char (region-beginning))'."
   (let* ((payload (helixel-event-payload tx))
          (sel (helixel-event-sel tx))
-         (edit-keys (plist-get payload :kmacro))
-         (helixel--inhibit-repeat-record t)
-         (helixel--inhibit-action-track t))
+         (edit-keys (plist-get payload :kmacro)))
+    (helixel-with-replay-context
     (when edit-keys
       ;; Reposition cursor at match-beginning for search sel chains.
       ;; The advance fn leaves point at match-end, but the original
@@ -118,7 +117,7 @@ where `helixel-insert' calls `(goto-char (region-beginning))'."
       (when (and sel (eq (helixel-sel-get-kind sel) 'search)
                  (match-beginning 0))
         (goto-char (match-beginning 0)))
-      (execute-kbd-macro edit-keys))))
+      (execute-kbd-macro edit-keys)))))
 
 (helixel-register-op chain
   :display "chain"
@@ -175,6 +174,28 @@ Same as chain strategy but uses `ignore' for apply (no edit execution)."
                 (goto-char (marker-position m)))))))
 
 
+;; ── Cleanup helper ──
+
+(defun helixel--chain-reset-state ()
+  "Reset all chain bookkeeping state.
+Clears recording flags, key accumulators, snapshotted ctx, and
+any initial-region markers (releasing them so they don't pin
+buffer text).  Idempotent.  Used by chain-end and chain-cancel."
+  (when helixel--repeat-chain-init-bounds
+    (let ((mb (car helixel--repeat-chain-init-bounds))
+          (me (cdr helixel--repeat-chain-init-bounds)))
+      (when (marker-position mb) (set-marker mb nil))
+      (when (marker-position me) (set-marker me nil))))
+  (setq helixel--repeat-chaining nil
+        helixel--repeat-chain-init-ctx nil
+        helixel--repeat-chain-init-bounds nil
+        helixel--chain-in-edit-phase nil
+        helixel--chain-move-keys nil
+        helixel--chain-edit-keys nil)
+  (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
+  (remove-hook 'post-command-hook #'helixel--chain-post-cmd t))
+
+
 ;; ── Lifecycle commands ──
 
 ;;;###autoload
@@ -212,15 +233,14 @@ Determines advance behavior from the initial selection context
   (interactive)
   (unless helixel--repeat-chaining
     (user-error "Not chaining"))
+  ;; Stop recording first; finalize-list reads the accumulators.
   (setq helixel--repeat-chaining nil)
   (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
   (remove-hook 'post-command-hook #'helixel--chain-post-cmd t)
-  ;; Build move/edit macros from separate accumulators.
-  ;; No substring splitting — keys were routed during recording.
-  (let* ((move-keys (when helixel--chain-move-keys
-                      (apply #'vconcat (nreverse helixel--chain-move-keys))))
-         (edit-keys (when helixel--chain-edit-keys
-                      (apply #'vconcat (nreverse helixel--chain-edit-keys))))
+  (let* ((move-keys (helixel-keyrec-finalize-list
+                     helixel--chain-move-keys))
+         (edit-keys (helixel-keyrec-finalize-list
+                     helixel--chain-edit-keys))
          (macro (if (and move-keys edit-keys)
                     (vconcat move-keys edit-keys)
                   (or move-keys edit-keys)))
@@ -239,61 +259,31 @@ Determines advance behavior from the initial selection context
                         :entry-kind
                         (helixel-sel-search-entry-kind live-ctx))
                      init-ctx))
-         (init-bounds helixel--repeat-chain-init-bounds))
-    (if (and macro (> (length macro) 0))
-        (let* ((tx (helixel--make-tx 'chain init-ctx
-                     :runner #'helixel--repeat-chain-runner
-                     :display (format "chain(%d)" (length edit-keys))
-                     :kmacro edit-keys
-                     :chain-move-keys move-keys
-                     :chain-init-ctx init-ctx)))
-          (when init-bounds
-            (let ((mb (car init-bounds))
-                  (me (cdr init-bounds)))
-              (when (marker-position mb) (set-marker mb nil))
-              (when (marker-position me) (set-marker me nil))))
-          (setq helixel--repeat-chain-init-ctx nil)
-          (setq helixel--repeat-chain-init-bounds nil)
-          (setq helixel--chain-in-edit-phase nil)
-          (setq helixel--chain-move-keys nil)
-          (setq helixel--chain-edit-keys nil)
-          (setq helixel--last-event (helixel--copy-tx tx))
-          (helixel-with-edit-tracking
-              (:op 'chain :category 'edit :subcat 'chain)
-            (helixel--live-edit-set tx))
-          (message "Chain recorded (%d keys, move=%d)"
-                   (length edit-keys)
-                   (if move-keys (length move-keys) 0)))
-      ;; Empty macro — clean up and discard
-      (when helixel--repeat-chain-init-bounds
-        (let ((mb (car helixel--repeat-chain-init-bounds))
-              (me (cdr helixel--repeat-chain-init-bounds)))
-          (when (marker-position mb) (set-marker mb nil))
-          (when (marker-position me) (set-marker me nil))))
-      (setq helixel--repeat-chain-init-ctx nil)
-      (setq helixel--repeat-chain-init-bounds nil)
-      (setq helixel--chain-in-edit-phase nil)
-      (setq helixel--chain-move-keys nil)
-      (setq helixel--chain-edit-keys nil)
-      (message "Chain empty — nothing recorded"))))
+         (had-content (and macro (> (length macro) 0))))
+    (when had-content
+      (let ((tx (helixel--make-tx 'chain init-ctx
+                   :runner #'helixel--repeat-chain-runner
+                   :display (format "chain(%d)" (length edit-keys))
+                   :kmacro edit-keys
+                   :chain-move-keys move-keys
+                   :chain-init-ctx init-ctx)))
+        (setq helixel--last-event (helixel--copy-tx tx))
+        (helixel-with-edit-tracking
+            (:op 'chain :category 'edit :subcat 'chain)
+          (helixel--live-edit-set tx))))
+    ;; Single point of teardown for both success and empty paths.
+    (let ((edit-len (length (or edit-keys [])))
+          (move-len (length (or move-keys []))))
+      (helixel--chain-reset-state)
+      (if had-content
+          (message "Chain recorded (%d keys, move=%d)" edit-len move-len)
+        (message "Chain empty — nothing recorded")))))
 
 ;;;###autoload
 (defun helixel-repeat-chain-cancel ()
   "Discard the current chain without recording."
   (interactive)
-  (when helixel--repeat-chain-init-bounds
-    (let ((mb (car helixel--repeat-chain-init-bounds))
-          (me (cdr helixel--repeat-chain-init-bounds)))
-      (when (marker-position mb) (set-marker mb nil))
-      (when (marker-position me) (set-marker me nil))))
-  (setq helixel--repeat-chaining nil)
-  (setq helixel--repeat-chain-init-ctx nil)
-  (setq helixel--repeat-chain-init-bounds nil)
-  (setq helixel--chain-in-edit-phase nil)
-  (setq helixel--chain-move-keys nil)
-  (setq helixel--chain-edit-keys nil)
-  (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
-  (remove-hook 'post-command-hook #'helixel--chain-post-cmd t)
+  (helixel--chain-reset-state)
   (message "Chain cancelled"))
 
 (provide 'helixel-chain)

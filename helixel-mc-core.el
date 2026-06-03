@@ -469,6 +469,34 @@ Consults the `multiple-cursors' symbol property; falls back to
   (dolist (c commands)
     (put c 'multiple-cursors nil)))
 
+(cl-defmacro helixel-mc-defcmd (cmd &key (policy 'all) substitute prepos)
+  "Declarative dispatch spec for CMD.
+Keyword options:
+  POLICY — `all' or `real' (default `all').  When `real', CMD
+     runs only at the real cursor (sets `multiple-cursors'
+     property to nil).  Any other value sets the property to t.
+  SUBSTITUTE FN — when CMD runs at a fake cursor, dispatch FN
+     instead.  Adds (CMD . FN) to
+     `helixel-mc--fake-substitute-alist'.
+     FN is also auto-marked with policy `all'.
+  PREPOS FN — set CMD's `helixel-mc-prepos' symbol property to
+     FN so insert-entry commands stage fakes before broadcast.
+
+Replaces three separate calls (`put', `add-to-list', another
+`put') at every dispatch site with one declarative form.
+See step 6 of docs/REFACTOR_PLAN.md."
+  (declare (indent 1))
+  (let ((real-only (eq policy 'real)))
+    `(progn
+       (put ',cmd 'multiple-cursors ,(not real-only))
+       ,@(when substitute
+           `((add-to-list 'helixel-mc--fake-substitute-alist
+                          (cons ',cmd ,substitute))
+             (put ,substitute 'multiple-cursors t)))
+       ,@(when prepos
+           `((put ',cmd 'helixel-mc-prepos ,prepos)))
+       ',cmd)))
+
 ;; ── Dispatch loop ──
 
 (defvar helixel-mc-executing-command-for-fake-cursor nil
@@ -575,21 +603,60 @@ Bound by code that wants to run commands at the real cursor only
 without triggering fake-cursor re-execution (e.g. our own
 dispatch loop, repeat-edit, chain replay).")
 
+;; ── Fake-cursor command substitution (populated by mc-integrate) ──
+
+(defvar helixel-mc--fake-substitute-alist nil
+  "Alist of (REAL-CMD . FAKE-CMD) for fake-cursor dispatch.
+When dispatching at fake cursors, REAL-CMD is replaced by FAKE-CMD
+so the input prompt is not re-issued.  REAL-CMD must have already
+run at the real cursor (so any shared state — e.g.
+`helixel--active-search' — is populated).
+
+Default value is nil; populated by `helixel-mc-integrate'
+at load time.")
+
+(defun helixel-mc--maybe-preposition ()
+  "Run `this-command's prepositioner at each fake, if registered.
+When `this-command' has a `helixel-mc-prepos' symbol property,
+invoke that function once at every fake cursor.  Called from
+the dispatcher so insert-entry commands stage fake cursors
+before the next `self-insert-command' broadcast."
+  (when (and helixel-multi-cursor-mode
+             (not helixel-mc--inhibit)
+             (not helixel-mc-executing-command-for-fake-cursor)
+             (helixel-mc-any-p)
+             (symbolp this-command))
+    (when-let* ((fn (get this-command 'helixel-mc-prepos)))
+      (let ((helixel-mc--inhibit t))
+        (helixel-mc-with-each-cursor
+          (condition-case err
+              (funcall fn)
+            (error
+             (message "helixel-mc: prepos %s failed: %s"
+                      this-command
+                      (error-message-string err)))))))))
+
 (defun helixel-mc--post-command ()
   "Post-command hook — dispatch `this-command' at every fake cursor.
-No-op when:
-  - the multi-cursor minor mode is off
-  - we are inside our own dispatch loop
-  - `this-command' is whitelisted off
-  - we are replaying or recording a keyboard macro
-    (caller is expected to handle the iteration manually).
+Single-undo-step amalgamation; substitutes input-reading commands
+via `helixel-mc--fake-substitute-alist' so fake cursors don't
+re-prompt.  When substituting, shared state (e.g.
+`helixel--active-search') from the real cursor's just-completed
+call is propagated into every fake cursor's snapshot so the
+substitute command has something to act on.
 
-Note: this basic dispatcher is replaced by
-`helixel-mc--post-command-amalgamated' in `helixel-mc-integrate'
-whenever the minor mode is on (see `helixel-mc--rewire-post-command').
-The amalgamated dispatcher also runs `helixel-mc--maybe-preposition'
-for insert-entry commands tagged with the `helixel-mc-prepos'
-symbol property."
+No-op when:
+  - the multi-cursor minor mode is off,
+  - we are inside our own dispatch loop (`helixel-mc--inhibit'),
+  - `this-command' is whitelisted off,
+  - we are replaying or recording a keyboard macro
+    (caller is expected to handle iteration manually).
+
+This is the SINGLE dispatcher used in all situations — step 10
+of docs/REFACTOR_PLAN.md merged the previous basic / amalgamated
+variants into this one function."
+  ;; Pre-position fakes for insert-entry commands first.
+  (helixel-mc--maybe-preposition)
   (when (and helixel-multi-cursor-mode
              (not helixel-mc--inhibit)
              (not helixel-mc-executing-command-for-fake-cursor)
@@ -598,13 +665,41 @@ symbol property."
              this-command
              (helixel-mc-any-p)
              (helixel-mc--should-run-for-all-p this-command))
-    (let ((helixel-mc--inhibit t)
-          (cmd this-command))
+    (let* ((helixel-mc--inhibit t)
+           (real-cmd this-command)
+           (substituted (cdr (assq real-cmd
+                                   helixel-mc--fake-substitute-alist)))
+           (cmd (or substituted real-cmd)))
+      ;; When substituting, propagate the real cursor's freshly-set
+      ;; shared state into every fake cursor's overlay so the
+      ;; substitute command (e.g. `helixel-find-repeat') sees the
+      ;; same active search.  Without this, fake cursors restore
+      ;; their own (possibly nil) snapshot and the substitute bails.
+      (when substituted
+        (let ((shared (and (boundp 'helixel--active-search)
+                           (symbol-value 'helixel--active-search))))
+          (dolist (ov (helixel-mc-all-cursors))
+            (when (helixel-mc-fake-cursor-p ov)
+              (overlay-put ov 'helixel--active-search shared)))))
       (condition-case err
-          (helixel-mc-with-each-cursor
-            (helixel-mc--call-interactively cmd))
+          (undo-amalgamate-change-group
+            (let ((dead nil))
+              (helixel-mc-with-each-cursor
+                ;; Per-cursor error trap: a single fake's failure
+                ;; (e.g. `search-failed' from a substituted find-
+                ;; char that doesn't find its char) must NOT abort
+                ;; the whole batch.  Failing fakes are queued for
+                ;; deletion below; the rest dispatch normally.
+                (condition-case e
+                    (helixel-mc--call-interactively cmd)
+                  (search-failed (push cursor dead))
+                  (error (message "helixel-mc: %s at fake: %s"
+                                  cmd (error-message-string e))
+                         (push cursor dead))))
+              (dolist (ov dead)
+                (helixel-mc-delete-fake-cursor ov))))
         (error
-         (message "helixel-mc: %s at fake cursor: %s"
+         (message "helixel-mc: %s outer error: %s"
                   cmd (error-message-string err))))
       ;; Movement / edits may have collapsed cursors onto each other
       ;; or onto the real cursor — dedupe so subsequent dispatch and

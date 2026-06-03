@@ -628,6 +628,18 @@ to walking the kind's :advance function from `point-min'."
   "Return the :all-dir-fn for KIND from the registry, or nil."
   (plist-get (gethash kind helixel--kind-registry) :all-dir-fn))
 
+(defun helixel--kind-flip-dir-fn (kind)
+  "Return the :flip-dir-fn for KIND from the registry, or nil.
+The flip-dir function takes a `helixel-sel' and returns a new
+sel with its direction reversed.  Used by `.' /
+`helixel-repeat-edit' with a prefix argument or while
+`helixel--repeat-permanent-flip' is non-nil.
+
+Kinds whose selections have no notion of direction (e.g. textobj,
+rect, movement, find-char) leave this nil; the repeat engine
+then simply does not flip."
+  (plist-get (gethash kind helixel--kind-registry) :flip-dir-fn))
+
 
 ;; ----------------------------------------------------------------------
 ;; Part 4 — helixel-event: Unified Event Struct
@@ -960,6 +972,31 @@ falls back to the operator registry."
                          (helixel--op-runner (helixel-event-op tx)))))
     (funcall runner tx)))
 
+;; ── Replay context ──
+;; `helixel--inhibit-repeat-record' (defined in helixel-repeat.el)
+;; and `helixel--inhibit-action-track' (defined in helixel-ring.el)
+;; almost always travel together: every replay path needs both off
+;; to avoid (a) re-recording the replay as a new edit and (b)
+;; polluting the event ring / jump log.  The single-flag asymmetric
+;; sites are intentional and stay explicit.
+
+(defvar helixel--inhibit-repeat-record)  ; helixel-repeat.el
+(defvar helixel--inhibit-action-track)   ; helixel-ring.el
+
+(defmacro helixel-with-replay-context (&rest body)
+  "Execute BODY with dot-repeat recording and action tracking inhibited.
+Binds both `helixel--inhibit-repeat-record' and
+`helixel--inhibit-action-track' to t for the dynamic extent of
+BODY.  Use in dot-repeat / chain / mc-broadcast paths that must
+not re-record their own replay."
+  (declare (indent 0) (debug t))
+  `(progn
+     (defvar helixel--inhibit-repeat-record)
+     (defvar helixel--inhibit-action-track)
+     (let ((helixel--inhibit-repeat-record t)
+           (helixel--inhibit-action-track t))
+       ,@body)))
+
 (defsubst helixel--repeat-echo (count)
   "Echo COUNT of repeated iterations."
   (unless (zerop count)
@@ -988,6 +1025,84 @@ Supports `line', `rect' and `textobj'."
           'line)))
      ((eq helixel--raw-selection-type 'textobj)
       'textobj))))
+
+;; ── Payload accessors ──
+
+(defsubst helixel-event-payload-get (event key)
+  "Return the KEY entry from EVENT's payload plist, or nil.
+Preferred over raw `(plist-get (helixel-event-payload EVENT) KEY)'
+at call sites; keeps payload access greppable and centralised."
+  (plist-get (helixel-event-payload event) key))
+
+(defsubst helixel-event-payload-put (event key value)
+  "Set KEY → VALUE in EVENT's payload plist (mutating EVENT).
+Returns the updated payload list.  Used by op runners that need
+to inject replay metadata into an existing event in-place."
+  (setf (helixel-event-payload event)
+        (plist-put (helixel-event-payload event) key value)))
+
+
+;; ----------------------------------------------------------------------
+;; Part 8 — Most-recent-edit pointer (single source of truth)
+;; ----------------------------------------------------------------------
+;;
+;; `helixel--last-event' is the pointer that `.` (dot-repeat) and
+;; `,` (selection-repeat) consume.  It is global (NOT buffer-local)
+;; so `.` replays the last edit cross-buffer.  Multi-cursor snapshots
+;; the global value into each fake cursor's overlay.
+;;
+;; Moved here from helixel-last-edit.el (now deleted).
+
+(defvar helixel--last-event nil
+  "Pointer to the most recent committed event in the ring.
+Consumed by `.` and `,` for repeat.
+Global — the single source of truth for the most recent edit.
+Used by `.` and `,` for cross-buffer replay.
+
+Do NOT make this buffer-local: cross-buffer dot-repeat depends
+on the global binding.")
+
+(defun helixel--update-last-event (new-tx)
+  "Update the payload of `helixel--last-event' from NEW-TX.
+
+Only the payload plist is copied; the operator, selection and
+runner of the existing `helixel--last-event' are left untouched.
+Used by operator commands that need to inject replay metadata
+\(e.g. `:keys', `:replacement') into the most recent edit after
+it was already committed."
+  (when (and helixel--last-event (helixel-event-p helixel--last-event))
+    (setf (helixel-event-payload helixel--last-event)
+          (helixel-event-payload new-tx))))
+
+;; ----------------------------------------------------------------------
+;; Part 9 — Shared key-sequence recording utilities
+;; ----------------------------------------------------------------------
+;;
+;; Tiny utilities shared by insert-mode recording
+;; (`helixel-insert-record.el') and chain recording
+;; (`helixel-chain.el').  Both use a `pre-command-hook' that pushes
+;; `this-single-command-keys' onto a reversed list, then concatenate
+;; at the end.  These two functions isolate the one operation they
+;; unambiguously share.
+;;
+;; Moved here from helixel-keyrec.el (now deleted).
+
+(defsubst helixel-keyrec-capture ()
+  "Return the current single-command key sequence for hook capture.
+
+A semantic alias for `this-single-command-keys'.  Both recorders
+push the return value of this function onto their accumulator
+inside `pre-command-hook'."
+  (this-single-command-keys))
+
+(defsubst helixel-keyrec-finalize-list (key-vector-list)
+  "Concatenate KEY-VECTOR-LIST (reversed) into a single key vector.
+
+Returns nil when KEY-VECTOR-LIST is empty.  Both recorders
+accumulate by `push'-ing onto a buffer-local list, so the list is
+reversed at finalize time."
+  (when key-vector-list
+    (apply #'vconcat (nreverse key-vector-list))))
 
 (provide 'helixel-core)
 ;;; helixel-core.el ends here

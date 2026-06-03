@@ -285,7 +285,7 @@ For rect selections the stored text is replayed on every subsequent
 rectangle line via `helixel--rect-replay' — no state-switching side
 -effect (avoids an unnecessary helixel-insert-exit during replay)."
   (let* ((keys (helixel--repeat-get-keys tx))
-         (text (plist-get (helixel-event-payload tx) :inserted-text)))
+         (text (helixel-event-payload-get tx :inserted-text)))
     (cond
      ((and (use-region-p) (eq (helixel--selection-type) 'rect))
       (helixel--rect-change)
@@ -324,18 +324,18 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 (helixel-register-op replace-char :repeat-advance 'line
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-event-payload tx) :char)))
+             (let ((c (helixel-event-payload-get tx :char)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
             (helixel-replace-char
-             (plist-get (helixel-event-payload tx) :char))))
+             (helixel-event-payload-get tx :char))))
 
 (helixel-register-op insert-text :display "i" :repeat-advance 'line
   :runner (lambda (tx)
-            (let ((keys (plist-get (helixel-event-payload tx) :keys)))
+            (let ((keys (helixel-event-payload-get tx :keys)))
               (if keys
                   (helixel--execute-keys keys)
-                (insert (or (plist-get (helixel-event-payload tx) :text)
+                (insert (or (helixel-event-payload-get tx :text)
                             ""))))))
 
 
@@ -652,7 +652,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 (helixel-op-set-runner 'indent-left
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (plist-get (helixel-event-payload tx) :multiplier) 1)))
+              (or (helixel-event-payload-get tx :multiplier) 1)))
          (helixel-indent-left))))
 
 (helixel-define-operator helixel-indent-right
@@ -692,7 +692,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 (helixel-op-set-runner 'indent-right
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (plist-get (helixel-event-payload tx) :multiplier) 1)))
+              (or (helixel-event-payload-get tx :multiplier) 1)))
          (helixel-indent-right))))
 
 ;; ── Case operations ──
@@ -778,7 +778,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 
 (helixel-register-op join-lines :display "J" :repeat-advance nil
   :runner (lambda (tx)
-            (let ((n (or (plist-get (helixel-event-payload tx) :count) 2)))
+            (let ((n (or (helixel-event-payload-get tx :count) 2)))
               (dotimes (_ (1- n))
                 (join-line 1)))))
 

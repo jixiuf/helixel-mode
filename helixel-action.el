@@ -258,38 +258,51 @@ to session-start, matching `;''s behaviour."
       (helixel--sel-push sel))
     sel))
 
+(defun helixel-action--cycle-mark-region (event first-call)
+  "Mark the region for EVENT during `;' cycling.
+If EVENT has a non-degenerate :mark-region and matches
+`helixel-semicolon-mark-thing', and FIRST-CALL is non-nil,
+activate a real region pointing at the far edge from point
+and return t (did-mark).  Otherwise just push the mark to the
+begin marker and return nil."
+  (let* ((mr (helixel-event-mark-region event))
+         (a (marker-position (car mr)))
+         (b (marker-position (cdr mr)))
+         (degenerate (= a b)))
+    (if (and (helixel--semicolon-mark-thing-p event)
+             first-call
+             (not degenerate))
+        (let ((p (point)))
+          (push-mark (if (> (abs (- p a)) (abs (- p b))) a b) t t)
+          (activate-mark)
+          t)
+      (push-mark a t t)
+      nil)))
+
 (defun helixel-action--cycle-show (pos ring)
   "Show the group-start entry for the group containing RING[POS].
-If the event has a non-degenerate \=:mark-region and
+If the event has a non-degenerate :mark-region and
 `helixel-semicolon-mark-thing' matches the event, mark the region
 using the pre-computed markers.
 
 If the jump results in no useful region change and no marking
-was performed, automatically advance to the next older event."
+was performed, automatically advance to the next older event.
+
+Thin orchestrator after step 15 — work split into
+`helixel-action--cycle-mark-region',
+`helixel-action--push-sel-from-event' and
+`helixel-action--cycle-auto-advance'."
   (let* ((gpos (helixel-action--cycle-group-start pos ring))
          (event (nth gpos ring))
          (newest-pos (helixel-action--cycle-group-newest pos ring))
          (sel-event (if (= newest-pos gpos) event (nth newest-pos ring)))
-         (first-call (null helixel--action-pos))
-         (did-mark nil))
+         (first-call (null helixel--action-pos)))
     (setq helixel--action-pos gpos)
-    (let* ((mr (helixel-event-mark-region event))
-           (a (marker-position (car mr)))
-           (b (marker-position (cdr mr)))
-           (degenerate (= a b)))
-      (if (and (helixel--semicolon-mark-thing-p event)
-               first-call
-               (not degenerate))
-          (progn
-            (let ((p (point)))
-              (push-mark (if (> (abs (- p a)) (abs (- p b))) a b) t t)
-              (activate-mark)
-              (setq did-mark t)))
-        (push-mark a t t)))
-    (helixel-action--push-sel-from-event sel-event)
-    (message "%s" (helixel-action--cycle-display event gpos ring))
-    ;; Auto-advance: skip events that produce no useful region change.
-    (helixel-action--cycle-auto-advance did-mark first-call)))
+    (let ((did-mark (helixel-action--cycle-mark-region event first-call)))
+      (helixel-action--push-sel-from-event sel-event)
+      (message "%s" (helixel-action--cycle-display event gpos ring))
+      ;; Auto-advance: skip events that produce no useful region change.
+      (helixel-action--cycle-auto-advance did-mark first-call))))
 
 (defun helixel-action--same-group-p (a b)
   "Return non-nil if `helixel-event' structs A and B share a group.

@@ -46,6 +46,8 @@
 (require 'helixel-chain)
 
 (defvar helixel--last-event)
+;; defined in helixel-last-edit.el (loaded transitively via
+;; helixel-mc-core → ...; explicit defvar here keeps byte-compile happy).
 
 ;; ── `.' / `,' semantics under multi-cursor ──
 ;;
@@ -58,28 +60,46 @@
 ;; last edit once at each cursor's current position" — i.e. the same
 ;; thing `helixel-mc-apply-last-edit' does.
 ;;
-;; We intercept `helixel-repeat-edit' (`.') via an :around advice so
-;; that whenever fake cursors exist, both the real-cursor invocation
-;; AND the per-fake-cursor dispatches collapse to a single
-;; `helixel--execute-edit' (no advance loop).  All N applications are
-;; then amalgamated into one undo step by the dispatcher's
-;; `undo-amalgamate-change-group' wrapper.
+;; We override `helixel-repeat-edit' (`.') via the
+;; `helixel-repeat-edit-function' hook (set up in
+;; `helixel-multi-cursor-mode' enable below) so that whenever fake
+;; cursors exist, both the real-cursor invocation AND the per-fake
+;; dispatches collapse to a single `helixel--execute-edit' (no
+;; advance loop).  All N applications are then amalgamated into
+;; one undo step by the dispatcher's `undo-amalgamate-change-group'
+;; wrapper.
 
-(defun helixel-mc--repeat-edit-apply-only (orig-fn &optional raw-prefix)
-  "Around-advice for `helixel-repeat-edit' under mc.
-When `helixel-multi-cursor-mode' is on AND fake cursors exist, run
-`helixel--execute-edit' once at point instead of the full advance
-+ apply loop.  ORIG-FN / RAW-PREFIX otherwise."
-  (if (and (bound-and-true-p helixel-multi-cursor-mode)
-           (helixel-mc-any-p)
-           helixel--last-event)
-      (let ((helixel--inhibit-repeat-record t)
-            (helixel--inhibit-action-track t))
-        (helixel--execute-edit helixel--last-event))
-    (funcall orig-fn raw-prefix)))
+(defun helixel-mc--repeat-edit-apply-only (raw-prefix)
+  "Hook-impl for `helixel-repeat-edit-function' under mc.
+Return non-nil (handled) when `helixel-multi-cursor-mode' is on AND
+fake cursors exist; run `helixel--execute-edit' once at point
+instead of the full advance + apply loop.  Return nil to fall
+through to the default `.' otherwise.  RAW-PREFIX is ignored in
+the override path — mc dispatches the same edit at each fake."
+  (ignore raw-prefix)
+  (when (and (bound-and-true-p helixel-multi-cursor-mode)
+             (helixel-mc-any-p)
+             helixel--last-event)
+    (helixel-with-replay-context
+      (helixel--execute-edit helixel--last-event))
+    t))
 
-(advice-add 'helixel-repeat-edit :around
+;; Install / uninstall the override on mc-mode toggle.
+(defun helixel-mc--repeat-edit-hook-install ()
+  "Set `helixel-repeat-edit-function' to the mc override impl."
+  (setq helixel-repeat-edit-function
+        #'helixel-mc--repeat-edit-apply-only))
+
+(defun helixel-mc--repeat-edit-hook-uninstall ()
+  "Clear `helixel-repeat-edit-function' if it was set by mc."
+  (when (eq helixel-repeat-edit-function
             #'helixel-mc--repeat-edit-apply-only)
+    (setq helixel-repeat-edit-function nil)))
+
+;; Install immediately so existing buffers with mc already on pick
+;; up the override.  helixel-multi-cursor-mode hooks below keep it
+;; in sync.
+(helixel-mc--repeat-edit-hook-install)
 
 ;; ── Whitelist tweaks ──
 
@@ -101,138 +121,45 @@ When `helixel-multi-cursor-mode' is on AND fake cursors exist, run
 ;; we map them to a no-prompt substitute that uses the state the real
 ;; cursor's call already established.
 
-(defvar helixel-mc--fake-substitute-alist
-  '((helixel-find-next-char      . helixel-find-repeat)
-    (helixel-find-prev-char      . helixel-find-repeat)
-    (helixel-find-till-char      . helixel-find-repeat)
-    (helixel-find-prev-till-char . helixel-find-repeat))
-  "Alist of (REAL-CMD . FAKE-CMD).
-When dispatching at fake cursors, REAL-CMD is replaced by FAKE-CMD
-so the input prompt is not re-issued.  REAL-CMD must have already
-run at the real cursor (so any shared state, e.g.
-`helixel--active-search', is populated).")
+;; Populate the substitute-alist defined in helixel-mc-core.el.
+;; Original commands prompt for input via `(interactive "c")' etc.;
+;; the substitute uses state already established by the real cursor.
+(setq helixel-mc--fake-substitute-alist
+      '((helixel-find-next-char      . helixel-find-repeat)
+        (helixel-find-prev-char      . helixel-find-repeat)
+        (helixel-find-till-char      . helixel-find-repeat)
+        (helixel-find-prev-till-char . helixel-find-repeat)))
 
 ;; Mark all substitute commands as mc-friendly.
-(helixel-mc-mark-all-for-multi-cursors
- '(helixel-find-repeat))
+(declare-function helixel-find-repeat "helixel-search" ())
 
-;; Mark the originals as mc-friendly too, otherwise `should-run-for-
-;; all-p' would block the dispatcher entirely.
-(helixel-mc-mark-all-for-multi-cursors
- '(helixel-find-next-char
-   helixel-find-prev-char
-   helixel-find-till-char
-   helixel-find-prev-till-char))
+;; Find-char dispatch: substitute the prompting variants with the
+;; non-prompting `helixel-find-repeat' at each fake cursor.  Each
+;; `helixel-mc-defcmd' call also auto-marks the substitute as
+;; mc-friendly.
+(helixel-mc-defcmd helixel-find-next-char
+  :substitute #'helixel-find-repeat)
+(helixel-mc-defcmd helixel-find-prev-char
+  :substitute #'helixel-find-repeat)
+(helixel-mc-defcmd helixel-find-till-char
+  :substitute #'helixel-find-repeat)
+(helixel-mc-defcmd helixel-find-prev-till-char
+  :substitute #'helixel-find-repeat)
 
-(defun helixel-mc--maybe-preposition ()
-  "Run `this-command's prepositioner at each fake, if registered.
-When `this-command' has a `helixel-mc-prepos' symbol property,
-invoke that function once at every fake cursor.  Called from
-both dispatchers so insert-entry commands stage fake cursors
-before the next `self-insert-command' broadcast."
-  (when (and helixel-multi-cursor-mode
-             (not helixel-mc--inhibit)
-             (not helixel-mc-executing-command-for-fake-cursor)
-             (helixel-mc-any-p)
-             (symbolp this-command))
-    (when-let* ((fn (get this-command 'helixel-mc-prepos)))
-      (let ((helixel-mc--inhibit t))
-        (helixel-mc-with-each-cursor
-          (condition-case err
-              (funcall fn)
-            (error
-             (message "helixel-mc: prepos %s failed: %s"
-                      this-command
-                      (error-message-string err)))))))))
-
-;; Back-compat alias — some tests / external code may call this with
-;; an explicit CMD argument.  Temporarily set `this-command' and
-;; delegate.
+;; `helixel-mc--maybe-preposition' lives in helixel-mc-core.el.
+;; `helixel-mc--preposition-fake-cursors' is the legacy adapter.
 (defun helixel-mc--preposition-fake-cursors (cmd)
   "Run CMD's pre-positioner at every fake cursor.
 Legacy entry point; prefer `put' + `helixel-mc--maybe-preposition'."
   (let ((this-command cmd))
     (helixel-mc--maybe-preposition)))
 
-(defun helixel-mc--post-command-amalgamated ()
-  "Post-command dispatcher with single-undo-step amalgamation.
-Substitutes input-reading commands via
-`helixel-mc--fake-substitute-alist' so fake cursors don't re-prompt.
-When substituting, shared state (e.g. `helixel--active-search')
-from the real cursor's just-completed call is propagated into
-every fake cursor's snapshot, so the substitute command has
-something to act on."
-  ;; Pre-position fakes for insert-entry commands first — see
-  ;; `helixel-mc--maybe-preposition'.
-  (helixel-mc--maybe-preposition)
-  (when (and helixel-multi-cursor-mode
-             (not helixel-mc--inhibit)
-             (not helixel-mc-executing-command-for-fake-cursor)
-             (not executing-kbd-macro)
-             (not defining-kbd-macro)
-             this-command
-             (helixel-mc-any-p)
-             (helixel-mc--should-run-for-all-p this-command))
-    (let* ((helixel-mc--inhibit t)
-           (real-cmd this-command)
-           (substituted (cdr (assq real-cmd
-                                   helixel-mc--fake-substitute-alist)))
-           (cmd (or substituted real-cmd)))
-      ;; When substituting, propagate the real cursor's freshly-set
-      ;; shared state into every fake cursor's overlay so the
-      ;; substitute command (e.g. `helixel-find-repeat') sees the
-      ;; same active search.  Without this, fake cursors restore
-      ;; their own (possibly nil) snapshot and the substitute bails.
-      (when substituted
-        (let ((shared (and (boundp 'helixel--active-search)
-                           helixel--active-search)))
-          (dolist (ov (helixel-mc-all-cursors))
-            (when (helixel-mc-fake-cursor-p ov)
-              (overlay-put ov 'helixel--active-search shared)))))
-      (condition-case err
-          (undo-amalgamate-change-group
-            (let ((dead nil))
-              (helixel-mc-with-each-cursor
-                ;; Per-cursor error trap: a single fake's failure
-                ;; (e.g. `search-failed' from a substituted find-
-                ;; char that doesn't find its char in this fake's
-                ;; direction) must NOT abort the whole batch.  The
-                ;; failing fake is queued for deletion below — the
-                ;; remaining cursors continue to dispatch normally.
-                (condition-case e
-                    (helixel-mc--call-interactively cmd)
-                  (search-failed (push cursor dead))
-                  (error (message "helixel-mc: %s at fake: %s"
-                                  cmd (error-message-string e))
-                         (push cursor dead))))
-              (dolist (ov dead)
-                (helixel-mc-delete-fake-cursor ov))))
-        (error
-         (message "helixel-mc: %s outer error: %s"
-                  cmd (error-message-string err))))
-      ;; Movement / edits may have collapsed cursors onto each other
-      ;; or onto the real cursor — dedupe so subsequent dispatch and
-      ;; visible overlays stay consistent.  (Matches the basic
-      ;; dispatcher's behaviour added in Phase A.)
-      (helixel-mc-dedupe-cursors))))
+;; ── Atomic undo around mc dispatch ──
+;;
+;; Step 10: the dispatcher (single, unified) now lives in
+;; helixel-mc-core.el as `helixel-mc--post-command'.  No rewire is
+;; needed at mode toggle; the basic vs amalgamated split is gone.
 
-;; Swap the basic dispatcher for the amalgamated one whenever the mode
-;; toggles.  Reuse the same priority slot (90).
-(defun helixel-mc--rewire-post-command ()
-  "Install the amalgamating dispatcher in place of the basic one."
-  (remove-hook 'post-command-hook #'helixel-mc--post-command t)
-  (when helixel-multi-cursor-mode
-    (add-hook 'post-command-hook
-              #'helixel-mc--post-command-amalgamated 90 t)))
-
-(add-hook 'helixel-multi-cursor-mode-hook
-          #'helixel-mc--rewire-post-command)
-(add-hook 'helixel-multi-cursor-mode-on-hook
-          #'helixel-mc--rewire-post-command)
-(add-hook 'helixel-multi-cursor-mode-off-hook
-          (lambda ()
-            (remove-hook 'post-command-hook
-                         #'helixel-mc--post-command-amalgamated t)))
 
 ;; ── Chain end: broadcast the new chain tx ──
 

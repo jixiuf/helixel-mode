@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-register.el helixel-action.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-mc-core.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel.el
-ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-register.elc helixel-action.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel.elc
+FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-register.el helixel-action.el helixel-insert-record.el helixel-repeat-prefix.el helixel-repeat-strategy.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj.el helixel-mc-core.el helixel-mc-targets.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel.el
+ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-register.elc helixel-action.elc helixel-insert-record.elc helixel-repeat-prefix.elc helixel-repeat-strategy.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-targets.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
@@ -22,7 +22,7 @@ INIT_PACKAGES="(progn \
 
 EMACS_BATCH=${EMACS} -Q -batch -L . --eval ${INIT_PACKAGES}
 
-.PHONY: all  test  lint compile clean
+.PHONY: all  test  lint compile clean depgraph
 all: clean-elc compile lint test
 
 compile: $(ELS)
@@ -92,6 +92,10 @@ column-check:
 
 lint: compile checkdoc package-lint column-check ctx-lint
 
+depgraph:
+	@emacs --batch -Q --script scripts/gen-depgraph.el > docs/DEPGRAPH.md
+	@echo "docs/DEPGRAPH.md regenerated"
+
 # ----------------------------------------------------------------------
 # ctx-lint: forbid raw plist-get on sel/ctx — must use helixel-sel-* accessors.
 # ----------------------------------------------------------------------
@@ -124,5 +128,10 @@ ctx-lint:
 	      fi; \
 	    fi; \
 	  done; \
+	  if grep -qn "plist-get (helixel-event-payload" "$$file" 2>/dev/null; then \
+	    echo "$$file: FATAL — raw plist-get on helixel-event-payload; use helixel-event-payload-get:"; \
+	    grep -n "plist-get (helixel-event-payload" "$$file"; \
+	    err=1; \
+	  fi; \
 	done; \
 	exit $$err

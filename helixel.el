@@ -38,6 +38,10 @@
 (require 'helixel-macros)
 (require 'helixel-register)
 (require 'helixel-action)
+
+(require 'helixel-insert-record)
+(require 'helixel-repeat-prefix)
+(require 'helixel-repeat-strategy)
 (require 'helixel-repeat)
 (require 'helixel-chain)
 (require 'helixel-state)
@@ -48,6 +52,7 @@
 (require 'helixel-swap)
 (require 'helixel-keymap)
 (require 'helixel-mc-core)
+(require 'helixel-mc-targets)
 (require 'helixel-mc-spawn)
 (require 'helixel-mc-integrate)
 (require 'helixel-shims)

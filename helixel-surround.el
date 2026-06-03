@@ -415,22 +415,22 @@ so the user can select a target with one keypress."
 
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-event-payload tx) :char)))
+             (let ((c (helixel-event-payload-get tx :char)))
                (if c (format "ms[%c]" c) "ms")))
   :repeat-advance 'line
   :runner (lambda (tx)
-            (when-let* ((char (plist-get (helixel-event-payload tx) :char))
+            (when-let* ((char (helixel-event-payload-get tx :char))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 
 (helixel-register-op surround-add-tag
   :display (lambda (tx)
-             (let ((tag (plist-get (helixel-event-payload tx) :tag)))
+             (let ((tag (helixel-event-payload-get tx :tag)))
                (if tag (format "mt[%s]" tag) "mt")))
   :repeat-advance 'line
   :runner (lambda (tx)
             (helixel--surround-add-tag
-             (plist-get (helixel-event-payload tx) :tag))))
+             (helixel-event-payload-get tx :tag))))
 
 (helixel-register-op surround-delete :display "md"
   :runner (lambda (tx)

@@ -4,12 +4,15 @@
 
 | File | Role |
 |------|------|
-| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-event` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type. Zero helixel deps (cl-lib only). |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-event` structs, `helixel--last-tx`, `helixel--last-event`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-edit-set`, live-event management. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-edit-tracking`. |
 | `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
 | `helixel-action.el` | `;` cycling + C-o/C-i jump navigation (thin consumers of event-ring). |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, insert recording, kind-specific advance/all-buffer/all-dir functions, line-pass helper, strategy engine. |
+| `helixel-insert-record.el` | Insert-mode key recording (pre-command-hook based); replay helper `helixel--execute-keys`. |
+| `helixel-repeat-prefix.el` | `helixel-repeat-prefix` struct + `helixel--decode-repeat-prefix` (pure). |
+| `helixel-repeat-strategy.el` | `helixel-repeat-strategy` struct, default strategy builder, dispatch, generic advance/apply/preview loops. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel, chain strategy builder, chain preview. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
@@ -20,10 +23,11 @@
 | `helixel-surround.el` | Surround add/delete/replace. |
 | `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
 | `helixel-mc-core.el` | **Multi-cursor core**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook`, whitelist policy, `helixel-multi-cursor-mode`. |
-| `helixel-mc-spawn.el` | Spawn cursors from selections / column / next-like-this; high-level `helixel-mc-toggle`. |
+| `helixel-mc-targets.el` | **Target computation**: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc-spawn-from-sel/-line/-rect/-find-char`, kind registry hooks. |
+| `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors. |
 | `helixel-mc-integrate.el` | Glue: dot-repeat / chain / insert per-cursor execution + atomic undo. |
 | `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww). 29 `declare-function` (all third-party). |
-| `helixel.el` | Package entry point. Requires all 18 domain files. |
+| `helixel.el` | Package entry point. Requires all domain files. |
 
 ### Test Files
 
@@ -172,10 +176,12 @@ Notes:
 ;; ── Kind Registry ──
 (helixel-register-kind kind &rest props)
   ;; props: :recreate :advance :display :all-buffer-fn :all-dir-fn
+  ;;        :flip-dir-fn :mc-spawn-fn
 (helixel--kind-advance kind)        → fn|nil
 (helixel--kind-recreate kind)       → fn|nil
 (helixel--kind-all-buffer-fn kind)  → fn|nil
 (helixel--kind-all-dir-fn kind)     → fn|nil
+(helixel--kind-flip-dir-fn kind)    → fn|nil  ; sel → reversed sel
 
 ;; ── Op Registry ──
 (helixel-register-op op &rest props)
@@ -218,6 +224,7 @@ Notes:
 ```bash
 rm -f *.elc && make compile && make test   # always fresh compile before test
 make lint                                   # checkdoc + package-lint + column-check + ctx-lint
+make depgraph                               # regenerate docs/DEPGRAPH.md from `require' edges
 
 ## Pitfalls
 

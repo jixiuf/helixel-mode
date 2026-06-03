@@ -2537,3 +2537,28 @@ Tests the all-dir branch of `helixel--repeat-preview'."
     ;; Last advance lands on last match ("hello C")
     (should (>= (region-beginning) 14))
     (should (string= (match-string 0) "hello"))))
+
+;; ── Step 14: sticky `helixel--repeat-has-preview' regression ──
+
+(ert-deftest helixel-test-repeat-preview-cleared-by-other-command ()
+  "After `,', an intervening command clears `helixel--repeat-has-preview'.
+This is the post-command-hook stale-clear introduced in step 14."
+  :tags '(repeat comma preview-stale)
+  (helixel-test-with-buffer "hello A hello B hello C"
+    (goto-char 1)
+    (setq helixel--last-event
+          (helixel--make-tx 'kill
+            (helixel-sel-create 'search
+              '(:pattern "hello" :dir forward)
+              #'helixel--recreate-search "/hello/")))
+    ;; , -> sets the preview flag
+    (helixel-repeat-selection nil)
+    ;; Simulate that the post-command-hook for `,' itself just ran:
+    ;; this-command was `helixel-repeat-selection' so the flag survives.
+    (let ((this-command 'helixel-repeat-selection))
+      (helixel--repeat-preview-stale-clear)
+      (should helixel--repeat-has-preview))
+    ;; Now a different command runs: flag must be cleared by hook.
+    (let ((this-command 'next-line))
+      (helixel--repeat-preview-stale-clear)
+      (should-not helixel--repeat-has-preview))))

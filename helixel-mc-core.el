@@ -390,14 +390,17 @@ Auto-enables `helixel-multi-cursor-mode'."
         (helixel-mc--snapshot-vars ov)
         (helixel-mc--paint-cursor-overlay ov point)
         (helixel-mc--update-fake-region ov)
-        (push ov helixel-mc--cursors)
-        (unless helixel-multi-cursor-mode
-          (helixel-multi-cursor-mode 1))
         ;; Exit `visual' state on first cursor creation.  Visual's
         ;; "extend" semantics are incompatible with multi-cursor
         ;; "each cursor has its own fresh selection" semantics.
+        ;; Do this BEFORE pushing to helixel-mc--cursors so the
+        ;; state-change hook (helixel-mc--sync-visual-state) won't
+        ;; clear the new cursor's mark-active.
         (when (eq helixel--current-state 'visual)
           (helixel-enter-normal-state))
+        (push ov helixel-mc--cursors)
+        (unless helixel-multi-cursor-mode
+          (helixel-multi-cursor-mode 1))
         ov)))))
 
 (defun helixel-mc-delete-fake-cursor (cursor)

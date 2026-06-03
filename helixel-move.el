@@ -49,6 +49,7 @@
                   (edit prefix))
 (declare-function helixel--all-dir-line "helixel-repeat"
                   (edit))
+(defvar helixel--inhibit-repeat-record)
 
 (defmacro helixel-define-movement (name builtin type &rest options)
   "Define a movement command NAME wrapping BUILTIN with TYPE.
@@ -597,6 +598,8 @@ for unmatched bracket characters."
         (dotimes (_ n)
           (call-interactively #'next-line)
           (end-of-line))
+      (unless helixel--inhibit-repeat-record
+        (helixel--switch-state 'visual))
       (beginning-of-line)
       (push-mark-command t t)
       (end-of-line)
@@ -624,6 +627,8 @@ for unmatched bracket characters."
         (dotimes (_ n)
           (call-interactively #'previous-line)
           (beginning-of-line))
+      (unless helixel--inhibit-repeat-record
+        (helixel--switch-state 'visual))
       (end-of-line)
       (push-mark-command t t)
       (beginning-of-line)

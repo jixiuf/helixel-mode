@@ -198,7 +198,9 @@ and commits the event.  This is called from `post-command-hook'."
 ;; Wire textobj hooks for action recording and visual state detection.
 (setq helixel-textobj-action-function #'helixel--tracking-open)
 (setq helixel-textobj-visual-state-p-function
-      (lambda () (eq helixel--current-state 'visual)))
+      (lambda ()
+        (and (eq helixel--current-state 'visual)
+             (not (memq (helixel--selection-type) '(line rect))))))
 (setq helixel-jump-cleanup-function #'helixel--clear-data)
 
 (defun helixel--unload-current-state ()

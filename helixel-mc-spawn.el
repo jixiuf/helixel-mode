@@ -296,32 +296,29 @@ cursor — so real never moves and never collides with a fake."
   (helixel-mc--mark-like-this -1))
 
 ;;;###autoload
-(defun helixel-mc-skip-next ()
-  "Skip the next occurrence of the region text without adding a cursor."
-  (interactive)
+(defun helixel-mc--skip-in-dir (dir)
+  "Skip occurrence in DIR (+1 / -1) without adding a cursor."
   (let* ((text (helixel-mc--region-text))
-         (re (region-end))
+         (start (if (> dir 0) (region-end) (region-beginning)))
          (target (save-excursion
-                   (goto-char re)
-                   (helixel-mc--search-for-next text 1))))
+                   (goto-char start)
+                   (helixel-mc--search-for-next text dir))))
     (unless target (user-error "No more matches"))
     (goto-char (marker-position (car target)))
     (push-mark (marker-position (cdr target)) t t)
     (helixel-mc--free-targets (list target))))
 
 ;;;###autoload
+(defun helixel-mc-skip-next ()
+  "Skip the next occurrence of the region text without adding a cursor."
+  (interactive)
+  (helixel-mc--skip-in-dir 1))
+
+;;;###autoload
 (defun helixel-mc-skip-previous ()
   "Skip the previous occurrence of the region text without adding a cursor."
   (interactive)
-  (let* ((text (helixel-mc--region-text))
-         (rb (region-beginning))
-         (target (save-excursion
-                   (goto-char rb)
-                   (helixel-mc--search-for-next text -1))))
-    (unless target (user-error "No more matches"))
-    (goto-char (marker-position (car target)))
-    (push-mark (marker-position (cdr target)) t t)
-    (helixel-mc--free-targets (list target))))
+  (helixel-mc--skip-in-dir -1))
 
 ;;;###autoload
 (defun helixel-mc-remove-primary ()
@@ -370,10 +367,9 @@ other fake cursor."
   (interactive)
   (helixel-mc-clear-all))
 
+;;;###autoload
 (defun helixel-mc-unmark-next ()
-  "Remove the next fake cursor after point.
-Prefer `helixel-mc-remove-primary' for interactive use — it
-matches the Helix `A-,' workflow and is bound to `M-,'."
+  "Remove the fake cursor at the next match-position after point."
   (interactive)
   (let ((cursor
          (cl-find-if
@@ -389,12 +385,11 @@ matches the Helix `A-,' workflow and is bound to `M-,'."
   "Remove the fake cursor at the previous match-position before point."
   (interactive)
   (let ((cursor
-         (cl-loop for ov in (helixel-mc-all-cursors :sort)
-                  when (< (marker-position
-                           (overlay-get ov 'helixel-mc-point))
-                          (point))
-                  collect ov into acc
-                  finally return (car (last acc)))))
+         (cl-find-if
+          (lambda (ov)
+            (< (marker-position (overlay-get ov 'helixel-mc-point))
+               (point)))
+          (reverse (helixel-mc-all-cursors :sort)))))
     (unless cursor (user-error "No fake cursor before point"))
     (helixel-mc-delete-fake-cursor cursor)))
 

@@ -120,17 +120,10 @@ the override path — mc dispatches the same edit at each fake."
 ;; Re-running them at each fake cursor would re-read input.  Instead
 ;; we map them to a no-prompt substitute that uses the state the real
 ;; cursor's call already established.
+;;
+;; The single source of truth is `helixel-mc-defcmd' below; the
+;; alist is populated from those calls.  No bulk seeding.
 
-;; Populate the substitute-alist defined in helixel-mc-core.el.
-;; Original commands prompt for input via `(interactive "c")' etc.;
-;; the substitute uses state already established by the real cursor.
-(setq helixel-mc--fake-substitute-alist
-      '((helixel-find-next-char      . helixel-find-repeat)
-        (helixel-find-prev-char      . helixel-find-repeat)
-        (helixel-find-till-char      . helixel-find-repeat)
-        (helixel-find-prev-till-char . helixel-find-repeat)))
-
-;; Mark all substitute commands as mc-friendly.
 (declare-function helixel-find-repeat "helixel-search" ())
 
 ;; Find-char dispatch: substitute the prompting variants with the

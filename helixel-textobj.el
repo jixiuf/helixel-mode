@@ -22,13 +22,22 @@
 ;;; Commentary:
 ;;
 ;; Text objects for Helixel Mode.
-;; Facade: requires engine, defs, and marks sub-modules.
+;; Facade: requires the four sub-modules.
 ;;
+;;   engine  — forward primitives, range, type properties,
+;;             activate-textobj-range, recreate / advance
+;;   pair    — paren / quote / xml-tag selection +
+;;             make-pair-delimiter, make-tag-delimiter
+;;   block   — regex blocks + block-at-point +
+;;             make-block-delimiter, make-regex-delimiter
+;;   marks   — define-mark-* macros + user mark commands +
+;;             default registrations + tree-sitter helper
 
 ;;; Code:
 
 (require 'helixel-textobj-engine)
-(require 'helixel-textobj-defs)
+(require 'helixel-textobj-pair)
+(require 'helixel-textobj-block)
 (require 'helixel-textobj-marks)
 
 (provide 'helixel-textobj)

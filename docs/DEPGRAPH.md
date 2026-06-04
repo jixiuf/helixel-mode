@@ -69,12 +69,17 @@ graph TD
   helixel-swap --> helixel-state
   helixel-swap --> helixel-macros
   helixel-swap --> helixel-editing
-  helixel-textobj-defs --> helixel-textobj-engine
+  helixel-textobj-block --> helixel-core
+  helixel-textobj-block --> helixel-textobj-engine
+  helixel-textobj-block --> helixel-textobj-pair
   helixel-textobj-engine --> helixel-core
   helixel-textobj-marks --> helixel-textobj-engine
-  helixel-textobj-marks --> helixel-textobj-defs
+  helixel-textobj-marks --> helixel-textobj-pair
+  helixel-textobj-marks --> helixel-textobj-block
+  helixel-textobj-pair --> helixel-textobj-engine
   helixel-textobj --> helixel-textobj-engine
-  helixel-textobj --> helixel-textobj-defs
+  helixel-textobj --> helixel-textobj-pair
+  helixel-textobj --> helixel-textobj-block
   helixel-textobj --> helixel-textobj-marks
   helixel --> helixel-core
   helixel --> helixel-ring
@@ -89,7 +94,8 @@ graph TD
   helixel --> helixel-search
   helixel --> helixel-editing
   helixel --> helixel-textobj-engine
-  helixel --> helixel-textobj-defs
+  helixel --> helixel-textobj-pair
+  helixel --> helixel-textobj-block
   helixel --> helixel-textobj-marks
   helixel --> helixel-textobj
   helixel --> helixel-surround

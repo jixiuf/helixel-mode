@@ -19,10 +19,11 @@
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
 | `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. 7 `declare-function` for flymake/eglot (third-party only). |
 | `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state. |
-| `helixel-textobj-engine.el` | Text object engines: forward-*, bounds-of-*, select-paren/quote/tag/block/regex, up-*, delimiter builders, recreate/advance. |
-| `helixel-textobj-defs.el` | Text object macros: define-mark-pair/-quote/-object/-regex-textobj. |
-| `helixel-textobj-marks.el` | User commands (mark-inner/a-*), default registrations, kind registration, tree-sitter helper. |
-| `helixel-textobj.el` | Facade: requires engine, defs, and marks sub-modules. |
+| `helixel-textobj-engine.el` | Forward primitives (forward-word/WORD/symbol/sentence/paragraph/function), generic select-inner/a-object + restricted variants, range struct, type-properties, motion-loop / with-restriction macros, activate-textobj-range, recreate-textobj + advance-textobj. Pure primitives, no per-textobj-type code. |
+| `helixel-textobj-pair.el` | Paren / quote / xml-tag selection (the matched-pair families): get-block-range, select-block, up-paren, select-paren, forward-quote, select-quote, select-xml-tag, tag-* helpers, make-pair-delimiter, make-tag-delimiter. |
+| `helixel-textobj-block.el` | Regex / fenced block text objects: up-regex-block, select-regex-block, up-block-at-point, select-block-at-point, block-textobj-alist (customs), block-spec-at-point, block-adjust-for-jump, regex-adjust-for-jump, make-block-delimiter, make-regex-delimiter. |
+| `helixel-textobj-marks.el` | User-facing surface: define-mark-pair/-quote/-object/-regex-textobj macros, mark-inner-*/mark-a-* commands (including tag and block), tree-sitter helper, all default registrations, `textobj' kind registration. |
+| `helixel-textobj.el` | Facade: requires engine, pair, block, marks. |
 | `helixel-surround.el` | Surround add/delete/replace. |
 | `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
 | `helixel-mc-core.el` | **Multi-cursor core**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook`, whitelist policy, `helixel-multi-cursor-mode`. |
@@ -66,9 +67,13 @@ helixel-core (cl-lib only, zero helixel deps)
   ├── helixel-register (→ core)
   │
   ├── helixel-textobj-engine (→ core)
-  │     ├── helixel-textobj-defs (→ core + textobj-engine)
-  │     │     └── helixel-textobj-marks (→ core + textobj-engine + textobj-defs)
-  │     └── helixel-textobj (→ core + textobj-engine + textobj-defs + textobj-marks)
+  │     ├── helixel-textobj-pair (→ core + textobj-engine)
+  │     │     └── helixel-textobj-block (→ core + textobj-engine
+  │     │                              + textobj-pair)
+  │     │           └── helixel-textobj-marks (→ core + textobj-engine
+  │     │                                    + textobj-pair
+  │     │                                    + textobj-block)
+  │     └── helixel-textobj (facade: requires the four above)
   │     └── helixel-surround (→ core + ring + repeat + textobj)
   │
   ├── helixel-repeat (→ core + action)   [action→ring→core]
@@ -110,7 +115,8 @@ Notes:
   - `helixel-keymap.el`: 7 (flymake, eglot)
   - `helixel-repeat.el`: 0
   - `helixel-textobj-engine.el`: 0
-  - `helixel-textobj-defs.el`: 0
+  - `helixel-textobj-pair.el`: 0
+  - `helixel-textobj-block.el`: 0
   - `helixel-textobj-marks.el`: 2 (evil-tree-sitter)
   - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww)
 

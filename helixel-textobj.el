@@ -2355,6 +2355,21 @@ backward if COUNT is negative.  A function is defined via
 (helixel-define-mark-quote "back-quote" ?` "back-quoted string" t)
 (helixel-define-mark-quote "back-quote" ?` "back-quoted string" nil)
 
+;; org-mode emphasis markers: ~code~ =verbatim= _underline_
+;; /italic/ *bold* +strikethrough+
+(helixel-define-mark-quote "tilde" ?~ "tilde-delimited string" t)
+(helixel-define-mark-quote "tilde" ?~ "tilde-delimited string" nil)
+(helixel-define-mark-quote "equal" ?= "equal-delimited string" t)
+(helixel-define-mark-quote "equal" ?= "equal-delimited string" nil)
+(helixel-define-mark-quote "underscore"  ?_ "underscore-delimited string" t)
+(helixel-define-mark-quote "underscore"  ?_ "underscore-delimited string" nil)
+(helixel-define-mark-quote "slash" ?/ "slash-delimited string" t)
+(helixel-define-mark-quote "slash" ?/ "slash-delimited string" nil)
+(helixel-define-mark-quote "star" ?* "star-delimited string" t)
+(helixel-define-mark-quote "star" ?* "star-delimited string" nil)
+(helixel-define-mark-quote "plus" ?+ "plus-delimited string" t)
+(helixel-define-mark-quote "plus" ?+ "plus-delimited string" nil)
+
 (defun helixel--recreate-textobj (ctx)
   "Replay a textobj selection from CTX.
 Skips past the current target (if cursor is inside one), then

@@ -69,7 +69,35 @@ Updated after each commit.
 
 ## Pending
 
-### Phase 7 (continued) — Code consolidation via macros
+### Phase 7 (consolidation wave 2) — More macros & helpers
+- **Commits**: `533faca`, `c916589`, `aa6b8ae`, `79085ba`, `a534b27`,
+  `1268c8b`
+- `core.el`: 18 `helixel-sel-*-ctx` accessors →
+  `helixel--def-sel-accessor` macro (-39 lines).
+- `core.el`: 7 `helixel--kind-*` registry accessors →
+  `helixel--def-kind-accessor` macro (-3 lines, must stay `defun`
+  because callers appear earlier in the same file).
+- `editing.el`: `helixel-yank` / `-yank-before` shared body →
+  `helixel--yank-body` (-13 lines).  Discovered both delegate to
+  the same `(yank arg)` — documented.
+- `editing.el`: `helixel-indent-left` / `-right` shared body →
+  `helixel--indent-body` (-29 lines).  Fixed a pre-existing
+  duplicate comment-line bug.
+- `editing.el`: `helixel-downcase` / `-upcase` →
+  `helixel--def-case-op` macro (-3 lines).
+- `surround.el`: extract `helixel--surround-prompt-target` shared by
+  delete/replace's no-pending-sel transient-map setup (-15 lines).
+  Caught a docstring quoting bug while at it.
+
+| Metric                          | Baseline | Now    |
+|---------------------------------|----------|--------|
+| Total line count                | 14166    | **14011** |
+| `helixel-core.el`               | 1076     | 1035   |
+| `helixel-editing.el`            | 979      | 879    |
+| `helixel-move.el`               | 940      | 825    |
+| `helixel-surround.el`           | (n/a)    | -15    |
+
+
 - **Commits**: `646a7c8`, `514e428`, `34ceb45`, `c65a9c7`, `238894c`
 - `editing.el`: dedupe insert-after/insert search-vs-line branches
   (one `memq kind '(search line)` test), extract `helixel--replace-do`
@@ -132,7 +160,7 @@ advance helpers, examining surround.el for further consolidation).
 | `advice-add` in mc-integrate.el | 6        | **1**  | ≤ 2    |
 | `advice-add` total              | 19       | 18†    | ≤ 8    |
 | Tests passing                   | 847      | 845‡  | ≥ 847  |
-| Total line count                | 14166    | **14088** | ≤ 10500|
+| Total line count                | 14166    | **14011** | ≤ 10500|
 
 † Remaining `advice-add`s are all on third-party emacs primitives
 (`keyboard-quit` × 3) or registered inside macros for the

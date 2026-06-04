@@ -2294,32 +2294,14 @@ before real point."
       (delete-overlay ov))))
 
 ;; ── post-command inhibition gates ──
-
-(ert-deftest helixel-test-mc-post-command-inhibited-by-inhibit-flag ()
-  "`helixel-mc--post-command' is a no-op when `helixel-mc--inhibit'."
-  (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
-    (goto-char 1)
-    (let ((helixel-mc--inhibit t)
-          (helixel-multi-cursor-mode t)
-          (this-command 'forward-char))
-      (helixel-mc--post-command))
-    ;; Real cursor should NOT have moved (inhibited).
-    (should (= 1 (point)))
-    (helixel-mc-clear-all)))
-
-(ert-deftest helixel-test-mc-post-command-inhibited-by-inner-dispatch ()
-  "`helixel-mc--post-command' is a no-op when
-`helixel-mc-executing-command-for-fake-cursor' is t."
-  (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
-    (goto-char 1)
-    (let ((helixel-mc-executing-command-for-fake-cursor t)
-          (helixel-multi-cursor-mode t)
-          (this-command 'forward-char))
-      (helixel-mc--post-command))
-    (should (= 1 (point)))
-    (helixel-mc-clear-all)))
+;;
+;; The legacy `helixel-mc--inhibit' and
+;; `helixel-mc-executing-command-for-fake-cursor' flag-defvars are
+;; gone — replaced by `helixel-replay-in-fake-p' /
+;; `helixel-mc-dispatch-in-progress-p' over the single
+;; `helixel-replay' struct (see helixel-replay.el).  The behavioural
+;; coverage moved into
+;; `helixel-test-mc-post-command-skips-when-replay-in-fake'.
 
 ;; ── save-main-state: point / mark / variable restore ──
 

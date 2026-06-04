@@ -167,31 +167,26 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert
     (:category state :subcat insert)
-  (cond
-   ;; Search context: refine the search sel with entry-kind
-   ((and helixel--pending-sel
-         (eq (helixel-sel-kind helixel--pending-sel) 'search))
-     (helixel--sel-push
-          (helixel-sel-update-ctx helixel--pending-sel
-                                  :entry-kind 'insert))
-    (goto-char (region-beginning)))
-   ;; Line selection: preserve sel for `.` auto-advance
-   ((and helixel--pending-sel
-         (eq (helixel-sel-kind helixel--pending-sel) 'line))
-     (helixel--sel-push
-          (helixel-sel-update-ctx helixel--pending-sel
-                                  :entry-kind 'insert))
-    (goto-char (region-beginning)))
-   ;; Manual region
-   ((use-region-p)
-     (helixel--sel-push
-          (helixel-sel-create
-           'insert-selection-start nil
-           #'helixel--recreate-insert-selection-start "is"))
-    (goto-char (region-beginning)))
-   ;; No context
-   (t
-    (setq helixel--pending-sel nil)))
+  (let ((kind (and helixel--pending-sel
+                   (helixel-sel-kind helixel--pending-sel))))
+    (cond
+     ;; Search or line context: preserve sel (just tag entry-kind)
+     ;; for `.` auto-advance.
+     ((memq kind '(search line))
+      (helixel--sel-push
+       (helixel-sel-update-ctx helixel--pending-sel
+                               :entry-kind 'insert))
+      (goto-char (region-beginning)))
+     ;; Manual region
+     ((use-region-p)
+      (helixel--sel-push
+       (helixel-sel-create
+        'insert-selection-start nil
+        #'helixel--recreate-insert-selection-start "is"))
+      (goto-char (region-beginning)))
+     ;; No context
+     (t
+      (setq helixel--pending-sel nil))))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-exit
@@ -228,33 +223,28 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-after
     (:category state :subcat insert)
-  (cond
-   ;; Search context: refine the search sel with entry-kind
-   ((and helixel--pending-sel
-         (eq (helixel-sel-kind helixel--pending-sel) 'search))
-     (helixel--sel-push
-          (helixel-sel-update-ctx helixel--pending-sel
-                                  :entry-kind 'append))
-    (goto-char (region-end)))
-   ;; Line selection: preserve sel for `.` auto-advance
-   ((and helixel--pending-sel
-         (eq (helixel-sel-kind helixel--pending-sel) 'line))
-     (helixel--sel-push
-          (helixel-sel-update-ctx helixel--pending-sel
-                                  :entry-kind 'append))
-    (goto-char (region-end)))
-   ;; Manual region
-   ((use-region-p)
-     (helixel--sel-push
-          (helixel-sel-create
-           'insert-selection-end nil
-           #'helixel--recreate-insert-selection-end "ie"))
-    (goto-char (region-end)))
-   ;; No context
-   (t
-    (unless (helixel--end-of-line-p)
-      (forward-char))
-    (setq helixel--pending-sel nil)))
+  (let ((kind (and helixel--pending-sel
+                   (helixel-sel-kind helixel--pending-sel))))
+    (cond
+     ;; Search or line context: preserve sel (just tag entry-kind)
+     ;; for `.` auto-advance.
+     ((memq kind '(search line))
+      (helixel--sel-push
+       (helixel-sel-update-ctx helixel--pending-sel
+                               :entry-kind 'append))
+      (goto-char (region-end)))
+     ;; Manual region
+     ((use-region-p)
+      (helixel--sel-push
+       (helixel-sel-create
+        'insert-selection-end nil
+        #'helixel--recreate-insert-selection-end "ie"))
+      (goto-char (region-end)))
+     ;; No context
+     (t
+      (unless (helixel--end-of-line-p)
+        (forward-char))
+      (setq helixel--pending-sel nil))))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-beginning-line
@@ -388,56 +378,69 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 Value is nil after a rectangle replace.
 Used to support cycling through the kill ring after a replace.")
 
+(defun helixel--replace-do (text &optional yank-fallback-fn)
+  "Delete current region (or char) and insert TEXT respecting selection type.
+Updates `helixel--replace-pop-bounds' with the inserted range, or
+nils it for rectangle replaces.  Returns the inserted bounds.
+
+TEXT is the `kill-ring' entry to insert.  YANK-FALLBACK-FN, when
+non-nil, is called in the no-region case (replace char at point)
+instead of `insert-for-yank' — `helixel-replace' passes
+`helixel-yank' so its dot-replay path runs."
+  (let* ((linewise-p (helixel--linewise-kill-p text))
+         (rectwise-p (helixel--rect-wise-kill-p text))
+         (bare (string-trim-right (substring-no-properties text) "\n"))
+         (pop-start nil))
+    (cond
+     ;; Rect selection — no pop tracking (rect bounds are multi-line)
+     ((and (use-region-p) (eq (helixel--selection-type) 'rect))
+      (let* ((beg (region-beginning))
+             (end (region-end))
+             (lines (nth 1 (get-text-property 0 'yank-handler text))))
+        (delete-rectangle beg end)
+        (goto-char beg)
+        (if (and rectwise-p lines)
+            (insert-rectangle lines)
+          (insert bare)))
+      (setq helixel--replace-pop-bounds nil))
+     ;; Line-wise selection: expand to full line bounds
+     ((and (use-region-p) (eq (helixel--selection-type) 'line))
+      (when-let* ((bounds (helixel--line-bounds-of-region)))
+        (delete-region (car bounds) (cdr bounds))
+        (setq pop-start (point))
+        (insert (if linewise-p text (concat bare "\n")))
+        (setq helixel--replace-pop-bounds
+              (cons pop-start (point)))))
+     ;; Charwise region
+     ((use-region-p)
+      (delete-region (region-beginning) (region-end))
+      (setq pop-start (point))
+      (insert (if (or linewise-p rectwise-p)
+                  bare
+                (substring-no-properties text)))
+      (setq helixel--replace-pop-bounds
+            (cons pop-start (point))))
+     ;; No region — replace char at point
+     (t
+      (when helixel-replace-delete-char-p
+        (delete-char 1))
+      (setq pop-start (point))
+      (if yank-fallback-fn
+          (funcall yank-fallback-fn)
+        (insert-for-yank text))
+      (setq helixel--replace-pop-bounds
+            (cons pop-start (point)))))))
+
 (helixel-define-operator helixel-replace
     (:op replace :display "r" :repeat-advance 'line)
   (helixel--record-edit 'replace)
   (if (and (not (helixel--register-active-p))
            (= 0 (length kill-ring)))
       (message "nothing to yank")
-    (let* ((text (or (helixel--current-kill 0) (current-kill 0)))
-           (linewise-p (helixel--linewise-kill-p text))
-           (rectwise-p (helixel--rect-wise-kill-p text))
-           (bare (string-trim-right (substring-no-properties text) "\n"))
-           (pop-start nil)
-           (_bare-rect (unless (or linewise-p rectwise-p) bare)))
-      (cond
-       ;; Rect selection — no pop tracking (rect bounds are multi-line)
-       ((and (use-region-p) (eq (helixel--selection-type) 'rect))
-        (let* ((beg (region-beginning))
-               (end (region-end))
-               (lines (nth 1 (get-text-property 0 'yank-handler text))))
-          (delete-rectangle beg end)
-          (goto-char beg)
-          (if (and rectwise-p lines)
-              (insert-rectangle lines)
-            (insert bare)))
-        (setq helixel--replace-pop-bounds nil))
-       ;; Line-wise selection: expand to full line bounds
-       ((and (use-region-p) (eq (helixel--selection-type) 'line))
-        (when-let* ((bounds (helixel--line-bounds-of-region)))
-          (delete-region (car bounds) (cdr bounds))
-          (setq pop-start (point))
-          (insert (if linewise-p text (concat bare "\n")))
-          (setq helixel--replace-pop-bounds
-                (cons pop-start (point)))))
-       ;; Charwise region
-       ((use-region-p)
-        (delete-region (region-beginning) (region-end))
-        (setq pop-start (point))
-        (insert (if (or linewise-p rectwise-p)
-                    bare
-                  (substring-no-properties text)))
-        (setq helixel--replace-pop-bounds
-              (cons pop-start (point))))
-       ;; No region — replace char at point
-       (t
-        (when helixel-replace-delete-char-p
-          (delete-char 1))
-        (setq pop-start (point))
-        (helixel-with-replay-as 'dot
-          (helixel-yank))
-        (setq helixel--replace-pop-bounds
-              (cons pop-start (point)))))
+    (let ((text (or (helixel--current-kill 0) (current-kill 0))))
+      (helixel--replace-do
+       text
+       (lambda () (helixel-with-replay-as 'dot (helixel-yank))))
       (helixel--register-consume)
       (helixel--clear-data))))
 
@@ -495,56 +498,12 @@ Used to support cycling through the kill ring after a replace.")
              (selected
               (completing-read "Replace with: " collection nil t))
              (idx (cl-position selected candidates :test #'string=))
-             (text (nth idx kill-ring))
-             (linewise-p (helixel--linewise-kill-p text))
-             (rectwise-p (helixel--rect-wise-kill-p text))
-             (bare (string-trim-right
-                    (substring-no-properties text) "\n"))
-             (pop-start nil))
+             (text (nth idx kill-ring)))
         (unless text
           (user-error "No kill-ring entry selected"))
         (setq kill-ring-yank-pointer (nthcdr idx kill-ring))
         (setq this-command 'helixel-replace-pop)
-        (cond
-         ;; Rect selection — no pop tracking
-         ((and (use-region-p)
-               (eq (helixel--selection-type) 'rect))
-          (let* ((beg (region-beginning))
-                 (end (region-end))
-                 (lines (nth 1 (get-text-property
-                                0 'yank-handler text))))
-            (delete-rectangle beg end)
-            (goto-char beg)
-            (if (and rectwise-p lines)
-                (insert-rectangle lines)
-              (insert bare)))
-          (setq helixel--replace-pop-bounds nil))
-         ;; Line-wise selection
-         ((and (use-region-p)
-               (eq (helixel--selection-type) 'line))
-          (when-let* ((bounds (helixel--line-bounds-of-region)))
-            (delete-region (car bounds) (cdr bounds))
-            (setq pop-start (point))
-            (insert (if linewise-p text (concat bare "\n")))
-            (setq helixel--replace-pop-bounds
-                  (cons pop-start (point)))))
-         ;; Charwise region
-         ((use-region-p)
-          (delete-region (region-beginning) (region-end))
-          (setq pop-start (point))
-          (insert (if (or linewise-p rectwise-p)
-                      bare
-                    (substring-no-properties text)))
-          (setq helixel--replace-pop-bounds
-                (cons pop-start (point))))
-         ;; No region — replace char at point
-         (t
-          (when helixel-replace-delete-char-p
-            (delete-char 1))
-          (setq pop-start (point))
-          (insert-for-yank text)
-          (setq helixel--replace-pop-bounds
-                (cons pop-start (point)))))))))
+        (helixel--replace-do text)))))
 
 ;; ── Copy ──
 

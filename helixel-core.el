@@ -706,20 +706,6 @@ All other keys form the :payload plist."
   "Return a shallow copy of transaction TX."
   (helixel-edit--shallow-copy tx))
 
-;; ── Equality (for event ring dedup) ──
-
-(defun helixel-edit-equal-p (tx1 tx2)
-  "Return non-nil if TX1 and TX2 represent the same editing operation.
-Compares op, sel, and payload.  Ignores marker (position differs
-on replay).  Returns t when both are nil."
-  (if (or (null tx1) (null tx2))
-      (eq tx1 tx2)
-    (and (eq (helixel-edit-op tx1) (helixel-edit-op tx2))
-         (helixel-sel-equal-p (helixel-edit-sel tx1)
-                              (helixel-edit-sel tx2))
-         (equal (helixel-edit-payload tx1)
-                (helixel-edit-payload tx2)))))
-
 ;; ── Payload helpers ──
 
 (defun helixel-edit-with-payload (tx key value)

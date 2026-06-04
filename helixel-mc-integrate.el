@@ -90,12 +90,6 @@ the override path — mc dispatches the same edit at each fake."
   (setq helixel-repeat-edit-function
         #'helixel-mc--repeat-edit-apply-only))
 
-(defun helixel-mc--repeat-edit-hook-uninstall ()
-  "Clear `helixel-repeat-edit-function' if it was set by mc."
-  (when (eq helixel-repeat-edit-function
-            #'helixel-mc--repeat-edit-apply-only)
-    (setq helixel-repeat-edit-function nil)))
-
 ;; Install immediately so existing buffers with mc already on pick
 ;; up the override.  helixel-multi-cursor-mode hooks below keep it
 ;; in sync.

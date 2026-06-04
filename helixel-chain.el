@@ -164,27 +164,6 @@ Reset: goto marker."
                 (goto-char (marker-position m))))
      :all-buffer-fn (helixel--kind-all-buffer-fn kind))))
 
-(defun helixel--chain-preview-strategy (edit &optional reverse-p)
-  "Build a preview-only repeat strategy for chain EDIT and REVERSE-P.
-Same as chain strategy but uses `ignore' for apply (no edit execution)."
-  (let* ((sel (helixel-edit-sel edit))
-         (kind (and sel (helixel-sel-kind sel)))
-         (advance-fn (helixel--kind-advance kind))
-         (move-keys (helixel-edit-payload-get edit :chain-move-keys))
-         (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p)))
-    (make-helixel-repeat-strategy
-     :advance (lambda (_edit)
-                (and (or (null advance-fn)
-                         (funcall advance-fn effective-edit))
-                     (progn
-                       (when move-keys
-                         (execute-kbd-macro move-keys))
-                       t)))
-     :apply #'ignore
-     :reset (lambda (_edit)
-              (when-let* ((m (car (helixel-edit-mark-region effective-edit))))
-                (goto-char (marker-position m)))))))
-
 
 ;; ── Cleanup helper ──
 

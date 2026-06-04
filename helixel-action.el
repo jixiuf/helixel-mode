@@ -386,20 +386,6 @@ Adds :before advice to record position before SYMBOL runs."
                 (helixel-register-jump 'goto 'jump))
               '((name . helixel-jump--before))))
 
-;; ── Jump display helpers ──
-
-(defun helixel--jump-display (entry)
-  "Format jump log ENTRY for display."
-  (let ((cat (plist-get entry :category))
-        (sub (plist-get entry :subcat))
-        (buf (plist-get entry :buffer)))
-    (format "%s.%s [%s]"
-            (or cat ?\?)
-            (or sub ?\?)
-            (if (buffer-live-p buf)
-                (buffer-name buf)
-              "(dead)"))))
-
 ;; ── Jump cycle predicates ──
 
 (defun helixel--jump-visible-p (entry)

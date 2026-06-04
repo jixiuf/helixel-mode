@@ -144,105 +144,56 @@ automatically, so this macro only does `push-mark' + activate."
        (push-mark current t 'activate))
      (setq helixel--raw-selection-type nil)))
 
-(helixel-define-command helixel-forward-word-start
-    (:category movement :subcat word
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-word (or count 1)))
-  (helixel--set-mark-region 'helixel-word :a))
+;; ── Word / WORD / symbol movement commands ──
+;;
+;; All twelve forward/backward × word/WORD/symbol × start/end commands
+;; share the same body shape; we generate them via
+;; `helixel--def-thing-move'.  Some `:side' values are NOT mechanical
+;; (helixel-backward-WORD uses :a, helixel-backward-symbol-start uses
+;; :a, helixel-backward-symbol-end uses :inner — preserved verbatim
+;; from the original definitions).
 
-(helixel-define-command helixel-forward-word-end
-    (:category movement :subcat word
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-word (or count 1)))
-  (helixel--set-mark-region 'helixel-word :inner))
+(defmacro helixel--def-thing-move (name subcat thing fwd-fn sign side)
+  "Define a thing-movement command.
+NAME is the command symbol; SUBCAT the :subcat tag; THING the
+thing category (`helixel-word' / -WORD / -symbol);
+FWD-FN is one of `forward-beginning' / `forward-end' (interned
+relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner."
+  (let ((fn (intern (format "helixel--%s" fwd-fn))))
+    `(helixel-define-command ,name
+         (:category movement :subcat ,subcat
+          :params (&optional count))
+       (interactive "p")
+       (helixel--with-movement-surround
+        (,fn ',thing (* ,sign (or count 1))))
+       (helixel--set-mark-region ',thing ,side))))
 
-(helixel-define-command helixel-backward-word-start
-    (:category movement :subcat word
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-word (- (or count 1))))
-  (helixel--set-mark-region 'helixel-word :inner))
+(helixel--def-thing-move helixel-forward-word-start
+                         word helixel-word forward-beginning  1 :a)
+(helixel--def-thing-move helixel-forward-word-end
+                         word helixel-word forward-end        1 :inner)
+(helixel--def-thing-move helixel-backward-word-start
+                         word helixel-word forward-beginning -1 :inner)
+(helixel--def-thing-move helixel-backward-word-end
+                         word helixel-word forward-end       -1 :a)
 
-(helixel-define-command helixel-backward-word-end
-    (:category movement :subcat word
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-word (- (or count 1))))
-  (helixel--set-mark-region 'helixel-word :a))
+(helixel--def-thing-move helixel-forward-WORD-start
+                         WORD helixel-WORD forward-beginning  1 :a)
+(helixel--def-thing-move helixel-forward-WORD-end
+                         WORD helixel-WORD forward-end        1 :inner)
+(helixel--def-thing-move helixel-backward-WORD
+                         WORD helixel-WORD forward-beginning -1 :a)
+(helixel--def-thing-move helixel-backward-WORD-end
+                         WORD helixel-WORD forward-end       -1 :inner)
 
-(helixel-define-command helixel-forward-WORD-start
-    (:category movement :subcat WORD
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-WORD (or count 1)))
-  (helixel--set-mark-region 'helixel-WORD :a))
-
-(helixel-define-command helixel-forward-WORD-end
-    (:category movement :subcat WORD
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-WORD (or count 1)))
-  (helixel--set-mark-region 'helixel-WORD :inner))
-
-(helixel-define-command helixel-backward-WORD
-    (:category movement :subcat WORD
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-WORD (- (or count 1))))
-  (helixel--set-mark-region 'helixel-WORD :a))
-
-(helixel-define-command helixel-backward-WORD-end
-    (:category movement :subcat WORD
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-WORD (- (or count 1))))
-  (helixel--set-mark-region 'helixel-WORD :inner))
-
-(helixel-define-command helixel-forward-symbol-start
-    (:category movement :subcat symbol
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-symbol (or count 1)))
-  (helixel--set-mark-region 'helixel-symbol :a))
-
-(helixel-define-command helixel-forward-symbol-end
-    (:category movement :subcat symbol
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-symbol (or count 1)))
-  (helixel--set-mark-region 'helixel-symbol :inner))
-
-(helixel-define-command helixel-backward-symbol-start
-    (:category movement :subcat symbol
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-symbol (- (or count 1))))
-  (helixel--set-mark-region 'helixel-symbol :a))
-
-(helixel-define-command helixel-backward-symbol-end
-    (:category movement :subcat symbol
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-symbol (- (or count 1))))
-  (helixel--set-mark-region 'helixel-symbol :inner))
-
-;; ── Pair delimiter movement ([ { outward, ] } forward-to-end) ──
-;; [key → outer textobj opening,  ]key → outer textobj closing
-;; {key → inner textobj opening,  }key → inner textobj closing
+(helixel--def-thing-move helixel-forward-symbol-start
+                         symbol helixel-symbol forward-beginning  1 :a)
+(helixel--def-thing-move helixel-forward-symbol-end
+                         symbol helixel-symbol forward-end        1 :inner)
+(helixel--def-thing-move helixel-backward-symbol-start
+                         symbol helixel-symbol forward-beginning -1 :a)
+(helixel--def-thing-move helixel-backward-symbol-end
+                         symbol helixel-symbol forward-end       -1 :inner)
 
 (defmacro helixel--define-delimiter-movement (name outer-p forward-p
                                                    factory &rest factory-args)

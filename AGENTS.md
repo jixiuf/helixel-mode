@@ -4,7 +4,7 @@
 
 | File | Role |
 |------|------|
-| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-event` structs, `helixel--last-tx`, `helixel--last-event`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-event` structs, `helixel--last-event`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-edit-set`, live-event management. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-edit-tracking`. |
 | `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
@@ -98,7 +98,7 @@ Notes:
 - `helixel--replace-region` lives in `helixel-editing.el`.
 - `helixel--delete-selection` lives in `helixel-editing.el` (moved from state.el in Phase 5).
 - `helixel--swap-source-type` lives in `helixel-core.el`.
-- `helixel--last-tx` lives in `helixel-core.el` (the shared data layer).
+- `helixel--last-event` lives in `helixel-core.el` (buffer-local).
   Every module that requires `helixel-core` can read/write the most recent transaction.
 - `declare-function` counts are minimal and only for third-party packages:
   - `helixel-keymap.el`: 7 (flymake, eglot)
@@ -239,8 +239,8 @@ Stale .elc silently hides changes. `rm -f *.elc && make compile` before testing.
 - First line must be a complete sentence
 - Function args must appear in docstring (uppercase)
 
-### helixel--last-tx is NOT buffer-local (cross-buffer)
-`. ` replays the last edit regardless of which buffer it was recorded in.
+### helixel--last-event is buffer-local
+`. ` replays the last edit from the current buffer only.
 
 ### helixel--make-tx keyword handling
 `helixel--make-tx` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel--copy-tx` + `setf`.
@@ -289,7 +289,7 @@ first-press span selection, prev/next cycling, and group-start logic all
 work via the real cycle code path with no mc-specific bookkeeping.
 Caveats: fakes inherit NO history at spawn time; the ring populates
 from commands run AFTER spawn.  `helixel--global-jump-log-push' is a
-no-op during fake dispatch (cross-buffer state must not be polluted).
+no-op during fake dispatch to avoid polluting the shared jump log.
 C-o / C-i remain real-only.
 
 ### Multi-cursor + `.` / `q` integration

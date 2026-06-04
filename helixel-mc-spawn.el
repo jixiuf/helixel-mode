@@ -54,8 +54,7 @@
 (defvar helixel--last-event)
 (defvar helixel--live-event)
 (defvar helixel--raw-selection-type)
-(defvar helixel--inhibit-action-track)
-(defvar helixel--inhibit-repeat-record)
+(defvar helixel--in-replay)
 
 ;; ── High-level entry points ──
 

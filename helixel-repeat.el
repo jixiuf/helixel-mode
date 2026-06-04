@@ -48,7 +48,6 @@
 (require 'helixel-repeat-strategy)
 
 ;; ── State variables ──
-(defvar helixel--inhibit-action-track)
 (defvar helixel--current-state)
 
 ;; ---------------------------------------------------------------------------
@@ -73,11 +72,7 @@ Toggled by `-.' — resets on each new `helixel--record-edit'.")
 Set by change and insert-entry commands.  Read in `helixel-insert-exit'
 to extract :change-text.")
 
-(defvar helixel--inhibit-repeat-record nil
-  "When non-nil, `helixel--record-edit' is a no-op.
-Bound during `helixel-repeat-edit' to prevent re-recording.
-Also bound in compound commands (e.g. `helixel-replace' calling
-`helixel-yank') to avoid double-recording.")
+
 
 ;; ---------------------------------------------------------------------------
 ;; Recording (called by editing commands in helixel-editing)
@@ -95,7 +90,7 @@ Also notifies the event ring so `;' jumping picks up the new edit.
 
 NOTE: Caller is responsible for calling `helixel--tracking-open' first.
 The `helixel-define-command' macro handles this automatically."
-  (unless (or helixel--inhibit-repeat-record executing-kbd-macro
+  (unless (or helixel--in-replay executing-kbd-macro
               defining-kbd-macro)
     (let* ((pop-sel (helixel--sel-pop))
            (runner (helixel--op-runner operator))

@@ -41,10 +41,6 @@
 ;; State variables
 ;; ----------------------------------------------------------------------
 
-(defvar helixel--inhibit-action-track nil
-  "When non-nil, event recording is inhibited.
-Bound during dot-repeat replay to prevent re-recording.")
-
 (defvar-local helixel--action-pos nil
   "Ring position for `;' cycling.
 nil = live event.  0 = newest ring entry.  N = older.")
@@ -156,9 +152,9 @@ and clears the live state."
 CATEGORY and SUBCAT classify the event for \=`;\=` and jump-list.
 OP is an optional operator symbol (nil for movement/search).
 
-No-op when `helixel--inhibit-action-track' is non-nil (dot-repeat).
+No-op when `helixel--in-replay' is non-nil (dot-repeat).
 Does NOT commit the new event — caller is responsible for eventual commit."
-  (unless helixel--inhibit-action-track
+  (unless helixel--in-replay
     ;; Clear textobj selection state on non-textobj actions
     (when (and (eq helixel--raw-selection-type 'textobj)
                (not (eq category 'textobj)))

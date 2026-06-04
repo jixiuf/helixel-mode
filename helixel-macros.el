@@ -52,7 +52,7 @@ event in an `unwind-protect' so it always finalises even on error."
      (helixel--tracking-open ,category ,subcat ,op)
      (unwind-protect
          (progn ,@body)
-       (unless helixel--inhibit-action-track
+       (unless helixel--in-replay
          (helixel-event-commit)))))
 
 ;; ── Command definition macro ──

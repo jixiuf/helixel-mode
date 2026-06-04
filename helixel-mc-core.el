@@ -534,6 +534,26 @@ that fake-cursor execution needs."
              (when (boundp (car cell))
                (set (car cell) (cdr cell)))))))))
 
+(defmacro helixel-mc-with-saved-state (&rest body)
+  "Execute BODY, saving and restoring per-cursor state.
+Saves all variables listed in `helixel-mc-cursor-vars' before
+BODY, restores them after.  Does NOT restore point/mark — the
+caller is responsible for cursor positioning.
+
+Use this when walking the buffer to collect targets outside
+of the standard with-each-cursor dispatch loop, so advance
+functions don't clobber the real cursor's state."
+  (declare (indent 0) (debug t))
+  (let ((saved (gensym "saved")))
+    `(let ((,saved (mapcar (lambda (v)
+                             (cons v (and (boundp v) (symbol-value v))))
+                           helixel-mc-cursor-vars)))
+       (unwind-protect
+           (progn ,@body)
+         (dolist (cell ,saved)
+           (when (boundp (car cell))
+             (set (car cell) (cdr cell))))))))
+
 (defmacro helixel-mc-with-each-cursor (&rest body)
   "Evaluate BODY once at each fake cursor.
 Real cursor's state (point, mark, helixel vars) is preserved.

@@ -49,7 +49,7 @@
                   (edit prefix))
 (declare-function helixel--all-dir-line "helixel-repeat"
                   (edit))
-(defvar helixel--inhibit-repeat-record)
+(defvar helixel--in-replay)
 
 (defmacro helixel-define-movement (name builtin type &rest options)
   "Define a movement command NAME wrapping BUILTIN with TYPE.
@@ -648,7 +648,7 @@ new direction."
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (forward: point at bottom, mark at top).
-        (unless helixel--inhibit-repeat-record
+        (unless helixel--in-replay
           (helixel--switch-state 'visual))
         (beginning-of-line)
         (push-mark-command t t)
@@ -693,7 +693,7 @@ new direction."
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (backward: point at top, mark at bottom).
-        (unless helixel--inhibit-repeat-record
+        (unless helixel--in-replay
           (helixel--switch-state 'visual))
         (end-of-line)
         (push-mark-command t t)
@@ -902,7 +902,7 @@ Creates/updates a `helixel-sel' struct of kind `movement' whenever
 a region is active — from visual mode or `normal-mode' movements that
 created a selection (e.g. w, e, b).
 No-op during dot-repeat replay, or when no region is active."
-  (when (and (not helixel--inhibit-repeat-record)
+  (when (and (not helixel--in-replay)
              (use-region-p))
     (let* ((ctx helixel--pending-sel)
            (entry (cons cmd 1)))

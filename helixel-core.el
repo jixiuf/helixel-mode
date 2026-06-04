@@ -1027,29 +1027,21 @@ falls back to the operator registry."
     (funcall runner tx)))
 
 ;; ── Replay context ──
-;; `helixel--inhibit-repeat-record' (defined in helixel-repeat.el)
-;; and `helixel--inhibit-action-track' (defined in helixel-ring.el)
-;; almost always travel together: every replay path needs both off
-;; to avoid (a) re-recording the replay as a new edit and (b)
-;; polluting the event ring / jump log.  The single-flag asymmetric
-;; sites are intentional and stay explicit.
 
-(defvar helixel--inhibit-repeat-record)  ; helixel-repeat.el
-(defvar helixel--inhibit-action-track)   ; helixel-ring.el
+(defvar-local helixel--in-replay nil
+  "When non-nil, dot-repeat recording and action tracking are suppressed.
+Bound during `helixel-repeat-edit', `.` replay, chain replay,
+and mc-broadcast to prevent re-recording the replay as a new edit.
+Single flag replacing the former `helixel--inhibit-repeat-record'
+and `helixel--inhibit-action-track'.")
 
 (defmacro helixel-with-replay-context (&rest body)
-  "Execute BODY with dot-repeat recording and action tracking inhibited.
-Binds both `helixel--inhibit-repeat-record' and
-`helixel--inhibit-action-track' to t for the dynamic extent of
-BODY.  Use in dot-repeat / chain / mc-broadcast paths that must
-not re-record their own replay."
+  "Execute BODY with replay recording inhibited.
+Binds `helixel--in-replay' to t.  Use in dot-repeat / chain /
+mc-broadcast paths that must not re-record their own replay."
   (declare (indent 0) (debug t))
-  `(progn
-     (defvar helixel--inhibit-repeat-record)
-     (defvar helixel--inhibit-action-track)
-     (let ((helixel--inhibit-repeat-record t)
-           (helixel--inhibit-action-track t))
-       ,@body)))
+  `(let ((helixel--in-replay t))
+     ,@body))
 
 (defsubst helixel--repeat-echo (count)
   "Echo COUNT of repeated iterations."
@@ -1102,17 +1094,10 @@ to inject replay metadata into an existing event in-place."
 ;;
 ;; `helixel--last-event' is the pointer that `.` (dot-repeat) and
 ;; `,` (selection-repeat) consume.  It is global (NOT buffer-local)
-;; so `.` replays the last edit cross-buffer.  Multi-cursor snapshots
-;; the global value into each fake cursor's overlay.
-
-(defvar helixel--last-event nil
-  "Pointer to the most recent committed event in the ring.
+(defvar-local helixel--last-event nil
+  "Pointer to the most recent committed event in this buffer.
 Consumed by `.` and `,` for repeat.
-Global — the single source of truth for the most recent edit.
-Used by `.` and `,` for cross-buffer replay.
-
-Do NOT make this buffer-local: cross-buffer dot-repeat depends
-on the global binding.")
+Buffer-local — dot-repeat is scoped to the current buffer.")
 
 (defun helixel--update-last-event (new-tx)
   "Update the payload of `helixel--last-event' from NEW-TX.

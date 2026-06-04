@@ -169,7 +169,7 @@ Assumes the current `helixel--last-event' is a chain transaction
           (tx helixel--last-event))
       (undo-amalgamate-change-group
         (helixel-mc-with-each-cursor
-          (let ((helixel--inhibit-repeat-record t))
+          (let ((helixel--in-replay t))
             (helixel--execute-edit tx)))))))
 
 (defun helixel-mc--chain-end-advice (&rest _)

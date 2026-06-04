@@ -68,7 +68,7 @@ These survive buffer edits and are used by the action cycle (`\;')
 to mark the region without re-computing bounds.
 
 Old markers are freed before replacement to prevent leaks."
-  (when (and (not helixel--inhibit-action-track)
+  (when (and (not helixel--in-replay)
              helixel--live-event)
     (let* ((old (helixel-event-mark-region helixel--live-event))
            (bounds (if (consp thing-or-bounds)

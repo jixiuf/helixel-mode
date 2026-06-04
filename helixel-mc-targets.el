@@ -56,8 +56,7 @@
 (defvar helixel--last-event)
 (defvar helixel--live-event)
 (defvar helixel--raw-selection-type)
-(defvar helixel--inhibit-action-track)
-(defvar helixel--inhibit-repeat-record)
+(defvar helixel--in-replay)
 
 ;; ── Helpers ──
 
@@ -169,18 +168,12 @@ number of walk iterations), breaking dot-repeat at fake cursors."
          (advance-fn (helixel--kind-advance kind))
          (limit (or helixel-mc-max-cursors 1000))
          (targets nil)
-         (last-key nil)
-         ;; Snapshot — restored below regardless of outcome.
-         (saved-pending      helixel--pending-sel)
-         (saved-last-event   helixel--last-event)
-         (saved-live-event   helixel--live-event)
-         (saved-raw-type     helixel--raw-selection-type))
+         (last-key nil))
     (unless advance-fn
       (user-error "No mc-spawn / advance for kind `%s'" kind))
-    (unwind-protect
-        (save-excursion
-          ;; Suppress all tracking / recording while walking.
-          (helixel-with-replay-context
+    (helixel-mc-with-saved-state
+      (save-excursion
+        (helixel-with-replay-context
             (deactivate-mark)
             (goto-char (point-min))
             (let ((tx (helixel-mc--make-dummy-tx sel))
@@ -255,13 +248,7 @@ number of walk iterations), breaking dot-repeat at fake cursors."
                   (goto-char (max re (1+ before)))
                   (when (>= (point) (point-max))
                     (throw 'done nil))))))))))
-      ;; Restore globals that textobj / search advance fns may have
-      ;; clobbered while we walked.
-      (setq helixel--pending-sel saved-pending)
-      (setq helixel--last-event saved-last-event)
-      (setq helixel--live-event saved-live-event)
-      (setq helixel--raw-selection-type saved-raw-type))
-    (nreverse targets)))
+      (nreverse targets))))
 
 ;; ── Generic dispatcher ──
 

@@ -96,23 +96,25 @@ DOC is the description.  INNER-P non-nil means inner, nil means a."
           count))
        ,@(unless inner-p surround-pushes))))
 
-(defmacro helixel-define-mark-pair (name open close doc inner-p)
-  "Define mark inner/a functions for a pair of brackets.
+(defmacro helixel-define-mark-pair (name open close doc)
+  "Define both `mark-inner-NAME' and `mark-a-NAME' for a bracket pair.
 NAME is the name of the bracket pair.  OPEN and CLOSE are the
-opening and closing delimiters.  DOC is a description of the
-pair.  INNER-P non-nil means inner, nil means a."
+opening and closing delimiters.  DOC is a description of the pair."
   (declare (indent defun))
-  `(helixel--define-mark-delimited :pair ,name ,open ,close ,doc ,inner-p))
+  `(progn
+     (helixel--define-mark-delimited :pair ,name ,open ,close ,doc t)
+     (helixel--define-mark-delimited :pair ,name ,open ,close ,doc nil)))
 
-(defmacro helixel-define-mark-quote (name quote-char doc inner-p)
-  "Define mark inner/a functions for a quote character.
-NAME is the name of the quote character.  QUOTE-CHAR is the
-quotation character.  DOC is a description of the quote.
-INNER-P non-nil means inner, nil means a."
+(defmacro helixel-define-mark-quote (name quote-char doc)
+  "Define both `mark-inner-NAME' and `mark-a-NAME' for a quote char.
+NAME is the name of the quote character.  QUOTE-CHAR is the quotation
+character.  DOC is a description of the quote."
   (declare (indent defun))
-  `(helixel--define-mark-delimited :quote ,name
-                                     ,quote-char ,quote-char
-                                     ,doc ,inner-p))
+  `(progn
+     (helixel--define-mark-delimited
+      :quote ,name ,quote-char ,quote-char ,doc t)
+     (helixel--define-mark-delimited
+      :quote ,name ,quote-char ,quote-char ,doc nil)))
 
 (defmacro helixel-define-mark-object
     (name thing doc subcat &optional restricted-p)
@@ -319,37 +321,24 @@ Example:
 (helixel-define-mark-object "function" 'helixel-function
                             "function" 'function)
 
-(helixel-define-mark-pair "paren" ?\( ?\) "parenthesis" t)
-(helixel-define-mark-pair "paren" ?\( ?\) "parenthesis" nil)
-(helixel-define-mark-pair "bracket" ?\[ ?\] "bracket" t)
-(helixel-define-mark-pair "bracket" ?\[ ?\] "bracket" nil)
-(helixel-define-mark-pair "brace" ?\{ ?\} "brace" t)
-(helixel-define-mark-pair "brace" ?\{ ?\} "brace" nil)
-(helixel-define-mark-pair "angle" ?\< ?\> "angle" t)
-(helixel-define-mark-pair "angle" ?\< ?\> "angle" nil)
+(helixel-define-mark-pair "paren" ?\( ?\) "parenthesis")
+(helixel-define-mark-pair "bracket" ?\[ ?\] "bracket")
+(helixel-define-mark-pair "brace" ?\{ ?\} "brace")
+(helixel-define-mark-pair "angle" ?\< ?\> "angle")
 
 
-(helixel-define-mark-quote "single-quote" ?' "single-quoted string" t)
-(helixel-define-mark-quote "single-quote" ?' "single-quoted string" nil)
-(helixel-define-mark-quote "double-quote" ?\" "double-quoted string" t)
-(helixel-define-mark-quote "double-quote" ?\" "double-quoted string" nil)
-(helixel-define-mark-quote "back-quote" ?` "back-quoted string" t)
-(helixel-define-mark-quote "back-quote" ?` "back-quoted string" nil)
+(helixel-define-mark-quote "single-quote" ?' "single-quoted string")
+(helixel-define-mark-quote "double-quote" ?\" "double-quoted string")
+(helixel-define-mark-quote "back-quote" ?` "back-quoted string")
 
 ;; org-mode emphasis markers: ~code~ =verbatim= _underline_
 ;; /italic/ *bold* +strikethrough+
-(helixel-define-mark-quote "tilde" ?~ "tilde-delimited string" t)
-(helixel-define-mark-quote "tilde" ?~ "tilde-delimited string" nil)
-(helixel-define-mark-quote "equal" ?= "equal-delimited string" t)
-(helixel-define-mark-quote "equal" ?= "equal-delimited string" nil)
-(helixel-define-mark-quote "underscore"  ?_ "underscore-delimited string" t)
-(helixel-define-mark-quote "underscore"  ?_ "underscore-delimited string" nil)
-(helixel-define-mark-quote "slash" ?/ "slash-delimited string" t)
-(helixel-define-mark-quote "slash" ?/ "slash-delimited string" nil)
-(helixel-define-mark-quote "star" ?* "star-delimited string" t)
-(helixel-define-mark-quote "star" ?* "star-delimited string" nil)
-(helixel-define-mark-quote "plus" ?+ "plus-delimited string" t)
-(helixel-define-mark-quote "plus" ?+ "plus-delimited string" nil)
+(helixel-define-mark-quote "tilde" ?~ "tilde-delimited string")
+(helixel-define-mark-quote "equal" ?= "equal-delimited string")
+(helixel-define-mark-quote "underscore"  ?_ "underscore-delimited string")
+(helixel-define-mark-quote "slash" ?/ "slash-delimited string")
+(helixel-define-mark-quote "star" ?* "star-delimited string")
+(helixel-define-mark-quote "plus" ?+ "plus-delimited string")
 
 
 (helixel-register-kind textobj

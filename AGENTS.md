@@ -19,7 +19,10 @@
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
 | `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. 7 `declare-function` for flymake/eglot (third-party only). |
 | `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state. |
-| `helixel-textobj.el` | Text object command macros + concretions + keymaps + recreate. |
+| `helixel-textobj-engine.el` | Text object engines: forward-*, bounds-of-*, select-paren/quote/tag/block/regex, up-*, delimiter builders, recreate/advance. |
+| `helixel-textobj-defs.el` | Text object macros: define-mark-pair/-quote/-object/-regex-textobj. |
+| `helixel-textobj-marks.el` | User commands (mark-inner/a-*), default registrations, kind registration, tree-sitter helper. |
+| `helixel-textobj.el` | Facade: requires engine, defs, and marks sub-modules. |
 | `helixel-surround.el` | Surround add/delete/replace. |
 | `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
 | `helixel-mc-core.el` | **Multi-cursor core**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook`, whitelist policy, `helixel-multi-cursor-mode`. |

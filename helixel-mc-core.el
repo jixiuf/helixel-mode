@@ -118,18 +118,14 @@ NOTE: `mark-active' is intentionally NOT registered — it is
 stored as the overlay's `mark-active' property and managed
 separately by `helixel-mc--enter-cursor' / `…--leave-cursor'.")
 
-(defvar helixel-mc--cursor-var-docs nil
-  "Alist of (VAR . DOC) for registered per-cursor variables.")
-
-(defun helixel-mc-register-cursor-var (var &optional doc)
-  "Register VAR as per-fake-cursor state with optional DOC string.
+(defun helixel-mc-register-cursor-var (var &optional _doc)
+  "Register VAR as per-fake-cursor state.  Optional _DOC is unused.
 When a fake cursor's command is dispatched, VAR is restored from
 the overlay before the call and snapshotted back after.  Adds
 VAR to `helixel-mc-cursor-vars' (idempotent).  Third-party code
 can register their own state to ride along."
   (unless (memq var helixel-mc-cursor-vars)
     (push var helixel-mc-cursor-vars))
-  (setf (alist-get var helixel-mc--cursor-var-docs) doc)
   var)
 
 ;; Built-in per-cursor state.  Each cursor needs its own kill ring

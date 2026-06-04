@@ -542,11 +542,10 @@ instead of `insert-for-yank' — `helixel-replace' passes
 
 ;; ── Yank ──
 
-(helixel-define-operator helixel-yank
-    (:op paste-after :display "p" :repeat-advance 'line
-     :params (&optional arg))
-  (interactive "*P")
-  (helixel--record-edit 'paste-after)
+(defun helixel--yank-body (arg)
+  "Shared body for `helixel-yank' / `helixel-yank-before'.
+Dispatches rect, linewise, or plain yank with ARG, then consumes
+the register."
   (prog1
       (cond
        ((helixel--rect-wise-kill-p)
@@ -564,27 +563,19 @@ instead of `insert-for-yank' — `helixel-replace' passes
         (helixel--yank arg)))
     (helixel--register-consume)))
 
+(helixel-define-operator helixel-yank
+    (:op paste-after :display "p" :repeat-advance 'line
+     :params (&optional arg))
+  (interactive "*P")
+  (helixel--record-edit 'paste-after)
+  (helixel--yank-body arg))
+
 (helixel-define-operator helixel-yank-before
     (:op paste-before :display "P" :repeat-advance 'line
      :params (&optional arg))
   (interactive "*P")
   (helixel--record-edit 'paste-before)
-  (prog1
-      (cond
-       ((helixel--rect-wise-kill-p)
-        (let* ((text (helixel--current-kill 0 t))
-               (lines (when text
-                        (nth 1 (get-text-property
-                                0 'yank-handler text)))))
-          (if lines
-              (insert-rectangle lines)
-            (when text (insert-for-yank text)))))
-       ((helixel--linewise-kill-p)
-        (let ((text (helixel--current-kill 0 t)))
-          (when text (insert-for-yank text))))
-       (t
-        (helixel--yank arg)))
-    (helixel--register-consume)))
+  (helixel--yank-body arg))
 
 ;; ── Indent ──
 ;; helixel--replay-multiplier is bound by the op runner during `.`

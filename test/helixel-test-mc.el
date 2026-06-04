@@ -262,11 +262,9 @@ be re-invoked by the advice (recording already broadcast)."
                  :runner (lambda (_tx) (error "REAPPLIED"))
                  :kmacro (vector ?x))))
       (setq helixel--last-edit tx))
-    ;; If the advice (still) called `apply-chain-once', the runner
-    ;; would `error' — we expect a clean return.
-    ;; The advice returns its `message' string — just ensure it
-    ;; does not signal (i.e. the runner is NOT invoked).
-    (helixel-mc--chain-end-advice)
+    ;; The hook impl returns its `message' string — just ensure
+    ;; it does not signal (i.e. the runner is NOT invoked).
+    (helixel-mc--on-chain-recorded helixel--last-edit)
     (helixel-mc-clear-all)))
 
 ;; ── Regression: chain recording must NOT broadcast per-command.

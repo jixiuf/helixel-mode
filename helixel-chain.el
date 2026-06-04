@@ -256,7 +256,8 @@ Determines advance behavior from the initial selection context
                         :entry-kind
                         (helixel-sel-search-entry-kind live-ctx))
                      init-ctx))
-         (had-content (and macro (> (length macro) 0))))
+         (had-content (and macro (> (length macro) 0)))
+         (chain-tx nil))
     (when had-content
       (let ((tx (helixel-edit-create 'chain init-ctx
                    :runner #'helixel--repeat-chain-runner
@@ -264,6 +265,7 @@ Determines advance behavior from the initial selection context
                    :kmacro edit-keys
                    :chain-move-keys move-keys
                    :chain-init-ctx init-ctx)))
+        (setq chain-tx tx)
         (setq helixel--last-edit (helixel-edit-copy tx))
         (helixel-with-edit-tracking
             (:op 'chain :category 'edit :subcat 'chain)
@@ -274,7 +276,22 @@ Determines advance behavior from the initial selection context
       (helixel--chain-reset-state)
       (if had-content
           (message "Chain recorded (%d keys, move=%d)" edit-len move-len)
-        (message "Chain empty — nothing recorded")))))
+        (message "Chain empty — nothing recorded")))
+    ;; Fire integration hook AFTER teardown so any handler (mc, etc.)
+    ;; sees a fully-consistent state.
+    (when chain-tx
+      (run-hook-with-args 'helixel-chain-recorded-functions chain-tx))))
+
+(defvar helixel-chain-recorded-functions nil
+  "Abnormal hook run after a chain is successfully recorded.
+Each function is called with one argument, the new chain
+`helixel-edit'.  Runs synchronously inside
+`helixel-repeat-chain-end' AFTER `helixel--last-edit' has been
+updated to point at the new chain.
+
+Use this hook from integration layers (e.g. `helixel-mc-integrate')
+instead of `advice-add' on `helixel-repeat-chain-end' —
+helixel-mode modules MUST NOT advise each other.")
 
 ;;;###autoload
 (defun helixel-repeat-chain-cancel ()

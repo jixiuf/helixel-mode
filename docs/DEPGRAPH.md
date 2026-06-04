@@ -42,11 +42,9 @@ graph TD
   helixel-move --> helixel-macros
   helixel-register --> helixel-core
   helixel-repeat-strategy --> helixel-core
-  helixel-repeat-strategy --> helixel-repeat-prefix
   helixel-repeat --> helixel-action
   helixel-repeat --> helixel-core
   helixel-repeat --> helixel-insert-record
-  helixel-repeat --> helixel-repeat-prefix
   helixel-repeat --> helixel-repeat-strategy
   helixel-ring --> helixel-core
   helixel-search --> helixel-state
@@ -78,7 +76,6 @@ graph TD
   helixel --> helixel-register
   helixel --> helixel-action
   helixel --> helixel-insert-record
-  helixel --> helixel-repeat-prefix
   helixel --> helixel-repeat-strategy
   helixel --> helixel-repeat
   helixel --> helixel-chain

@@ -509,10 +509,11 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
     ;; helixel-action-push-functions removed — event-ring handles this now
 
 ;; Register xref/eglot jump commands so they push to the jump list.
-(helixel-define-jump-command 'xref-find-definitions)
-(helixel-define-jump-command 'xref-find-references)
-(helixel-define-jump-command 'eglot-find-typeDefinition)
-(helixel-define-jump-command 'eglot-find-implementation)
+(dolist (cmd '(xref-find-definitions
+               xref-find-references
+               eglot-find-typeDefinition
+               eglot-find-implementation))
+  (helixel-define-jump-command cmd))
 
 
 (provide 'helixel-state)

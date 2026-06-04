@@ -382,29 +382,23 @@ The _action parameter is kept for caller compatibility but ignored."
         (unless (use-region-p)
           (push-mark current t 'activate))))))
 
-(defun helixel-find-next-char (char)
-  "Find next CHAR forward."
-  (interactive "c")
-  (helixel--tracking-open 'find-char 'next)
-  (helixel-search--find-char-exec char 'next 1))
+(defmacro helixel--def-find-char (name type dir doc)
+  "Define a find-char command NAME with TYPE (`next' or `till') and DIR.
+DOC is the docstring."
+  `(defun ,name (char)
+     ,doc
+     (interactive "c")
+     (helixel--tracking-open 'find-char ',type)
+     (helixel-search--find-char-exec char ',type ,dir)))
 
-(defun helixel-find-prev-char (char)
-  "Find next CHAR backward."
-  (interactive "c")
-  (helixel--tracking-open 'find-char 'next)
-  (helixel-search--find-char-exec char 'next -1))
-
-(defun helixel-find-till-char (char)
-  "Find till CHAR forward."
-  (interactive "c")
-  (helixel--tracking-open 'find-char 'till)
-  (helixel-search--find-char-exec char 'till 1))
-
-(defun helixel-find-prev-till-char (char)
-  "Find till CHAR backward."
-  (interactive "c")
-  (helixel--tracking-open 'find-char 'till)
-  (helixel-search--find-char-exec char 'till -1))
+(helixel--def-find-char helixel-find-next-char next 1
+                        "Find next CHAR forward.")
+(helixel--def-find-char helixel-find-prev-char next -1
+                        "Find next CHAR backward.")
+(helixel--def-find-char helixel-find-till-char till 1
+                        "Find till CHAR forward.")
+(helixel--def-find-char helixel-find-prev-till-char till -1
+                        "Find till CHAR backward.")
 
 ;; ── Search re-creation helpers ──
 

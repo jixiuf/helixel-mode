@@ -114,17 +114,6 @@ Example:
 
 ;; ── Word / WORD / Symbol movement ──
 
-(defun helixel-surround-thing-at-point (&optional thing)
-  "Construct a region around THING at point.
-
-Argument THING must be one of the things identified by the package
-thingatpt.  Defaults to \\='word."
-  (let ((bounds (bounds-of-thing-at-point (or thing 'word))))
-    (when bounds
-      (set-mark (car bounds))
-      (goto-char (cdr bounds))
-      (activate-mark))))
-
 (defmacro helixel--with-movement-surround (&rest body)
   "Create a region around movement defined in BODY.
 If a region is already active, no new region is created.

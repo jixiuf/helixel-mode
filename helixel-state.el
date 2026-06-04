@@ -191,18 +191,6 @@ Stores mode-specific helixel bindings registered via `helixel-define-key'.")
 Set by operator commands (d, c, y) when awaiting a selection.
 Consumed alongside `helixel--pending-sel'.")
 
-(defun helixel--commit-pending-event ()
-  "Finalize the pending event after operator+selection are both ready.
-Creates the helixel-sel from pending-sel, sets it on the current live-event,
-and commits the event.  This is called from `post-command-hook'."
-  (when (and helixel--pending-op helixel--pending-sel)
-    (let ((sel helixel--pending-sel))
-      (setq helixel--pending-op nil
-            helixel--pending-sel nil)
-      (when helixel--live-edit
-        (setf (helixel-edit-sel helixel--live-edit) sel)
-        (helixel-edit-commit)))))
-
 ;; Wire textobj hooks for action recording and visual state detection.
 (setq helixel-textobj-action-function #'helixel--tracking-open)
 (setq helixel-textobj-visual-state-p-function

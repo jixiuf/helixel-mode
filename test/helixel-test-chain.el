@@ -235,7 +235,7 @@
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-edit tx)
            (helixel--inhibit-action-track t)
-           (helixel--repeat-has-preview nil))
+           (helixel--repeat-preview-pos nil))
       (helixel-repeat-selection)
       ;; After ;, point should be at the second "foo" match-beginning
       (should (= (point) 9)))))
@@ -249,7 +249,7 @@
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-edit tx)
            (helixel--inhibit-action-track t)
-           (helixel--repeat-has-preview nil))
+           (helixel--repeat-preview-pos nil))
       (helixel-repeat-selection)
       ;; Comma advances past blank line to next non-blank target
       (should (= (line-number-at-pos) 3)))))

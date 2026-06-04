@@ -479,7 +479,7 @@ Like 3N for search — negative count also permanently flips."
 
 (ert-deftest helixel-test-repeat-flip-dir-comma ()
   "`-,' flips direction permanently and previews.
-After `-,' a plain `.` uses the preview position (helixel--repeat-has-preview)."
+After `-,' a plain `.` uses the preview position (helixel--repeat-preview-pos)."
   (helixel-test-with-buffer "line1\nline2\nline3\nline4\n"
     (goto-char (point-min))
     (forward-line 1)                    ; line 2
@@ -498,7 +498,7 @@ After `-,' a plain `.` uses the preview position (helixel--repeat-has-preview)."
     ;; Direction permanently flipped
     (should helixel--repeat-permanent-flip)
     ;; Plain `.` at the preview position: appends at preview EOL.
-    ;; helixel--repeat-has-preview was set by `,` so `.` uses
+    ;; helixel--repeat-preview-pos was set by `,` so `.` uses
     ;; the current position directly (no advance).
     (helixel-repeat-edit)
     (should (string= (buffer-string)
@@ -2213,7 +2213,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
-          helixel--repeat-has-preview nil
+          helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "hello world foo bar baz qux")
     (goto-char 1)
@@ -2250,7 +2250,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
-          helixel--repeat-has-preview nil
+          helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "x hello y hello z hello w")
     (goto-char 1)
@@ -2302,7 +2302,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
-          helixel--repeat-has-preview nil
+          helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil
           helixel--active-search nil)
     (insert "a x b x c x d x e")
@@ -2339,7 +2339,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
-          helixel--repeat-has-preview nil
+          helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "hello world foo bar baz qux")
     (goto-char 1)
@@ -2477,7 +2477,7 @@ the selection on each word."
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
-          helixel--repeat-has-preview nil
+          helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "hello world foo bar baz qux")
     (goto-char 1)
@@ -2538,11 +2538,13 @@ Tests the all-dir branch of `helixel--repeat-preview'."
     (should (>= (region-beginning) 14))
     (should (string= (match-string 0) "hello"))))
 
-;; ── Step 14: sticky `helixel--repeat-has-preview' regression ──
+;; ── Step 14: positional preview handoff regression ──
 
 (ert-deftest helixel-test-repeat-preview-cleared-by-other-command ()
-  "After `,', an intervening command clears `helixel--repeat-has-preview'.
-This is the post-command-hook stale-clear introduced in step 14."
+  "After `,', moving point invalidates the preview handoff.
+Replaces the old `helixel--repeat-preview-pos' flag +
+`post-command-hook' stale-clear design: a marker at the preview
+position auto-invalidates the moment point moves."
   :tags '(repeat comma preview-stale)
   (helixel-test-with-buffer "hello A hello B hello C"
     (goto-char 1)
@@ -2551,14 +2553,14 @@ This is the post-command-hook stale-clear introduced in step 14."
             (helixel-sel-create 'search
               '(:pattern "hello" :dir forward)
               #'helixel--recreate-search "/hello/")))
-    ;; , -> sets the preview flag
+    ;; , -> sets the preview marker at the previewed position
     (helixel-repeat-selection nil)
-    ;; Simulate that the post-command-hook for `,' itself just ran:
-    ;; this-command was `helixel-repeat-selection' so the flag survives.
-    (let ((this-command 'helixel-repeat-selection))
-      (helixel--repeat-preview-stale-clear)
-      (should helixel--repeat-has-preview))
-    ;; Now a different command runs: flag must be cleared by hook.
-    (let ((this-command 'next-line))
-      (helixel--repeat-preview-stale-clear)
-      (should-not helixel--repeat-has-preview))))
+    (should (markerp helixel--repeat-preview-pos))
+    (should (= (point) (marker-position helixel--repeat-preview-pos)))
+    ;; Move point: marker still exists but no longer matches point —
+    ;; the next `.' would NOT treat this as a preview replay.
+    (forward-char 1)
+    (should (markerp helixel--repeat-preview-pos))
+    (should-not (= (point)
+                   (marker-position helixel--repeat-preview-pos)))))
+

@@ -118,7 +118,7 @@ into a single form.
 METADATA is a plist:
   :op OP              — operator symbol for \=`.\=` (required)
   :display DISPLAY    — label string or function (TX) -> string
-  :repeat-advance TAG — nil, \=`line', or function
+  :moves-point-p P    — boolean; see `helixel-register-op'.
   :subcat SUB         — action subcategory (default: OP)
   :params PARAMS      — function parameter list
 
@@ -131,7 +131,7 @@ the edit for \=`.\=` replay."
   (declare (indent 2))
   (let* ((op (plist-get metadata :op))
          (display (plist-get metadata :display))
-         (advance (plist-get metadata :repeat-advance))
+         (moves-point (plist-get metadata :moves-point-p))
          (subcat (or (plist-get metadata :subcat) op)))
     (unless op
       (error "helixel-define-operator: :op is required"))
@@ -139,7 +139,7 @@ the edit for \=`.\=` replay."
        ;; ── Op registration (for . replay) ──
        (helixel-register-op ,op
          :display ,display
-         :repeat-advance ,advance
+         :moves-point-p ,moves-point
          :runner (lambda (_tx) (,name)))
        ;; ── Command definition (for action tracking) ──
        (helixel-define-command ,name

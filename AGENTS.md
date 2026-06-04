@@ -11,8 +11,7 @@
 | `helixel-action.el` | `;` cycling + C-o/C-i jump navigation (thin consumers of event-ring). |
 | `helixel-insert-record.el` | Insert-mode key recording (pre-command-hook based); replay helper `helixel--execute-keys`. |
 
-| `helixel-repeat-strategy.el` | `helixel-repeat-strategy` struct, default strategy builder, dispatch, generic advance/apply/preview loops. |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel, chain strategy builder, chain preview. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
@@ -144,7 +143,7 @@ Notes:
               category subcat display timestamp buffer)
 ```
 
-### helixel-repeat-strategy (dot-repeat strategy)
+### helixel-repeat-strategy (dot-repeat strategy, lives in `helixel-repeat.el`)
 ```elisp
 (cl-defstruct helixel-repeat-strategy advance apply reset all-buffer-fn all-dir-fn)
 ```
@@ -201,9 +200,9 @@ Notes:
 
 ;; ── Op Registry ──
 (helixel-register-op op &rest props)
-  ;; props: :runner :display :repeat-advance :strategy-builder
+  ;; props: :runner :display :moves-point-p :strategy-builder
 (helixel--op-runner op)         → fn
-(helixel--op-advance op)        → nil|'line|fn
+(helixel--op-moves-point-p op)        → boolean
 (helixel--op-strategy-builder op) → fn|nil
 
 ;; ── Repeat ──
@@ -320,7 +319,7 @@ applications, all in one undo step.
 CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-field`, `helixel-sel-textobj-command`, etc.).
 
 ### Design notes
-- `:repeat-advance` tag on ops gates auto-advance. nil = no advance (kill, change); 'line = line advance (insert-text).
+- `:moves-point-p` boolean on ops: t = op moves point itself, suppress auto-advance (kill, change, join-lines); nil = op leaves point alone (insert, replace, paste, indent, surround, ...).
 - Insert replay: `pre-command-hook` captures `this-single-command-keys` (key-based replay) with `:text` fallback. No `:commands` layer. No `start-kbd-macro` used.
 - Chain and non-chain share the same strategy architecture. Chain has a custom `:strategy-builder` in the op registry.
 - `helixel-repeat-selection` (`,`) uses the same strategy + preview path.

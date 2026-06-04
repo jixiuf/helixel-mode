@@ -46,11 +46,11 @@ Centralizes per-operator protocol:
 ```
 :runner            fn(tx) → nil      execute edit at replay time
 :display           string|fn         display string for history
-:repeat-advance    nil|'line|fn      auto-advance tag for `.`
+:moves-point-p    boolean           t = op self-advances, no auto-advance
 :strategy-builder  fn(edit rev) → strategy  custom strategy (chain)
 ```
 
-Access: `(helixel--op-runner 'kill)`, `(helixel--op-advance 'insert-text)`, etc.
+Access: `(helixel--op-runner 'kill)`, `(helixel--op-moves-point-p 'insert-text)`, etc.
 
 ---
 
@@ -101,7 +101,7 @@ Events are deduplicated by content: same op, category, subcat, sel, payload, and
 1. Check op registry for custom `:strategy-builder` (chain uses this)
 2. Fall back to `helixel--default-strategy-builder`:
    - Read kind from sel, advance-fn from kind registry
-   - Check `:repeat-advance` tag from op registry (nil → no advance)
+   - Check `:moves-point-p` flag from op registry (t → no auto-advance)
    - Handle `reverse-p` by creating reversed-edit copy
    - Set `:all-buffer-fn` and `:all-dir-fn` from kind registry
 
@@ -318,10 +318,10 @@ helixel-repeat.el:helixel-repeat-edit
   ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
   │
   ▼
-helixel-repeat-strategy.el:helixel--build-strategy(edit, reverse-p)
+helixel-repeat.el:helixel--build-strategy(edit, reverse-p)
   ├── Checks op registry for :strategy-builder (chain uses this)
   ├── Falls back to helixel--default-strategy-builder:
-  │     ├── Reads :repeat-advance tag from op registry
+  │     ├── Reads :moves-point-p flag from op registry
   │     │     (nil=no advance, 'line=line-advance, fn=custom)
   │     ├── Reads :advance/:recreate from kind registry
   │     └── Reads :all-buffer-fn/:all-dir-fn from kind registry

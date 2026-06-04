@@ -331,10 +331,10 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 ;; below (kill, copy, replace, paste-after, paste-before).
 
 ;; Ops with non-trivial runners (need tx payload) → register separately:
-(helixel-register-op change :display "c" :repeat-advance nil
+(helixel-register-op change :display "c" :moves-point-p t
   :runner #'helixel--repeat-change-core)
 
-(helixel-register-op replace-char :repeat-advance 'line
+(helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
              (let ((c (helixel-edit-payload-get tx :char)))
                (if c (format "R[%c]" c) "R")))
@@ -342,7 +342,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
             (helixel-replace-char
              (helixel-edit-payload-get tx :char))))
 
-(helixel-register-op insert-text :display "i" :repeat-advance 'line
+(helixel-register-op insert-text :display "i" :moves-point-p nil
   :runner (lambda (tx)
             (let ((keys (helixel-edit-payload-get tx :keys)))
               (if keys
@@ -354,7 +354,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 ;; ── Kill & Change ──
 
 (helixel-define-operator helixel-kill-thing-at-point
-    (:op kill :display "d" :repeat-advance nil)
+    (:op kill :display "d" :moves-point-p t)
   (helixel--record-edit 'kill)
   (helixel--delete-selection)
   (helixel--register-consume)
@@ -432,7 +432,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
             (cons pop-start (point)))))))
 
 (helixel-define-operator helixel-replace
-    (:op replace :display "r" :repeat-advance 'line)
+    (:op replace :display "r" :moves-point-p nil)
   (helixel--record-edit 'replace)
   (if (and (not (helixel--register-active-p))
            (= 0 (length kill-ring)))
@@ -508,7 +508,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
 ;; ── Copy ──
 
 (helixel-define-operator helixel-kill-ring-save
-    (:op copy :display "y" :repeat-advance 'line)
+    (:op copy :display "y" :moves-point-p nil)
   (helixel--record-edit 'copy)
   (when (use-region-p)
     (let ((swap-source
@@ -564,14 +564,14 @@ the register."
     (helixel--register-consume)))
 
 (helixel-define-operator helixel-yank
-    (:op paste-after :display "p" :repeat-advance 'line
+    (:op paste-after :display "p" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
   (helixel--record-edit 'paste-after)
   (helixel--yank-body arg))
 
 (helixel-define-operator helixel-yank-before
-    (:op paste-before :display "P" :repeat-advance 'line
+    (:op paste-before :display "P" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
   (helixel--record-edit 'paste-before)
@@ -621,7 +621,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
   (helixel--clear-data))
 
 (helixel-define-operator helixel-indent-left
-    (:op indent-left :display "<" :repeat-advance 'line
+    (:op indent-left :display "<" :moves-point-p nil
      :params (&optional count))
   (interactive "p")
   (helixel--indent-body 'indent-left count -1))
@@ -633,7 +633,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
          (helixel-indent-left))))
 
 (helixel-define-operator helixel-indent-right
-    (:op indent-right :display ">" :repeat-advance 'line
+    (:op indent-right :display ">" :moves-point-p nil
      :params (&optional count))
   (interactive "p")
   (helixel--indent-body 'indent-right count 1))
@@ -647,7 +647,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
 ;; ── Case operations ──
 
 (helixel-define-operator helixel-toggle-case
-    (:op toggle-case :display "~" :repeat-advance 'line
+    (:op toggle-case :display "~" :moves-point-p nil
      :subcat case :params (&optional count))
   (interactive "p")
   (helixel--record-edit 'toggle-case :count (or count 1))
@@ -669,7 +669,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
 OP, DISPLAY, SUBCAT match `helixel-define-operator's keys.
 REGION-FN takes (beg end), WORD-FN takes COUNT."
   `(helixel-define-operator ,name
-       (:op ,op :display ,display :repeat-advance 'line
+       (:op ,op :display ,display :moves-point-p nil
         :subcat ,subcat :params (&optional count))
      (interactive "p")
      (helixel--record-edit ',op :count (or count 1))
@@ -686,7 +686,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 ;; ── Comment toggle ──
 
 (helixel-define-operator helixel-comment-toggle
-    (:op comment-toggle :display "gc" :repeat-advance 'line
+    (:op comment-toggle :display "gc" :moves-point-p nil
      :subcat comment)
   (helixel--record-edit 'comment-toggle)
   (if (use-region-p)
@@ -697,7 +697,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 ;; ── Shell command filter ──
 
 (helixel-define-operator helixel-shell-command
-    (:op shell-command :display "!" :repeat-advance 'line
+    (:op shell-command :display "!" :moves-point-p nil
      :subcat shell)
   (helixel--record-edit 'shell-command)
   (let ((cmd (read-shell-command "!")))
@@ -724,7 +724,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 
 ;; ── Join lines ──
 
-(helixel-register-op join-lines :display "J" :repeat-advance nil
+(helixel-register-op join-lines :display "J" :moves-point-p t
   :runner (lambda (tx)
             (let ((n (or (helixel-edit-payload-get tx :count) 2)))
               (dotimes (_ (1- n))

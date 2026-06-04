@@ -416,7 +416,7 @@ so the user can select a target with one keypress."
   :display (lambda (tx)
              (let ((c (helixel-edit-payload-get tx :char)))
                (if c (format "ms[%c]" c) "ms")))
-  :repeat-advance 'line
+  :moves-point-p nil
   :runner (lambda (tx)
             (when-let* ((char (helixel-edit-payload-get tx :char))
                         (pair (helixel--surround-lookup char)))
@@ -426,7 +426,7 @@ so the user can select a target with one keypress."
   :display (lambda (tx)
              (let ((tag (helixel-edit-payload-get tx :tag)))
                (if tag (format "mt[%s]" tag) "mt")))
-  :repeat-advance 'line
+  :moves-point-p nil
   :runner (lambda (tx)
             (helixel--surround-add-tag
              (helixel-edit-payload-get tx :tag))))

@@ -121,7 +121,7 @@ replay it.  This is a data-only registration — no command is defined.
 |-----|------|-------------|
 | `:runner` | function | `(TX) -> nil` — replays the edit from a transaction |
 | `:display` | string or function | Label for edit history. If a function: `(TX) -> string` |
-| `:repeat-advance` | nil, `'line`, or function | Auto-advance behavior for `.` repeat. `nil` = no advance, `'line` = forward-line, function = custom |
+| `:moves-point-p` | boolean | `t` = op moves point itself (kill, change, join-lines, suppress auto-advance); `nil` = op leaves point alone and the repeat engine drives stepping via the kind's `:advance` fn (default) |
 
 ### When to Use
 
@@ -139,7 +139,7 @@ replay it.  This is a data-only registration — no command is defined.
 
 **Runner needs payload access:**
 ```elisp
-(helixel-register-op replace-char :repeat-advance 'line
+(helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
              (let ((c (plist-get (helixel-edit-payload tx) :char)))
                (if c (format "R[%c]" c) "R")))
@@ -150,7 +150,7 @@ replay it.  This is a data-only registration — no command is defined.
 
 **No corresponding interactive command:**
 ```elisp
-(helixel-register-op insert-text :display "i" :repeat-advance 'line
+(helixel-register-op insert-text :display "i" :moves-point-p nil
   :runner (lambda (tx)
             (let ((keys (plist-get (helixel-edit-payload tx) :keys)))
               (if keys
@@ -161,7 +161,7 @@ replay it.  This is a data-only registration — no command is defined.
 
 **Runner ≠ command function:**
 ```elisp
-(helixel-register-op change :display "c" :repeat-advance nil
+(helixel-register-op change :display "c" :moves-point-p t
   :runner #'helixel--repeat-change-core)
 ```
 
@@ -196,7 +196,7 @@ form.  Use this when the `.` runner IS the command itself.
 |-----|------|-------------|
 | `:op` | symbol | **(Required)** Operator symbol for `.` repeat |
 | `:display` | string or function | Label for edit history |
-| `:repeat-advance` | nil, `'line`, or function | Auto-advance for `.` |
+| `:moves-point-p` | boolean | See `helixel-register-op'. |
 | `:subcat` | symbol | Action subcategory (default: `:op` value) |
 | `:params` | list | Function parameter list |
 
@@ -227,7 +227,7 @@ effects that might change the selection or cursor position.
 **Simple edit command:**
 ```elisp
 (helixel-define-operator helixel-kill-thing-at-point
-    (:op kill :display "d" :repeat-advance nil)
+    (:op kill :display "d" :moves-point-p t)
   (helixel--record-edit 'kill)
   (helixel--delete-selection)
   (helixel--clear-data))
@@ -236,7 +236,7 @@ effects that might change the selection or cursor position.
 **Edit command with line advance:**
 ```elisp
 (helixel-define-operator helixel-kill-ring-save
-    (:op copy :display "y" :repeat-advance 'line)
+    (:op copy :display "y" :moves-point-p nil)
   (helixel--record-edit 'copy)
   (when (use-region-p)
     (cond
@@ -250,7 +250,7 @@ effects that might change the selection or cursor position.
 **Edit command with params:**
 ```elisp
 (helixel-define-operator helixel-yank
-    (:op paste-after :display "p" :repeat-advance 'line
+    (:op paste-after :display "p" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
   (helixel--record-edit 'paste-after)

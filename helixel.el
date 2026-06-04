@@ -39,9 +39,6 @@
 (require 'helixel-macros)
 (require 'helixel-register)
 (require 'helixel-action)
-
-(require 'helixel-insert-record)
-(require 'helixel-repeat-strategy)
 (require 'helixel-repeat)
 (require 'helixel-chain)
 (require 'helixel-state)

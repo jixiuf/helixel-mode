@@ -185,7 +185,7 @@
     :display "chain(test)"
     :kmacro (vconcat (kbd "x"))
     :chain-move-keys nil
-    :chain-init-ctx sel-ctx))
+))
 
 (ert-deftest helixel-test-chain-dot-search-no-more ()
   ". on chain search at edge signals user-error (caught by repeat-edit)."
@@ -490,7 +490,7 @@ an :op (true edits) should switch phases."
                       :display "chain"
                       :kmacro edit-keys
                       :chain-move-keys move-keys
-                      :chain-init-ctx init-ctx)))
+)))
             (setq helixel--last-edit (helixel-edit-copy tx))
             ;; Verify chain tx has move-keys
             (should (eq (helixel-edit-op helixel--last-edit) 'chain))
@@ -518,7 +518,7 @@ Also verifies that `helixel--chain-strategy-builder' picks up
                   :display "chain"
                   :kmacro (vconcat (kbd "d"))
                   :chain-move-keys move-keys-v
-                  :chain-init-ctx init-ctx)))
+)))
         (setq helixel--last-edit tx)
         ;; Verify the strategy builder is the chain one
         (let ((strategy (helixel--build-strategy tx nil)))

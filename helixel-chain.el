@@ -275,8 +275,7 @@ Determines advance behavior from the initial selection context
                    :runner #'helixel--repeat-chain-runner
                    :display (format "chain(%d)" (length edit-keys))
                    :kmacro edit-keys
-                   :chain-move-keys move-keys
-                   :chain-init-ctx init-ctx)))
+                   :chain-move-keys move-keys)))
         (setq chain-tx tx)
         (setq helixel--last-edit (helixel-edit-copy tx))
         (helixel-with-edit-tracking

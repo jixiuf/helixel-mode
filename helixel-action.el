@@ -427,17 +427,6 @@ Adds :before advice to record position before SYMBOL runs."
   (helixel-gr-group-newest helixel--global-jump-log pos
     #'helixel--jump-same-group-p))
 
-(defun helixel--jump-message (pos)
-  "Format and message the current jump position POS."
-  (let* ((entry (nth pos helixel--global-jump-log))
-         (total (helixel-gr-visible-count
-                 helixel--global-jump-log #'helixel--jump-visible-p))
-         (display-pos (1+ (cl-loop for i from 0 below pos
-                                   count (helixel--jump-visible-p
-                                          (nth i helixel--global-jump-log))))))
-    (message "[%d/%d] %s" display-pos total
-             (helixel--jump-display entry))))
-
 (defun helixel--jump-goto (pos)
   "Go to the group-start of jump entry at POS, switching buffers as needed."
   (let* ((gpos (helixel--jump-group-start pos))

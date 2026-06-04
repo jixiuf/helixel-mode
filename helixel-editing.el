@@ -882,12 +882,6 @@ Tags the text with a rect-wise yank-handler for proper pasting."
     (eq (car-safe (get-text-property 0 'yank-handler s))
         'helixel--yank-handler-rect-wise)))
 
-(defun helixel--rect-bounds-of-region ()
-  "Return the rectangle bounds as a list of cons cells (BEG . END).
-One per line of the rectangle."
-  (when (and (use-region-p) rectangle-mark-mode)
-    (extract-rectangle-bounds (region-beginning) (region-end))))
-
 ;;; Rect change with replay
 
 (defun helixel--rect-change ()

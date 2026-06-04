@@ -283,7 +283,8 @@ commands during chain recording — the live broadcast is the only
 application path; chain-end does not re-replay."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
-    (let ((helixel--repeat-chaining t)
+    (let ((helixel--chain-session
+           (make-helixel-chain-session :active-p t))
           (this-command 'self-insert-command)
           (helixel-multi-cursor-mode t))
       (should (helixel-mc--should-run-for-all-p 'self-insert-command)))
@@ -299,16 +300,14 @@ application path; chain-end does not re-replay."
   "`helixel--chain-pre-cmd' must skip `helixel-normal-escape' so the
 chain's edit-keys do not contain the trailing chain-end ESC."
   (helixel-test-with-buffer "abc\n"
-    (setq helixel--chain-edit-keys nil
-          helixel--chain-in-edit-phase t
-          helixel--repeat-chaining t)
+    (setq helixel--chain-session
+          (make-helixel-chain-session
+           :active-p t :edit-phase-p t :edit-keys nil :move-keys nil))
     (let ((this-command 'helixel-normal-escape))
       (helixel--chain-pre-cmd))
-    (should (null helixel--chain-edit-keys))
+    (should (null (helixel-chain-session-edit-keys helixel--chain-session)))
     ;; Cleanup chain state.
-    (setq helixel--chain-edit-keys nil
-          helixel--chain-in-edit-phase nil
-          helixel--repeat-chaining nil)))
+    (setq helixel--chain-session nil)))
 
 ;; ── Regression: bulk whitelist must mark ALL helixel-* commands.
 ;; Two bugs we want to catch:

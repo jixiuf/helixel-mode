@@ -29,58 +29,69 @@
 (require 'helixel-macros)                ; for helixel-with-edit-tracking
 (require 'helixel-repeat)                ; for helixel--last-edit, etc.
 
-;; ── State variables ──
+;; ── Session state ──
+;;
+;; All chain bookkeeping lives in a single `helixel-chain-session'
+;; struct stored in one buffer-local, replacing what used to be 7
+;; separate `defvar-local's.  Predicate `helixel--chain-active-p'
+;; replaces direct reads of the old `helixel--repeat-chaining' flag.
 
-(defvar-local helixel--repeat-chaining nil
-  "Non-nil when kmacro is being recorded for a compound chain.
-Set by `helixel-repeat-chain-start', cleared by `helixel-repeat-chain-end'
-or `helixel-repeat-chain-cancel'.")
+(cl-defstruct (helixel-chain-session
+               (:conc-name helixel-chain-session-)
+               (:copier nil))
+  "Per-buffer chain recording session, owned by `helixel--chain-session'.
+Slots:
+  ACTIVE-P    — non-nil while recording is in progress.
+  EDIT-PHASE-P — non-nil once the first editing command has been seen;
+                 before this, captured keys go to MOVE-KEYS, after to
+                 EDIT-KEYS.
+  MOVE-KEYS   — list of key-vectors captured before the first edit
+                 (reversed; finalize via `nreverse'+vconcat).
+  EDIT-KEYS   — list of key-vectors captured after first edit.
+  INIT-CTX    — `helixel-sel' snapshotted at chain-start; drives
+                 advance behaviour at replay time.
+  INIT-BOUNDS — (BEG . END) markers of the initial region at start,
+                 or nil; released on teardown.
+  LAST-EDIT-SNAPSHOT — `helixel--last-edit' at chain-start; used to
+                       detect the first edit (a different value of
+                       `helixel--last-edit' carrying an :op)."
+  active-p edit-phase-p
+  move-keys edit-keys
+  init-ctx init-bounds
+  last-edit-snapshot)
 
-(defvar-local helixel--repeat-chain-init-ctx nil
-  "The `helixel-sel' at chain-start time.
-Snapshotted by `helixel-repeat-chain-start', used by chain-end
-to determine advance behavior.")
+(defvar-local helixel--chain-session nil
+  "Per-buffer `helixel-chain-session' for the in-progress chain, or nil.
+Replaces what used to be 7 separate buffer-local variables
+\(`helixel--repeat-chaining', `helixel--chain-move-keys',
+`helixel--chain-edit-keys', `helixel--chain-in-edit-phase',
+`helixel--chain-last-event-snapshot', `helixel--repeat-chain-init-ctx',
+`helixel--repeat-chain-init-bounds').")
 
-(defvar-local helixel--repeat-chain-init-bounds nil
-  "Initial region bounds at chain-start, as (BEG . END) markers, or nil.")
-
-(defvar-local helixel--chain-move-keys nil
-  "Key vectors for cursor-movement commands before the first edit.
-Collected by `helixel--chain-pre-cmd' in move phase.
-Cleared and vconcat'd by `helixel-repeat-chain-end'.")
-
-(defvar-local helixel--chain-edit-keys nil
-  "Key vectors for editing commands (after first edit detected).
-Collected by `helixel--chain-pre-cmd' in edit phase.
-Cleared and vconcat'd by `helixel-repeat-chain-end'.")
-
-(defvar-local helixel--chain-in-edit-phase nil
-  "Non-nil once the first edit command has been detected.
-Set by `helixel--chain-post-cmd'.  Before this, keys go into
-`helixel--chain-move-keys'; after, into `helixel--chain-edit-keys'.")
-
-(defvar-local helixel--chain-last-event-snapshot nil
-  "Snapshot of `helixel--last-edit' at chain-start.
-Used by `helixel--chain-post-cmd' to detect the first edit
-command by checking whether `helixel--last-edit' changed.
-More reliable than checking `:category' on `helixel-edit'.")
+(defsubst helixel--chain-active-p ()
+  "Return non-nil while a chain is being recorded in this buffer."
+  (and helixel--chain-session
+       (helixel-chain-session-active-p helixel--chain-session)))
 
 
 ;; ── Key recording (pre-command-hook, no kmacro) ──
 
 (defun helixel--chain-pre-cmd ()
   "Pre-command-hook: route keys to move-keys or edit-keys.
-Before first edit: push to `helixel--chain-move-keys'.
-After first edit: push to `helixel--chain-edit-keys'.
+Before first edit: push to MOVE-KEYS slot of `helixel--chain-session'.
+After first edit: push to EDIT-KEYS slot.
 Skips chain start/end/cancel commands."
   (unless (memq this-command
                 '(helixel-repeat-chain-start
                   helixel-repeat-chain-end
                   helixel-repeat-chain-cancel
                   helixel-normal-escape))
-    (if helixel--chain-in-edit-phase
-        (push (helixel-keyrec-capture) helixel--chain-edit-keys)
-      (push (helixel-keyrec-capture) helixel--chain-move-keys))))
+    (let ((s helixel--chain-session))
+      (when s
+        (let ((k (helixel-keyrec-capture)))
+          (if (helixel-chain-session-edit-phase-p s)
+              (push k (helixel-chain-session-edit-keys s))
+            (push k (helixel-chain-session-move-keys s))))))))
 
 ;; ── Runner ──
 
@@ -88,17 +99,21 @@ Skips chain start/end/cancel commands."
   "Post-command-hook: detect first edit, switch from move to edit phase.
 Once `helixel--last-edit' changes AND carries an :op (meaning
 `helixel--record-edit' was called, not a mere movement commit),
-all subsequent keys go to edit-keys."
-  (when (and helixel--repeat-chaining
-             (not helixel--chain-in-edit-phase)
-             helixel--last-edit
-             (helixel-edit-op helixel--last-edit)
-             (not (eq helixel--last-edit helixel--chain-last-event-snapshot)))
-    ;; Move the edit command's own key from move-keys to edit-keys.
-    (when helixel--chain-move-keys
-      (push (car helixel--chain-move-keys) helixel--chain-edit-keys)
-      (pop helixel--chain-move-keys))
-    (setq helixel--chain-in-edit-phase t)))
+all subsequent keys go to EDIT-KEYS."
+  (let ((s helixel--chain-session))
+    (when (and s
+               (helixel-chain-session-active-p s)
+               (not (helixel-chain-session-edit-phase-p s))
+               helixel--last-edit
+               (helixel-edit-op helixel--last-edit)
+               (not (eq helixel--last-edit
+                        (helixel-chain-session-last-edit-snapshot s))))
+      ;; Move the edit command's own key from move-keys to edit-keys.
+      (when (helixel-chain-session-move-keys s)
+        (push (car (helixel-chain-session-move-keys s))
+              (helixel-chain-session-edit-keys s))
+        (pop (helixel-chain-session-move-keys s)))
+      (setf (helixel-chain-session-edit-phase-p s) t))))
 
 (defun helixel--repeat-chain-runner (tx)
   "Execute the stored kmacro in chain TX.
@@ -175,20 +190,15 @@ Same as chain strategy but uses `ignore' for apply (no edit execution)."
 
 (defun helixel--chain-reset-state ()
   "Reset all chain bookkeeping state.
-Clears recording flags, key accumulators, snapshotted ctx, and
-any initial-region markers (releasing them so they don't pin
-buffer text).  Idempotent.  Used by chain-end and chain-cancel."
-  (when helixel--repeat-chain-init-bounds
-    (let ((mb (car helixel--repeat-chain-init-bounds))
-          (me (cdr helixel--repeat-chain-init-bounds)))
+Releases any initial-region markers (so they don't pin buffer text),
+then clears `helixel--chain-session' and removes the recording hooks.
+Idempotent.  Used by chain-end and chain-cancel."
+  (when-let* ((s helixel--chain-session)
+              (bounds (helixel-chain-session-init-bounds s)))
+    (let ((mb (car bounds)) (me (cdr bounds)))
       (when (marker-position mb) (set-marker mb nil))
       (when (marker-position me) (set-marker me nil))))
-  (setq helixel--repeat-chaining nil
-        helixel--repeat-chain-init-ctx nil
-        helixel--repeat-chain-init-bounds nil
-        helixel--chain-in-edit-phase nil
-        helixel--chain-move-keys nil
-        helixel--chain-edit-keys nil)
+  (setq helixel--chain-session nil)
   (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
   (remove-hook 'post-command-hook #'helixel--chain-post-cmd t))
 
@@ -203,18 +213,19 @@ Keystrokes are collected via `pre-command-hook' (no kmacro).
 Call `helixel-repeat-chain-end' to finish and create a repeatable
 transaction, or `helixel-repeat-chain-cancel' to discard."
   (interactive)
-  (when (or helixel--repeat-chaining executing-kbd-macro)
+  (when (or (helixel--chain-active-p) executing-kbd-macro)
     (user-error "Already chaining or macro replay in progress"))
-  (setq helixel--repeat-chaining t)
-  (setq helixel--chain-in-edit-phase nil)
-  (setq helixel--chain-last-event-snapshot helixel--last-edit)
-  (setq helixel--chain-move-keys nil)
-  (setq helixel--chain-edit-keys nil)
-  (setq helixel--repeat-chain-init-ctx helixel--pending-sel)
-  (setq helixel--repeat-chain-init-bounds
-        (when (use-region-p)
-          (cons (copy-marker (region-beginning))
-                (copy-marker (region-end)))))
+  (setq helixel--chain-session
+        (make-helixel-chain-session
+         :active-p t
+         :edit-phase-p nil
+         :move-keys nil
+         :edit-keys nil
+         :init-ctx helixel--pending-sel
+         :init-bounds (when (use-region-p)
+                        (cons (copy-marker (region-beginning))
+                              (copy-marker (region-end))))
+         :last-edit-snapshot helixel--last-edit))
   (deactivate-mark)
   (add-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
   (add-hook 'post-command-hook #'helixel--chain-post-cmd nil t)
@@ -228,20 +239,21 @@ Collects move-keys and edit-keys from separate accumulators
 Determines advance behavior from the initial selection context
 \(snapshotted at chain-start)."
   (interactive)
-  (unless helixel--repeat-chaining
+  (unless (helixel--chain-active-p)
     (user-error "Not chaining"))
   ;; Stop recording first; finalize-list reads the accumulators.
-  (setq helixel--repeat-chaining nil)
-  (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
-  (remove-hook 'post-command-hook #'helixel--chain-post-cmd t)
-  (let* ((move-keys (helixel-keyrec-finalize-list
-                     helixel--chain-move-keys))
+  (let* ((s helixel--chain-session)
+         (_ (setf (helixel-chain-session-active-p s) nil))
+         (_ (remove-hook 'pre-command-hook #'helixel--chain-pre-cmd t))
+         (_ (remove-hook 'post-command-hook #'helixel--chain-post-cmd t))
+         (move-keys (helixel-keyrec-finalize-list
+                     (helixel-chain-session-move-keys s)))
          (edit-keys (helixel-keyrec-finalize-list
-                     helixel--chain-edit-keys))
+                     (helixel-chain-session-edit-keys s)))
          (macro (if (and move-keys edit-keys)
                     (vconcat move-keys edit-keys)
                   (or move-keys edit-keys)))
-         (init-ctx helixel--repeat-chain-init-ctx)
+         (init-ctx (helixel-chain-session-init-ctx s))
          ;; Merge entry-kind from live ctx (i/a updates it after snapshot)
          (live-ctx helixel--pending-sel)
          (init-ctx (if (and init-ctx live-ctx

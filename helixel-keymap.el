@@ -512,15 +512,14 @@ used selection management lives here under `s'."
 
 (defun helixel-normal-escape ()
   "Escape handler: chain end → clear cursors → `keyboard-quit'.
-When `helixel--repeat-chaining' is non-nil, finishes the chain
-\(which may also apply the chain at every fake cursor via the
-mc integration advice).
+When a chain recording is active (see `helixel--chain-active-p'),
+finishes the chain (which may also apply the chain at every fake
+cursor via the mc integration hook).
 Else, when any fake cursors are visible, clear them.
 Else fall back to `keyboard-quit'."
   (interactive)
   (cond
-   ((and (boundp 'helixel--repeat-chaining)
-         helixel--repeat-chaining)
+   ((helixel--chain-active-p)
     (helixel-repeat-chain-end))
    ((and (boundp 'helixel-multi-cursor-mode)
          helixel-multi-cursor-mode)

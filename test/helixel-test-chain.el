@@ -37,27 +37,19 @@
      (goto-char (point-min))
      (setq-local helixel--current-state 'motion)
      (helixel--switch-state 'normal)
-     (setq helixel--repeat-chaining nil)
-     (setq helixel--repeat-chain-init-ctx nil)
-     (setq helixel--repeat-chain-init-bounds nil)
+     (setq helixel--chain-session nil)
      (setq helixel--pending-sel nil)
      (setq helixel--inhibit-action-track nil)
      (setq helixel--repeat-permanent-flip nil)
-     (setq helixel--chain-in-edit-phase nil)
-     (setq helixel--chain-move-keys nil)
-     (setq helixel--chain-edit-keys nil)
      (unwind-protect
          (progn ,@body)
-       (setq helixel--repeat-chaining nil)
-       (setq helixel--repeat-chain-init-ctx nil)
-       (when helixel--repeat-chain-init-bounds
-         (ignore-errors (set-marker (car helixel--repeat-chain-init-bounds) nil))
-         (ignore-errors (set-marker (cdr helixel--repeat-chain-init-bounds) nil))
-         (setq helixel--repeat-chain-init-bounds nil))
+       (when helixel--chain-session
+         (when-let* ((b (helixel-chain-session-init-bounds
+                         helixel--chain-session)))
+           (ignore-errors (set-marker (car b) nil))
+           (ignore-errors (set-marker (cdr b) nil))))
+       (setq helixel--chain-session nil)
        (setq helixel--inhibit-action-track nil)
-       (setq helixel--chain-in-edit-phase nil)
-       (setq helixel--chain-move-keys nil)
-       (setq helixel--chain-edit-keys nil)
        (ignore-errors (helixel-normal-state -1)))))
 
 ;; ── Chain lifecycle tests ──
@@ -67,9 +59,9 @@
   (helixel-chain-test-with-buffer "line1\nline2\nline3\n"
     (let ((prev-tx helixel--last-edit))
       (helixel-repeat-chain-start)
-      (should helixel--repeat-chaining)
+      (should (helixel--chain-active-p))
       (helixel-repeat-chain-end)
-      (should-not helixel--repeat-chaining)
+      (should-not (helixel--chain-active-p))
       (should (eq helixel--last-edit prev-tx)))))
 
 (ert-deftest helixel-test-chain-cancel-discards ()
@@ -77,9 +69,9 @@
   (helixel-chain-test-with-buffer "aaa bbb\nccc ddd\n"
     (let ((prev-tx helixel--last-edit))
       (helixel-repeat-chain-start)
-      (should helixel--repeat-chaining)
+      (should (helixel--chain-active-p))
       (helixel-repeat-chain-cancel)
-      (should-not helixel--repeat-chaining)
+      (should-not (helixel--chain-active-p))
       (should-not defining-kbd-macro)
       (should (eq helixel--last-edit prev-tx)))))
 
@@ -98,9 +90,9 @@
 (ert-deftest helixel-test-chain-end-without-kmacro ()
   "Ending chain without kmacro active creates empty chain (graceful)."
   (helixel-chain-test-with-buffer "test\n"
-    (setq helixel--repeat-chaining t)
+    (setq helixel--chain-session (make-helixel-chain-session :active-p t))
     (helixel-repeat-chain-end)
-    (should-not helixel--repeat-chaining)))
+    (should-not (helixel--chain-active-p))))
 
 ;; ── Chain: kmacro tx structure ──
 
@@ -110,8 +102,8 @@
     (goto-char 1)
     (helixel-repeat-chain-start)
     ;; Push keys directly to edit-keys accumulator (no move phase).
-    (push (kbd "x") helixel--chain-edit-keys)
-    (push (kbd "x") helixel--chain-edit-keys)
+    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
+    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--last-edit)
     (should (eq (helixel-edit-op helixel--last-edit) 'chain))
@@ -125,7 +117,7 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (kbd "x") helixel--chain-edit-keys)
+    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
     (helixel-repeat-chain-end)
     (should (eq (helixel-edit-op helixel--last-edit) 'chain))))
 
@@ -142,7 +134,7 @@
     (setq helixel--pending-sel
           (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'insert))
-    (push (kbd "x") helixel--chain-edit-keys)
+    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--last-edit)
     (let ((sel (helixel-edit-sel helixel--last-edit)))
@@ -154,7 +146,7 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (kbd "x") helixel--chain-edit-keys)
+    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--event-ring)
     (should (eq (helixel-edit-op (car helixel--event-ring))
@@ -459,50 +451,52 @@ an :op (true edits) should switch phases."
     (helixel-select-line)
     (let ((init-ctx helixel--pending-sel))
       ;; Simulate chain start
-      (setq helixel--repeat-chaining t)
-      (setq helixel--chain-move-keys nil)
-      (setq helixel--chain-edit-keys nil)
-      (setq helixel--chain-in-edit-phase nil)
-      (setq helixel--chain-last-event-snapshot helixel--last-edit)
-      (setq helixel--repeat-chain-init-ctx init-ctx)
-      ;; bb: movement commands — these change last-event via
-      ;; event-commit but have no :op, so post-cmd must NOT
-      ;; switch to edit phase.
-      (push (kbd "b") helixel--chain-move-keys)
-      (push (kbd "b") helixel--chain-move-keys)
-      (helixel-backward-word-start)
-      (helixel-backward-word-start)
-      ;; Verify still in move phase
-      (should-not helixel--chain-in-edit-phase)
-      (should (= 2 (length helixel--chain-move-keys)))
-      (should (= 0 (length helixel--chain-edit-keys)))
-      ;; d: kill — this has :op, should trigger phase switch
-      (push (kbd "d") helixel--chain-move-keys)
-      (helixel--record-edit 'kill)
-      ;; Simulate post-cmd: move d from move to edit
-      (push (car helixel--chain-move-keys) helixel--chain-edit-keys)
-      (pop helixel--chain-move-keys)
-      (setq helixel--chain-in-edit-phase t)
-      ;; End chain
-      (let* ((move-keys (when helixel--chain-move-keys
-                         (apply #'vconcat
-                                (nreverse helixel--chain-move-keys))))
-             (edit-keys (when helixel--chain-edit-keys
-                         (apply #'vconcat
-                                (nreverse helixel--chain-edit-keys)))))
-        (setq helixel--repeat-chaining nil)
-        (let ((tx (helixel-edit-create 'chain init-ctx
-                    :runner #'helixel--repeat-chain-runner
-                    :display "chain"
-                    :kmacro edit-keys
-                    :chain-move-keys move-keys
-                    :chain-init-ctx init-ctx)))
-          (setq helixel--last-edit (helixel-edit-copy tx))
-          ;; Verify chain tx has move-keys
-          (should (eq (helixel-edit-op helixel--last-edit) 'chain))
-          (let ((payload (helixel-edit-payload helixel--last-edit)))
-            (should (plist-get payload :chain-move-keys))
-            (should (= 2 (length (plist-get payload :chain-move-keys))))))))))
+      (setq helixel--chain-session
+            (make-helixel-chain-session
+             :active-p t
+             :move-keys nil :edit-keys nil :edit-phase-p nil
+             :last-edit-snapshot helixel--last-edit
+             :init-ctx init-ctx))
+      (let ((s helixel--chain-session))
+        ;; bb: movement commands — these change last-event via
+        ;; event-commit but have no :op, so post-cmd must NOT
+        ;; switch to edit phase.
+        (push (kbd "b") (helixel-chain-session-move-keys s))
+        (push (kbd "b") (helixel-chain-session-move-keys s))
+        (helixel-backward-word-start)
+        (helixel-backward-word-start)
+        ;; Verify still in move phase
+        (should-not (helixel-chain-session-edit-phase-p s))
+        (should (= 2 (length (helixel-chain-session-move-keys s))))
+        (should (= 0 (length (helixel-chain-session-edit-keys s))))
+        ;; d: kill — this has :op, should trigger phase switch
+        (push (kbd "d") (helixel-chain-session-move-keys s))
+        (helixel--record-edit 'kill)
+        ;; Simulate post-cmd: move d from move to edit
+        (push (car (helixel-chain-session-move-keys s))
+              (helixel-chain-session-edit-keys s))
+        (pop (helixel-chain-session-move-keys s))
+        (setf (helixel-chain-session-edit-phase-p s) t)
+        ;; End chain
+        (let* ((move-keys (when (helixel-chain-session-move-keys s)
+                            (apply #'vconcat
+                                   (nreverse (helixel-chain-session-move-keys s)))))
+               (edit-keys (when (helixel-chain-session-edit-keys s)
+                            (apply #'vconcat
+                                   (nreverse (helixel-chain-session-edit-keys s))))))
+          (setq helixel--chain-session nil)
+          (let ((tx (helixel-edit-create 'chain init-ctx
+                      :runner #'helixel--repeat-chain-runner
+                      :display "chain"
+                      :kmacro edit-keys
+                      :chain-move-keys move-keys
+                      :chain-init-ctx init-ctx)))
+            (setq helixel--last-edit (helixel-edit-copy tx))
+            ;; Verify chain tx has move-keys
+            (should (eq (helixel-edit-op helixel--last-edit) 'chain))
+            (let ((payload (helixel-edit-payload helixel--last-edit)))
+              (should (plist-get payload :chain-move-keys))
+              (should (= 2 (length (plist-get payload :chain-move-keys)))))))))))
 
 (ert-deftest helixel-test-chain-comma-with-move-keys ()
   ", on a chain with move-keys uses chain strategy.

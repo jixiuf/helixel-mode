@@ -45,6 +45,11 @@
 
 ## 1. Phase 总览（依赖 + 顺序）
 
+> **⚠ 实际执行进度见 [STATUS.md](STATUS.md)。**
+>
+> 已完成：Phase 1 (partial)、Phase 2 (full)、Phase 5 (hook 部分)。
+> 待办：Phase 3、Phase 4、Phase 5 状态机部分、Phase 6、Phase 7。
+
 ```
 Phase 1 ── 切分 event struct，抽出 grouped-ring
      │

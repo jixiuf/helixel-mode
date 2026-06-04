@@ -171,14 +171,10 @@ number of walk iterations), breaking dot-repeat at fake cursors."
          (targets nil)
          (last-key nil)
          ;; Snapshot — restored below regardless of outcome.
-         (saved-pending      (and (boundp 'helixel--pending-sel)
-                                  helixel--pending-sel))
-         (saved-last-event   (and (boundp 'helixel--last-event)
-                                  helixel--last-event))
-         (saved-live-event   (and (boundp 'helixel--live-event)
-                                  helixel--live-event))
-         (saved-raw-type     (and (boundp 'helixel--raw-selection-type)
-                                  helixel--raw-selection-type)))
+         (saved-pending      helixel--pending-sel)
+         (saved-last-event   helixel--last-event)
+         (saved-live-event   helixel--live-event)
+         (saved-raw-type     helixel--raw-selection-type))
     (unless advance-fn
       (user-error "No mc-spawn / advance for kind `%s'" kind))
     (unwind-protect
@@ -261,14 +257,10 @@ number of walk iterations), breaking dot-repeat at fake cursors."
                     (throw 'done nil))))))))))
       ;; Restore globals that textobj / search advance fns may have
       ;; clobbered while we walked.
-      (when (boundp 'helixel--pending-sel)
-        (setq helixel--pending-sel saved-pending))
-      (when (boundp 'helixel--last-event)
-        (setq helixel--last-event saved-last-event))
-      (when (boundp 'helixel--live-event)
-        (setq helixel--live-event saved-live-event))
-      (when (boundp 'helixel--raw-selection-type)
-        (setq helixel--raw-selection-type saved-raw-type)))
+      (setq helixel--pending-sel saved-pending)
+      (setq helixel--last-event saved-last-event)
+      (setq helixel--live-event saved-live-event)
+      (setq helixel--raw-selection-type saved-raw-type))
     (nreverse targets)))
 
 ;; ── Generic dispatcher ──

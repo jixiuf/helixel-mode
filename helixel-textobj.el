@@ -1292,14 +1292,14 @@ the count so `.' repeats the full chain of textobj selections."
     (let* ((cmd this-command)
            (n (or count 1))
            (delim delimiter)
-           (prev (helixel--pending-sel-get))
+           (prev helixel--pending-sel)
            (total-n (if (and prev
                              (eq (helixel-sel-kind prev) 'textobj)
                              (eq (helixel-sel-textobj-command prev) cmd))
                         (+ (helixel-sel-textobj-count prev) n)
                       n)))
       (setq helixel--raw-selection-type 'textobj)
-      (helixel--pending-sel-set
+      (helixel--sel-push
        (helixel-sel-create
         'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
                     :inline-advance t)

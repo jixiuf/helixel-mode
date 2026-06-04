@@ -201,15 +201,11 @@ and commits the event.  This is called from `post-command-hook'."
       #'helixel--pure-visual-state-p)
 (setq helixel-jump-cleanup-function #'helixel--clear-data)
 
-(defun helixel--unload-current-state ()
-  "Deactivate the minor mode described by `helixel--current-state'."
-  (let ((mode (alist-get helixel--current-state helixel-state-alist)))
-    (funcall mode -1)))
-
 (defun helixel--switch-state (state)
   "Switch to STATE."
   (unless (eq state helixel--current-state)
-    (helixel--unload-current-state)
+    (when-let* ((mode (alist-get helixel--current-state helixel-state-alist)))
+      (funcall mode -1))
     (helixel--clear-data)
     (setq-local helixel--current-state state)
     (let ((mode (alist-get state helixel-state-alist)))
@@ -261,7 +257,7 @@ Also preserve highlights when `rectangle-mark-mode' is active."
          (eq (helixel-sel-kind helixel--pending-sel) 'line))
     (exchange-point-and-mark)
     (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
-      (helixel--pending-sel-set (funcall fn helixel--pending-sel))))
+      (helixel--sel-push (funcall fn helixel--pending-sel))))
    (t
     (exchange-point-and-mark))))
 
@@ -449,7 +445,9 @@ A non-positive STATUS deactivates the current state.
 The default state is determined by `helixel--default-state-for-buffer'."
   (when (and (not (minibufferp)) helixel-global-mode)
     (if (and status (<= status 0))
-        (helixel--unload-current-state)
+        (when-let* ((lookup (assq helixel--current-state
+                                 helixel-state-alist)))
+          (funcall (cdr lookup) -1))
       (let ((state (helixel--default-state-for-buffer)))
         (setq-local helixel--current-state state)
         (funcall (alist-get state helixel-state-alist)

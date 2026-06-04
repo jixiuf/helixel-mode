@@ -81,37 +81,32 @@ The :dir slot is MUTABLE — N flips it.
 Event-ring entries are immutable snapshots and never store
 mutable state.")
 
-;; ── Active-search accessors (delegate to `helixel--active-search') ──
-;;
-;; All access to `helixel--active-search' goes through these
-;; functions or direct struct accessors — no raw `plist-get'.
+(defsubst helixel-search--current-dir ()
+  "Return current repeat direction from `helixel--active-search'.
+Defaults to `forward' when the search state has no direction set."
+  (if helixel--active-search
+      (helixel-active-search--dir helixel--active-search)
+    'forward))
 
-(defsubst helixel-search--active-category ()
-  "Return the category slot from `helixel--active-search'."
+(defsubst helixel-search--safe-category ()
+  "Return category slot from `helixel--active-search', or nil."
   (and helixel--active-search
        (helixel-active-search--category helixel--active-search)))
 
-(defsubst helixel-search--active-pattern ()
-  "Return the pattern slot from `helixel--active-search'."
+(defsubst helixel-search--safe-pattern ()
+  "Return pattern slot from `helixel--active-search', or nil."
   (and helixel--active-search
        (helixel-active-search--pattern helixel--active-search)))
 
-(defsubst helixel-search--active-type ()
-  "Return the type slot from `helixel--active-search'."
+(defsubst helixel-search--safe-type ()
+  "Return type slot from `helixel--active-search', or nil."
   (and helixel--active-search
        (helixel-active-search--type helixel--active-search)))
 
-(defsubst helixel-search--active-char ()
-  "Return the char slot from `helixel--active-search'."
+(defsubst helixel-search--safe-char ()
+  "Return char slot from `helixel--active-search', or nil."
   (and helixel--active-search
        (helixel-active-search--char helixel--active-search)))
-
-(defsubst helixel-search--current-dir ()
-  "Return current repeat direction from `helixel--active-search'.
-Defaults to \='forward' when the search state has no direction set."
-  (if helixel--active-search
-      (or (helixel-active-search--dir helixel--active-search) 'forward)
-    'forward))
 
 (defun helixel-search--flip-dir ()
   "Toggle repeat direction in `helixel--active-search'."
@@ -169,11 +164,11 @@ Increments :n-count each time (0 for initial search, 1 for first n,
 2 for second n, etc.) so . advance skips the correct number of
 matches to match the original n count."
   (when-let* ((s helixel--active-search)
-              (pat (helixel-search--active-pattern))
+              (pat (helixel-search--safe-pattern))
               (dir (helixel-search--current-dir)))
     ;; Read previous n-count from existing pending-sel and increment.
     (let* ((prev-n (plist-get (helixel-sel-ctx
-                               (helixel--pending-sel-get))
+                               helixel--pending-sel)
                               :n-count))
            (n-count (if prev-n (1+ prev-n) 0)))
       (helixel--push-selection
@@ -299,7 +294,7 @@ Reads pattern from `helixel--active-search'."
         (isearch-wrap-pause 'no-ding)
         (isearch-repeat-on-direction-change t)
         (had-region (region-active-p)))
-    (when-let* ((pat (helixel-search--active-pattern)))
+    (when-let* ((pat (helixel-search--safe-pattern)))
       (setq isearch-string pat
             isearch-regexp t
             isearch-forward (eq (helixel-search--current-dir) 'forward)))
@@ -315,7 +310,7 @@ Reads pattern from `helixel--active-search'."
 (defun helixel-search--find-char-set-sel (char type dir)
   "Push a find-char sel for CHAR, TYPE, DIR with incremented :n-count.
 Tracks how many times n was pressed so . repeats the full sequence."
-  (let* ((prev-pending (helixel--pending-sel-get))
+  (let* ((prev-pending helixel--pending-sel)
          (prev-n (when (and prev-pending
                             (eq (helixel-sel-kind prev-pending)
                                 'find-char))
@@ -363,8 +358,8 @@ Tracks how many times n was pressed so . repeats the full sequence."
   "Execute find-char in direction DIR.
 Reads type/char from `helixel--active-search'.
 The _action parameter is kept for caller compatibility but ignored."
-  (let* ((type (helixel-search--active-type))
-         (char (helixel-search--active-char)))
+  (let* ((type (helixel-search--safe-type))
+         (char (helixel-search--safe-char)))
     (when (and type char)
       (let ((fdir (if (eq (or dir (helixel-search--current-dir)) 'forward)
                       'forward 'backward)))
@@ -517,8 +512,8 @@ the full f x n n sequence.  Extends region back to origin when
   "Repeat the last find-char in the current direction.
 Updates n-count in the pending sel so . repeats the full sequence."
   (interactive)
-  (let* ((type (helixel-search--active-type))
-         (char (helixel-search--active-char))
+  (let* ((type (helixel-search--safe-type))
+         (char (helixel-search--safe-char))
          (dir (helixel-search--current-dir)))
     (if (and type char)
         (progn
@@ -549,7 +544,7 @@ With prefix ARG (\\[universal-argument]), pick from history."
   (interactive "P")
   (if arg
       (helixel-search--from-history t)
-    (let ((cat (helixel-search--active-category))
+    (let ((cat (helixel-search--safe-category))
           (dir (helixel-search--current-dir)))
       (pcase cat
         ('find-char (helixel-find-repeat))

@@ -241,7 +241,7 @@ Preserves current \=`n\=' count by preferring
 the selection descriptor stored in EVENT.
 Adds `:span t' so the strategy builder extends the region
 to session-start, matching `;''s behaviour."
-  (let ((pending (helixel--pending-sel-get))
+  (let ((pending helixel--pending-sel)
         (event-sel (helixel-event-sel event))
         sel)
     (cond

@@ -146,14 +146,6 @@ the override path — mc dispatches the same edit at each fake."
 (helixel-mc-defcmd helixel-find-prev-till-char
   :substitute #'helixel-find-repeat)
 
-;; `helixel-mc--maybe-preposition' lives in helixel-mc-core.el.
-;; `helixel-mc--preposition-fake-cursors' is the legacy adapter.
-(defun helixel-mc--preposition-fake-cursors (cmd)
-  "Run CMD's pre-positioner at every fake cursor.
-Legacy entry point; prefer `put' + `helixel-mc--maybe-preposition'."
-  (let ((this-command cmd))
-    (helixel-mc--maybe-preposition)))
-
 ;; ── Atomic undo around mc dispatch ──
 ;;
 ;; The dispatcher lives in helixel-mc-core.el as `helixel-mc--post-command'.
@@ -430,7 +422,6 @@ of commands from modules `mc-integrate' itself depends on."
 (declare-function helixel-sel-surround-delimiter "helixel-core" (obj))
 (declare-function helixel-delimiter-open "helixel-core" (d))
 (declare-function helixel-delimiter-close "helixel-core" (d))
-(declare-function helixel--pending-sel-get "helixel-core" ())
 
 (defvar helixel-mc--last-replace-char nil
   "Char most recently used by `helixel-replace-char'.
@@ -469,7 +460,7 @@ prompting the user.")
 Replays the surround at every fake cursor's active region using
 the delimiter pair the real cursor just used (read off the
 pending selection).  Fakes without an active region are skipped."
-  (let* ((sel (helixel--pending-sel-get))
+  (let* ((sel helixel--pending-sel)
          (d (and sel (helixel-sel-surround-delimiter sel))))
     (when d
       (setq helixel-mc--last-surround-pair d)
@@ -526,7 +517,7 @@ selection carries a surround delimiter."
              (null helixel--pending-surround-op))
     (let ((helixel-mc--inhibit t))
       (helixel-mc-with-each-cursor
-        (let* ((sel (helixel--pending-sel-get))
+        (let* ((sel helixel--pending-sel)
                (d (and sel (helixel-sel-surround-delimiter sel))))
           (when d
             (ignore-errors (helixel-surround-delete)))))
@@ -550,13 +541,12 @@ pending-sel and applies the same kind of substitution."
              (helixel-mc-any-p)
              (null helixel--pending-surround-op)
              helixel--last-event)
-    (let* ((payload (helixel-event-payload helixel--last-event))
-           (new-char (plist-get payload :new-char))
-           (new-tag  (plist-get payload :tag)))
+    (let* ((new-char (helixel-event-payload-get helixel--last-event :new-char))
+           (new-tag  (helixel-event-payload-get helixel--last-event :tag)))
       (when (or new-char new-tag)
         (let ((helixel-mc--inhibit t))
           (helixel-mc-with-each-cursor
-            (let* ((sel (helixel--pending-sel-get))
+            (let* ((sel helixel--pending-sel)
                    (d (and sel (helixel-sel-surround-delimiter sel))))
               (when d
                 (ignore-errors

@@ -639,12 +639,12 @@ new direction."
     (when (and flip-p helixel--pending-sel
                (eq (helixel-sel-kind helixel--pending-sel) 'line))
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
-        (helixel--pending-sel-set (funcall fn helixel--pending-sel))))
+        (helixel--sel-push (funcall fn helixel--pending-sel))))
     (let ((extending (and (region-active-p)
                           (eq helixel--raw-selection-type 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
-          (let ((dir (helixel-sel-line-dir (helixel--pending-sel-get))))
+          (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (forward: point at bottom, mark at top).
@@ -663,7 +663,7 @@ new direction."
                                            (region-beginning)))))
                           abs-n))
              (dir (if extending
-                      (helixel-sel-line-dir (helixel--pending-sel-get))
+                      (helixel-sel-line-dir helixel--pending-sel)
                     'forward)))
       (helixel--push-selection 'line `(:count ,new-count :dir ,dir)
                                #'helixel--recreate-line
@@ -684,12 +684,12 @@ new direction."
     (when (and flip-p helixel--pending-sel
                (eq (helixel-sel-kind helixel--pending-sel) 'line))
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
-        (helixel--pending-sel-set (funcall fn helixel--pending-sel))))
+        (helixel--sel-push (funcall fn helixel--pending-sel))))
     (let ((extending (and (region-active-p)
                           (eq helixel--raw-selection-type 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
-          (let ((dir (helixel-sel-line-dir (helixel--pending-sel-get))))
+          (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (backward: point at top, mark at bottom).
@@ -708,7 +708,7 @@ new direction."
                                            (region-beginning)))))
                           abs-n))
              (dir (if extending
-                      (helixel-sel-line-dir (helixel--pending-sel-get))
+                      (helixel-sel-line-dir helixel--pending-sel)
                     'backward)))
       (helixel--push-selection 'line `(:count ,new-count :dir ,dir)
                                #'helixel--recreate-line
@@ -739,7 +739,7 @@ new direction."
         (forward-line 1)
         (rectangle--reset-point-crutches)))
     (setq helixel--raw-selection-type 'rect)
-    (let* ((prev-count (helixel-sel-count (helixel--pending-sel-get)))
+    (let* ((prev-count (helixel-sel-count helixel--pending-sel))
            (new-count (if extending (+ prev-count n) n)))
       (helixel--push-selection 'rect `(:count ,new-count)
                                #'helixel--recreate-rect
@@ -913,13 +913,13 @@ No-op during dot-repeat replay, or when no region is active."
                (last (car moves)))
           (if (and last (eq (car last) cmd))
               (setcdr last (1+ (cdr last)))
-            (helixel--pending-sel-set
+            (helixel--sel-push
              (helixel-sel-update-ctx ctx :moves
                                      (cons entry moves))))))
        ;; Create: first movement that made a region.
        ;; Only when no sel exists — never clobber line/rect/textobj.
        ((null ctx)
-        (helixel--pending-sel-set
+        (helixel--sel-push
          (helixel-sel-create 'movement
                              `(:moves (,entry) :inline-advance t
                                       :normal-mode

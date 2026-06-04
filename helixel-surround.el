@@ -248,7 +248,7 @@ The prompt shows the old delimiter being replaced."
                           (helixel-delimiter-close new-d))
     (helixel--tracking-open 'edit 'surround-replace)
     (helixel--record-edit 'surround-replace :new-char new-char)
-     (helixel--pending-sel-set
+     (helixel--sel-push
           (helixel-sel-create
            'surround `(:delimiter ,new-d)
            (lambda (_) nil)  ; surround recreate is a no-op
@@ -301,7 +301,7 @@ D is the tag delimiter plist used to locate the tags."
     (helixel--surround-add open close)
     (helixel--tracking-open 'edit 'surround-add)
     (helixel--record-edit 'surround-add :char char)
-     (helixel--pending-sel-set
+     (helixel--sel-push
           (helixel-sel-create
            'surround `(:delimiter ,(if is-block
                                       (helixel--make-block-delimiter open close)
@@ -322,7 +322,7 @@ D is the tag delimiter plist used to locate the tags."
     (helixel--surround-add-tag tag)
     (helixel--tracking-open 'edit 'surround-add)
     (helixel--record-edit 'surround-add-tag :tag tag)
-     (helixel--pending-sel-set
+     (helixel--sel-push
           (helixel-sel-create
            'surround `(:delimiter ,(helixel--make-tag-delimiter))
            (lambda (_) nil)
@@ -338,7 +338,7 @@ Uses `helixel--pending-sel' to determine the delimiter type.
 When the selection lacks surround info, activates textobj keys
 so the user can select a target with one keypress."
   (interactive)
-  (let ((sel-ctx (helixel--pending-sel-get))
+  (let ((sel-ctx helixel--pending-sel)
         d)
     (if (and sel-ctx (setq d (helixel-sel-surround-delimiter sel-ctx)))
         (progn
@@ -369,7 +369,7 @@ Prompts per type: tag `read-string', all others `read-char'.
 When the selection lacks surround info, activates textobj keys
 so the user can select a target with one keypress."
   (interactive)
-  (let ((sel-ctx (helixel--pending-sel-get))
+  (let ((sel-ctx helixel--pending-sel)
         d)
     (if (and sel-ctx (setq d (helixel-sel-surround-delimiter sel-ctx)))
         (let ((type (helixel-delimiter-type d)))
@@ -382,7 +382,7 @@ so the user can select a target with one keypress."
                (helixel--tracking-open 'edit 'surround-replace)
                (helixel--record-edit 'surround-replace :tag new-tag
                                      :surround-type 'tag)
-               (helixel--pending-sel-set
+               (helixel--sel-push
                 (helixel-sel-create
                  'surround `(:delimiter ,(helixel--make-tag-delimiter))
                  (lambda (_) nil)
@@ -447,11 +447,10 @@ so the user can select a target with one keypress."
                (if label (format "mr[%s]" label) "mr")))
   :runner (lambda (tx)
             (let* ((sel-ctx (helixel-event-sel tx))
-                   (payload (helixel-event-payload tx))
                    (d (helixel-sel-surround-delimiter sel-ctx))
                    (type (and d (helixel-delimiter-type d)))
-                   (new-char (plist-get payload :new-char))
-                   (tag (plist-get payload :tag)))
+                   (new-char (helixel-event-payload-get tx :new-char))
+                   (tag (helixel-event-payload-get tx :tag)))
               (when d
                 (pcase type
                   ('tag

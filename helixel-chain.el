@@ -106,9 +106,8 @@ all subsequent keys go to edit-keys."
 For search-initiated chains, positions cursor at `match-beginning'
 before replay, matching the behaviour of the original recording
 where `helixel-insert' calls `(goto-char (region-beginning))'."
-  (let* ((payload (helixel-event-payload tx))
-         (sel (helixel-event-sel tx))
-         (edit-keys (plist-get payload :kmacro)))
+  (let* ((sel (helixel-event-sel tx))
+         (edit-keys (helixel-event-payload-get tx :kmacro)))
     (helixel-with-replay-context
     (when edit-keys
       ;; Reposition cursor at match-beginning for search sel chains.
@@ -133,8 +132,7 @@ Reset: goto marker."
   (let* ((sel (helixel-event-sel edit))
          (kind (and sel (helixel-sel-kind sel)))
          (advance-fn (helixel--kind-advance kind))
-         (payload (helixel-event-payload edit))
-         (move-keys (plist-get payload :chain-move-keys))
+         (move-keys (helixel-event-payload-get edit :chain-move-keys))
          (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p)))
     (make-helixel-repeat-strategy
      :advance (lambda (_edit)
@@ -157,8 +155,7 @@ Same as chain strategy but uses `ignore' for apply (no edit execution)."
   (let* ((sel (helixel-event-sel edit))
          (kind (and sel (helixel-sel-kind sel)))
          (advance-fn (helixel--kind-advance kind))
-         (payload (helixel-event-payload edit))
-         (move-keys (plist-get payload :chain-move-keys))
+         (move-keys (helixel-event-payload-get edit :chain-move-keys))
          (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p)))
     (make-helixel-repeat-strategy
      :advance (lambda (_edit)

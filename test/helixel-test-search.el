@@ -155,7 +155,7 @@ exact-case 'Hello' still matches 'Hello'."
     (let ((pt (point))
           (mk (mark)))
       (helixel-search-repeat-reverse)
-      (should (eq (or (helixel-active-search--dir helixel--active-search) (quote forward)) 'backward))
+      (should (eq (or (helixel-active-search--dir helixel--active-search) 'forward) 'backward))
       (should (= (point) mk))
       (should (= (mark) pt)))))
 
@@ -431,7 +431,7 @@ For find-char events, the stored direction comes from
                    (helixel-action-display (car helixel--event-ring)))))
         (helixel-search-repeat-next t))
       ;; C-u n: use-dir = stored-dir = backward, from pos 8 → 7
-      (should (eq (helixel-search--current-dir) 'backward))
+      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
       (should (eql (point) 7)))))
 
 (ert-deftest helixel-test-search-from-history-search-entry ()
@@ -473,7 +473,7 @@ For find-char events, the stored direction comes from
                    (helixel-action-display (car helixel--event-ring)))))
         (helixel-search-repeat-reverse t))
       ;; C-u N: forwardp=nil → toggles stored dir (forward→backward)
-      (should (eq (helixel-search--current-dir) 'backward))
+      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
       (should (eql (point) 7)))))
 
 (ert-deftest helixel-test-search-repeat-reverse-from-history-search ()
@@ -493,7 +493,7 @@ For find-char events, the stored direction comes from
                    (helixel-action-display (car helixel--event-ring)))))
         (helixel-search-repeat-reverse t))
       ;; Direction toggled to backward, from pos 20 backward → first hello
-      (should (eq (helixel-search--current-dir) 'backward))
+      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
       (should (<= (point) 10)))))
 
 (ert-deftest helixel-test-search-from-history-no-direction-flip ()
@@ -512,7 +512,7 @@ For find-char events, the stored direction comes from
                    (helixel-action-display (car helixel--event-ring)))))
         (helixel-search-repeat-next t))
       ;; C-u n uses stored direction, does NOT flip
-      (should (eq (helixel-search--current-dir) 'forward)))))
+      (should (eq (helixel-active-search--dir helixel--active-search) 'forward)))))
 
 (ert-deftest helixel-test-search-repeat-no-push ()
   "n/N for search do not push entries with :subcat repeat into the ring.

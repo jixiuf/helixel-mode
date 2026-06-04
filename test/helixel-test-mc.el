@@ -883,7 +883,7 @@ Fix: the sync only acts on transitions INTO / OUT OF `visual'."
     ;; Simulate /hello<RET>: real selects first match (mark=1 pt=6).
     (re-search-forward "hello")
     (set-mark (match-beginning 0))
-    (helixel--pending-sel-set
+    (helixel--sel-push
      (helixel-sel-create 'search
                          (list :pattern "hello" :dir 'forward)
                          #'helixel--recreate-search))
@@ -1096,7 +1096,7 @@ that carries its own surround delimiter sel."
                                   (lambda (_) nil)))))
       ;; Real at first pair, fakes at others.
       (goto-char 3)                    ; inside first (foo)
-      (helixel--pending-sel-set (funcall mk-sel))
+      (helixel--sel-push (funcall mk-sel))
       (helixel-mc-create-fake-cursor 9)  ; inside (bar)
       (helixel-mc-create-fake-cursor 15) ; inside (baz)
       ;; Snapshot pending-sel into each fake's overlay so enter-
@@ -1118,7 +1118,7 @@ textobj."
   (helixel-test-with-buffer "(foo)\n"
     (helixel-enter-normal-state)
     (goto-char 2)
-    (helixel--pending-sel-set nil)
+    (helixel--sel-push nil)
     (helixel-mc-create-fake-cursor 3)
     ;; No pending-sel → transient branch sets pending-surround-op.
     (let ((helixel--pending-surround-op nil))
@@ -2006,44 +2006,6 @@ every fake cursor independently."
     (let ((before-lines (count-lines (point-min) (point-max))))
       (helixel-mc--prepos-newline-before)
       (should (> (count-lines (point-min) (point-max)) before-lines)))))
-
-(ert-deftest helixel-test-mc-preposition-fake-cursors-i ()
-  "`helixel-mc--preposition-fake-cursors' on `helixel-insert' jumps
-every fake cursor to its own region-begin."
-  (helixel-test-with-buffer "foo bar baz\n"
-    ;; Fake cursors with active region (4..1) and (8..5).
-    (helixel-mc-create-fake-cursor 4 1)
-    (helixel-mc-create-fake-cursor 8 5)
-    (goto-char 1)
-    (helixel-mc--preposition-fake-cursors 'helixel-insert)
-    ;; Each fake's point moved to its region-begin (min pt mk).
-    (let ((points
-           (sort (mapcar (lambda (ov)
-                           (marker-position
-                            (overlay-get ov 'helixel-mc-point)))
-                         (helixel-mc-all-cursors))
-                 #'<)))
-      (should (equal '(1 5) points))
-      ;; mark-active flag cleared on each fake.
-      (dolist (ov (helixel-mc-all-cursors))
-        (should-not (overlay-get ov 'mark-active))))
-    (helixel-mc-clear-all)))
-
-(ert-deftest helixel-test-mc-preposition-fake-cursors-a ()
-  "`a' prepositioner pushes each fake cursor to its region-end."
-  (helixel-test-with-buffer "foo bar baz\n"
-    (helixel-mc-create-fake-cursor 4 1)
-    (helixel-mc-create-fake-cursor 8 5)
-    (goto-char 1)
-    (helixel-mc--preposition-fake-cursors 'helixel-insert-after)
-    (let ((points
-           (sort (mapcar (lambda (ov)
-                           (marker-position
-                            (overlay-get ov 'helixel-mc-point)))
-                         (helixel-mc-all-cursors))
-                 #'<)))
-      (should (equal '(4 8) points)))
-    (helixel-mc-clear-all)))
 
 ;; ── 3. Per-cursor kill-ring isolation, end-to-end ──
 ;;

@@ -267,6 +267,7 @@ Sets KEY to VALUE in the ctx plist."
          :kind (helixel-sel--kind sel)
          :ctx new-ctx
          :recreate (helixel-sel--recreate sel)
+         :advance (helixel-sel--advance sel)
          :display (helixel-sel--display sel)))
     sel))
 
@@ -410,18 +411,6 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
 Set by selection commands (w, b, e, iw, aw, line, rect, search,
 find-char, textobj).  Consumed by operator commands (d, c, y).")
 
-(defsubst helixel--pending-sel-set (sel)
-  "Set `helixel--pending-sel' to SEL."
-  (setq helixel--pending-sel sel))
-
-(defsubst helixel--pending-sel-get ()
-  "Return `helixel--pending-sel'."
-  helixel--pending-sel)
-
-(defsubst helixel--pending-sel-clear ()
-  "Clear `helixel--pending-sel'."
-  (setq helixel--pending-sel nil))
-
 (defsubst helixel--sel-push (sel)
   "Push SEL onto the pending-selection stack.
 Selection commands call this; editing commands consume via
@@ -445,10 +434,10 @@ EXTRAS is a plist passed to `helixel-sel-create' (e.g. :advance).
 Returns the created `helixel-sel' struct.
 
 This combines the two-step pattern:
-  (helixel--pending-sel-set (helixel-sel-create ...))
+  (helixel--sel-push (helixel-sel-create ...))
 into a single call, reducing boilerplate in selection commands."
   (let ((sel (apply #'helixel-sel-create kind ctx recreate-fn display extras)))
-    (helixel--pending-sel-set sel)
+    (helixel--sel-push sel)
     sel))
 
 

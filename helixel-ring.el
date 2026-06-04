@@ -275,7 +275,7 @@ Creates independent marker copy; the jump-log entry is lightweight."
 Used by state machine, surround, and jump navigation."
   (setq helixel--raw-selection-type nil)
   (setq helixel--action-pos nil)
-  (helixel--pending-sel-clear)
+  (setq helixel--pending-sel nil)
   (when rectangle-mark-mode
     (rectangle-mark-mode -1))
   (deactivate-mark))

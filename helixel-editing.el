@@ -164,29 +164,29 @@ Otherwise RECORD-P defaults to t via the wrapper body."
     (:category state :subcat insert)
   (cond
    ;; Search context: refine the search sel with entry-kind
-   ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'search))
-     (helixel--pending-sel-set
-          (helixel-sel-update-ctx (helixel--pending-sel-get)
+   ((and helixel--pending-sel
+         (eq (helixel-sel-kind helixel--pending-sel) 'search))
+     (helixel--sel-push
+          (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'insert))
     (goto-char (region-beginning)))
    ;; Line selection: preserve sel for `.` auto-advance
-   ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'line))
-     (helixel--pending-sel-set
-          (helixel-sel-update-ctx (helixel--pending-sel-get)
+   ((and helixel--pending-sel
+         (eq (helixel-sel-kind helixel--pending-sel) 'line))
+     (helixel--sel-push
+          (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'insert))
     (goto-char (region-beginning)))
    ;; Manual region
    ((use-region-p)
-     (helixel--pending-sel-set
+     (helixel--sel-push
           (helixel-sel-create
            'insert-selection-start nil
            #'helixel--recreate-insert-selection-start "is"))
     (goto-char (region-beginning)))
    ;; No context
    (t
-    (helixel--pending-sel-clear)))
+    (setq helixel--pending-sel nil)))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-exit
@@ -225,22 +225,22 @@ Otherwise RECORD-P defaults to t via the wrapper body."
     (:category state :subcat insert)
   (cond
    ;; Search context: refine the search sel with entry-kind
-   ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'search))
-     (helixel--pending-sel-set
-          (helixel-sel-update-ctx (helixel--pending-sel-get)
+   ((and helixel--pending-sel
+         (eq (helixel-sel-kind helixel--pending-sel) 'search))
+     (helixel--sel-push
+          (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'append))
     (goto-char (region-end)))
    ;; Line selection: preserve sel for `.` auto-advance
-   ((and (helixel--pending-sel-get)
-         (eq (helixel-sel-kind (helixel--pending-sel-get)) 'line))
-     (helixel--pending-sel-set
-          (helixel-sel-update-ctx (helixel--pending-sel-get)
+   ((and helixel--pending-sel
+         (eq (helixel-sel-kind helixel--pending-sel) 'line))
+     (helixel--sel-push
+          (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'append))
     (goto-char (region-end)))
    ;; Manual region
    ((use-region-p)
-     (helixel--pending-sel-set
+     (helixel--sel-push
           (helixel-sel-create
            'insert-selection-end nil
            #'helixel--recreate-insert-selection-end "ie"))
@@ -249,13 +249,13 @@ Otherwise RECORD-P defaults to t via the wrapper body."
    (t
     (unless (helixel--end-of-line-p)
       (forward-char))
-    (helixel--pending-sel-clear)))
+    (setq helixel--pending-sel nil)))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-beginning-line
     (:category state :subcat insert)
   (beginning-of-line)
-   (helixel--pending-sel-set
+   (helixel--sel-push
         (helixel-sel-create
          'insert-beginning-line nil
          #'helixel--recreate-insert-beginning-line "I"))
@@ -264,7 +264,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 (helixel-define-command helixel-insert-after-end-line
     (:category state :subcat insert)
   (end-of-line)
-   (helixel--pending-sel-set
+   (helixel--sel-push
         (helixel-sel-create
          'insert-end-line nil
          #'helixel--recreate-insert-end-line "A"))
@@ -650,8 +650,7 @@ Set by the op runner from the transaction's :multiplier payload.")
           (let ((helixel--inhibit-action-track t))
             (helixel--recreate-selection sel))
           (indent-rigidly (region-beginning) (region-end) (- 1))
-          (let* ((payload (helixel-event-payload tx))
-                 (mult (or (plist-get payload :multiplier) 1)))
+          (let* ((mult (or (helixel-event-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
              (helixel--tx-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
@@ -691,8 +690,7 @@ Set by the op runner from the transaction's :multiplier payload.")
           (let ((helixel--inhibit-action-track t))
             (helixel--recreate-selection sel))
           (indent-rigidly (region-beginning) (region-end) 1)
-          (let* ((payload (helixel-event-payload tx))
-                 (mult (or (plist-get payload :multiplier) 1)))
+          (let* ((mult (or (helixel-event-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
              (helixel--tx-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))

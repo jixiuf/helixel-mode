@@ -202,129 +202,90 @@ Sets KEY to VALUE in the ctx plist."
 
 ;; ── Kind-specific ctx accessors ──
 ;;
-;; Each function takes either a `helixel-sel' struct or a raw ctx
+;; Each accessor takes either a `helixel-sel' struct or a raw ctx
 ;; plist (for use inside recreate closures).  These are the preferred
 ;; way to read ctx fields; they document the valid keys per kind
 ;; through their names.  See the CTX schema table above for details.
+;;
+;; All accessors share the same body shape
+;;     (or (plist-get (helixel-sel--ctx-ensure OBJ) KEY) DEFAULT)
+;; so we generate them via `helixel--def-sel-accessor'.
 
 (defsubst helixel-sel--ctx-ensure (obj)
   "If OBJ is a `helixel-sel' struct, return its ctx; else return OBJ."
   (if (helixel-sel-p obj) (helixel-sel--ctx obj) obj))
 
+(defmacro helixel--def-sel-accessor (name key &optional default doc)
+  "Define a `defsubst' NAME that reads ctx KEY (with optional DEFAULT).
+DOC is the docstring (the OBJ/ctx-plist clarification is appended
+automatically)."
+  (let ((doc (concat (or doc (format "Return %s from ctx." key))
+                     "\nOBJ is a `helixel-sel' struct or raw ctx plist.")))
+    `(defsubst ,name (obj)
+       ,doc
+       ,(if default
+            `(or (plist-get (helixel-sel--ctx-ensure obj) ,key) ,default)
+          `(plist-get (helixel-sel--ctx-ensure obj) ,key)))))
+
 ;;;; line
-
-(defsubst helixel-sel-line-dir (obj)
-  "Return :dir from line ctx (\=`forward' or \=`backward'), default \=`forward'.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (or (plist-get (helixel-sel--ctx-ensure obj) :dir) 'forward))
-
-(defsubst helixel-sel-line-count (obj)
-  "Return :count from line ctx, default 1.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (or (plist-get (helixel-sel--ctx-ensure obj) :count) 1))
+(helixel--def-sel-accessor helixel-sel-line-dir   :dir   'forward
+  "Return :dir from line ctx (`forward' or `backward'), default `forward'.")
+(helixel--def-sel-accessor helixel-sel-line-count :count 1
+  "Return :count from line ctx, default 1.")
 
 ;;;; rect
-
-(defsubst helixel-sel-rect-count (obj)
-  "Return :count from rect ctx, default 1.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (or (plist-get (helixel-sel--ctx-ensure obj) :count) 1))
+(helixel--def-sel-accessor helixel-sel-rect-count :count 1
+  "Return :count from rect ctx, default 1.")
 
 ;;;; movement
-
-(defsubst helixel-sel-movement-moves (obj)
-  "Return :moves list from movement ctx ((CMD . COUNT) ...).
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :moves))
-
-(defsubst helixel-sel-movement-inline-advance-p (obj)
-  "Return non-nil if movement ctx has :inline-advance set.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :inline-advance))
-
-(defsubst helixel-sel-movement-normal-mode-p (obj)
+(helixel--def-sel-accessor helixel-sel-movement-moves :moves nil
+  "Return :moves list from movement ctx ((CMD . COUNT) ...).")
+(helixel--def-sel-accessor helixel-sel-movement-inline-advance-p
+  :inline-advance nil
+  "Return non-nil if movement ctx has :inline-advance set.")
+(helixel--def-sel-accessor helixel-sel-movement-normal-mode-p
+  :normal-mode nil
   "Return non-nil if movement was recorded in normal mode.
 When set, each movement command resets the selection during
-dot-repeat replay (only the final target is selected).
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :normal-mode))
+dot-repeat replay (only the final target is selected).")
 
 ;;;; textobj
-
-(defsubst helixel-sel-textobj-command (obj)
-  "Return :command (symbol) from textobj ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :command))
-
-(defsubst helixel-sel-textobj-count (obj)
-  "Return :count from textobj ctx, default 1.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (or (plist-get (helixel-sel--ctx-ensure obj) :count) 1))
-
-(defsubst helixel-sel-textobj-delimiter (obj)
-  "Return :delimiter (plist) from textobj ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :delimiter))
+(helixel--def-sel-accessor helixel-sel-textobj-command :command nil
+  "Return :command (symbol) from textobj ctx.")
+(helixel--def-sel-accessor helixel-sel-textobj-count   :count   1
+  "Return :count from textobj ctx, default 1.")
+(helixel--def-sel-accessor helixel-sel-textobj-delimiter :delimiter nil
+  "Return :delimiter (plist) from textobj ctx.")
 
 ;;;; search
-
-(defsubst helixel-sel-search-pattern (obj)
-  "Return :pattern (string) from search ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :pattern))
-
-(defsubst helixel-sel-search-dir (obj)
-  "Return :dir from search ctx, default \=`forward'.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (or (plist-get (helixel-sel--ctx-ensure obj) :dir) 'forward))
-
-(defsubst helixel-sel-search-entry-kind (obj)
-  "Return :entry-kind (insert or append) from search ctx, or nil.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :entry-kind))
-
-(defsubst helixel-sel-search-cursor-offset (obj)
-  "Return :cursor-offset (integer) from search ctx, or nil.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :cursor-offset))
+(helixel--def-sel-accessor helixel-sel-search-pattern :pattern nil
+  "Return :pattern (string) from search ctx.")
+(helixel--def-sel-accessor helixel-sel-search-dir :dir 'forward
+  "Return :dir from search ctx, default `forward'.")
+(helixel--def-sel-accessor helixel-sel-search-entry-kind :entry-kind nil
+  "Return :entry-kind (insert or append) from search ctx, or nil.")
+(helixel--def-sel-accessor helixel-sel-search-cursor-offset :cursor-offset nil
+  "Return :cursor-offset (integer) from search ctx, or nil.")
 
 ;;;; find-char
-
-(defsubst helixel-sel-find-char-dir (obj)
-  "Return :dir (`forward' or `backward') from find-char ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (or (plist-get (helixel-sel--ctx-ensure obj) :dir) 'forward))
-
-(defsubst helixel-sel-find-char-type (obj)
-  "Return :type (`next' or `till') from find-char ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :type))
-
-(defsubst helixel-sel-find-char-char (obj)
-  "Return :char (character) from find-char ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :char))
+(helixel--def-sel-accessor helixel-sel-find-char-dir :dir 'forward
+  "Return :dir (`forward' or `backward') from find-char ctx.")
+(helixel--def-sel-accessor helixel-sel-find-char-type :type nil
+  "Return :type (`next' or `till') from find-char ctx.")
+(helixel--def-sel-accessor helixel-sel-find-char-char :char nil
+  "Return :char (character) from find-char ctx.")
 
 ;;;; surround
-
-(defsubst helixel-sel-surround-delimiter (obj)
-  "Return :delimiter (plist) from surround ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :delimiter))
+(helixel--def-sel-accessor helixel-sel-surround-delimiter :delimiter nil
+  "Return :delimiter (plist) from surround ctx.")
 
 ;;;; insert-search-offset
-
-(defsubst helixel-sel-insert-offset (obj)
-  "Return :offset (integer) from insert-search-offset ctx.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :offset))
+(helixel--def-sel-accessor helixel-sel-insert-offset :offset nil
+  "Return :offset (integer) from insert-search-offset ctx.")
 
 ;;;; insert-selection-start / insert-selection-end
-
-(defsubst helixel-sel-insert-cursor-offset (obj)
-  "Return :cursor-offset (integer) from insert ctx, or nil.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (plist-get (helixel-sel--ctx-ensure obj) :cursor-offset))
+(helixel--def-sel-accessor helixel-sel-insert-cursor-offset :cursor-offset nil
+  "Return :cursor-offset (integer) from insert ctx, or nil.")
 
 
 ;; ----------------------------------------------------------------------

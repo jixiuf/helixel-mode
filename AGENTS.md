@@ -65,7 +65,10 @@ helixel-core (cl-lib only, zero helixel deps)
   │
   ├── helixel-register (→ core)
   │
-  ├── helixel-textobj (→ core)
+  ├── helixel-textobj-engine (→ core)
+  │     ├── helixel-textobj-defs (→ core + textobj-engine)
+  │     │     └── helixel-textobj-marks (→ core + textobj-engine + textobj-defs)
+  │     └── helixel-textobj (→ core + textobj-engine + textobj-defs + textobj-marks)
   │     └── helixel-surround (→ core + ring + repeat + textobj)
   │
   ├── helixel-repeat (→ core + action)   [action→ring→core]
@@ -106,14 +109,18 @@ Notes:
 - `declare-function` counts are minimal and only for third-party packages:
   - `helixel-keymap.el`: 7 (flymake, eglot)
   - `helixel-repeat.el`: 0
-  - `helixel-textobj.el`: 2 (evil-tree-sitter)
+  - `helixel-textobj-engine.el`: 0
+  - `helixel-textobj-defs.el`: 0
+  - `helixel-textobj-marks.el`: 2 (evil-tree-sitter)
   - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww)
 
 ## Key Structs
 
 ### helixel-sel (selection descriptor)
 ```elisp
-(cl-defstruct helixel-sel kind ctx recreate advance display)
+(cl-defstruct helixel-sel kind ctx)
+;; Protocol methods (recreate, advance, display) looked up from
+;; kind registry via helixel-register-kind.
 ;; CTX keys per kind:
 ;;   line          :dir (forward|backward) :count (int≥1) :entry-kind
 ;;   rect          :count (int≥1)
@@ -140,11 +147,11 @@ Notes:
 
 ```elisp
 ;; ── Selection ──
-(helixel-sel-create kind ctx recreate &optional display &rest extras) → struct
+(helixel-sel-create kind ctx)   → struct (extra args ignored)
 (helixel-sel-kind sel)          → symbol
-(helixel-sel-call-recreate sel)     → recreates region
-(helixel-sel-update-ctx sel k v)    → new sel
-(helixel-sel-count sel)             → :count or 0
+(helixel-sel-call-recreate sel) → recreates region via kind registry
+(helixel-sel-update-ctx sel k v)→ new sel
+(helixel-sel-count sel)         → :count or 0
 ;; Kind accessors (work on struct or raw ctx plist):
 (helixel-sel-line-dir obj)          → :dir, default 'forward
 (helixel-sel-line-count obj)        → :count, default 1

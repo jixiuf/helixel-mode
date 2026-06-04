@@ -821,6 +821,13 @@ using advance+apply without recursion."
   :display  (lambda (ctx)
               (format "/%s/" (or (helixel-sel-search-pattern ctx) "?"))))
 
+(helixel-register-kind find-char
+  :recreate #'helixel--recreate-find-char
+  :advance  #'helixel--repeat-advance-movement
+  :display  (lambda (ctx)
+              (let ((c (helixel-sel-find-char-char ctx)))
+                (if c (format "f%c" c) "f"))))
+
 ;; ── Hook registrations ──
 
 (add-hook 'helixel-mode-on-hook #'helixel-search-setup)

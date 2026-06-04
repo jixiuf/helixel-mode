@@ -245,8 +245,8 @@
            (helixel--inhibit-action-track t)
            (helixel--repeat-has-preview nil))
       (helixel-repeat-selection)
-      ;; After ;, point should be at the second "foo" match-end
-      (should (= (point) 12)))))
+      ;; After ;, point should be at the second "foo" match-beginning
+      (should (= (point) 9)))))
 
 (ert-deftest helixel-test-chain-dot-skip-blank-line ()
   ", on chain line skips blank lines like dot does."

@@ -476,6 +476,14 @@ Clears `helixel--pending-surround-op' regardless."
                   helixel--pending-sel))
         (funcall op)))))
 
+(helixel-register-kind surround
+  :recreate #'ignore
+  :advance  nil
+  :display  (lambda (ctx)
+              (if-let* ((d (helixel-sel-surround-delimiter ctx)))
+                  (format "@%s" (helixel-delimiter-type d))
+                "surround")))
+
 (add-hook 'helixel-textobj-after-select-functions
           #'helixel--surround-execute-pending)
 

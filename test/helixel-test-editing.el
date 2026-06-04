@@ -46,7 +46,7 @@
     (should (helixel-sel-p sel))
     (should (eq (helixel-sel--kind sel) 'line))
     (should (equal (helixel-sel--ctx sel) '(:count 3)))
-    (should (string= (helixel-sel--display sel) "L"))))
+    (should (string= (helixel-sel-call-display sel) "L"))))
 
 (ert-deftest helixel-test-sel-get-kind ()
   "`helixel-sel-kind' works for struct."
@@ -102,25 +102,26 @@
                                      (helixel-sel-create 'rect '(:count 3) #'helixel--recreate-rect "r")))))
 
 (ert-deftest helixel-test-sel-call-recreate ()
-  "`helixel-sel-call-recreate' dispatches to struct closure."
+  "`helixel-sel-call-recreate' dispatches via kind registry."
   (with-temp-buffer
-    (insert "hello world")
+    (insert "hello\nworld\n")
     (goto-char 1)
-    (let ((sel (helixel-sel-create 'line nil
-                                   (lambda (_) (goto-char 7))
-                                   "L")))
+    ;; Line sel with count=1 should select the current line.
+    (let ((sel (helixel-sel-create 'line '(:count 1 :dir forward))))
       (helixel-sel-call-recreate sel)
-      (should (= (point) 7)))
+      (should (use-region-p))
+      (should (>= (region-end) (region-beginning))))
     (let ((pt (point)))
       (helixel-sel-call-recreate nil)
       (should (= (point) pt)))))
 
 (ert-deftest helixel-test-sel-call-display ()
-  "`helixel-sel-call-display' returns display string for struct."
+  "`helixel-sel-call-display' returns display from kind registry."
   (should (string= (helixel-sel-call-display
-                    (helixel-sel-create 'line nil (lambda (_) nil) "L"))
+                    (helixel-sel-create 'line '(:count 1 :dir forward)))
                    "L"))
-  (should (string= (helixel-sel-call-display (helixel-sel-create 'line '(:count 3) #'helixel--recreate-line "L"))
+  (should (string= (helixel-sel-call-display
+                    (helixel-sel-create 'line '(:count 3 :dir forward)))
                    "L"))
   (should (null (helixel-sel-call-display nil))))
 
@@ -133,7 +134,7 @@
               'insert-selection-start nil
               #'helixel--recreate-insert-selection-start "is")))
     (should (eq (helixel-sel-kind sel) 'insert-selection-start))
-    (should (string= (helixel-sel-call-display sel) "is"))
+    (should (string= (helixel-sel-call-display sel) "i"))
     (should (helixel-sel-p sel))))
 
 (ert-deftest helixel-test-sel-insert-selection-end ()
@@ -142,7 +143,7 @@
               'insert-selection-end nil
               #'helixel--recreate-insert-selection-end "ie")))
     (should (eq (helixel-sel-kind sel) 'insert-selection-end))
-    (should (string= (helixel-sel-call-display sel) "ie"))
+    (should (string= (helixel-sel-call-display sel) "a"))
     (should (helixel-sel-p sel))))
 
 (ert-deftest helixel-test-sel-insert-beginning-line ()
@@ -169,7 +170,7 @@
               'insert-search-offset '(:offset 3)
               #'helixel--recreate-insert-search-offset "io")))
     (should (eq (helixel-sel-kind sel) 'insert-search-offset))
-    (should (string= (helixel-sel-call-display sel) "io"))
+    (should (string= (helixel-sel-call-display sel) "s"))
     (should (= (helixel-sel-insert-offset sel) 3))
     (should (helixel-sel-p sel))))
 
@@ -492,7 +493,7 @@ deduplication is against the ring front by content."
                     (helixel-event-create 'kill
                       (helixel-sel-create 'line '(:dir backward :count 2)
                         #'helixel--recreate-line "L^")))
-                   "d.L^x2"))
+                   "d.Lx2"))
   (should (string= (helixel-event-format
                     (helixel-event-create 'replace-char nil :char ?Q))
                    "R[Q]"))
@@ -1066,13 +1067,11 @@ works in the dot-repeat context."
     (should (string= (buffer-string) "abXworld"))))
 
 (ert-deftest helixel-test-search-sel-display ()
-  "`helixel-sel-call-display' for search shows /pattern."
+  "`helixel-sel-call-display' for search shows /pattern/."
   (should (string= (helixel-sel-call-display
                     (helixel-sel-create 'search
-                      '(:pattern "hello" :dir forward)
-                      #'helixel--recreate-search
-                      "/hello"))
-                   "/hello")))
+                      '(:pattern "hello" :dir forward)))
+                   "/hello/")))
 
 ;; ============================================================================
 ;; Surround tests

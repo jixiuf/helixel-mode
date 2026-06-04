@@ -181,9 +181,15 @@ Example:
 
 
 (helixel-register-kind textobj
-  :recreate nil
+  :recreate #'helixel--recreate-textobj
   :advance  #'helixel--repeat-advance-textobj
-  :display  (lambda (ctx) (symbol-name (helixel-sel-textobj-command ctx))))
+  :display  (lambda (ctx)
+              (let ((cmd (helixel-sel-textobj-command ctx)))
+                (if cmd
+                    (let* ((name (symbol-name cmd))
+                           (pos (string-match "mark-" name)))
+                      (if pos (substring name (+ pos 5)) name))
+                  "textobj"))))
 
 (provide 'helixel-textobj-marks)
 ;;; helixel-textobj-marks.el ends here

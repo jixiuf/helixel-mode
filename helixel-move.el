@@ -881,8 +881,7 @@ advance functions to avoid double-moving."
                  (helixel-sel-update-ctx
                   sel :dir (helixel--flip-dir
                             (helixel-sel-line-dir sel))))
-  :display  (lambda (ctx)
-              (format "%dL" (or (helixel-sel-count ctx) 1))))
+  :display  "L")
 
 (helixel-register-kind rect
   :recreate #'helixel--recreate-rect
@@ -890,9 +889,12 @@ advance functions to avoid double-moving."
   :display  "R")
 
 (helixel-register-kind movement
-  :recreate nil
+  :recreate #'helixel--recreate-movement
   :advance  #'helixel--repeat-advance-movement
-  :display  "m")
+  :display  (lambda (ctx)
+              (let ((ms (helixel-sel-movement-moves ctx)))
+                (let ((n (apply #'+ (mapcar #'cdr ms))))
+                  (format "v%d" n)))))
 
 ;; ── Visual move tracking (from helixel-state.el) ──
 

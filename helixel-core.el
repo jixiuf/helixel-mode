@@ -46,18 +46,13 @@
 (cl-defstruct (helixel-sel (:conc-name helixel-sel--)
                            (:constructor helixel-sel--internal)
                            (:copier helixel-sel--shallow-copy))
-  "Selection descriptor for dot-repeat with closure-based recreate.
+  "Selection descriptor for dot-repeat.
 KIND is a symbol identifying the selection type.
 CTX is a plist of mutable extra data (:count, :dir, :moves, ...).
-RECREATE is a function (CTX) that recreates the selection at point.
-ADVANCE is nil or a function (TX TAG) that positions cursor at the
-next target, returning t on success, nil at buffer edge.
-DISPLAY is a string or a function (CTX) → string."
+Protocol methods (recreate, advance, display) are looked up from
+the kind registry via `helixel-register-kind'."
   kind
-  ctx
-  recreate
-  advance
-  display)
+  ctx)
 
 ;; ── CTX schema ──
 ;;
@@ -93,19 +88,6 @@ DISPLAY is a string or a function (CTX) → string."
 ;; When t, the advance function creates the region as part
 ;; of its positioning (movement, textobj, find-char).
 ;; The strategy reads this flag to avoid double-recreating.
-
-;; ── Builder ──
-
-(defsubst helixel-sel--extras-advance (extras)
-  "Extract :advance function from EXTRAS plist."
-  (plist-get extras :advance))
-
-(defun helixel-sel--extras-strip-advance (extras)
-  "Return EXTRAS with any :advance key-value pair removed.
-EXTRAS is a keyword plist."
-  (cl-loop for (k v) on extras by #'cddr
-           unless (eq k :advance)
-           append (list k v)))
 
 ;; ── CTX schema validation ──
 ;;
@@ -172,27 +154,15 @@ Signals `helixel-ctx-error' on mismatch with details."
                                      kind k))))
           t))))
 
-(defun helixel-sel-create (kind ctx recreate &optional display &rest extras)
-  "Create a `helixel-sel' struct for selection KIND.
-CTX is a plist of extra data.
-RECREATE is a function (CTX) that recreates the selection at point.
-DISPLAY is an optional string or function (CTX) → string.
-EXTRAS is an optional plist with keys:
-  :advance — function (TX TAG) → boolean, positions cursor at next target.
-
-When `helixel--ctx-validation-enabled' is non-nil (test/lint only),
-validates CTX against the schema registered for KIND."
+(defun helixel-sel-create (kind ctx &rest _)
+  "Create a `helixel-sel' struct for selection KIND with data CTX.
+All protocol methods (recreate, advance, display) are looked up
+from the kind registry.  Extra args accepted for legacy callers.
+When `helixel--ctx-validation-enabled' is non-nil, validates CTX
+against the schema for KIND."
   (when helixel--ctx-validation-enabled
     (helixel--validate-ctx kind ctx))
-  (let* ((adv (helixel-sel--extras-advance extras))
-         (rest (helixel-sel--extras-strip-advance extras)))
-    (apply #'helixel-sel--internal
-           :kind kind
-           :ctx ctx
-           :recreate recreate
-           :display (or display (symbol-name kind))
-           :advance adv
-           rest)))
+  (helixel-sel--internal :kind kind :ctx ctx))
 
 ;; ── Span extension helper ──
 
@@ -210,17 +180,18 @@ For `;' + `.' repeating the full session-start-to-point span."
 ;; ── Core accessors ──
 
 (defun helixel-sel-call-recreate (sel)
-  "Recreate selection described by SEL, a `helixel-sel' struct.
-Calls the stored RECREATE closure with CTX."
+  "Recreate selection described by SEL, looking up from kind registry."
   (when (helixel-sel-p sel)
-    (funcall (helixel-sel--recreate sel) (helixel-sel--ctx sel))))
+    (when-let* ((fn (helixel--kind-recreate (helixel-sel--kind sel))))
+      (funcall fn (helixel-sel--ctx sel)))))
 
 (defun helixel-sel-call-display (sel)
-  "Return display string for `helixel-sel' struct SEL.
-Evaluates the DISPLAY field (string or function)."
+  "Return display string for SEL, from kind registry."
   (when (helixel-sel-p sel)
-    (let ((d (helixel-sel--display sel)))
-      (if (functionp d) (funcall d (helixel-sel--ctx sel)) d))))
+    (let ((d (helixel--kind-display (helixel-sel--kind sel))))
+      (if (functionp d)
+          (funcall d (helixel-sel--ctx sel))
+        (or d (symbol-name (helixel-sel--kind sel)))))))
 
 (defun helixel-sel-kind (sel)
   "Return the :kind from `helixel-sel' struct SEL."
@@ -228,9 +199,9 @@ Evaluates the DISPLAY field (string or function)."
     (helixel-sel--kind sel)))
 
 (defun helixel-sel-advance (sel)
-  "Return the :advance closure from `helixel-sel' struct SEL, or nil."
+  "Return the advance function for SEL from the kind registry."
   (when (helixel-sel-p sel)
-    (helixel-sel--advance sel)))
+    (helixel--kind-advance (helixel-sel--kind sel))))
 
 (defun helixel-sel-ctx (sel)
   "Return the CTX (data plist) from `helixel-sel' struct SEL."
@@ -261,14 +232,10 @@ Compares kind and ctx.  Returns t when both are nil."
   "Return a new `helixel-sel' struct from SEL with CTX updated.
 Sets KEY to VALUE in the ctx plist."
   (if (helixel-sel-p sel)
-      (let ((new-ctx (plist-put (copy-sequence (helixel-sel--ctx sel))
-                                key value)))
-        (helixel-sel--internal
-         :kind (helixel-sel--kind sel)
-         :ctx new-ctx
-         :recreate (helixel-sel--recreate sel)
-         :advance (helixel-sel--advance sel)
-         :display (helixel-sel--display sel)))
+      (helixel-sel--internal
+       :kind (helixel-sel--kind sel)
+       :ctx (plist-put (copy-sequence (helixel-sel--ctx sel))
+                       key value))
     sel))
 
 ;; ── Kind-specific ctx accessors ──
@@ -426,17 +393,10 @@ previous selection command."
 
 ;; ── Convenience: push a freshly created selection ──
 
-(defun helixel--push-selection
-    (kind ctx recreate-fn &optional display &rest extras)
-  "Create a `helixel-sel' and push it as the pending selection.
-KIND, CTX, RECREATE-FN, DISPLAY — see `helixel-sel-create'.
-EXTRAS is a plist passed to `helixel-sel-create' (e.g. :advance).
-Returns the created `helixel-sel' struct.
-
-This combines the two-step pattern:
-  (helixel--sel-push (helixel-sel-create ...))
-into a single call, reducing boilerplate in selection commands."
-  (let ((sel (apply #'helixel-sel-create kind ctx recreate-fn display extras)))
+(defun helixel--push-selection (kind ctx &rest _)
+  "Create a `helixel-sel' of KIND with CTX and push as pending selection.
+Extra args accepted for legacy callers.  Returns the created sel."
+  (let ((sel (helixel-sel-create kind ctx)))
     (helixel--sel-push sel)
     sel))
 
@@ -851,10 +811,9 @@ Does not mutate TX."
   "Deep-copy `helixel-sel' struct SEL.
 Copies the ctx plist so the copy is independent."
   (when (helixel-sel-p sel)
-    (let ((copy (helixel-sel--shallow-copy sel)))
-      (setf (helixel-sel--ctx copy)
-            (copy-sequence (helixel-sel--ctx sel)))
-      copy)))
+    (helixel-sel--internal
+     :kind (helixel-sel--kind sel)
+     :ctx (copy-sequence (helixel-sel--ctx sel)))))
 
 
 ;; ----------------------------------------------------------------------

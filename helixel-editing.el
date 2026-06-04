@@ -664,25 +664,24 @@ INDENT-SIGN is +1 (right) or -1 (left)."
         (insert (if (eq c (upcase c)) (downcase c) (upcase c))))))
   (helixel--clear-data))
 
-(helixel-define-operator helixel-downcase
-    (:op downcase :display "gu" :repeat-advance 'line
-     :subcat case :params (&optional count))
-  (interactive "p")
-  (helixel--record-edit 'downcase :count (or count 1))
-  (if (use-region-p)
-      (downcase-region (region-beginning) (region-end))
-    (downcase-word (or count 1)))
-  (helixel--clear-data))
+(defmacro helixel--def-case-op (name op display subcat region-fn word-fn)
+  "Define a case-changing operator NAME.
+OP, DISPLAY, SUBCAT match `helixel-define-operator's keys.
+REGION-FN takes (beg end), WORD-FN takes COUNT."
+  `(helixel-define-operator ,name
+       (:op ,op :display ,display :repeat-advance 'line
+        :subcat ,subcat :params (&optional count))
+     (interactive "p")
+     (helixel--record-edit ',op :count (or count 1))
+     (if (use-region-p)
+         (,region-fn (region-beginning) (region-end))
+       (,word-fn (or count 1)))
+     (helixel--clear-data)))
 
-(helixel-define-operator helixel-upcase
-    (:op upcase :display "gU" :repeat-advance 'line
-     :subcat case :params (&optional count))
-  (interactive "p")
-  (helixel--record-edit 'upcase :count (or count 1))
-  (if (use-region-p)
-      (upcase-region (region-beginning) (region-end))
-    (upcase-word (or count 1)))
-  (helixel--clear-data))
+(helixel--def-case-op helixel-downcase downcase "gu" case
+                      downcase-region downcase-word)
+(helixel--def-case-op helixel-upcase   upcase   "gU" case
+                      upcase-region   upcase-word)
 
 ;; ── Comment toggle ──
 

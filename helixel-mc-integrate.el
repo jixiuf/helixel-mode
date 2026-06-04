@@ -233,18 +233,15 @@ any fake replays the same chain."
     (indent-according-to-mode)))
 
 ;; Register prepositioners on each helixel insert-entry command.
-(put 'helixel-insert               'helixel-mc-prepos
-     #'helixel-mc--prepos-region-begin)
-(put 'helixel-insert-after         'helixel-mc-prepos
-     #'helixel-mc--prepos-region-end)
-(put 'helixel-insert-beginning-line 'helixel-mc-prepos
-     #'helixel-mc--prepos-bol)
-(put 'helixel-insert-after-end-line 'helixel-mc-prepos
-     #'helixel-mc--prepos-eol)
-(put 'helixel-insert-newline       'helixel-mc-prepos
-     #'helixel-mc--prepos-newline-after)
-(put 'helixel-insert-prevline      'helixel-mc-prepos
-     #'helixel-mc--prepos-newline-before)
+(pcase-dolist
+    (`(,cmd . ,fn)
+     '((helixel-insert            . helixel-mc--prepos-region-begin)
+       (helixel-insert-after      . helixel-mc--prepos-region-end)
+       (helixel-insert-beginning-line . helixel-mc--prepos-bol)
+       (helixel-insert-after-end-line . helixel-mc--prepos-eol)
+       (helixel-insert-newline    . helixel-mc--prepos-newline-after)
+       (helixel-insert-prevline   . helixel-mc--prepos-newline-before)))
+  (put cmd 'helixel-mc-prepos fn))
 
 ;; ── Lifecycle: ensure mc cleans up with helixel-mode ──
 

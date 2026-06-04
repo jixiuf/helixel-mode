@@ -268,89 +268,59 @@ to composed keymaps with mode overrides on top of the base maps."
 ;; { key → inner (i) textobj, outward to opening
 ;; } key → inner (i) textobj, forward to closing end
 
+(defconst helixel--bracket-prefix-delims
+  ;; (KEYS . TYPE-INFIX)
+  ;; TYPE-INFIX is the substring inserted into helixel-{prefix}-{TYPE}
+  ;; -end (for ] / }) or helixel-{prefix}-{TYPE} (for [ / {).
+  '(("()b"   . "paren")
+    ("[]"    . "bracket")
+    ("B{}"   . "brace")
+    ("<>"    . "angle")
+    ("\""   . "double-quote")
+    ("'"     . "single-quote")
+    ("`"     . "back-quote")
+    ("t"     . "tag")
+    ("c"     . "block"))
+  "Table mapping bracket-prefix KEYS to textobj TYPE-INFIX.
+Used to populate `helixel-right-map' / `-left-map' /
+`-inner-right-map' / `-inner-left-map'.")
+
+(defun helixel--bracket-prefix-populate (map fn-template)
+  "Populate MAP from `helixel--bracket-prefix-delims'.
+FN-TEMPLATE is a format string that takes one %s for the type-infix,
+e.g. \"helixel-next-%s-end\"."
+  (dolist (cell helixel--bracket-prefix-delims)
+    (let ((fn (intern (format fn-template (cdr cell)))))
+      (dolist (ch (string-to-list (car cell)))
+        (define-key map (char-to-string ch) fn)))))
+
 (defvar-keymap helixel-right-map
   :doc "Keymap for `]' prefix."
   "d" #'flymake-goto-next-error
   "p" #'helixel-forward-paragraph-end
   "s" #'helixel-forward-sentence-end
-  "f" #'helixel-forward-function-end
-  ;; outer textobj → forward to closing end
-  "("  #'helixel-next-paren-end
-  ")"  #'helixel-next-paren-end
-  "b"  #'helixel-next-paren-end
-  "["  #'helixel-next-bracket-end
-  "]"  #'helixel-next-bracket-end
-  "B"  #'helixel-next-brace-end
-  "{"  #'helixel-next-brace-end
-  "}"  #'helixel-next-brace-end
-  "<"  #'helixel-next-angle-end
-  ">"  #'helixel-next-angle-end
-  "\"" #'helixel-next-double-quote-end
-  "'"  #'helixel-next-single-quote-end
-  "`"  #'helixel-next-back-quote-end
-  "t"  #'helixel-next-tag-end
-  "c"  #'helixel-next-block-end)
+  "f" #'helixel-forward-function-end)
+(helixel--bracket-prefix-populate helixel-right-map
+                                  "helixel-next-%s-end")
 
 (defvar-keymap helixel-left-map
   :doc "Keymap for `[' prefix."
   "d" #'flymake-goto-prev-error
   "p" #'helixel-backward-paragraph-start
   "s" #'helixel-backward-sentence-start
-  "f" #'helixel-backward-function-start
-  ;; outer textobj → outward to opening
-  "("  #'helixel-outer-paren
-  ")"  #'helixel-outer-paren
-  "b"  #'helixel-outer-paren
-  "["  #'helixel-outer-bracket
-  "]"  #'helixel-outer-bracket
-  "B"  #'helixel-outer-brace
-  "{"  #'helixel-outer-brace
-  "}"  #'helixel-outer-brace
-  "<"  #'helixel-outer-angle
-  ">"  #'helixel-outer-angle
-  "\"" #'helixel-outer-double-quote
-  "'"  #'helixel-outer-single-quote
-  "`"  #'helixel-outer-back-quote
-  "t"  #'helixel-outer-tag
-  "c"  #'helixel-outer-block)
+  "f" #'helixel-backward-function-start)
+(helixel--bracket-prefix-populate helixel-left-map
+                                  "helixel-outer-%s")
 
 (defvar-keymap helixel-inner-right-map
-  :doc "Keymap for `}' prefix."
-  ;; inner textobj → forward to closing end
-  "("  #'helixel-inner-next-paren-end
-  ")"  #'helixel-inner-next-paren-end
-  "b"  #'helixel-inner-next-paren-end
-  "["  #'helixel-inner-next-bracket-end
-  "]"  #'helixel-inner-next-bracket-end
-  "B"  #'helixel-inner-next-brace-end
-  "{"  #'helixel-inner-next-brace-end
-  "}"  #'helixel-inner-next-brace-end
-  "<"  #'helixel-inner-next-angle-end
-  ">"  #'helixel-inner-next-angle-end
-  "\"" #'helixel-inner-next-double-quote-end
-  "'"  #'helixel-inner-next-single-quote-end
-  "`"  #'helixel-inner-next-back-quote-end
-  "t"  #'helixel-inner-next-tag-end
-  "c"  #'helixel-inner-next-block-end)
+  :doc "Keymap for `}' prefix.")
+(helixel--bracket-prefix-populate helixel-inner-right-map
+                                  "helixel-inner-next-%s-end")
 
 (defvar-keymap helixel-inner-left-map
-  :doc "Keymap for `{' prefix."
-  ;; inner textobj → outward to opening
-  "("  #'helixel-inner-outer-paren
-  ")"  #'helixel-inner-outer-paren
-  "b"  #'helixel-inner-outer-paren
-  "["  #'helixel-inner-outer-bracket
-  "]"  #'helixel-inner-outer-bracket
-  "B"  #'helixel-inner-outer-brace
-  "{"  #'helixel-inner-outer-brace
-  "}"  #'helixel-inner-outer-brace
-  "<"  #'helixel-inner-outer-angle
-  ">"  #'helixel-inner-outer-angle
-  "\"" #'helixel-inner-outer-double-quote
-  "'"  #'helixel-inner-outer-single-quote
-  "`"  #'helixel-inner-outer-back-quote
-  "t"  #'helixel-inner-outer-tag
-  "c"  #'helixel-inner-outer-block)
+  :doc "Keymap for `{' prefix.")
+(helixel--bracket-prefix-populate helixel-inner-left-map
+                                  "helixel-inner-outer-%s")
 
 ;; ── State keymaps ──
 

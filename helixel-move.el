@@ -307,101 +307,35 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
 ;; `helixel--generic-bounds-at' / `helixel--generic-bounds-next'
 ;; are defined in helixel-core.el.
 
-(helixel-define-command helixel-forward-paragraph-start
-    (:category movement :subcat paragraph
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-paragraph (or count 1)))
-  (helixel--set-mark-region 'helixel-paragraph :a))
+;; ── Paragraph / sentence / function movement commands ──
+;; All twelve commands here use :side :a (verbatim from originals).
 
-(helixel-define-command helixel-backward-paragraph-start
-    (:category movement :subcat paragraph
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-paragraph (- (or count 1))))
-  (helixel--set-mark-region 'helixel-paragraph :a))
+(helixel--def-thing-move helixel-forward-paragraph-start
+                         paragraph helixel-paragraph forward-beginning  1 :a)
+(helixel--def-thing-move helixel-backward-paragraph-start
+                         paragraph helixel-paragraph forward-beginning -1 :a)
+(helixel--def-thing-move helixel-forward-paragraph-end
+                         paragraph helixel-paragraph forward-end        1 :a)
+(helixel--def-thing-move helixel-backward-paragraph-end
+                         paragraph helixel-paragraph forward-end       -1 :a)
 
-(helixel-define-command helixel-forward-paragraph-end
-    (:category movement :subcat paragraph
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-paragraph (or count 1)))
-  (helixel--set-mark-region 'helixel-paragraph :a))
+(helixel--def-thing-move helixel-forward-sentence-end
+                         sentence helixel-sentence forward-end          1 :a)
+(helixel--def-thing-move helixel-backward-sentence-start
+                         sentence helixel-sentence forward-beginning   -1 :a)
+(helixel--def-thing-move helixel-forward-sentence-start
+                         sentence helixel-sentence forward-beginning    1 :a)
+(helixel--def-thing-move helixel-backward-sentence-end
+                         sentence helixel-sentence forward-end         -1 :a)
 
-(helixel-define-command helixel-backward-paragraph-end
-    (:category movement :subcat paragraph
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-paragraph (- (or count 1))))
-  (helixel--set-mark-region 'helixel-paragraph :a))
-
-(helixel-define-command helixel-forward-sentence-end
-    (:category movement :subcat sentence
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-sentence (or count 1)))
-  (helixel--set-mark-region 'helixel-sentence :a))
-
-(helixel-define-command helixel-backward-sentence-start
-    (:category movement :subcat sentence
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-sentence (- (or count 1))))
-  (helixel--set-mark-region 'helixel-sentence :a))
-
-(helixel-define-command helixel-forward-sentence-start
-    (:category movement :subcat sentence
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-sentence (or count 1)))
-  (helixel--set-mark-region 'helixel-sentence :a))
-
-(helixel-define-command helixel-backward-sentence-end
-    (:category movement :subcat sentence
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-sentence (- (or count 1))))
-  (helixel--set-mark-region 'helixel-sentence :a))
-
-(helixel-define-command helixel-forward-function-end
-    (:category movement :subcat function
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-function (or count 1)))
-  (helixel--set-mark-region 'helixel-function :a))
-
-(helixel-define-command helixel-backward-function-start
-    (:category movement :subcat function
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-function (- (or count 1))))
-  (helixel--set-mark-region 'helixel-function :a))
-
-(helixel-define-command helixel-forward-function-start
-    (:category movement :subcat function
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-beginning 'helixel-function (or count 1)))
-  (helixel--set-mark-region 'helixel-function :a))
-
-(helixel-define-command helixel-backward-function-end
-    (:category movement :subcat function
-     :params (&optional count))
-  (interactive "p")
-  (helixel--with-movement-surround
-   (helixel--forward-end 'helixel-function (- (or count 1))))
-  (helixel--set-mark-region 'helixel-function :a))
+(helixel--def-thing-move helixel-forward-function-end
+                         function helixel-function forward-end          1 :a)
+(helixel--def-thing-move helixel-backward-function-start
+                         function helixel-function forward-beginning   -1 :a)
+(helixel--def-thing-move helixel-forward-function-start
+                         function helixel-function forward-beginning    1 :a)
+(helixel--def-thing-move helixel-backward-function-end
+                         function helixel-function forward-end         -1 :a)
 
 (defun helixel--jump-target-for-delimiter (d orig &optional no-close-backoff
                                                 mark-thing)

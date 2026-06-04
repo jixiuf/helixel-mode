@@ -368,30 +368,34 @@ other fake cursor."
   (helixel-mc-clear-all))
 
 ;;;###autoload
+(defun helixel-mc--unmark-in-dir (dir)
+  "Remove the fake cursor at the next match in DIR (+1 / -1) from point."
+  (let* ((cursors (helixel-mc-all-cursors :sort))
+         (pred (if (> dir 0) #'> #'<))
+         (ordered (if (> dir 0) cursors (reverse cursors)))
+         (cursor (cl-find-if
+                  (lambda (ov)
+                    (funcall
+                     pred
+                     (marker-position (overlay-get ov 'helixel-mc-point))
+                     (point)))
+                  ordered)))
+    (unless cursor
+      (user-error "No fake cursor %s point"
+                  (if (> dir 0) "after" "before")))
+    (helixel-mc-delete-fake-cursor cursor)))
+
+;;;###autoload
 (defun helixel-mc-unmark-next ()
   "Remove the fake cursor at the next match-position after point."
   (interactive)
-  (let ((cursor
-         (cl-find-if
-          (lambda (ov)
-            (> (marker-position (overlay-get ov 'helixel-mc-point))
-               (point)))
-          (helixel-mc-all-cursors :sort))))
-    (unless cursor (user-error "No fake cursor after point"))
-    (helixel-mc-delete-fake-cursor cursor)))
+  (helixel-mc--unmark-in-dir 1))
 
 ;;;###autoload
 (defun helixel-mc-unmark-previous ()
   "Remove the fake cursor at the previous match-position before point."
   (interactive)
-  (let ((cursor
-         (cl-find-if
-          (lambda (ov)
-            (< (marker-position (overlay-get ov 'helixel-mc-point))
-               (point)))
-          (reverse (helixel-mc-all-cursors :sort)))))
-    (unless cursor (user-error "No fake cursor before point"))
-    (helixel-mc-delete-fake-cursor cursor)))
+  (helixel-mc--unmark-in-dir -1))
 
 ;; Whitelist: helixel-mc commands themselves run only at real cursor.
 (helixel-mc-mark-all-for-real-cursor-only

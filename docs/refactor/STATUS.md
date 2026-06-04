@@ -69,7 +69,43 @@ Updated after each commit.
 
 ## Pending
 
-### Phase 7 (consolidation wave 2) — More macros & helpers
+### Phase 7 (consolidation wave 3) — Keymap tables & dead code
+- **Commits**: `22e2d4a`, `6858e66`, `c2be229`, `8f25c19`, `4e93231`,
+  `a0c6042`, `a0040d2`, `1fb969e`, `9539b48`, `afd309d`
+
+- `keymap.el`: 4 bracket-prefix keymaps (`]`/`[`/`}`/`{`) collapsed
+  via `helixel--bracket-prefix-delims` table + populate helper
+  (-30 lines).
+- `keymap.el`: textobj inner/outer maps unified via
+  `helixel--textobj-delims` + populator (-10 lines).
+- `keymap.el`: 10 digit-argument bindings → `dotimes` (-7 lines).
+- `keymap.el`: 12 org-mode emphasis textobj bindings →
+  `pcase-dolist` (-11 lines).
+- `textobj-marks.el`: `helixel-define-mark-pair` /
+  `-mark-quote` now emit BOTH inner+a in one call (drop INNER-P
+  argument) (-19 lines).
+- `mc-integrate.el`: 6 `(put 'helixel-insert-* ...)` prepos
+  registrations → `pcase-dolist` (-3 lines).
+- `state.el`: 4 `(helixel-define-jump-command ...)` → `dolist` (-1).
+- `state.el`: dropped unused `helixel--rect-replay-set` (-4).
+- **Dead-code sweep**: removed 6 dead functions across action.el,
+  chain.el, core.el, mc-integrate.el, move.el, state.el
+  (-64 lines):
+  - `helixel--jump-display`
+  - `helixel--chain-preview-strategy`
+  - `helixel-edit-equal-p`
+  - `helixel-mc--repeat-edit-hook-uninstall`
+  - `helixel--commit-pending-event`
+  - `helixel-surround-thing-at-point`
+
+| Metric                          | Was      | Now   |
+|---------------------------------|----------|-------|
+| Total line count                | 14011    | **13858** |
+| `helixel-keymap.el`             | 658      | 597   |
+| `helixel-textobj-marks.el`      | 369      | 350   |
+| Dead public/private fns         | 6        | 0     |
+
+
 - **Commits**: `533faca`, `c916589`, `aa6b8ae`, `79085ba`, `a534b27`,
   `1268c8b`
 - `core.el`: 18 `helixel-sel-*-ctx` accessors →
@@ -160,7 +196,7 @@ advance helpers, examining surround.el for further consolidation).
 | `advice-add` in mc-integrate.el | 6        | **1**  | ≤ 2    |
 | `advice-add` total              | 19       | 18†    | ≤ 8    |
 | Tests passing                   | 847      | 845‡  | ≥ 847  |
-| Total line count                | 14166    | **14011** | ≤ 10500|
+| Total line count                | 14166    | **13858** | ≤ 10500|
 
 † Remaining `advice-add`s are all on third-party emacs primitives
 (`keyboard-quit` × 3) or registered inside macros for the

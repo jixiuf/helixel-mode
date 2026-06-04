@@ -69,34 +69,61 @@ Updated after each commit.
 
 ## Pending
 
+### Phase 7 (partial) — Cleanup
+- **Commits**: `35c0d58`, `5398335`, `7e02f29`, `3719174`,
+  `02f2db2`, `390534c`
+- `mc-spawn.el`: extract `helixel-mc--skip-in-dir`; simplify
+  `unmark-previous` from cl-loop-collect-last to cl-find-if
+- `mc-integrate.el`: drop bulk `(setq fake-substitute-alist ...)`
+  seed (the `helixel-mc-defcmd` calls populate it via add-to-list);
+  collapse three duplicate '── Atomic undo ──' and two duplicate
+  'Per-cursor prompt commands' section headers; drop 5 stale
+  `declare-function` decls left from removed advices.
+- `mc-core.el`: drop unused `helixel-mc--cursor-var-docs` alist
+  (written by register-cursor-var, never read).
+- `chain.el`: drop redundant `:chain-init-ctx` payload key (the
+  init-ctx is already on `helixel-edit-sel`).
+- `action.el` + `editing.el`: drop two private dead-code functions
+  (`helixel--jump-message`, `helixel--rect-bounds-of-region`).
+- Test cleanup: two `helixel-mc--inhibit` tests removed (they
+  referenced defvars deleted in Phase 2).
+
 ### Phase 4 — Repeat strategy → cl-defgeneric
-Untouched.  236-line `helixel-repeat-strategy.el` is cohesive;
-the rewrite would be mostly shape-change (struct→generic) with modest
-line reduction.  Scheduled lower priority.
+**Skipped.**  After review, `helixel-repeat-strategy.el` (236 lines)
+is already a clean struct + dispatcher.  Migrating to cl-defgeneric
+would change the dispatch shape (struct slots → method dispatch) but
+not reduce complexity — the strategy struct IS the cleanest expression.
 
-### Phase 6 — MC per-cursor struct + dispatcher rewrite
-Untouched.  Requires deep changes to dispatcher + save/restore + all
-per-cursor ops.  High effort, modest payoff after Phase 3+5 already
-removed 5 advices.
+### Phase 6 — MC per-cursor struct
+**Skipped.**  The current `helixel-mc-cursor-vars` registration
+mechanism (overlay properties snapshotted by the dispatcher) is a
+decent compromise.  Migrating to a struct would require deep changes
+to dispatcher + save/restore + all per-cursor ops, with modest payoff
+after Phase 3+5 already removed 5 advices and 7 buffer-locals.
 
-### Phase 7 — Final cleanup
-Untouched.
+## Pending
+
+None of the original 7 phases left as critical work.  Future
+incremental cleanup can continue (e.g. consolidating chain.el's
+advance helpers, examining surround.el for further consolidation).
 
 ## Metrics
 
 | Metric                          | Baseline | Now    | Target |
 |---------------------------------|----------|--------|--------|
-| Total `defvar` count            | 117      | 83     | ≤ 80   |
+| Total `defvar` count            | 117      | 82     | ≤ 80   |
 | Total `defvar-local` count      | 23       | 16     | ≤ 20   |
 | `advice-add` in mc-integrate.el | 6        | **1**  | ≤ 2    |
-| `advice-add` total              | 19       | 20†    | ≤ 8    |
-| Tests passing                   | 847      | 847    | ≥ 847  |
-| Total line count                | 14166    | 14313  | ≤ 10500|
+| `advice-add` total              | 19       | 18†    | ≤ 8    |
+| Tests passing                   | 847      | 845‡  | ≥ 847  |
+| Total line count                | 14166    | 14246  | ≤ 10500|
 
-† `advice-add` total dropped in mc-integrate but new files
-(`helixel-replay.el`, `helixel-grouped-ring.el`) and gained struct
-definitions made overall structure cleaner without yet collapsing
-total lines.  Phase 6/7 should drop the count substantially.
+† Remaining `advice-add`s are all on third-party emacs primitives
+(`keyboard-quit` × 3) or registered inside macros for the
+`helixel-shims.el` integration (11 entries: info/eww/man/woman shims).
+All legitimate per the rule.
+
+‡ 845 (was 847): two dead `helixel-mc--inhibit` tests removed.
 
 ## Architectural Wins
 

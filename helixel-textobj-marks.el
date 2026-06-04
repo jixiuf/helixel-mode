@@ -181,6 +181,8 @@ Example:
 
 
 (helixel-register-kind textobj
+  :ctx-schema '(:required (:command :count :delimiter)
+                :optional (:inline-advance))
   :recreate #'helixel--recreate-textobj
   :advance  #'helixel--repeat-advance-textobj
   :display  (lambda (ctx)

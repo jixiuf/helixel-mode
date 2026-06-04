@@ -811,6 +811,8 @@ using advance+apply without recursion."
 ;; ── Kind registrations ──
 
 (helixel-register-kind search
+  :ctx-schema '(:required (:pattern :dir)
+                :optional (:entry-kind :n-count :cursor-offset))
   :recreate #'helixel--recreate-search
   :advance  #'helixel--repeat-advance-search
   :all-buffer-fn #'helixel--all-buffer-search
@@ -822,6 +824,7 @@ using advance+apply without recursion."
               (format "/%s/" (or (helixel-sel-search-pattern ctx) "?"))))
 
 (helixel-register-kind find-char
+  :ctx-schema '(:required (:char :type :dir) :optional (:inline-advance))
   :recreate #'helixel--recreate-find-char
   :advance  #'helixel--repeat-advance-movement
   :display  (lambda (ctx)

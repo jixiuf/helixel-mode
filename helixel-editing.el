@@ -136,26 +136,31 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 ;; Recreate functions defined here; advance functions in helixel-repeat.el.
 
 (helixel-register-kind insert-selection-start
+  :ctx-schema '(:required () :optional (:cursor-offset :entry-kind))
   :recreate #'helixel--recreate-insert-selection-start
   :advance  #'helixel--repeat-advance-search
   :display  "i")
 
 (helixel-register-kind insert-selection-end
+  :ctx-schema '(:required () :optional (:cursor-offset :entry-kind))
   :recreate #'helixel--recreate-insert-selection-end
   :advance  #'helixel--repeat-advance-search
   :display  "a")
 
 (helixel-register-kind insert-beginning-line
+  :ctx-schema '(:required () :optional ())
   :recreate #'helixel--recreate-insert-beginning-line
   :advance  #'helixel--repeat-advance-line
   :display  "I")
 
 (helixel-register-kind insert-end-line
+  :ctx-schema '(:required () :optional ())
   :recreate #'helixel--recreate-insert-end-line
   :advance  #'helixel--repeat-advance-line
   :display  "A")
 
 (helixel-register-kind insert-search-offset
+  :ctx-schema '(:required (:offset) :optional ())
   :recreate #'helixel--recreate-insert-search-offset
   :advance  #'helixel--repeat-advance-search
   :display  "s")

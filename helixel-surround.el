@@ -477,6 +477,7 @@ Clears `helixel--pending-surround-op' regardless."
         (funcall op)))))
 
 (helixel-register-kind surround
+  :ctx-schema '(:required (:delimiter) :optional ())
   :recreate #'ignore
   :advance  nil
   :display  (lambda (ctx)

@@ -873,6 +873,7 @@ advance functions to avoid double-moving."
 ;; ── Kind registrations ──
 
 (helixel-register-kind line
+  :ctx-schema '(:required (:count :dir) :optional (:entry-kind :span))
   :recreate #'helixel--recreate-line
   :advance  #'helixel--repeat-advance-line
   :all-buffer-fn #'helixel--all-buffer-line
@@ -884,11 +885,13 @@ advance functions to avoid double-moving."
   :display  "L")
 
 (helixel-register-kind rect
+  :ctx-schema '(:required (:count) :optional ())
   :recreate #'helixel--recreate-rect
   :advance  nil
   :display  "R")
 
 (helixel-register-kind movement
+  :ctx-schema '(:required (:moves) :optional (:inline-advance :normal-mode))
   :recreate #'helixel--recreate-movement
   :advance  #'helixel--repeat-advance-movement
   :display  (lambda (ctx)

@@ -56,33 +56,11 @@ the kind registry via `helixel-register-kind'."
 
 ;; ── CTX schema ──
 ;;
-;; Each selection kind uses a specific subset of ctx keys.
-;; This table is the single source of truth for valid ctx keys per kind.
-;; Recreate functions (in their respective modules) are the sole consumers.
-;;
-;; Kind                      CTX keys                     Setter(s)
-;; ----                      ------                       ---------
-;; line                      :dir    (forward|backward)   movement cmd
-;;                           :count  (integer ≥ 1)         same
-;; rect                      :count  (integer ≥ 1)         movement cmd
-;; movement                  :moves  ((CMD . COUNT) ...)   visual move fns
-;;                           :inline-advance  t             same
-;; textobj                   :command  (symbol)            textobj fns
-;;                           :count    (integer)            same
-;;                           :delimiter (plist)             same
-;;                           :inline-advance  t             same
-;; search                    :pattern  (string)            search fns
-;;                           :dir      (forward|backward)   same
-;; find-char                 :char     (character)          find-char fns
-;;                           :type     (next|till)           same
-;;                           :dir      (forward|backward)    same
-;;                           :inline-advance  t              same
-;; surround                  :delimiter (plist)            surround fns
-;; insert-selection-start    :cursor-offset (int|nil)      insert-exit
-;; insert-selection-end      :cursor-offset (int|nil)      insert-exit
-;; insert-beginning-line     (none)                        —
-;; insert-end-line           (none)                        —
-;; insert-search-offset      :offset (integer)             insert cmd
+;; Each selection kind uses a specific subset of ctx keys.  The
+;; schema lives in the kind registry (`helixel-register-kind') under
+;; the `:ctx-schema (:required (...) :optional (...))' key; the
+;; registry is the single source of truth.  `helixel--validate-ctx'
+;; reads it at author/lint time.
 ;;
 ;; All kinds accept an optional :inline-advance flag.
 ;; When t, the advance function creates the region as part
@@ -91,68 +69,52 @@ the kind registry via `helixel-register-kind'."
 
 ;; ── CTX schema validation ──
 ;;
-;; `helixel--ctx-schema' is the machine-readable counterpart to the
-;; comment table above.  `helixel--validate-ctx' checks a (kind . ctx-plist)
-;; pair against this schema.  It never runs in production — gated by
-;; `helixel--ctx-validation-enabled'.
-
-(defvar helixel--ctx-schema
-  '((line         :required (:count :dir) :optional (:entry-kind :span))
-    (rect         :required (:count) :optional ())
-    (movement     :required (:moves)
-                  :optional (:inline-advance :normal-mode))
-    (textobj      :required (:command :count :delimiter)
-                  :optional (:inline-advance))
-    (search       :required (:pattern :dir)
-                  :optional (:entry-kind :n-count :cursor-offset))
-    (find-char    :required (:char :type :dir)
-                  :optional (:inline-advance))
-    (surround     :required (:delimiter) :optional ())
-    (insert-selection-start
-     :required () :optional (:cursor-offset :entry-kind))
-    (insert-selection-end
-     :required () :optional (:cursor-offset :entry-kind))
-    (insert-beginning-line   :required () :optional ())
-    (insert-end-line         :required () :optional ())
-    (insert-search-offset    :required (:offset) :optional ()))
-  "Per-kind schema: (KIND :required (KEYS…) :optional (KEYS…)).
-Must match the CTX schema comment table exactly.")
+;; Schemas are stored on each kind's registry entry (see
+;; `helixel-register-kind').  `helixel--validate-ctx' looks them up
+;; at runtime.  Gated by `helixel--ctx-validation-enabled' — it
+;; never runs in production.
 
 (defvar helixel--ctx-validation-enabled nil
   "When non-nil, `helixel--validate-ctx' checks ctx against the schema.
 Enabled during `make lint' and in test suites.
 Never set in production — ctx are validated at author time only.")
 
+(defvar helixel--kind-registry)         ; defined in Part 3 below.
+
 (defun helixel--validate-ctx (kind ctx-plist)
-  "Validate CTX-PLIST against the schema for KIND.
+  "Validate CTX-PLIST against the schema registered for KIND.
 Returns t if valid.  When `helixel--ctx-validation-enabled' is nil,
 returns t immediately (no-op).
+
+Reads `:ctx-schema' from the kind registry.  Kinds without a
+registered schema are accepted (no validation).
 
 Checks:
   1. All :required keys present in CTX-PLIST.
   2. No keys outside the union of :required and :optional.
 Signals `helixel-ctx-error' on mismatch with details."
   (or (not helixel--ctx-validation-enabled)
-      (let ((entry (assq kind helixel--ctx-schema)))
-        (unless entry
-          (signal 'helixel-ctx-error
-                  (list (format "Unknown kind: %s" kind))))
-        (let* ((spec (cdr entry))
-               (required (plist-get spec :required))
-               (optional (plist-get spec :optional))
-               (allowed (append required optional)))
-          (dolist (key required)
-            (unless (plist-member ctx-plist key)
-              (signal 'helixel-ctx-error
-                      (list (format "Kind %s: missing required key :%s"
-                                    kind key)))))
-          (cl-loop for (k _v) on ctx-plist by #'cddr
-                   unless (memq k allowed)
-                   do (signal 'helixel-ctx-error
-                              (list (format
-                                     "Kind %s: unknown key :%s in ctx"
-                                     kind k))))
-          t))))
+      (let* ((entry (gethash kind helixel--kind-registry))
+             (spec (plist-get entry :ctx-schema)))
+        ;; Kinds with no :ctx-schema in their registration are
+        ;; permissive — useful for transient/internal kinds.
+        (or (null spec)
+            (let* ((required (plist-get spec :required))
+                   (optional (plist-get spec :optional))
+                   (allowed (append required optional)))
+              (dolist (key required)
+                (unless (plist-member ctx-plist key)
+                  (signal 'helixel-ctx-error
+                          (list (format
+                                 "Kind %s: missing required key :%s"
+                                 kind key)))))
+              (cl-loop for (k _v) on ctx-plist by #'cddr
+                       unless (memq k allowed)
+                       do (signal 'helixel-ctx-error
+                                  (list (format
+                                         "Kind %s: unknown key :%s in ctx"
+                                         kind k))))
+              t)))))
 
 (defun helixel-sel-create (kind ctx &rest _)
   "Create a `helixel-sel' struct for selection KIND with data CTX.

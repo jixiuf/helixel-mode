@@ -27,7 +27,7 @@
 ;; `helixel-define-operator'     — editing operator (command + op reg)
 ;;
 ;; All macros expand to inline code (zero hooks).  They depend on
-;; `helixel--tracking-open' and `helixel-event-commit' from
+;; `helixel--tracking-open' and `helixel-edit-commit' from
 ;; `helixel-ring', and `helixel-register-op' from `helixel-core'.
 
 ;;; Code:
@@ -52,8 +52,8 @@ event in an `unwind-protect' so it always finalises even on error."
      (helixel--tracking-open ,category ,subcat ,op)
      (unwind-protect
          (progn ,@body)
-       (unless helixel--in-replay
-         (helixel-event-commit)))))
+       (unless (helixel-replaying-p)
+         (helixel-edit-commit)))))
 
 ;; ── Command definition macro ──
 

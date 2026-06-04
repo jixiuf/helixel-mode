@@ -41,6 +41,7 @@
 
 (require 'cl-lib)
 (require 'helixel-core)
+(require 'helixel-replay)
 
 (defvar helixel-multi-cursor-mode)        ; forward decl — defined below
 (defvar helixel--current-state)           ; from `helixel-state'
@@ -145,16 +146,16 @@ can register their own state to ride along."
   "Per-cursor mark history.")
 (helixel-mc-register-cursor-var 'helixel--pending-sel
   "Per-cursor pending selection descriptor (for chain / repeat).")
-(helixel-mc-register-cursor-var 'helixel--last-event
+(helixel-mc-register-cursor-var 'helixel--last-edit
   "Per-cursor last edit transaction (replayed by `.').")
 (helixel-mc-register-cursor-var 'helixel--active-search
   "Per-cursor active search state (pattern + direction).")
 (helixel-mc-register-cursor-var 'helixel--event-ring
   "Per-cursor event ring for `;' cycling.  Each fake builds its
 own private history of motions/edits run AFTER spawn.  Capped
-by `helixel-event-ring-max'.")
-(helixel-mc-register-cursor-var 'helixel--live-event
-  "Per-cursor in-progress `helixel-event' (committed at the
+by `helixel-edit-ring-max'.")
+(helixel-mc-register-cursor-var 'helixel--live-edit
+  "Per-cursor in-progress `helixel-edit' (committed at the
 next `helixel--tracking-open').  Required so each fake's events
 go into its OWN ring rather than the shared buffer-local one.")
 (helixel-mc-register-cursor-var 'helixel--action-pos
@@ -498,11 +499,10 @@ Replaces three separate calls (`put', `add-to-list', another
        ',cmd)))
 
 ;; ── Dispatch loop ──
-
-(defvar helixel-mc-executing-command-for-fake-cursor nil
-  "Bound to t while dispatching a command at a fake cursor.
-Editing commands / hooks can check this to avoid recursive
-tracking / recording.")
+;;
+;; The legacy `helixel-mc-executing-command-for-fake-cursor' flag
+;; was replaced by the `mc-fake' origin of the `helixel-replay'
+;; context.  Check via `helixel-replay-in-fake-p'.
 
 (defun helixel-mc--call-interactively (command)
   "Run COMMAND interactively (skipping `ignore').
@@ -562,16 +562,14 @@ mark, and `helixel-mc-cursor-vars' have been restored from the
 overlay.  After BODY, the overlay is updated to reflect the new
 state."
   (declare (indent 0) (debug t))
-  `(let ((helixel-mc-executing-command-for-fake-cursor t)
-         ;; Suppress per-fake echo-area spam (e.g. `;' prints a
-         ;; line per cursor; only real's final message matters).
-         (inhibit-message t))
-     (helixel-mc--save-main-state
-       (dolist (cursor (helixel-mc-all-cursors :sort))
-         (when (and (helixel-mc-fake-cursor-p cursor)
-                    (helixel-mc--enter-cursor cursor))
-           (unwind-protect (progn ,@body)
-             (helixel-mc--leave-cursor cursor)))))))
+  `(let ((inhibit-message t))            ; suppress per-fake echo spam
+     (helixel-with-replay 'mc-fake
+       (helixel-mc--save-main-state
+         (dolist (cursor (helixel-mc-all-cursors :sort))
+           (when (and (helixel-mc-fake-cursor-p cursor)
+                      (helixel-mc--enter-cursor cursor))
+             (unwind-protect (progn ,@body)
+               (helixel-mc--leave-cursor cursor))))))))
 
 (defun helixel-mc--enter-cursor (cursor)
   "Restore point/mark/state from CURSOR overlay into globals.
@@ -593,7 +591,7 @@ overlay or by checking `helixel-mc-fake-cursor-p' afterwards."
 (defun helixel-mc--leave-cursor (cursor)
   "Snapshot current globals back into CURSOR overlay and repaint.
 After the fake's body ran, the per-cursor variables registered
-in `helixel-mc-cursor-vars' (including `helixel--live-event' and
+in `helixel-mc-cursor-vars' (including `helixel--live-edit' and
 `helixel--event-ring') hold this fake's state — snapshot them
 back into the overlay.  Also re-snap the fake's point/mark and
 repaint its visual overlay."
@@ -616,12 +614,12 @@ without going through the command loop."
       (helixel-mc--call-interactively command))))
 
 ;; ── post-command-hook integration ──
-
-(defvar helixel-mc--inhibit nil
-  "When non-nil, the post-command dispatcher is a no-op.
-Bound by code that wants to run commands at the real cursor only
-without triggering fake-cursor re-execution (e.g. our own
-dispatch loop, repeat-edit, chain replay).")
+;;
+;; The former `helixel-mc--inhibit' and
+;; `helixel-mc-executing-command-for-fake-cursor' flags are gone:
+;; their function is now expressed by the `mc-batch' / `mc-fake'
+;; origin of the unified `helixel-replay' context.
+;; `helixel-mc-dispatch-in-progress-p' covers both.
 
 ;; ── Fake-cursor command substitution (populated by mc-integrate) ──
 
@@ -642,12 +640,11 @@ invoke that function once at every fake cursor.  Called from
 the dispatcher so insert-entry commands stage fake cursors
 before the next `self-insert-command' broadcast."
   (when (and helixel-multi-cursor-mode
-             (not helixel-mc--inhibit)
-             (not helixel-mc-executing-command-for-fake-cursor)
+             (not (helixel-mc-dispatch-in-progress-p))
              (helixel-mc-any-p)
              (symbolp this-command))
     (when-let* ((fn (get this-command 'helixel-mc-prepos)))
-      (let ((helixel-mc--inhibit t))
+      (helixel-with-replay 'mc-batch
         (helixel-mc-with-each-cursor
           (condition-case err
               (funcall fn)
@@ -667,7 +664,8 @@ substitute command has something to act on.
 
 No-op when:
   - the multi-cursor minor mode is off,
-  - we are inside our own dispatch loop (`helixel-mc--inhibit'),
+  - we are inside our own dispatch loop
+    (`helixel-mc-dispatch-in-progress-p'),
   - `this-command' is whitelisted off,
   - we are replaying or recording a keyboard macro
     (caller is expected to handle iteration manually).
@@ -676,18 +674,17 @@ This is the SINGLE dispatcher used in all situations."
   ;; Pre-position fakes for insert-entry commands first.
   (helixel-mc--maybe-preposition)
   (when (and helixel-multi-cursor-mode
-             (not helixel-mc--inhibit)
-             (not helixel-mc-executing-command-for-fake-cursor)
+             (not (helixel-mc-dispatch-in-progress-p))
              (not executing-kbd-macro)
              (not defining-kbd-macro)
              this-command
              (helixel-mc-any-p)
              (helixel-mc--should-run-for-all-p this-command))
-    (let* ((helixel-mc--inhibit t)
-           (real-cmd this-command)
-           (substituted (cdr (assq real-cmd
-                                   helixel-mc--fake-substitute-alist)))
-           (cmd (or substituted real-cmd)))
+    (helixel-with-replay 'mc-batch
+     (let* ((real-cmd this-command)
+            (substituted (cdr (assq real-cmd
+                                    helixel-mc--fake-substitute-alist)))
+            (cmd (or substituted real-cmd)))
       ;; When substituting, propagate the real cursor's freshly-set
       ;; shared state into every fake cursor's overlay so the
       ;; substitute command (e.g. `helixel-find-repeat') sees the
@@ -722,7 +719,7 @@ This is the SINGLE dispatcher used in all situations."
       ;; Movement / edits may have collapsed cursors onto each other
       ;; or onto the real cursor — dedupe so subsequent dispatch and
       ;; visible overlays stay consistent.
-      (helixel-mc-dedupe-cursors))))
+      (helixel-mc-dedupe-cursors)))))
 
 ;; ── Minor mode ──
 

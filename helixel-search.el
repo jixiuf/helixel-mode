@@ -33,7 +33,7 @@
 
 ;; ── Forward declarations for variables in later-loaded modules ──
 (defvar helixel--event-ring)
-(defvar helixel--live-event)
+(defvar helixel--live-edit)
 
 (require 'helixel-state)
 (require 'helixel-core)
@@ -186,7 +186,7 @@ matches to match the original n count."
     (let ((dir (if isearch-forward 'forward 'backward)))
       ;; Update live-event's mark-region to the match so ; jumps
       ;; to the match position, not the pre-search point.
-      (when (and isearch-other-end helixel--live-event)
+      (when (and isearch-other-end helixel--live-edit)
         (helixel--set-mark-region
          (cons (min isearch-other-end (point))
                (max isearch-other-end (point)))))
@@ -196,7 +196,7 @@ matches to match the original n count."
             (make-helixel-active-search
              :category 'search :pattern isearch-string :dir dir))
       (helixel-search--set-sel-ctx)
-      (helixel-event-commit)))
+      (helixel-edit-commit)))
   (helixel-search--handle-done helixel-search--had-region))
 
 (defun helixel-search--handle-done (_had-region)
@@ -346,7 +346,7 @@ Tracks how many times n was pressed so . repeats the full sequence."
     ;; Push find-char sel with tracked n-count.
     (helixel-search--find-char-set-sel
      char type (if forwardp 'forward 'backward))
-    (helixel-event-commit)
+    (helixel-edit-commit)
     
     (let ((dir (if forwardp 'forward 'backward)))
       (helixel-search--set-dir dir)
@@ -454,7 +454,7 @@ Shared by `helixel--recreate-search' and `helixel--repeat-advance-search'."
 (defun helixel--recreate-search (ctx)
   "Replay search selection from CTX.
 Finds the next match, activates the region on it.
-If `helixel--search-advance-done' is t, skips the internal search
+If `(helixel-search-advance-done-p)' is t, skips the internal search
 \(the advance function already positioned point and set `match-data').
 If CTX has :entry-kind (insert or append), positions the cursor
 at the appropriate offset within the match for insert-text ops."
@@ -464,8 +464,8 @@ at the appropriate offset within the match for insert-text ops."
     (unless pat
       (user-error "No search pattern to repeat"))
     (helixel--with-span ctx
-      (if helixel--search-advance-done
-          (setq helixel--search-advance-done nil)
+      (if (helixel-search-advance-done-p)
+          (helixel-search-advance-done-set nil)
         ;; Internal search — only run when advance wasn't already done.
         (when (helixel-search--skip-current-match
                pat dir (helixel-sel-search-entry-kind ctx))
@@ -571,8 +571,8 @@ With prefix ARG (\\[universal-argument]), pick from history."
   "Return alist of (display . event) for valid repeatable entries."
   (let ((entries (cl-remove-if-not
                   (lambda (e)
-                    (and (helixel-event-p e)
-                         (memq (helixel-event-category e)
+                    (and (helixel-edit-p e)
+                         (memq (helixel-edit-category e)
                                helixel-search-repeat-categories)))
                   helixel--event-ring)))
     (unless entries
@@ -594,31 +594,31 @@ Returns the chosen action plist or nil."
     (cdr (assoc choice alist))))
 
 (defun helixel-search--history-execute (event use-dir)
-  "Execute EVENT (a `helixel-event' struct) in direction USE-DIR."
-  (let ((cat (helixel-event-category event)))
+  "Execute EVENT (a `helixel-edit' struct) in direction USE-DIR."
+  (let ((cat (helixel-edit-category event)))
     (helixel-search--set-dir use-dir)
     (pcase cat
       ('find-char
-       (let* ((sel (helixel-event-sel event))
+       (let* ((sel (helixel-edit-sel event))
               (ctx (and sel (helixel-sel-ctx sel)))
               (type (helixel-sel-find-char-type ctx))
               (char (helixel-sel-find-char-char ctx)))
-         (helixel--tracking-open cat (helixel-event-subcat event))
+         (helixel--tracking-open cat (helixel-edit-subcat event))
          
          (setq helixel--active-search
                (make-helixel-active-search
                 :category 'find-char :type type :char char :dir use-dir))
          (helixel-search--find-char-core event use-dir)))
        ('search
-        (let* ((sel (helixel-event-sel event))
+        (let* ((sel (helixel-edit-sel event))
                (pattern (and sel (helixel-sel-search-pattern sel)))
                (had-region (region-active-p))
                (isearch-success nil)
                (isearch-other-end nil))
           (unless pattern
-            (setq pattern (helixel-event-payload-get event :pattern)))
-          (helixel--tracking-open cat (helixel-event-subcat event))
-          (helixel-event-commit)
+            (setq pattern (helixel-edit-payload-get event :pattern)))
+          (helixel--tracking-open cat (helixel-edit-subcat event))
+          (helixel-edit-commit)
           
           (setq helixel--active-search
                 (make-helixel-active-search
@@ -642,10 +642,10 @@ FORWARDP: t = use stored direction, nil = toggle it."
                      "search next (history): "
                    "search prev (history): "))))
     (when event
-      (let* ((cat (helixel-event-category event))
+      (let* ((cat (helixel-edit-category event))
              (stored-dir
               (if (eq cat 'search)
-                  (when-let* ((sel (helixel-event-sel event)))
+                  (when-let* ((sel (helixel-edit-sel event)))
                     (helixel-sel-search-dir sel))
                 (helixel-search--current-dir)))
              (use-dir (if forwardp stored-dir
@@ -692,9 +692,9 @@ Called by `helixel-mode' deactivation."
 
 ;; ── Search advance state (defined in helixel-repeat.el) ──
 
-(defvar helixel--search-advance-done)
-(defvar helixel--advance-search-last-pos)
-(defvar helixel--advance-search-edge-seen)
+;; Search-advance scratch now lives on the replay context (see
+;; `helixel-search-advance-done-p' etc in helixel-replay.el).
+
 ;; ── Search and insert advance ──
 
 (defun helixel--repeat-advance-search (tx)
@@ -703,7 +703,7 @@ Positions point and sets `match-data' so `helixel--recreate-search'
 can reuse it without re-searching.  Returns nil if no more matches.
 Guards against zero-width patterns (`$', `^') that would
 otherwise cause infinite loops at buffer edges."
-  (let* ((sel (helixel-event-sel tx))
+  (let* ((sel (helixel-edit-sel tx))
          (pat (helixel-sel-search-pattern sel))
          (dir (helixel-sel-search-dir sel))
          (entry-kind (helixel-sel-search-entry-kind sel)))
@@ -724,14 +724,14 @@ otherwise cause infinite loops at buffer edges."
             (when (and (= m-beg m-end)
                        (or (= m-beg (point-min))
                            (= m-beg (point-max))))
-              (if helixel--advance-search-edge-seen
+              (if (helixel-search-advance-edge-seen-p)
                   (signal 'search-failed nil)
-                (setq helixel--advance-search-edge-seen t)))
+                (helixel-search-advance-edge-seen-set t)))
             ;; Guard against repeated matches at same position
-            (when (equal m-beg helixel--advance-search-last-pos)
+            (when (equal m-beg (helixel-search-advance-last-pos))
               (signal 'search-failed nil)))
-          (setq helixel--search-advance-done t)
-          (setq helixel--advance-search-last-pos (match-beginning 0))
+          (helixel-search-advance-done-set t)
+          (helixel-search-advance-last-pos-set (match-beginning 0))
           (helixel-search--advance-n-count
            (helixel-sel-ctx sel)
            (lambda () (helixel-search--search pat dir)))
@@ -747,8 +747,8 @@ For `insert-search-offset' and `insert-selection-*' entry-kinds."
     (goto-char start-pos)
     (let* ((pat (helixel-sel-search-pattern sel))
            (entry-kind (helixel-sel-search-entry-kind sel))
-           (txt (or (helixel-event-payload-get tx :inserted-text)
-                    (helixel-event-payload-get tx :text)
+           (txt (or (helixel-edit-payload-get tx :inserted-text)
+                    (helixel-edit-payload-get tx :text)
                     ""))
            (last-pos nil)
            (cnt 0))
@@ -780,7 +780,7 @@ For `insert-search-offset' and `insert-selection-*' entry-kinds."
 For entry-kind searches, inserts text at every match from
 buffer edge.  For non-entry-kind, scans from point-min
 using advance+apply without recursion."
-  (let* ((sel (helixel-event-sel edit))
+  (let* ((sel (helixel-edit-sel edit))
          (entry-kind (helixel-sel-search-entry-kind sel)))
     (if entry-kind
         (let ((start-pos (if (helixel-repeat-prefix-reverse-p prefix)
@@ -794,9 +794,9 @@ using advance+apply without recursion."
       (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
              (forced-dir (if reverse-p 'backward 'forward))
              (forced-sel (helixel-sel-update-ctx sel :dir forced-dir))
-             (forced-tx (helixel-event-copy edit))
+             (forced-tx (helixel-edit-copy edit))
              (strategy (helixel--build-strategy forced-tx)))
-        (setf (helixel-event-sel forced-tx) forced-sel)
+        (setf (helixel-edit-sel forced-tx) forced-sel)
         (funcall (helixel-repeat-strategy-reset strategy) forced-tx)
         (save-excursion
           (goto-char (if reverse-p (point-max) (point-min)))

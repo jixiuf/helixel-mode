@@ -415,42 +415,42 @@ so the user can select a target with one keypress."
 
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (helixel-event-payload-get tx :char)))
+             (let ((c (helixel-edit-payload-get tx :char)))
                (if c (format "ms[%c]" c) "ms")))
   :repeat-advance 'line
   :runner (lambda (tx)
-            (when-let* ((char (helixel-event-payload-get tx :char))
+            (when-let* ((char (helixel-edit-payload-get tx :char))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 
 (helixel-register-op surround-add-tag
   :display (lambda (tx)
-             (let ((tag (helixel-event-payload-get tx :tag)))
+             (let ((tag (helixel-edit-payload-get tx :tag)))
                (if tag (format "mt[%s]" tag) "mt")))
   :repeat-advance 'line
   :runner (lambda (tx)
             (helixel--surround-add-tag
-             (helixel-event-payload-get tx :tag))))
+             (helixel-edit-payload-get tx :tag))))
 
 (helixel-register-op surround-delete :display "md"
   :runner (lambda (tx)
             (when-let* ((d (helixel-sel-surround-delimiter
-                           (helixel-event-sel tx))))
+                           (helixel-edit-sel tx))))
               (goto-char (helixel--surround-delete-delimiter d)))))
 
 (helixel-register-op surround-replace
   :display (lambda (tx)
-             (let* ((p (helixel-event-payload tx))
+             (let* ((p (helixel-edit-payload tx))
                     (label (or (plist-get p :tag)
                                (when-let* ((c (plist-get p :new-char)))
                                  (string c)))))
                (if label (format "mr[%s]" label) "mr")))
   :runner (lambda (tx)
-            (let* ((sel-ctx (helixel-event-sel tx))
+            (let* ((sel-ctx (helixel-edit-sel tx))
                    (d (helixel-sel-surround-delimiter sel-ctx))
                    (type (and d (helixel-delimiter-type d)))
-                   (new-char (helixel-event-payload-get tx :new-char))
-                   (tag (helixel-event-payload-get tx :tag)))
+                   (new-char (helixel-edit-payload-get tx :new-char))
+                   (tag (helixel-edit-payload-get tx :tag)))
               (when d
                 (pcase type
                   ('tag

@@ -202,16 +202,16 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                       (buffer-substring
                        helixel--change-track-marker (point))))))
     (unless executing-kbd-macro
-      (when helixel--last-event
-        (let ((tx helixel--last-event))
+      (when helixel--last-edit
+        (let ((tx helixel--last-edit))
           ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
-            (setq tx (helixel-event-with-payload tx :keys keys)))
+            (setq tx (helixel-edit-with-payload tx :keys keys)))
           ;; Store text as replay fallback (tests, programmatic use)
           (when text
-            (setq tx (helixel-event-with-payload tx :text text))
-            (when (eq (helixel-event-op tx) 'change)
-              (setq tx (helixel-event-with-payload tx
+            (setq tx (helixel-edit-with-payload tx :text text))
+            (when (eq (helixel-edit-op tx) 'change)
+              (setq tx (helixel-edit-with-payload tx
                                                   :inserted-text text))))
           (helixel--update-last-event tx))))
     (when helixel--change-track-marker
@@ -299,7 +299,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (defun helixel--repeat-change-core (tx)
   "Repeat change TX: delete selection, replay keys or insert text.
-TX is the complete edit transaction (see `helixel-event-create').
+TX is the complete edit transaction (see `helixel-edit-create').
 Keys (primary) capture the full insert-mode keystrokes.
 Text (fallback) is used when keys are unavailable (tests).
 
@@ -307,7 +307,7 @@ For rect selections the stored text is replayed on every subsequent
 rectangle line via `helixel--rect-replay' — no state-switching side
 -effect (avoids an unnecessary helixel-insert-exit during replay)."
   (let* ((keys (helixel--repeat-get-keys tx))
-         (text (helixel-event-payload-get tx :inserted-text)))
+         (text (helixel-edit-payload-get tx :inserted-text)))
     (cond
      ((and (use-region-p) (eq (helixel--selection-type) 'rect))
       (helixel--rect-change)
@@ -346,18 +346,18 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 (helixel-register-op replace-char :repeat-advance 'line
   :display (lambda (tx)
-             (let ((c (helixel-event-payload-get tx :char)))
+             (let ((c (helixel-edit-payload-get tx :char)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
             (helixel-replace-char
-             (helixel-event-payload-get tx :char))))
+             (helixel-edit-payload-get tx :char))))
 
 (helixel-register-op insert-text :display "i" :repeat-advance 'line
   :runner (lambda (tx)
-            (let ((keys (helixel-event-payload-get tx :keys)))
+            (let ((keys (helixel-edit-payload-get tx :keys)))
               (if keys
                   (helixel--execute-keys keys)
-                (insert (or (helixel-event-payload-get tx :text)
+                (insert (or (helixel-edit-payload-get tx :text)
                             ""))))))
 
 
@@ -434,7 +434,7 @@ Used to support cycling through the kill ring after a replace.")
         (when helixel-replace-delete-char-p
           (delete-char 1))
         (setq pop-start (point))
-        (let ((helixel--in-replay t))
+        (helixel-with-replay-as 'dot
           (helixel-yank))
         (setq helixel--replace-pop-bounds
               (cons pop-start (point)))))
@@ -646,18 +646,18 @@ Set by the op runner from the transaction's :multiplier payload.")
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last event.
-      (when-let* ((tx helixel--last-event)
-                  (sel (helixel-event-sel tx)))
-        (when (eq (helixel-event-op tx) 'indent-left)
-          (when-let* ((m (car (helixel-event-mark-region tx)))
+      (when-let* ((tx helixel--last-edit)
+                  (sel (helixel-edit-sel tx)))
+        (when (eq (helixel-edit-op tx) 'indent-left)
+          (when-let* ((m (car (helixel-edit-mark-region tx)))
                       (pos (marker-position m)))
             (goto-char pos))
-          (let ((helixel--in-replay t))
+          (helixel-with-replay-as 'dot
             (helixel--recreate-selection sel))
           (indent-rigidly (region-beginning) (region-end) (- 1))
-          (let* ((mult (or (helixel-event-payload-get tx :multiplier) 1)))
+          (let* ((mult (or (helixel-edit-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
-             (helixel-event-with-payload tx :multiplier (1+ mult))))
+             (helixel-edit-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p
@@ -673,7 +673,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 (helixel-op-set-runner 'indent-left
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (helixel-event-payload-get tx :multiplier) 1)))
+              (or (helixel-edit-payload-get tx :multiplier) 1)))
          (helixel-indent-left))))
 
 (helixel-define-operator helixel-indent-right
@@ -686,18 +686,18 @@ Set by the op runner from the transaction's :multiplier payload.")
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last event.
-      (when-let* ((tx helixel--last-event)
-                  (sel (helixel-event-sel tx)))
-        (when (eq (helixel-event-op tx) 'indent-right)
-          (when-let* ((m (car (helixel-event-mark-region tx)))
+      (when-let* ((tx helixel--last-edit)
+                  (sel (helixel-edit-sel tx)))
+        (when (eq (helixel-edit-op tx) 'indent-right)
+          (when-let* ((m (car (helixel-edit-mark-region tx)))
                       (pos (marker-position m)))
             (goto-char pos))
-          (let ((helixel--in-replay t))
+          (helixel-with-replay-as 'dot
             (helixel--recreate-selection sel))
           (indent-rigidly (region-beginning) (region-end) 1)
-          (let* ((mult (or (helixel-event-payload-get tx :multiplier) 1)))
+          (let* ((mult (or (helixel-edit-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
-             (helixel-event-with-payload tx :multiplier (1+ mult))))
+             (helixel-edit-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p
@@ -712,7 +712,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 (helixel-op-set-runner 'indent-right
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (helixel-event-payload-get tx :multiplier) 1)))
+              (or (helixel-edit-payload-get tx :multiplier) 1)))
          (helixel-indent-right))))
 
 ;; ── Case operations ──
@@ -798,7 +798,7 @@ Set by the op runner from the transaction's :multiplier payload.")
 
 (helixel-register-op join-lines :display "J" :repeat-advance nil
   :runner (lambda (tx)
-            (let ((n (or (helixel-event-payload-get tx :count) 2)))
+            (let ((n (or (helixel-edit-payload-get tx :count) 2)))
               (dotimes (_ (1- n))
                 (join-line 1)))))
 

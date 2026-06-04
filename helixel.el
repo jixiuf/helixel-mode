@@ -34,6 +34,8 @@
 ;;; Code:
 
 (require 'helixel-core)
+(require 'helixel-grouped-ring)
+(require 'helixel-replay)
 (require 'helixel-ring)
 (require 'helixel-macros)
 (require 'helixel-register)

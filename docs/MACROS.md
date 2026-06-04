@@ -141,21 +141,21 @@ replay it.  This is a data-only registration — no command is defined.
 ```elisp
 (helixel-register-op replace-char :repeat-advance 'line
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-event-payload tx) :char)))
+             (let ((c (plist-get (helixel-edit-payload tx) :char)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
             (helixel-replace-char
-             (plist-get (helixel-event-payload tx) :char))))
+             (plist-get (helixel-edit-payload tx) :char))))
 ```
 
 **No corresponding interactive command:**
 ```elisp
 (helixel-register-op insert-text :display "i" :repeat-advance 'line
   :runner (lambda (tx)
-            (let ((keys (plist-get (helixel-event-payload tx) :keys)))
+            (let ((keys (plist-get (helixel-edit-payload tx) :keys)))
               (if keys
                   (helixel--execute-keys keys)
-                (insert (or (plist-get (helixel-event-payload tx) :text)
+                (insert (or (plist-get (helixel-edit-payload tx) :text)
                             ""))))))
 ```
 
@@ -169,10 +169,10 @@ replay it.  This is a data-only registration — no command is defined.
 ```elisp
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-event-payload tx) :char)))
+             (let ((c (plist-get (helixel-edit-payload tx) :char)))
                (if c (format "ms[%c]" c) "ms")))
   :runner (lambda (tx)
-            (when-let* ((char (plist-get (helixel-event-payload tx) :char))
+            (when-let* ((char (plist-get (helixel-edit-payload tx) :char))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 ```

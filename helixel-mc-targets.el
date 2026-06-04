@@ -49,14 +49,10 @@
 
 ;; Special vars from helixel-repeat / helixel-search — must be `defvar'
 ;; so the `let' binding below is treated as dynamic, not lexical.
-(defvar helixel--advance-search-last-pos)
-(defvar helixel--advance-search-edge-seen)
-(defvar helixel--search-advance-done)
 (defvar helixel--pending-sel)
-(defvar helixel--last-event)
-(defvar helixel--live-event)
+(defvar helixel--last-edit)
+(defvar helixel--live-edit)
 (defvar helixel--raw-selection-type)
-(defvar helixel--in-replay)
 
 ;; ── Helpers ──
 
@@ -138,9 +134,9 @@ Returns count of fake cursors created."
 ;; ── Advance-walk fallback ──
 
 (defun helixel-mc--make-dummy-tx (sel)
-  "Build a minimal `helixel-event' carrying SEL for advance fns."
+  "Build a minimal `helixel-edit' carrying SEL for advance fns."
   (let ((m (point-marker)))
-    (make-helixel-event
+    (make-helixel-edit
      :sel sel :op nil :payload nil
      :mark-region (cons m (copy-marker m t))
      :timestamp (float-time)
@@ -156,11 +152,11 @@ next iteration lands on a fresh target.  Bounded by
 `helixel-mc-max-cursors' to avoid runaways.
 
 Fully isolates helixel's event / selection / tracking globals so
-the walk does NOT pollute `helixel--last-event',
-`helixel--pending-sel', `helixel--live-event' or
+the walk does NOT pollute `helixel--last-edit',
+`helixel--pending-sel', `helixel--live-edit' or
 `helixel--raw-selection-type'.  Without this, textobj advance
 functions (which internally re-run the textobj command and
-capture `this-command') would clobber `helixel--last-event'
+capture `this-command') would clobber `helixel--last-edit'
 with a sel whose `:command' is the outer mc command (e.g.
 `helixel-mc-toggle' with an accumulated `:count' equal to the
 number of walk iterations), breaking dot-repeat at fake cursors."
@@ -176,10 +172,9 @@ number of walk iterations), breaking dot-repeat at fake cursors."
         (helixel-with-replay-context
             (deactivate-mark)
             (goto-char (point-min))
-            (let ((tx (helixel-mc--make-dummy-tx sel))
-                  (helixel--advance-search-last-pos nil)
-                  (helixel--advance-search-edge-seen nil)
-                  (helixel--search-advance-done nil))
+            ;; Search-advance scratch lives on the replay ctx the macro
+            ;; just bound — no need to bind globals here.
+            (let ((tx (helixel-mc--make-dummy-tx sel)))
         (catch 'done
           (while (< (length targets) limit)
             (let ((before (point)))

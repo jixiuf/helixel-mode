@@ -22,8 +22,8 @@
 | Struct | Role | Mutable? |
 |--------|------|----------|
 | `helixel-sel` | Selection descriptor (kind + ctx + recreate closure) | Immutable (copy on update) |
-| `helixel-event` | Transaction and ring entry (op + sel + payload + runner + category + subcat) | `helixel--last-tx` is mutable; ring entries are copies |
-| `helixel-event` | Unified event for ring storage (`;` jumping + event history) | Immutable after commit |
+| `helixel-edit` | Transaction and ring entry (op + sel + payload + runner + category + subcat) | `helixel--last-tx` is mutable; ring entries are copies |
+| `helixel-edit` | Unified event for ring storage (`;` jumping + event history) | Immutable after commit |
 
 ### Kind Registry
 
@@ -63,14 +63,14 @@ Access: `(helixel--op-runner 'kill)`, `(helixel--op-advance 'insert-text)`, etc.
 | `helixel--event-ring` | buffer-local | `;` cycling, dot-repeat picker | C-g |
 | `helixel--jump-list` | global | C-o/C-i jump navigation | C-o |
 
-Both store `helixel-event` structs. The jump-list stores a subset of ring events (filtered by `helixel-jump-categories`).
+Both store `helixel-edit` structs. The jump-list stores a subset of ring events (filtered by `helixel-jump-categories`).
 
 ### Commit Pipeline
 
 ```
 Editing command
   → helixel--record-edit (creates an event tx, stores as helixel--last-tx)
-  → helixel-event-commit
+  → helixel-edit-commit
     → push to helixel--event-ring (dedup, cap)
       → push to helixel--jump-list (filtered)
 ```
@@ -128,9 +128,9 @@ helixel-repeat-edit
 `helixel--record-edit(op, &rest extra)`:
 1. Pop pending sel via `helixel--sel-pop`
 2. Look up runner from op registry
-3. Create event tx via `helixel-event-create`
+3. Create event tx via `helixel-edit-create`
 4. Store as `helixel--last-tx`
-5. Commit event via `helixel-event-commit`
+5. Commit event via `helixel-edit-commit`
 
 ### Insert Recording
 
@@ -286,7 +286,7 @@ helixel-core (cl-lib only)
 |----------|----------|---------|
 | `helixel--pending-sel` | `helixel-core.el` | Pending selection descriptor |
 | `helixel--last-tx` | `helixel-core.el` | Most recent edit transaction |
-| `helixel--live-event` | `helixel-ring.el` | Current in-progress event |
+| `helixel--live-edit` | `helixel-ring.el` | Current in-progress event |
 | `helixel--active-search` | `helixel-search.el` | Active search direction+pattern |
 
 ---
@@ -298,7 +298,7 @@ helixel-core (cl-lib only)
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions
-- For dot-repeat tests: build tx with `helixel-event-create` and set `helixel--last-tx`
+- For dot-repeat tests: build tx with `helixel-edit-create` and set `helixel--last-tx`
 - For chain tests: use `helixel-chain--make-test-tx` helper
 - Max 12s timeout per test run; zero hangs expected
 
@@ -314,7 +314,7 @@ User presses `.`
   │
   ▼
 helixel-repeat.el:helixel-repeat-edit
-  ├── Resolves helixel--last-event (global, cross-buffer)
+  ├── Resolves helixel--last-edit (global, cross-buffer)
   ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
   │
   ▼
@@ -335,7 +335,7 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-context)
   │
   ├── Apply: execute edit at current position
   │     ├── helixel-core.el:helixel--execute-edit(tx)
-  │     │     └── calls helixel-event-runner(tx) — closure stored at record time
+  │     │     └── calls helixel-edit-runner(tx) — closure stored at record time
   │     └── (runners live in helixel-editing.el, registered via
   │          helixel-register-op / helixel-define-operator)
   │
@@ -347,7 +347,7 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-context)
 Key invariants:
 - Both `helixel--inhibit-repeat-record` and `helixel--inhibit-action-track`
   are bound to t during replay (via `helixel-with-replay-context`).
-- `helixel--last-event` is NOT buffer-local — `.` replays cross-buffer.
+- `helixel--last-edit` is NOT buffer-local — `.` replays cross-buffer.
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.
 - All iterations within a single `.` press are wrapped in one undo step.

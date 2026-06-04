@@ -203,9 +203,9 @@ and commits the event.  This is called from `post-command-hook'."
     (let ((sel helixel--pending-sel))
       (setq helixel--pending-op nil
             helixel--pending-sel nil)
-      (when helixel--live-event
-        (setf (helixel-event-sel helixel--live-event) sel)
-        (helixel-event-commit)))))
+      (when helixel--live-edit
+        (setf (helixel-edit-sel helixel--live-edit) sel)
+        (helixel-edit-commit)))))
 
 ;; Wire textobj hooks for action recording and visual state detection.
 (setq helixel-textobj-action-function #'helixel--tracking-open)

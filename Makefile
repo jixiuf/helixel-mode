@@ -1,7 +1,7 @@
 EMACS ?= emacs
 
-FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-register.el helixel-action.el helixel-insert-record.el helixel-repeat-strategy.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj-engine.el helixel-textobj-pair.el helixel-textobj-block.el helixel-textobj-marks.el helixel-textobj.el helixel-mc-core.el helixel-mc-targets.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel.el
-ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-register.elc helixel-action.elc helixel-insert-record.elc helixel-repeat-strategy.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj-engine.elc helixel-textobj-pair.elc helixel-textobj-block.elc helixel-textobj-marks.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-targets.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel.elc
+FILES = helixel-core.el helixel-grouped-ring.el helixel-replay.el helixel-ring.el helixel-macros.el helixel-register.el helixel-action.el helixel-insert-record.el helixel-repeat-strategy.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj-engine.el helixel-textobj-pair.el helixel-textobj-block.el helixel-textobj-marks.el helixel-textobj.el helixel-mc-core.el helixel-mc-targets.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel.el
+ELS := helixel-core.elc helixel-grouped-ring.elc helixel-replay.elc helixel-ring.elc helixel-macros.elc helixel-register.elc helixel-action.elc helixel-insert-record.elc helixel-repeat-strategy.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj-engine.elc helixel-textobj-pair.elc helixel-textobj-block.elc helixel-textobj-marks.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-targets.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
@@ -120,7 +120,7 @@ ctx-lint:
 	    if grep -qn "plist-get.*$$key" "$$file" 2>/dev/null; then \
 	      MATCHES=$$(grep -n "plist-get.*$$key" "$$file" \
 	                | grep -v "helixel--active-search" \
-	                | grep -v "helixel-event-payload" \
+	                | grep -v "helixel-edit-payload" \
 	                | grep -v "ctx-lint-ok"); \
 	      if [ -n "$$MATCHES" ]; then \
 	        echo "$$file: REVIEW — plist-get with key $$key (verify it is not ctx):"; \
@@ -128,9 +128,9 @@ ctx-lint:
 	      fi; \
 	    fi; \
 	  done; \
-	  if grep -qn "plist-get (helixel-event-payload" "$$file" 2>/dev/null; then \
-	    echo "$$file: FATAL — raw plist-get on helixel-event-payload; use helixel-event-payload-get:"; \
-	    grep -n "plist-get (helixel-event-payload" "$$file"; \
+	  if grep -qn "plist-get (helixel-edit-payload" "$$file" 2>/dev/null; then \
+	    echo "$$file: FATAL — raw plist-get on helixel-edit-payload; use helixel-edit-payload-get:"; \
+	    grep -n "plist-get (helixel-edit-payload" "$$file"; \
 	    err=1; \
 	  fi; \
 	done; \

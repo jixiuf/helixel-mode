@@ -36,6 +36,7 @@
 
 (require 'cl-lib)
 (require 'helixel-core)
+(require 'helixel-replay)
 
 ;; ----------------------------------------------------------------------
 ;; State variables
@@ -49,70 +50,70 @@ nil = live event.  0 = newest ring entry.  N = older.")
 ;; Buffer-local event ring
 ;; ----------------------------------------------------------------------
 
-(defcustom helixel-event-ring-max 50
+(defcustom helixel-edit-ring-max 50
   "Maximum number of events stored in `helixel--event-ring'."
   :type 'integer
   :group 'helixel)
 
 (defvar-local helixel--event-ring nil
-  "Event ring, most recent first.  Capped at `helixel-event-ring-max'.
-Each entry is a `helixel-event' struct.
+  "Event ring, most recent first.  Capped at `helixel-edit-ring-max'.
+Each entry is a `helixel-edit' struct.
 Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
 
-(defvar-local helixel--live-event nil
-  "The currently in-progress `helixel-event'.
+(defvar-local helixel--live-edit nil
+  "The currently in-progress `helixel-edit'.
 Set at command start, committed to ring when complete.")
 
-;; `helixel--last-event' is defined in helixel-core.el.
+;; `helixel--last-edit' is defined in helixel-core.el.
 ;; It is available transitively through the require chain.
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
   "Event categories that carry a selection descriptor.
-Used by `helixel-event-commit' to sync `helixel--pending-sel'
+Used by `helixel-edit-commit' to sync `helixel--pending-sel'
 into the committed event's :sel slot when the event's own :sel
 is nil.  Categories not listed here never carry a pending-sel.")
 
-(defun helixel-event--ring-cap ()
-  "Truncate `helixel--event-ring' to `helixel-event-ring-max' entries.
+(defun helixel-edit--ring-cap ()
+  "Truncate `helixel--event-ring' to `helixel-edit-ring-max' entries.
 Releases markers of evicted entries to prevent leaks."
-  (when (> (length helixel--event-ring) helixel-event-ring-max)
-    (let ((tail (nthcdr helixel-event-ring-max helixel--event-ring)))
+  (when (> (length helixel--event-ring) helixel-edit-ring-max)
+    (let ((tail (nthcdr helixel-edit-ring-max helixel--event-ring)))
       (dolist (e tail)
-        (when-let* ((mr (helixel-event-mark-region e))
+        (when-let* ((mr (helixel-edit-mark-region e))
                     ((consp mr)))
           (set-marker (car mr) nil)
           (set-marker (cdr mr) nil))))
-    (setcdr (nthcdr (1- helixel-event-ring-max)
+    (setcdr (nthcdr (1- helixel-edit-ring-max)
                     helixel--event-ring)
             nil)))
 
-(defun helixel-event-commit ()
-  "Commit `helixel--live-event' to `helixel--event-ring'.
+(defun helixel-edit-commit ()
+  "Commit `helixel--live-edit' to `helixel--event-ring'.
 Deep-copies the event (marker + sel) so ring entries are independent.
 Deduplicates against the ring front — same (op sel payload) skips push.
 Also mirrors to `helixel--global-jump-log'.
-Sets `helixel--last-event' to the committed entry.
+Sets `helixel--last-edit' to the committed entry.
 Returns the committed entry or nil."
-  (when helixel--live-event
+  (when helixel--live-edit
     ;; Sync pending-sel into the live-event so movement/search
     ;; events in the ring carry their selection descriptor.
     ;; Only for selection-creating categories; edits already set
     ;; sel via `helixel--live-edit-set'.
     (when (and helixel--pending-sel
-               (not (helixel-event-sel helixel--live-event))
-               (memq (helixel-event-category helixel--live-event)
+               (not (helixel-edit-sel helixel--live-edit))
+               (memq (helixel-edit-category helixel--live-edit)
                      helixel--sel-categories))
-      (setf (helixel-event-sel helixel--live-event)
+      (setf (helixel-edit-sel helixel--live-edit)
             (helixel-sel--copy helixel--pending-sel)))
-    (let ((entry (helixel-event--copy helixel--live-event)))
+    (let ((entry (helixel-edit--copy helixel--live-edit)))
       (unless (and (car helixel--event-ring)
-                   (helixel-event--same-content-p
+                   (helixel-edit--same-content-p
                     entry (car helixel--event-ring)))
         (push entry helixel--event-ring)
-        (helixel-event--ring-cap))
-      (setq helixel--last-event entry)
+        (helixel-edit--ring-cap))
+      (setq helixel--last-edit entry)
       (helixel--global-jump-log-push entry)
-      (setq helixel--live-event nil)
+      (setq helixel--live-edit nil)
       entry)))
 
 ;; ── Live-event helpers ──
@@ -121,47 +122,47 @@ Returns the committed entry or nil."
   "Cancel the current action via \\[keyboard-quit].
 Commits meaningful events, pushes a state/cancel sentinel,
 and clears the live state."
-  (helixel-event-commit)
+  (helixel-edit-commit)
   ;; Push cancel sentinel for dedup boundary
-  (setq helixel--live-event
-        (make-helixel-event
+  (setq helixel--live-edit
+        (make-helixel-edit
          :category 'state
          :subcat 'cancel
          :mark-region (let ((pm (point-marker)))
                          (cons pm (copy-marker pm t)))
          :timestamp (float-time)
          :buffer (current-buffer)))
-  (helixel-event-commit))
+  (helixel-edit-commit))
 
 (defun helixel--live-edit-set (tx)
-  "Set edit details from TX on `helixel--live-event'."
-  (when (and helixel--live-event (helixel-event-p tx))
-    (setf (helixel-event-op helixel--live-event) (helixel-event-op tx))
-    (setf (helixel-event-sel helixel--live-event) (helixel-event-sel tx))
-    (setf (helixel-event-payload helixel--live-event)
-          (helixel-event-payload tx))
-    (setf (helixel-event-runner helixel--live-event)
-          (helixel-event-runner tx))
-    (when-let* ((disp (helixel-event-display tx)))
-      (setf (helixel-event-display helixel--live-event) disp))))
+  "Set edit details from TX on `helixel--live-edit'."
+  (when (and helixel--live-edit (helixel-edit-p tx))
+    (setf (helixel-edit-op helixel--live-edit) (helixel-edit-op tx))
+    (setf (helixel-edit-sel helixel--live-edit) (helixel-edit-sel tx))
+    (setf (helixel-edit-payload helixel--live-edit)
+          (helixel-edit-payload tx))
+    (setf (helixel-edit-runner helixel--live-edit)
+          (helixel-edit-runner tx))
+    (when-let* ((disp (helixel-edit-display tx)))
+      (setf (helixel-edit-display helixel--live-edit) disp))))
 
 ;; ── Unified entry point: open event (commit prev, create new) ──
 
 (defun helixel--tracking-open (category subcat &optional op)
-  "Commit previous `helixel--live-event' and create a new one.
+  "Commit previous `helixel--live-edit' and create a new one.
 CATEGORY and SUBCAT classify the event for \=`;\=` and jump-list.
 OP is an optional operator symbol (nil for movement/search).
 
-No-op when `helixel--in-replay' is non-nil (dot-repeat).
+No-op when `(helixel-replaying-p)` is non-nil (dot-repeat).
 Does NOT commit the new event — caller is responsible for eventual commit."
-  (unless helixel--in-replay
+  (unless (helixel-replaying-p)
     ;; Clear textobj selection state on non-textobj actions
     (when (and (eq helixel--raw-selection-type 'textobj)
                (not (eq category 'textobj)))
       (setq helixel--raw-selection-type nil))
-    (helixel-event-commit)
-    (setq helixel--live-event
-          (make-helixel-event
+    (helixel-edit-commit)
+    (setq helixel--live-edit
+          (make-helixel-edit
            :op op
            :category category
            :subcat subcat
@@ -238,12 +239,11 @@ Compares :buffer, :category, :subcat, and marker position."
 Only pushes if EVENT's :category is in `helixel-jump-categories'.
 Creates independent marker copy; the jump-log entry is lightweight."
   (when (and event
-             (memq (helixel-event-category event) helixel-jump-categories)
+             (memq (helixel-edit-category event) helixel-jump-categories)
              ;; Don't pollute the global (cross-buffer) jump log
              ;; with events committed during fake-cursor dispatch.
-             (not (bound-and-true-p
-                   helixel-mc-executing-command-for-fake-cursor)))
-    (let* ((src-mr (helixel-event-mark-region event))
+             (not (helixel-replay-in-fake-p)))
+    (let* ((src-mr (helixel-edit-mark-region event))
            (buf (if (and (consp src-mr) (markerp (car src-mr)))
                     (marker-buffer (car src-mr))
                   (current-buffer)))
@@ -251,8 +251,8 @@ Creates independent marker copy; the jump-log entry is lightweight."
                                     (cons (copy-marker (car src-mr))
                                           (copy-marker (cdr src-mr) t)))
                     :buffer ,buf
-                    :category ,(helixel-event-category event)
-                    :subcat ,(helixel-event-subcat event))))
+                    :category ,(helixel-edit-category event)
+                    :subcat ,(helixel-edit-subcat event))))
       (unless (helixel--jump-same-content-p
                entry (car helixel--global-jump-log))
         (push entry helixel--global-jump-log)

@@ -35,6 +35,7 @@
 (require 'cl-lib)
 
 (require 'helixel-core)
+(require 'helixel-grouped-ring)
 (require 'helixel-ring)
 
 ;; ----------------------------------------------------------------------
@@ -55,7 +56,7 @@ Returns (BEG . END) or nil if no bounds found."
       (cons (car b) (cdr b)))))
 
 (defun helixel--set-mark-region (thing-or-bounds &optional outer-p)
-  "Set the \=:mark-region slot of `helixel--live-event'.
+  "Set the \=:mark-region slot of `helixel--live-edit'.
 If THING-OR-BOUNDS is a cons (BEG . END), use it as pre-computed bounds.
 If it is a thingatpt symbol, compute bounds via
 `helixel--compute-mark-bounds' at point.
@@ -68,14 +69,14 @@ These survive buffer edits and are used by the action cycle (`\;')
 to mark the region without re-computing bounds.
 
 Old markers are freed before replacement to prevent leaks."
-  (when (and (not helixel--in-replay)
-             helixel--live-event)
-    (let* ((old (helixel-event-mark-region helixel--live-event))
+  (when (and (not (helixel-replaying-p))
+             helixel--live-edit)
+    (let* ((old (helixel-edit-mark-region helixel--live-edit))
            (bounds (if (consp thing-or-bounds)
                        thing-or-bounds
                      (save-excursion
-                       (goto-char (car (helixel-event-mark-region
-                                         helixel--live-event)))
+                       (goto-char (car (helixel-edit-mark-region
+                                         helixel--live-edit)))
                        (helixel--compute-mark-bounds
                         thing-or-bounds outer-p)))))
       (when bounds
@@ -85,7 +86,7 @@ Old markers are freed before replacement to prevent leaks."
           (set-marker (cdr old) nil))
         (let ((beg-marker (copy-marker (car bounds)))
               (end-marker (copy-marker (cdr bounds) t)))
-          (setf (helixel-event-mark-region helixel--live-event)
+          (setf (helixel-edit-mark-region helixel--live-edit)
                 (cons beg-marker end-marker)))))))
 
 ;; ----------------------------------------------------------------------
@@ -124,9 +125,9 @@ Consults `helixel-semicolon-mark-thing'."
   (cl-some
    (lambda (entry)
      (if (consp entry)
-         (and (eq (helixel-event-category event) (car entry))
-              (eq (helixel-event-subcat event) (cdr entry)))
-       (eq (helixel-event-category event) entry)))
+         (and (eq (helixel-edit-category event) (car entry))
+              (eq (helixel-edit-subcat event) (cdr entry)))
+       (eq (helixel-edit-category event) entry)))
    helixel-semicolon-mark-thing))
 
 ;; ----------------------------------------------------------------------
@@ -141,76 +142,22 @@ Typically `helixel--clear-data'.")
 ;; Event display
 ;; ----------------------------------------------------------------------
 
-(defun helixel-event-display-format (event)
-  "Format `helixel-event' EVENT for display in cycling messages.
-Uses `helixel-event-display' if set, otherwise builds from
+(defun helixel-edit-display-format (event)
+  "Format `helixel-edit' EVENT for display in cycling messages.
+Uses `helixel-edit-display' if set, otherwise builds from
 category and subcat."
-  (or (helixel-event-display event)
-      (let ((cat (helixel-event-category event))
-            (sub (helixel-event-subcat event)))
+  (or (helixel-edit-display event)
+      (let ((cat (helixel-edit-category event))
+            (sub (helixel-edit-subcat event)))
         (cond
          ((and (eq cat 'state) (eq sub 'cancel)) "C-g")
          (t (format "%s.%s" cat sub))))))
 
 (defun helixel-action-display (event)
-  "Format EVENT for display.  Delegates to `helixel-event-display-format'."
-  (helixel-event-display-format event))
+  "Format EVENT for display.  Delegates to `helixel-edit-display-format'."
+  (helixel-edit-display-format event))
 
-;; ----------------------------------------------------------------------
-;; Generic grouped-ring helpers
-;; ----------------------------------------------------------------------
-;;
-;; Both `;' cycling (event ring) and C-o/C-i (jump list) share the
-;; same core algorithm.  These helpers are parameterized by visibility
-;; and same-group predicates.
-
-(defun helixel--grouped-ring-group-start (list pos same-group-pred)
-  "Return the oldest index in LIST of the group containing POS.
-SAME-GROUP-PRED is a function of two elements returning non-nil
-when they belong to the same group."
-  (let ((len (length list)))
-    (while (and (< (1+ pos) len)
-                (funcall same-group-pred
-                         (nth pos list) (nth (1+ pos) list)))
-      (cl-incf pos))
-    pos))
-
-(defun helixel--grouped-ring-group-newest (list pos same-group-pred)
-  "Return the newest index in LIST of the group containing POS.
-SAME-GROUP-PRED is a function of two elements returning non-nil
-when they belong to the same group."
-  (let ((i pos))
-    (while (and (> i 0)
-                (funcall same-group-pred
-                         (nth i list) (nth (1- i) list)))
-      (cl-decf i))
-    i))
-
-(defun helixel--grouped-ring-visible-index (list pos visible-pred)
-  "Return index of first visible entry starting at POS in LIST, or nil.
-VISIBLE-PRED is a function of one element returning non-nil when the
-entry should be counted as visible."
-  (cl-loop for i from pos below (length list)
-           when (funcall visible-pred (nth i list))
-           return i))
-
-(defun helixel--grouped-ring-visible-count (list visible-pred)
-  "Count visible entries in LIST.
-VISIBLE-PRED is a function of one element returning non-nil when the
-entry should be counted as visible."
-  (cl-loop for a in list
-           when (funcall visible-pred a)
-           count 1))
-
-(defun helixel--grouped-ring-find (list pos direction visible-pred)
-  "Find index of next visible entry from POS in DIRECTION (+1/-1).
-LIST is the ring to search.  VISIBLE-PRED is a function of one
-element returning non-nil when the entry is visible."
-  (let ((len (length list)))
-    (cl-loop for i from (+ pos direction) by direction
-             while (if (> direction 0) (< i len) (>= i 0))
-             when (funcall visible-pred (nth i list))
-             return i)))
+;; Generic grouped-ring helpers live in `helixel-grouped-ring'.
 
 ;; ----------------------------------------------------------------------
 ;; Marker jump helper
@@ -222,17 +169,17 @@ element returning non-nil when the entry is visible."
 
 (defun helixel-action--cycle-visible-p (event)
   "Return non-nil if EVENT should be visible during `;' cycling."
-  (memq (helixel-event-category event) helixel-action-cycle-categories))
+  (memq (helixel-edit-category event) helixel-action-cycle-categories))
 
 (defun helixel-action--cycle-display (event pos ring)
   "Format cycling message for EVENT at POS in RING."
-  (let* ((total (helixel--grouped-ring-visible-count
+  (let* ((total (helixel-gr-visible-count
                  ring #'helixel-action--cycle-visible-p))
          (display-pos (1+ (cl-loop for i from 0 below pos
                                    count (helixel-action--cycle-visible-p
                                           (nth i ring))))))
     (format "[%d/%d] %s" display-pos total
-            (helixel-event-display-format event))))
+            (helixel-edit-display-format event))))
 
 (defun helixel-action--push-sel-from-event (event)
   "Push a `helixel-sel' from EVENT for `.' repeat.
@@ -242,7 +189,7 @@ the selection descriptor stored in EVENT.
 Adds `:span t' so the strategy builder extends the region
 to session-start, matching `;''s behaviour."
   (let ((pending helixel--pending-sel)
-        (event-sel (helixel-event-sel event))
+        (event-sel (helixel-edit-sel event))
         sel)
     (cond
      ((and pending event-sel
@@ -265,7 +212,7 @@ If EVENT has a non-degenerate :mark-region and matches
 activate a real region pointing at the far edge from point
 and return t (did-mark).  Otherwise just push the mark to the
 begin marker and return nil."
-  (let* ((mr (helixel-event-mark-region event))
+  (let* ((mr (helixel-edit-mark-region event))
          (a (marker-position (car mr)))
          (b (marker-position (cdr mr)))
          (degenerate (= a b)))
@@ -305,23 +252,23 @@ Thin orchestrator after step 15 — work split into
       (helixel-action--cycle-auto-advance did-mark first-call))))
 
 (defun helixel-action--same-group-p (a b)
-  "Return non-nil if `helixel-event' structs A and B share a group.
+  "Return non-nil if `helixel-edit' structs A and B share a group.
 Two events are in the same group when they share both
 category and subcat."
   (and a b
-       (eq (helixel-event-category a) (helixel-event-category b))
-       (eq (helixel-event-subcat a) (helixel-event-subcat b))))
+       (eq (helixel-edit-category a) (helixel-edit-category b))
+       (eq (helixel-edit-subcat a) (helixel-edit-subcat b))))
 
 (defun helixel-action--cycle-group-start (pos ring)
   "Return the oldest index in RING of the group containing POS.
 Uses `helixel-action--same-group-p' as the grouping predicate."
-  (helixel--grouped-ring-group-start ring pos
+  (helixel-gr-group-start ring pos
     #'helixel-action--same-group-p))
 
 (defun helixel-action--cycle-group-newest (pos ring)
   "Return the newest index in RING of the group containing POS.
 Uses `helixel-action--same-group-p' as the grouping predicate."
-  (helixel--grouped-ring-group-newest ring pos
+  (helixel-gr-group-newest ring pos
     #'helixel-action--same-group-p))
 
 (defun helixel-action--cycle-auto-advance (did-mark first-call)
@@ -361,26 +308,26 @@ Optional prefix ARG is passed to the underlying commands."
         (let* ((newest (helixel-action--cycle-group-newest
                         helixel--action-pos helixel--event-ring))
                (prev (when (> newest 0)
-                       (helixel--grouped-ring-visible-index
+                       (helixel-gr-visible-index
                         helixel--event-ring (1- newest)
                         #'helixel-action--cycle-visible-p))))
           (if prev
               (helixel-action--cycle-show prev helixel--event-ring)
             (message "At newest"))))
        ((eq helixel--action-pos 0)
-        (if helixel--live-event
+        (if helixel--live-edit
             (progn
               (setq helixel--action-pos nil)
-              (push-mark (car (helixel-event-mark-region
-                                  helixel--live-event)) t t)
+              (push-mark (car (helixel-edit-mark-region
+                                  helixel--live-edit)) t t)
               (message "[live] %s"
-                       (helixel-event-display-format helixel--live-event)))
+                       (helixel-edit-display-format helixel--live-edit)))
           (message "At newest")))
        (t (message "At newest")))
     ;; ; → go back (older)
     (cond
      (helixel--action-pos
-      (let ((pos (helixel--grouped-ring-find
+      (let ((pos (helixel-gr-find
                   helixel--event-ring helixel--action-pos 1
                   #'helixel-action--cycle-visible-p)))
         (if pos
@@ -389,23 +336,23 @@ Optional prefix ARG is passed to the underlying commands."
           ;; to expand the visible region (first-`;' span wrap).
           (let ((gpos (helixel-action--cycle-group-start
                        helixel--action-pos helixel--event-ring)))
-            (push-mark (car (helixel-event-mark-region
+            (push-mark (car (helixel-edit-mark-region
                                 (nth gpos helixel--event-ring))) t t)
             (message "%s"
                      (helixel-action--cycle-display
                       (nth gpos helixel--event-ring)
                       gpos helixel--event-ring))))))
-     (helixel--live-event
+     (helixel--live-edit
       ;; Commit live event first, then show ring[0]
-      (helixel-event-commit)
-      (let ((pos (helixel--grouped-ring-visible-index
+      (helixel-edit-commit)
+      (let ((pos (helixel-gr-visible-index
                   helixel--event-ring 0
                   #'helixel-action--cycle-visible-p)))
         (if pos
             (helixel-action--cycle-show pos helixel--event-ring)
           (message "No saved actions"))))
      (helixel--event-ring
-      (let ((pos (helixel--grouped-ring-visible-index
+      (let ((pos (helixel-gr-visible-index
                   helixel--event-ring 0
                   #'helixel-action--cycle-visible-p)))
         (if pos
@@ -423,7 +370,7 @@ CATEGORY defaults to `user', SUBCAT defaults to `jump'."
   (let ((cat (or category 'user))
         (sub (or subcat 'jump)))
     (helixel--global-jump-log-push
-     (make-helixel-event
+     (make-helixel-edit
       :category cat
       :subcat sub
       :mark-region (let ((pm (point-marker))) (cons pm (copy-marker pm t)))
@@ -472,18 +419,18 @@ Adds :before advice to record position before SYMBOL runs."
 
 (defun helixel--jump-group-start (pos)
   "Return group-start index for jump entry at POS."
-  (helixel--grouped-ring-group-start helixel--global-jump-log pos
+  (helixel-gr-group-start helixel--global-jump-log pos
     #'helixel--jump-same-group-p))
 
 (defun helixel--jump-group-newest (pos)
   "Return newest index for jump group containing POS."
-  (helixel--grouped-ring-group-newest helixel--global-jump-log pos
+  (helixel-gr-group-newest helixel--global-jump-log pos
     #'helixel--jump-same-group-p))
 
 (defun helixel--jump-message (pos)
   "Format and message the current jump position POS."
   (let* ((entry (nth pos helixel--global-jump-log))
-         (total (helixel--grouped-ring-visible-count
+         (total (helixel-gr-visible-count
                  helixel--global-jump-log #'helixel--jump-visible-p))
          (display-pos (1+ (cl-loop for i from 0 below pos
                                    count (helixel--jump-visible-p
@@ -525,7 +472,7 @@ Adds :before advice to record position before SYMBOL runs."
     (helixel-register-jump 'jump 'return)
     (setq helixel--jump-pos (if saved-pos (1+ saved-pos) nil))
     (let* ((start (if helixel--jump-pos helixel--jump-pos 0))
-           (pos (helixel--grouped-ring-find
+           (pos (helixel-gr-find
                  helixel--global-jump-log start 1
                  #'helixel--jump-visible-p))
            (found nil))
@@ -533,7 +480,7 @@ Adds :before advice to record position before SYMBOL runs."
         (if (helixel--jump-goto pos)
             (setq found t pos nil)
           (setq helixel--jump-pos pos
-                pos (helixel--grouped-ring-find
+                pos (helixel-gr-find
                      helixel--global-jump-log pos 1
                      #'helixel--jump-visible-p))))
       (unless found
@@ -546,7 +493,7 @@ Adds :before advice to record position before SYMBOL runs."
       (let ((newest (helixel--jump-group-newest helixel--jump-pos))
             (pos nil))
         (while (and (not pos) (> newest 0))
-          (setq pos (helixel--grouped-ring-visible-index
+          (setq pos (helixel-gr-visible-index
                      helixel--global-jump-log (1- newest)
                      #'helixel--jump-visible-p))
           (when pos

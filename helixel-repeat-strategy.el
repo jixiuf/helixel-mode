@@ -102,14 +102,14 @@ When REVERSE-P or `helixel--repeat-permanent-flip' is non-nil and
 the selection kind has a `:flip-dir-fn' registered, build a copy
 of EDIT whose sel has been flipped by that function.  Otherwise
 return EDIT unchanged."
-  (let* ((sel (helixel-event-sel edit))
+  (let* ((sel (helixel-edit-sel edit))
          (kind (and sel (helixel-sel-kind sel)))
          (flip-fn (and kind (helixel--kind-flip-dir-fn kind)))
          (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
     (if (and effective-reverse sel flip-fn)
         (let* ((reversed-sel (funcall flip-fn sel))
-               (new-edit (helixel-event-copy edit)))
-          (setf (helixel-event-sel new-edit) reversed-sel)
+               (new-edit (helixel-edit-copy edit)))
+          (setf (helixel-edit-sel new-edit) reversed-sel)
           new-edit)
       edit)))
 
@@ -121,7 +121,7 @@ If the operator has a :strategy-builder in the op registry, use it.
 Otherwise fall back to `helixel--default-strategy-builder'.
 If REVERSE-P is non-nil, flip :dir in the selection ctx
 for line/search kinds."
-  (let* ((op (helixel-event-op edit))
+  (let* ((op (helixel-edit-op edit))
          (custom-builder (helixel--op-strategy-builder op)))
     (if custom-builder
         (funcall custom-builder edit reverse-p)
@@ -136,9 +136,9 @@ Looks up the advance function from the kind registry.
 When the operator has no :repeat-advance tag, the advance
 just recreates the selection at the current position
 \(no actual advancing — e.g. kill auto-moves point)."
-  (let* ((sel (helixel-event-sel edit))
+  (let* ((sel (helixel-edit-sel edit))
          (kind (and sel (helixel-sel-kind sel)))
-         (op (helixel-event-op edit))
+         (op (helixel-edit-op edit))
          (adv-tag (helixel--op-advance op))
          (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p))
          (advance-fn
@@ -153,14 +153,14 @@ just recreates the selection at the current position
               (condition-case nil
                   (progn
                     (helixel-sel-call-recreate
-                     (helixel-event-sel ed))
+                     (helixel-edit-sel ed))
                     t)
                 (error nil)))))))
     (make-helixel-repeat-strategy
      :advance (lambda (_ed) (funcall advance-fn effective-edit))
      :apply   (lambda (_ed) (helixel--execute-edit effective-edit))
      :reset   (lambda (_ed)
-                (when-let* ((m (car (helixel-event-mark-region
+                (when-let* ((m (car (helixel-edit-mark-region
                                        effective-edit))))
                   (goto-char (marker-position m))))
      :all-buffer-fn (helixel--kind-all-buffer-fn kind)

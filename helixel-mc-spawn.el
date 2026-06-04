@@ -51,10 +51,9 @@
 ;; Special vars from helixel-repeat — must be `defvar' so the `let'
 ;; bindings below are treated as dynamic, not lexical.
 (defvar helixel--pending-sel)
-(defvar helixel--last-event)
-(defvar helixel--live-event)
+(defvar helixel--last-edit)
+(defvar helixel--live-edit)
 (defvar helixel--raw-selection-type)
-(defvar helixel--in-replay)
 
 ;; ── High-level entry points ──
 
@@ -64,7 +63,7 @@
 If fake cursors exist → clear them.
 Otherwise spawn from:
   1. `helixel--pending-sel' (most recent selection) if non-nil
-  2. `helixel--last-event' sel (last edit's selection)
+  2. `helixel--last-edit' sel (last edit's selection)
   3. signal `user-error' if neither has a usable selection."
   (interactive)
   (cond
@@ -72,9 +71,9 @@ Otherwise spawn from:
    (t
     (let ((sel (or (and (boundp 'helixel--pending-sel)
                         helixel--pending-sel)
-                   (and (boundp 'helixel--last-event)
-                        helixel--last-event
-                        (helixel-event-sel helixel--last-event)))))
+                   (and (boundp 'helixel--last-edit)
+                        helixel--last-edit
+                        (helixel-edit-sel helixel--last-edit)))))
       (unless sel
         (user-error "No selection to spawn cursors from"))
       (let ((n (helixel-mc-spawn-from-sel sel)))

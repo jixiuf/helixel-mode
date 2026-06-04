@@ -761,7 +761,7 @@ inherently create the region).  Returns t on success, nil when
 recreate fails.
 The strategy skips the separate `recreate-selection' call for inline
 advance functions to avoid double-moving."
-  (let ((sel (helixel-event-sel tx)))
+  (let ((sel (helixel-edit-sel tx)))
     (when sel
       (condition-case nil
           (progn (helixel--recreate-selection sel) t)

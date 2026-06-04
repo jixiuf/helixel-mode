@@ -28,25 +28,25 @@ real cursor's bindings of any registered per-cursor var."
     (helixel-mc-create-fake-cursor 5)   ; on 'd'
     (helixel-mc-create-fake-cursor 9)   ; on 'h'
     (let ((helixel--pending-sel  'REAL-SEL)
-          (helixel--last-event   'REAL-EVT)
+          (helixel--last-edit   'REAL-EVT)
           (helixel--active-search 'REAL-SEARCH)
           (helixel--event-ring   '(real-evt))
-          (helixel--live-event   'REAL-LIVE)
+          (helixel--live-edit   'REAL-LIVE)
           (helixel--action-pos   42))
       ;; Per-fake mutation
       (helixel-mc-with-each-cursor
         (setq helixel--pending-sel   'FAKE-SEL
-              helixel--last-event    'FAKE-EVT
+              helixel--last-edit    'FAKE-EVT
               helixel--active-search 'FAKE-SEARCH
               helixel--event-ring    '(fake-evt)
-              helixel--live-event    'FAKE-LIVE
+              helixel--live-edit    'FAKE-LIVE
               helixel--action-pos    99))
       ;; Real cursor's bindings untouched
       (should (eq helixel--pending-sel   'REAL-SEL))
-      (should (eq helixel--last-event    'REAL-EVT))
+      (should (eq helixel--last-edit    'REAL-EVT))
       (should (eq helixel--active-search 'REAL-SEARCH))
       (should (equal helixel--event-ring '(real-evt)))
-      (should (eq helixel--live-event    'REAL-LIVE))
+      (should (eq helixel--live-edit    'REAL-LIVE))
       (should (eq helixel--action-pos    42)))
     (helixel-mc-clear-all)))
 

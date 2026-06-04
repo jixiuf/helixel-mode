@@ -258,10 +258,10 @@ be re-invoked by the advice (recording already broadcast)."
     ;; Fake a chain TX whose runner would `error' if called.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel-event-create 'chain sel
+           (tx (helixel-edit-create 'chain sel
                  :runner (lambda (_tx) (error "REAPPLIED"))
                  :kmacro (vector ?x))))
-      (setq helixel--last-event tx))
+      (setq helixel--last-edit tx))
     ;; If the advice (still) called `apply-chain-once', the runner
     ;; would `error' — we expect a clean return.
     ;; The advice returns its `message' string — just ensure it
@@ -483,7 +483,7 @@ drop them."
 ;; ── Phase D: . and , under mc ─────────────────────────────────
 
 (ert-deftest helixel-test-mc-dot-replays-per-cursor-last-event ()
-  "Each fake snapshots its own `helixel--last-event' via
+  "Each fake snapshots its own `helixel--last-edit' via
 `helixel-mc-cursor-vars' after the broadcast.  `.' replayed via
 the amalgamated dispatcher must use the per-cursor snapshot, not
 the real cursor's event."
@@ -496,43 +496,43 @@ the real cursor's event."
     ;; directly to the overlay snapshots.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel-event-create 'insert-text sel
+           (tx (helixel-edit-create 'insert-text sel
                  :runner (lambda (_tx) (insert "X"))
                  :text "X")))
-      (setq helixel--last-event tx)
+      (setq helixel--last-edit tx)
       (dolist (ov (helixel-mc-all-cursors))
-        (overlay-put ov 'helixel--last-event tx)))
+        (overlay-put ov 'helixel--last-edit tx)))
     ;; Now broadcast `.' — dispatcher's around-advice converts it
     ;; to a single execute-edit at each cursor's point.
-    (helixel--execute-edit helixel--last-event)
+    (helixel--execute-edit helixel--last-edit)
     (helixel-mc-with-each-cursor
       (let ((helixel--inhibit-repeat-record t))
-        (helixel--execute-edit helixel--last-event)))
+        (helixel--execute-edit helixel--last-edit)))
     ;; Each cursor inserted an X at its position.
     (should (string-match-p "X" (buffer-string)))
     (should (>= (length (split-string (buffer-string) "X")) 4))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-broadcast-snapshots-last-event ()
-  "After a broadcast edit, each fake's overlay `helixel--last-event'
+  "After a broadcast edit, each fake's overlay `helixel--last-edit'
 property must be updated by `leave-cursor' — otherwise a later
 `.' at the fake would replay a stale TX."
   (helixel-test-with-buffer "aaa bbb\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    ;; Wipe any stale `helixel--last-event' from previous tests so
+    ;; Wipe any stale `helixel--last-edit' from previous tests so
     ;; the fresh fake's snapshot really starts nil.
-    (let ((helixel--last-event nil))
+    (let ((helixel--last-edit nil))
       (helixel-mc-create-fake-cursor 5)
       ;; Initially fakes have no last-event snapshot.
       (let ((ov (car (helixel-mc-all-cursors))))
-        (should-not (overlay-get ov 'helixel--last-event))
+        (should-not (overlay-get ov 'helixel--last-edit))
         (helixel-mc-with-each-cursor
           (let ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                          #'ignore)))
-            (setq helixel--last-event
-                  (helixel-event-create 'noop sel))))
-        (should (overlay-get ov 'helixel--last-event))))
+            (setq helixel--last-edit
+                  (helixel-edit-create 'noop sel))))
+        (should (overlay-get ov 'helixel--last-edit))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-dot-bypasses-advance-with-fakes ()
@@ -545,9 +545,9 @@ fires only when fakes exist."
     (let* ((called 0)
            (sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel-event-create 'noop sel
+           (tx (helixel-edit-create 'noop sel
                  :runner (lambda (_tx) (cl-incf called)))))
-      (setq helixel--last-event tx)
+      (setq helixel--last-edit tx)
       ;; Direct call to advised `.':
       (helixel-repeat-edit)
       ;; The around advice runs `helixel--execute-edit' exactly once
@@ -565,14 +565,14 @@ fake then replays the chain TX (not the pre-chain edit)."
     (helixel-mc-create-fake-cursor 2)
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel-event-create 'chain sel
+           (tx (helixel-edit-create 'chain sel
                  :runner (lambda (_tx) (ignore))
                  :kmacro (vector ?x))))
-      (setq helixel--last-event tx)
+      (setq helixel--last-edit tx)
       (helixel-mc--broadcast-last-event)
       ;; Every fake's overlay holds the chain TX as last-event.
       (dolist (ov (helixel-mc-all-cursors))
-        (should (eq tx (overlay-get ov 'helixel--last-event)))))
+        (should (eq tx (overlay-get ov 'helixel--last-edit)))))
     (helixel-mc-clear-all)))
 
 ;; ── Phase C: find-char per-cursor + per-fake error tolerance ────
@@ -635,18 +635,18 @@ events into the fake's OWN ring.  3 motions → 2 ring entries +
       (helixel-mc-with-each-cursor (helixel-forward-word-start 1)))
     (let* ((ov (car (helixel-mc-all-cursors)))
            (ring (overlay-get ov 'helixel--event-ring))
-           (live (overlay-get ov 'helixel--live-event)))
+           (live (overlay-get ov 'helixel--live-edit)))
       (should (= 2 (length ring)))
       (should live)
       (dolist (e ring)
-        (should (eq 'movement (helixel-event-category e)))))
+        (should (eq 'movement (helixel-edit-category e)))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-per-fake-rings-are-independent ()
   "Each fake's ring grows independently — commits from cursor A
 do NOT leak into cursor B's ring.  Achieved because
 `helixel-mc-cursor-vars' snapshots `helixel--event-ring' /
-`helixel--live-event' per cursor."
+`helixel--live-edit' per cursor."
   (helixel-test-with-buffer
       "alpha beta gamma delta epsilon zeta eta theta iota kappa\n"
     (helixel-enter-normal-state)
@@ -667,9 +667,9 @@ do NOT leak into cursor B's ring.  Achieved because
            (ringA (overlay-get fakeA 'helixel--event-ring))
            (ringB (overlay-get fakeB 'helixel--event-ring))
            (begA  (marker-position
-                   (car (helixel-event-mark-region (car ringA)))))
+                   (car (helixel-edit-mark-region (car ringA)))))
            (begB  (marker-position
-                   (car (helixel-event-mark-region (car ringB))))))
+                   (car (helixel-edit-mark-region (car ringB))))))
       (should (= 1 (length ringA)))
       (should (= 1 (length ringB)))
       ;; Per-cursor isolation: fakeA's mark-region is near beta;
@@ -688,7 +688,7 @@ must not corrupt the fake's state."
     (let ((ov (helixel-mc-create-fake-cursor 5)))
       ;; Sanity: fresh fake has nil ring and nil live-event.
       (should (null (overlay-get ov 'helixel--event-ring)))
-      (should (null (overlay-get ov 'helixel--live-event)))
+      (should (null (overlay-get ov 'helixel--live-edit)))
       ;; Broadcast `;' — fake's `helixel-action-cycle' sees no
       ;; ring, no live; prints "No saved actions" and returns.
       (helixel-mc-with-each-cursor (helixel-action-cycle))
@@ -699,7 +699,7 @@ must not corrupt the fake's state."
 
 (ert-deftest helixel-test-mc-spawn-after-motion-inherits-real-ring ()
   "Spawning a fake AFTER real built a ring: the fake inherits
-real's `helixel--event-ring' / `--live-event' via the snapshot
+real's `helixel--event-ring' / `--live-edit' via the snapshot
 taken by `helixel-mc-create-fake-cursor'.  This means
 `w w w s s ;' DOES work — fake's `;' cycles the inherited
 history."
@@ -710,12 +710,12 @@ history."
     (helixel-forward-word-start 1)
     (helixel-forward-word-start 1)
     (let ((real-ring-len (length helixel--event-ring))
-          (real-live helixel--live-event))
+          (real-live helixel--live-edit))
       (should (>= real-ring-len 1))
       ;; Spawn fake AFTER motions.
       (let* ((ov (helixel-mc-create-fake-cursor 13))
              (fake-ring (overlay-get ov 'helixel--event-ring))
-             (fake-live (overlay-get ov 'helixel--live-event)))
+             (fake-live (overlay-get ov 'helixel--live-edit)))
         ;; Fake's snapshot copies real's history.
         (should (= real-ring-len (length fake-ring)))
         (should (eq real-live fake-live))))
@@ -1463,13 +1463,13 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
 
 (ert-deftest helixel-test-mc-apply-last-edit ()
   (helixel-test-with-buffer "AAA\nAAA\nAAA\n"
-    ;; Build a fake helixel--last-event whose runner inserts "X".
-    (let ((tx (make-helixel-event
+    ;; Build a fake helixel--last-edit whose runner inserts "X".
+    (let ((tx (make-helixel-edit
                :op 'test-insert
                :runner (lambda (_tx) (insert "X"))
                :sel nil :payload nil :timestamp 0.0
                :buffer (current-buffer))))
-      (setq helixel--last-event tx)
+      (setq helixel--last-edit tx)
       (goto-char 1)
       (helixel-mc-create-fake-cursor 5)
       (helixel-mc-create-fake-cursor 9)
@@ -1558,13 +1558,13 @@ N word targets, not N+1."
 ;; Regression: walk-advance calls advance functions (e.g. `mark-inner-word')
 ;; which re-run the textobj command and capture `this-command' +
 ;; accumulate counts into `helixel--pending-sel'.  Without isolation,
-;; after `s s' the user's `helixel--last-event' would be overwritten
+;; after `s s' the user's `helixel--last-edit' would be overwritten
 ;; with a sel whose `:command' is the outer mc command (e.g.
 ;; `helixel-mc-toggle') and `:count' equal to the iteration count,
 ;; breaking subsequent `.` ("No previous edit").
 ;;
-;; The fix snapshots `helixel--pending-sel', `helixel--last-event',
-;; `helixel--live-event' and `helixel--raw-selection-type' before the
+;; The fix snapshots `helixel--pending-sel', `helixel--last-edit',
+;; `helixel--live-edit' and `helixel--raw-selection-type' before the
 ;; walk and restores them in `unwind-protect'.
 
 (ert-deftest helixel-test-mc-walk-advance-preserves-globals ()
@@ -1572,27 +1572,27 @@ N word targets, not N+1."
   (helixel-test-with-buffer "alpha beta gamma\n"
     (helixel-enter-normal-state)
     (let* ((sentinel-sel (helixel-test-mc--word-sel))
-           (sentinel-tx (make-helixel-event
+           (sentinel-tx (make-helixel-edit
                          :op 'change
                          :sel sentinel-sel
                          :runner #'ignore
                          :payload '(:keys [?X])
                          :timestamp 0.0
                          :buffer (current-buffer)))
-           (helixel--last-event sentinel-tx)
+           (helixel--last-edit sentinel-tx)
            (helixel--pending-sel sentinel-sel)
            (helixel--raw-selection-type 'textobj))
       (helixel-mc--walk-advance (helixel-test-mc--word-sel))
       ;; All globals must be restored exactly — no accumulated count,
       ;; no overwritten command, no flipped raw-type.
-      (should (eq helixel--last-event sentinel-tx))
+      (should (eq helixel--last-edit sentinel-tx))
       (should (eq helixel--pending-sel sentinel-sel))
       (should (eq helixel--raw-selection-type 'textobj))
       (should (= 1 (helixel-sel-textobj-count
-                    (helixel-event-sel helixel--last-event))))
+                    (helixel-edit-sel helixel--last-edit))))
       (should (eq 'helixel-mark-inner-word
                   (helixel-sel-textobj-command
-                   (helixel-event-sel helixel--last-event)))))))
+                   (helixel-edit-sel helixel--last-edit)))))))
 
 ;; ── `.' (dot) at mc cursors: apply-only, no advance ──
 ;;
@@ -1610,7 +1610,7 @@ N word targets, not N+1."
 
 (defun helixel-test-mc--make-replace-tx (replacement)
   "Synthesise a change tx whose runner replaces the active region with REPLACEMENT."
-  (make-helixel-event
+  (make-helixel-edit
    :op 'change
    :sel (helixel-test-mc--word-sel)
    :runner (lambda (_tx)
@@ -1628,7 +1628,7 @@ the wrong word and overlap with neighbouring cursors)."
     (helixel-enter-normal-state)
     (let* ((sel (helixel-test-mc--word-sel))
            (tx (helixel-test-mc--make-replace-tx "FOO"))
-           (helixel--last-event tx))
+           (helixel--last-edit tx))
       (helixel-mc-spawn-from-sel sel)
       (should (use-region-p))
       ;; Real cursor: advice short-circuits to apply-only.
@@ -1649,7 +1649,7 @@ exactly N cursors (one per word) and every word becomes FOO."
     (helixel-enter-normal-state)
     (let* ((sel (helixel-test-mc--word-sel))
            (tx (helixel-test-mc--make-replace-tx "FOO"))
-           (helixel--last-event tx))
+           (helixel--last-edit tx))
       (helixel-mc-spawn-from-sel sel)
       ;; 5 words → 1 real + 4 fakes (NOT 5 fakes / 6 cursors).
       (should (= 4 (length (helixel-mc-all-cursors))))
@@ -1662,14 +1662,14 @@ exactly N cursors (one per word) and every word becomes FOO."
 (ert-deftest helixel-test-mc-dot-advice-falls-through-without-cursors ()
   "Without fake cursors the override hook returns nil (fall through)."
   (helixel-test-with-buffer "abc\n"
-    (let ((helixel--last-event nil))
+    (let ((helixel--last-edit nil))
       (should-not (helixel-mc--repeat-edit-apply-only nil)))))
 
 (ert-deftest helixel-test-mc-dot-advice-falls-through-without-last-event ()
   "With fake cursors but no last-event, the override returns nil."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
-    (let ((helixel--last-event nil))
+    (let ((helixel--last-edit nil))
       (should-not (helixel-mc--repeat-edit-apply-only nil)))
     (helixel-mc-clear-all)))
 
@@ -2092,7 +2092,7 @@ every fake cursor independently."
   "`s s' with no stored selection signals `user-error'."
   (helixel-test-with-buffer "abc\n"
     (let ((helixel--pending-sel nil)
-          (helixel--last-event nil))
+          (helixel--last-edit nil))
       (should-error (helixel-mc-toggle) :type 'user-error))))
 
 (ert-deftest helixel-test-mc-toggle-error-not-a-sel ()
@@ -2247,7 +2247,7 @@ before real point."
 (ert-deftest helixel-test-mc-apply-last-edit-error-no-cursors ()
   "`M-s .' with no fake cursors signals `user-error'."
   (helixel-test-with-buffer "abc\n"
-    (let ((helixel--last-event (make-helixel-event
+    (let ((helixel--last-edit (make-helixel-edit
                               :op 'test :sel nil :payload nil
                               :runner #'ignore :timestamp 0.0
                               :buffer (current-buffer))))
@@ -2256,7 +2256,7 @@ before real point."
 (ert-deftest helixel-test-mc-apply-last-edit-error-no-event ()
   "`M-s .' with no last-event signals `user-error'."
   (helixel-test-with-buffer "abc\n"
-    (let ((helixel--last-event nil))
+    (let ((helixel--last-edit nil))
       (helixel-mc-create-fake-cursor 2)
       (should-error (helixel-mc-apply-last-edit) :type 'user-error))
     (helixel-mc-clear-all)))
@@ -2605,18 +2605,18 @@ region is NOT restored (the new target replaces it correctly)."
 (ert-deftest helixel-test-mc-broadcast-then-replay ()
   "Broadcasting a last-event then replaying at each fake cursor works."
   (helixel-test-with-buffer "X\nX\nX\n"
-    (let ((tx (make-helixel-event
+    (let ((tx (make-helixel-edit
                :op 'test
                :runner (lambda (_tx) (insert "Y"))
                :sel nil :payload nil :timestamp 0.0
                :buffer (current-buffer))))
-      (setq helixel--last-event tx)
+      (setq helixel--last-edit tx)
       (helixel-mc-create-fake-cursor 3)
       (helixel-mc-create-fake-cursor 5)
       (helixel-mc--broadcast-last-event)
       ;; Every fake now has the tx.
       (dolist (ov (helixel-mc-all-cursors))
-        (should (eq tx (overlay-get ov 'helixel--last-event))))
+        (should (eq tx (overlay-get ov 'helixel--last-edit))))
       ;; Apply once at each fake.
       (helixel-mc--apply-chain-once)
       (should (string= "X\nYX\nYX\n" (buffer-string)))

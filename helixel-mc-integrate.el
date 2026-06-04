@@ -27,7 +27,7 @@
 ;;                               dispatcher.  Nothing else to do.
 ;;   * dot-repeat (`.')        — whitelisted ON: each cursor runs
 ;;                               `helixel-repeat-edit' with its own
-;;                               snapshotted `helixel--last-event'.
+;;                               snapshotted `helixel--last-edit'.
 ;;   * repeat-selection (`,')  — same.
 ;;   * chain end               — `:after' advice: if any fake cursors,
 ;;                               propagate the newly built chain
@@ -45,7 +45,7 @@
 (require 'helixel-repeat)
 (require 'helixel-chain)
 
-(defvar helixel--last-event)
+(defvar helixel--last-edit)
 ;; defined in helixel-last-edit.el (loaded transitively via
 ;; helixel-mc-core → ...; explicit defvar here keeps byte-compile happy).
 
@@ -79,9 +79,9 @@ the override path — mc dispatches the same edit at each fake."
   (ignore raw-prefix)
   (when (and (bound-and-true-p helixel-multi-cursor-mode)
              (helixel-mc-any-p)
-             helixel--last-event)
+             helixel--last-edit)
     (helixel-with-replay-context
-      (helixel--execute-edit helixel--last-event))
+      (helixel--execute-edit helixel--last-edit))
     t))
 
 ;; Install / uninstall the override on mc-mode toggle.
@@ -154,23 +154,23 @@ the override path — mc dispatches the same edit at each fake."
 ;; ── Chain end: broadcast the new chain tx ──
 
 (defun helixel-mc--broadcast-last-event ()
-  "Snapshot `helixel--last-event' into every fake cursor's overlay.
+  "Snapshot `helixel--last-edit' into every fake cursor's overlay.
 Call after building a new chain transaction so subsequent `.' at
 each fake cursor replays the chain (not the pre-chain edit)."
   (dolist (ov (helixel-mc-all-cursors))
-    (overlay-put ov 'helixel--last-event helixel--last-event)))
+    (overlay-put ov 'helixel--last-edit helixel--last-edit)))
 
 (defun helixel-mc--apply-chain-once ()
-  "Execute `helixel--last-event' once at every fake cursor.
-Assumes the current `helixel--last-event' is a chain transaction
+  "Execute `helixel--last-edit' once at every fake cursor.
+Assumes the current `helixel--last-edit' is a chain transaction
 \(or any replayable edit).  Wraps the batch in one undo step."
-  (when (and helixel-multi-cursor-mode helixel--last-event)
-    (let ((helixel-mc--inhibit t)
-          (tx helixel--last-event))
-      (undo-amalgamate-change-group
-        (helixel-mc-with-each-cursor
-          (let ((helixel--in-replay t))
-            (helixel--execute-edit tx)))))))
+  (when (and helixel-multi-cursor-mode helixel--last-edit)
+    (helixel-with-replay-as 'mc-batch
+      (let ((tx helixel--last-edit))
+        (undo-amalgamate-change-group
+          (helixel-mc-with-each-cursor
+            (helixel-with-replay-as 'dot
+              (helixel--execute-edit tx))))))))
 
 (defun helixel-mc--chain-end-advice (&rest _)
   "After-advice on `helixel-repeat-chain-end'.
@@ -182,8 +182,8 @@ fake).  We only emit the user-visible confirmation message,
 broadcasting the new chain TX to fake cursors so a future `.' at
 any fake replays the same chain."
   (when (and helixel-multi-cursor-mode
-             helixel--last-event
-             (eq (helixel-event-op helixel--last-event) 'chain))
+             helixel--last-edit
+             (eq (helixel-edit-op helixel--last-edit) 'chain))
     (helixel-mc--broadcast-last-event)
     (let ((n (length (helixel-mc-all-cursors))))
       (message "helixel-mc: chain recorded for %d fake cursor%s"
@@ -275,14 +275,14 @@ Called from `helixel-mode-off-hook'."
 
 ;;;###autoload
 (defun helixel-mc-apply-last-edit ()
-  "Apply `helixel--last-event' once at every fake cursor.
+  "Apply `helixel--last-edit' once at every fake cursor.
 Useful when you spawned cursors AFTER an edit and want to retro-
 fit it onto the new positions.  Acts on the real cursor's
-`helixel--last-event' so cursors all replay the SAME edit."
+`helixel--last-edit' so cursors all replay the SAME edit."
   (interactive)
   (unless (helixel-mc-any-p)
     (user-error "No fake cursors"))
-  (unless helixel--last-event
+  (unless helixel--last-edit
     (user-error "No edit to apply"))
   (helixel-mc--broadcast-last-event)
   (helixel-mc--apply-chain-once))
@@ -335,13 +335,13 @@ selection started."
       (cond
        ;; Entering visual: activate each fake's mark at its point.
        ((and (eq curr 'visual) (not (eq prev 'visual)))
-        (let ((helixel-mc--inhibit t))
+        (helixel-with-replay-as 'mc-batch
           (helixel-mc-with-each-cursor
             (set-marker (mark-marker) (point))
             (setq mark-active t))))
        ;; Leaving visual: deactivate each fake's mark.
        ((and (eq prev 'visual) (not (eq curr 'visual)))
-        (let ((helixel-mc--inhibit t))
+        (helixel-with-replay-as 'mc-batch
           (helixel-mc-with-each-cursor
             (setq mark-active nil))))))))
 
@@ -435,7 +435,7 @@ when no region is active), using CHAR captured from the real-
 cursor call."
   (setq helixel-mc--last-replace-char char)
   (when (and helixel-multi-cursor-mode (helixel-mc-any-p))
-    (let ((helixel-mc--inhibit t))
+    (helixel-with-replay-as 'mc-batch
       (helixel-mc-with-each-cursor
         (if (use-region-p)
             (helixel--replace-region
@@ -466,12 +466,12 @@ pending selection).  Fakes without an active region are skipped."
       (setq helixel-mc--last-surround-pair d)
       (when (and helixel-multi-cursor-mode (helixel-mc-any-p))
         (let* ((open  (helixel-delimiter-open d))
-               (close (helixel-delimiter-close d))
-               (helixel-mc--inhibit t))
-          (helixel-mc-with-each-cursor
-            (when (use-region-p)
-              (helixel--surround-add open close)))
-          (helixel-mc-dedupe-cursors))))))
+               (close (helixel-delimiter-close d)))
+          (helixel-with-replay-as 'mc-batch
+            (helixel-mc-with-each-cursor
+              (when (use-region-p)
+                (helixel--surround-add open close)))
+            (helixel-mc-dedupe-cursors)))))))
 
 (advice-add 'helixel-surround-add :after
             #'helixel-mc--surround-add-advice)
@@ -512,10 +512,10 @@ When real took the edit branch (i.e. did not enter the transient
 textobj wait), broadcast the delete to every fake whose pending
 selection carries a surround delimiter."
   (when (and helixel-multi-cursor-mode
-             (not helixel-mc--inhibit)
+             (not (helixel-mc-dispatch-in-progress-p))
              (helixel-mc-any-p)
              (null helixel--pending-surround-op))
-    (let ((helixel-mc--inhibit t))
+    (helixel-with-replay-as 'mc-batch
       (helixel-mc-with-each-cursor
         (let* ((sel helixel--pending-sel)
                (d (and sel (helixel-sel-surround-delimiter sel))))
@@ -533,18 +533,18 @@ selection carries a surround delimiter."
 (defun helixel-mc--surround-replace-advice (&rest _)
   "Replay `helixel-surround-replace' at each fake on edit branch.
 The replacement delimiter (char or tag) is read from the real-
-side `helixel--last-event' payload so fakes do NOT re-prompt.
+side `helixel--last-edit' payload so fakes do NOT re-prompt.
 Each fake re-derives its OWN surrounding delimiter D from its
 pending-sel and applies the same kind of substitution."
   (when (and helixel-multi-cursor-mode
-             (not helixel-mc--inhibit)
+             (not (helixel-mc-dispatch-in-progress-p))
              (helixel-mc-any-p)
              (null helixel--pending-surround-op)
-             helixel--last-event)
-    (let* ((new-char (helixel-event-payload-get helixel--last-event :new-char))
-           (new-tag  (helixel-event-payload-get helixel--last-event :tag)))
+             helixel--last-edit)
+    (let* ((new-char (helixel-edit-payload-get helixel--last-edit :new-char))
+           (new-tag  (helixel-edit-payload-get helixel--last-edit :tag)))
       (when (or new-char new-tag)
-        (let ((helixel-mc--inhibit t))
+        (helixel-with-replay-as 'mc-batch
           (helixel-mc-with-each-cursor
             (let* ((sel helixel--pending-sel)
                    (d (and sel (helixel-sel-surround-delimiter sel))))
@@ -593,7 +593,7 @@ pending-sel and applies the same kind of substitution."
 
 ;; ── `;' action-cycle at fakes is handled by the per-fake event
 ;; ring (see `helixel-mc--cursor-vars' registration of
-;; `helixel--event-ring' / `--live-event' / `--action-pos').
+;; `helixel--event-ring' / `--live-edit' / `--action-pos').
 ;; When `;' broadcasts, each fake runs the SAME `helixel-action--
 ;; cycle-show' code path against its OWN ring — the first `;'
 ;; press selects the traversed span, subsequent presses cycle

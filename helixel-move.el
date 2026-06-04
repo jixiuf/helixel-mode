@@ -49,7 +49,6 @@
                   (edit prefix))
 (declare-function helixel--all-dir-line "helixel-repeat"
                   (edit))
-(defvar helixel--in-replay)
 
 (defmacro helixel-define-movement (name builtin type &rest options)
   "Define a movement command NAME wrapping BUILTIN with TYPE.
@@ -648,7 +647,7 @@ new direction."
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (forward: point at bottom, mark at top).
-        (unless helixel--in-replay
+        (unless (helixel-replaying-p)
           (helixel--switch-state 'visual))
         (beginning-of-line)
         (push-mark-command t t)
@@ -693,7 +692,7 @@ new direction."
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (backward: point at top, mark at bottom).
-        (unless helixel--in-replay
+        (unless (helixel-replaying-p)
           (helixel--switch-state 'visual))
         (end-of-line)
         (push-mark-command t t)
@@ -842,7 +841,7 @@ After advancing, recreates the line selection to position point
 correctly (bol for insert, eol for append).  Returns nil at buffer edge.
 Deactivates any prior region so `helixel-select-line-up' starts
 fresh rather than extending a stale mark."
-  (let* ((sel (helixel-event-sel tx))
+  (let* ((sel (helixel-edit-sel tx))
          (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
          (entry-kind (plist-get (helixel-sel-ctx sel) :entry-kind))
          (count (if (eq entry-kind 'append) 1
@@ -864,7 +863,7 @@ inherently create the region).  Returns t on success, nil when
 point does not move.
 The strategy skips the separate `recreate-selection' call for inline
 advance functions to avoid double-moving."
-  (let ((sel (helixel-event-sel tx)))
+  (let ((sel (helixel-edit-sel tx)))
     (when sel
       (condition-case nil
           (progn (helixel--recreate-selection sel) t)
@@ -907,7 +906,7 @@ Creates/updates a `helixel-sel' struct of kind `movement' whenever
 a region is active — from visual mode or `normal-mode' movements that
 created a selection (e.g. w, e, b).
 No-op during dot-repeat replay, or when no region is active."
-  (when (and (not helixel--in-replay)
+  (when (and (not (helixel-replaying-p))
              (use-region-p))
     (let* ((ctx helixel--pending-sel)
            (entry (cons cmd 1)))

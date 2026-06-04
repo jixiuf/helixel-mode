@@ -109,10 +109,6 @@ via `helixel--rect-replay-get' and `helixel--rect-replay-clear'.")
   "Return the rect-replay info plist, or nil."
   helixel--rect-replay-info)
 
-(defun helixel--rect-replay-set (info)
-  "Set rect-replay info to INFO plist."
-  (setq helixel--rect-replay-info info))
-
 (defun helixel--rect-replay-clear ()
   "Clear rect-replay info, releasing the marker."
   (when-let* ((m (plist-get helixel--rect-replay-info :marker)))

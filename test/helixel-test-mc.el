@@ -1073,14 +1073,12 @@ dispatch path (runner reads :char from payload — no advice)."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-surround-delete-real-only-and-broadcasts ()
-  "`md' (in edit branch — pending-sel already has delimiter) must
-be real-only; the :after advice replays the delete at every fake
-that carries its own surround delimiter sel."
+  "`md' (in edit branch — pending-sel already has delimiter) broadcasts
+the delete to every fake via the fresh-edit dispatch path.  Each
+fake's runner uses the delimiter struct's finder to re-locate its
+OWN enclosing pair — no per-cursor advice needed."
   (helixel-test-with-buffer "(foo) (bar) (baz)\n"
     (helixel-enter-normal-state)
-    (should (plist-member (symbol-plist 'helixel-surround-delete)
-                          'multiple-cursors))
-    (should (null (get 'helixel-surround-delete 'multiple-cursors)))
     ;; Build a pair-delimiter for `(' ... `)' and seed it as each
     ;; cursor's pending-sel.
     (let* ((pair (helixel--surround-lookup ?\())
@@ -1098,9 +1096,12 @@ that carries its own surround delimiter sel."
       ;; cursor restores it during the broadcast.
       (dolist (ov (helixel-mc-all-cursors))
         (overlay-put ov 'helixel--pending-sel (funcall mk-sel)))
-      ;; Real runs `md'.  Pending-sel already has delimiter, so it
-      ;; takes the edit branch; the :after advice broadcasts.
+      ;; Real runs `md'; this commits an edit with by-command=
+      ;; helixel-surround-delete.  Then post-command dispatch sees
+      ;; the fresh edit and replays the runner at every fake.
       (helixel-surround-delete)
+      (let ((this-command 'helixel-surround-delete))
+        (helixel-mc--post-command))
       ;; All three pairs of parentheses gone.
       (should (string-match-p "\\`foo bar baz\n\\'" (buffer-string)))
       (helixel-mc-clear-all))))

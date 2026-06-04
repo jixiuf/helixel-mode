@@ -440,89 +440,16 @@ of commands from modules `mc-integrate' itself depends on."
 ;;      after-select hook re-invokes the surround command (which now
 ;;      takes path A).
 ;;
-;; Both commands run only at the real cursor.  Each fake's
-;; `helixel--pending-sel' was already populated by the broadcast of
-;; the preceding textobj (in case B) or pre-existing (case A).  After
-;; real finishes the edit-branch, replay the same surround command at
-;; every fake.  Each fake's pending-sel drives its own delimiter
-;; lookup via the delimiter's `:finder' (bounds re-derived at the
-;; fake's point, so position shifts from earlier fakes' edits are
-;; tolerated automatically).
+;; Path A produces a normal `helixel-edit' (op=surround-delete /
+;; surround-replace).  The mc dispatcher's fresh-edit path picks it
+;; up via the `by-command' stamp and replays the runner at every fake.
+;; Each runner uses the delimiter struct's finder to re-derive bounds
+;; at the current point, so each fake operates on its OWN enclosing
+;; pair — NO per-command advice needed.
 ;;
-;; To distinguish the edit-branch (path A's actual run) from the
-;; transient-setup branch (path B's first call), check
-;; `helixel--pending-surround-op': SET => transient branch (skip);
-;; nil => edit branch (broadcast).
-
-(defvar helixel--pending-surround-op)   ; from `helixel-surround'
-(declare-function helixel-surround-delete  "helixel-surround" ())
-(declare-function helixel-surround-replace "helixel-surround" ())
-
-(defun helixel-mc--surround-delete-advice (&rest _)
-  "Replay `helixel-surround-delete' at each fake on edit branch.
-When real took the edit branch (i.e. did not enter the transient
-textobj wait), broadcast the delete to every fake whose pending
-selection carries a surround delimiter."
-  (when (and helixel-multi-cursor-mode
-             (not (helixel-mc-dispatch-in-progress-p))
-             (helixel-mc-any-p)
-             (null helixel--pending-surround-op))
-    (helixel-with-replay-as 'mc-batch
-      (helixel-mc-with-each-cursor
-        (let* ((sel helixel--pending-sel)
-               (d (and sel (helixel-sel-surround-delimiter sel))))
-          (when d
-            (ignore-errors (helixel-surround-delete)))))
-      (helixel-mc-dedupe-cursors))))
-
-(declare-function helixel--surround-replace-tag "helixel-surround"
-                  (new-tag-name d))
-(declare-function helixel--surround-delete-delimiter
-                  "helixel-surround" (d))
-(declare-function helixel--surround-lookup-delimiter
-                  "helixel-surround" (char))
-
-(defun helixel-mc--surround-replace-advice (&rest _)
-  "Replay `helixel-surround-replace' at each fake on edit branch.
-The replacement delimiter (char or tag) is read from the real-
-side `helixel--last-edit' payload so fakes do NOT re-prompt.
-Each fake re-derives its OWN surrounding delimiter D from its
-pending-sel and applies the same kind of substitution."
-  (when (and helixel-multi-cursor-mode
-             (not (helixel-mc-dispatch-in-progress-p))
-             (helixel-mc-any-p)
-             (null helixel--pending-surround-op)
-             helixel--last-edit)
-    (let* ((new-char (helixel-edit-payload-get helixel--last-edit :new-char))
-           (new-tag  (helixel-edit-payload-get helixel--last-edit :tag)))
-      (when (or new-char new-tag)
-        (helixel-with-replay-as 'mc-batch
-          (helixel-mc-with-each-cursor
-            (let* ((sel helixel--pending-sel)
-                   (d (and sel (helixel-sel-surround-delimiter sel))))
-              (when d
-                (ignore-errors
-                  (cond
-                   (new-tag
-                    (helixel--surround-replace-tag new-tag d))
-                   (new-char
-                    (let ((new-d
-                           (helixel--surround-lookup-delimiter
-                            new-char)))
-                      (when new-d
-                        (helixel--surround-delete-delimiter d)
-                        (helixel--surround-add
-                         (helixel-delimiter-open new-d)
-                         (helixel-delimiter-close new-d))))))))))
-          (helixel-mc-dedupe-cursors))))))
-
-(advice-add 'helixel-surround-delete :after
-            #'helixel-mc--surround-delete-advice)
-(advice-add 'helixel-surround-replace :after
-            #'helixel-mc--surround-replace-advice)
-
-(helixel-mc-mark-all-for-real-cursor-only
- '(helixel-surround-delete helixel-surround-replace))
+;; Path B is real-cursor-only (a transient map; the user picks the
+;; textobj at real); after textobj selection the surround command
+;; re-enters path A, which then broadcasts via fresh-edit dispatch.
 
 ;; ── Action cycle (`;') and jump nav (C-o / C-i)
 ;;

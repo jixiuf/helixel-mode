@@ -678,12 +678,13 @@ FORWARDP: t = use stored direction, nil = toggle it."
   "Enable lazy-count, custom isearch prompt, and highlight cleanup.
 Called by `helixel-mode' activation, NOT at load time."
   (setq isearch-lazy-count t)
-  (advice-add 'keyboard-quit :before #'helixel-search--unhighlight)
+  (add-hook 'helixel-keyboard-quit-functions #'helixel-search--unhighlight)
   (add-hook 'lazy-count-update-hook #'helixel-search--count-hook))
 (defun helixel-search-teardown ()
   "Disable search-related global settings.
 Called by `helixel-mode' deactivation."
-  (advice-remove 'keyboard-quit #'helixel-search--unhighlight)
+  (remove-hook 'helixel-keyboard-quit-functions
+               #'helixel-search--unhighlight)
   (remove-hook 'lazy-count-update-hook #'helixel-search--count-hook))
 
 ;; ---------------------------------------------------------------------------

@@ -273,12 +273,11 @@ fit it onto the new positions.  Acts on the real cursor's
 
 (defun helixel-mc--maybe-clear-on-quit ()
   "Clear fake cursors when `keyboard-quit' fires.
-Wired into `helixel--clear-data' / `keyboard-quit' pipeline via
-helixel-state advice (no extra hook required here)."
+Wired via `helixel-keyboard-quit-functions'."
   (when helixel-multi-cursor-mode
     (helixel-mc-clear-all)))
 
-(advice-add 'keyboard-quit :before #'helixel-mc--maybe-clear-on-quit)
+(add-hook 'helixel-keyboard-quit-functions #'helixel-mc--maybe-clear-on-quit)
 
 ;; ── Visual state sync ──
 ;;

@@ -467,6 +467,25 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
         (buffer-list))
   (setq helixel-global-mode (if status status 1)))
 
+(defvar helixel-keyboard-quit-functions
+  '(helixel--clear-data helixel--cancel-action)
+  "Abnormal hook: functions run :before `keyboard-quit'.
+Modules add to this list (e.g. via `with-eval-after-load' or in
+their own load body) instead of calling `advice-add' on
+`keyboard-quit' directly.  The single advice that drives this hook
+is installed at module load (see below).")
+
+(defun helixel--run-keyboard-quit-functions (&rest _)
+  "Run `helixel-keyboard-quit-functions' (used as :before advice)."
+  (run-hook-with-args 'helixel-keyboard-quit-functions))
+
+;; Single point where helixel touches `keyboard-quit'.  Installed at
+;; load so it's active regardless of `helixel-mode' state — each
+;; registered fn is responsible for its own gate (e.g. `when
+;; helixel-multi-cursor-mode').
+(advice-add #'keyboard-quit :before
+            #'helixel--run-keyboard-quit-functions)
+
 ;;;###autoload
 (defun helixel-mode ()
   "Toggle global Helixel mode."
@@ -475,9 +494,6 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
   (setq helixel-global-mode (not helixel-global-mode))
   (if helixel-global-mode
       (progn
-        ;; Ensure \\[keyboard-quit] clears state and breaks session continuity.
-        (advice-add #'keyboard-quit :before #'helixel--clear-data)
-        (advice-add #'keyboard-quit :before #'helixel--cancel-action)
         (add-hook 'after-change-major-mode-hook #'helixel-mode-maybe-activate)
         (run-hooks 'helixel-mode-on-hook)
         (helixel-mode-maybe-activate 1))
@@ -486,8 +502,6 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
      (helixel-insert-state (helixel-insert-state -1))
      (helixel-motion-state (helixel-motion-state -1))
      (helixel-visual-state (helixel-visual-state -1)))
-    (advice-remove #'keyboard-quit #'helixel--clear-data)
-    (advice-remove #'keyboard-quit #'helixel--cancel-action)
     (remove-hook 'after-change-major-mode-hook #'helixel-mode-maybe-activate)
     (run-hooks 'helixel-mode-off-hook)))
     ;; helixel-action-push-functions removed — event-ring handles this now

@@ -38,7 +38,6 @@
 (require 'helixel-ring)
 (require 'helixel-macros)
 (require 'helixel-register)
-(require 'helixel-action)
 (require 'helixel-repeat)
 (require 'helixel-chain)
 (require 'helixel-state)

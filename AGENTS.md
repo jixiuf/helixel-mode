@@ -5,10 +5,9 @@
 | File | Role |
 |------|------|
 | `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-edit` structs, `helixel--last-edit`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
-| `helixel-ring.el` | **Event storage**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-edit-set`, live-event management. |
+| `helixel-ring.el` | **Event storage + history navigation**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-edit-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-edit-tracking`. |
 | `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
-| `helixel-action.el` | `;` cycling + C-o/C-i jump navigation (thin consumers of event-ring). |
 | `helixel-insert-record.el` | Insert-mode key recording (pre-command-hook based); replay helper `helixel--execute-keys`. |
 
 | `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |

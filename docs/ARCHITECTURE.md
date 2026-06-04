@@ -204,7 +204,7 @@ Chain has a custom `:strategy-builder` in the op registry:
 
 ---
 
-## Action Tracking (`helixel-action.el`)
+## Action Tracking (`helixel-ring.el`)
 
 ### `;` Cycling
 

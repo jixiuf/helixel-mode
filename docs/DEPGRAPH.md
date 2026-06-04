@@ -5,8 +5,6 @@ Do not edit by hand; run `make depgraph' to refresh.
 
 ```mermaid
 graph TD
-  helixel-action --> helixel-core
-  helixel-action --> helixel-ring
   helixel-chain --> helixel-core
   helixel-chain --> helixel-macros
   helixel-chain --> helixel-repeat
@@ -43,8 +41,8 @@ graph TD
   helixel-move --> helixel-state
   helixel-move --> helixel-macros
   helixel-register --> helixel-core
-  helixel-repeat --> helixel-action
   helixel-repeat --> helixel-core
+  helixel-repeat --> helixel-ring
   helixel-repeat --> helixel-insert-record
   helixel-ring --> helixel-core
   helixel-ring --> helixel-replay
@@ -59,7 +57,6 @@ graph TD
   helixel-state --> helixel-ring
   helixel-state --> helixel-macros
   helixel-state --> helixel-register
-  helixel-state --> helixel-action
   helixel-state --> helixel-repeat
   helixel-state --> helixel-textobj
   helixel-state --> helixel-surround
@@ -87,7 +84,6 @@ graph TD
   helixel --> helixel-ring
   helixel --> helixel-macros
   helixel --> helixel-register
-  helixel --> helixel-action
   helixel --> helixel-repeat
   helixel --> helixel-chain
   helixel --> helixel-state

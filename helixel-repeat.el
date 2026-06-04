@@ -41,8 +41,8 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-action)
 (require 'helixel-core)
+(require 'helixel-ring)
 (require 'helixel-insert-record)
 
 ;; ----------------------------------------------------------------------

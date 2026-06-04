@@ -538,35 +538,34 @@ PROPS is a keyword plist."
   (declare (indent 1))
   `(puthash ',kind (list ,@props) helixel--kind-registry))
 
-(defun helixel--kind-advance (kind)
-  "Return the :advance function for KIND from the registry."
-  (plist-get (gethash kind helixel--kind-registry) :advance))
+;; Kind-registry accessors.  All seven look up KIND in
+;; `helixel--kind-registry' and return one plist field.  Generated
+;; via `helixel--def-kind-accessor' so the table is the schema.
 
-(defun helixel--kind-recreate (kind)
-  "Return the :recreate function for KIND from the registry."
-  (plist-get (gethash kind helixel--kind-registry) :recreate))
+(defmacro helixel--def-kind-accessor (name key doc)
+  "Define `defun' NAME with docstring DOC returning KEY from kind registry.
+Generated function takes one argument KIND."
+  `(defun ,name (kind)
+     ,doc
+     (plist-get (gethash kind helixel--kind-registry) ,key)))
 
-(defun helixel--kind-display (kind)
-  "Return the :display function/string for KIND from the registry."
-  (plist-get (gethash kind helixel--kind-registry) :display))
-
-(defun helixel--kind-all-buffer-fn (kind)
-  "Return the :all-buffer-fn for KIND from the registry, or nil."
-  (plist-get (gethash kind helixel--kind-registry) :all-buffer-fn))
-
-(defun helixel--kind-mc-spawn-fn (kind)
+(helixel--def-kind-accessor helixel--kind-advance :advance
+  "Return the :advance function for KIND from the registry.")
+(helixel--def-kind-accessor helixel--kind-recreate :recreate
+  "Return the :recreate function for KIND from the registry.")
+(helixel--def-kind-accessor helixel--kind-display :display
+  "Return the :display function/string for KIND from the registry.")
+(helixel--def-kind-accessor helixel--kind-all-buffer-fn :all-buffer-fn
+  "Return the :all-buffer-fn for KIND from the registry, or nil.")
+(helixel--def-kind-accessor helixel--kind-mc-spawn-fn :mc-spawn-fn
   "Return the :mc-spawn-fn for KIND from the registry, or nil.
 The spawn function takes one argument SEL (a `helixel-sel') and
 returns a list of (POINT . MARK) marker pairs — one fake cursor
 target per element.  When nil, the multi-cursor module falls back
-to walking the kind's :advance function from `point-min'."
-  (plist-get (gethash kind helixel--kind-registry) :mc-spawn-fn))
-
-(defun helixel--kind-all-dir-fn (kind)
-  "Return the :all-dir-fn for KIND from the registry, or nil."
-  (plist-get (gethash kind helixel--kind-registry) :all-dir-fn))
-
-(defun helixel--kind-flip-dir-fn (kind)
+to walking the kind's :advance function from `point-min'.")
+(helixel--def-kind-accessor helixel--kind-all-dir-fn :all-dir-fn
+  "Return the :all-dir-fn for KIND from the registry, or nil.")
+(helixel--def-kind-accessor helixel--kind-flip-dir-fn :flip-dir-fn
   "Return the :flip-dir-fn for KIND from the registry, or nil.
 The flip-dir function takes a `helixel-sel' and returns a new
 sel with its direction reversed.  Used by `.' /
@@ -575,8 +574,7 @@ sel with its direction reversed.  Used by `.' /
 
 Kinds whose selections have no notion of direction (e.g. textobj,
 rect, movement, find-char) leave this nil; the repeat engine
-then simply does not flip."
-  (plist-get (gethash kind helixel--kind-registry) :flip-dir-fn))
+then simply does not flip.")
 
 
 ;; ----------------------------------------------------------------------

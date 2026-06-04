@@ -715,104 +715,7 @@ can be pressed repeatedly."
           (set-marker (plist-get entry :beg) nil)
           (set-marker (plist-get entry :end) nil))))))
 
-;;;###autoload
-(defun helixel-mc-merge ()
-  "Merge real + every fake cursor into ONE big selection.
-The merged region spans from the leftmost cursor edge to the
-rightmost cursor edge.  All fakes are cleared."
-  (interactive)
-  (unless (helixel-mc-any-p)
-    (user-error "No fake cursors"))
-  (let* ((all-pos
-          (cl-loop
-           for ov in (helixel-mc-all-cursors)
-           append (list (marker-position (overlay-get ov 'helixel-mc-point))
-                        (marker-position (overlay-get ov 'helixel-mc-mark)))))
-         (lo (apply #'min (point) (mark t) all-pos))
-         (hi (apply #'max (point) (mark t) all-pos)))
-    (helixel-mc-clear-all)
-    (goto-char hi)
-    (set-marker (mark-marker) lo)
-    (setq mark-active t)))
-
-;;;###autoload
-(defun helixel-mc--trim-region (beg end)
-  "Return (TRIMMED-BEG . TRIMMED-END) for region [BEG, END)."
-  (save-excursion
-    (let* ((s (buffer-substring-no-properties beg end))
-           (lead (if (string-match "\\`[ \t\r\n]+" s)
-                     (match-end 0) 0))
-           (trail (if (string-match "[ \t\r\n]+\\'" s)
-                      (- (length s) (match-beginning 0)) 0)))
-      (cons (+ beg lead) (- end trail)))))
-
-(defun helixel-mc-trim ()
-  "Trim leading and trailing whitespace from every cursor's region."
-  (interactive)
-  ;; Real cursor
-  (when (use-region-p)
-    (let* ((trimmed (helixel-mc--trim-region (region-beginning) (region-end)))
-           (lo (car trimmed)) (hi (cdr trimmed)))
-      (when (< lo hi)
-        (let ((forward (> (point) (mark t))))
-          (if forward (progn (goto-char hi) (set-marker (mark-marker) lo))
-            (progn (goto-char lo) (set-marker (mark-marker) hi)))
-          (setq mark-active t)))))
-  ;; Fakes
-  (dolist (ov (helixel-mc-all-cursors))
-    (let* ((p (marker-position (overlay-get ov 'helixel-mc-point)))
-           (m (marker-position (overlay-get ov 'helixel-mc-mark)))
-           (a (overlay-get ov 'mark-active)))
-      (when (and a (/= p m))
-        (let* ((trimmed (helixel-mc--trim-region (min p m) (max p m)))
-               (lo (car trimmed)) (hi (cdr trimmed)))
-          (when (< lo hi)
-            (let ((forward (> p m)))
-              (if forward
-                  (progn
-                    (set-marker (overlay-get ov 'helixel-mc-point) hi)
-                    (set-marker (overlay-get ov 'helixel-mc-mark) lo))
-                (set-marker (overlay-get ov 'helixel-mc-point) lo)
-                (set-marker (overlay-get ov 'helixel-mc-mark) hi)))
-            (helixel-mc--update-fake-region ov)))))))
-
-;;;###autoload
-(defun helixel-mc-align ()
-  "Insert spaces to align all cursor columns.
-For each line that has multiple cursors, pads earlier ones with
-spaces so every cursor sits at the rightmost cursor's column on
-its group of lines.  Simpler than hel-mode's full multi-column
-align, but covers the common case of column-aligning a vertical
-column-of-cursors created via `s a' / `xs'."
-  (interactive)
-  (unless (helixel-mc-any-p)
-    (user-error "No fake cursors"))
-  (let* ((points
-          (sort (cons (copy-marker (point) t)
-                      (mapcar (lambda (ov)
-                                (copy-marker
-                                 (marker-position
-                                  (overlay-get ov 'helixel-mc-point))
-                                 t))
-                              (helixel-mc-all-cursors)))
-                (lambda (a b) (< (marker-position a)
-                                 (marker-position b)))))
-         ;; Compute max column across all points.
-         (max-col
-          (cl-loop for p in points
-                   maximize (save-excursion
-                              (goto-char (marker-position p))
-                              (current-column)))))
-    ;; Right-to-left so insertions don't shift earlier markers.
-    (dolist (p (reverse points))
-      (save-excursion
-        (goto-char (marker-position p))
-        (let ((need (- max-col (current-column))))
-          (when (> need 0)
-            (insert (make-string need ?\s))))))
-    (dolist (p points) (set-marker p nil))))
-
-;; ── Split selection on regex / into lines ──
+;; ── Region-set helpers (shared by trim, merge, split, etc.) ──
 
 (defun helixel-mc--regions-of-all-cursors ()
   "Return list of (CURSOR-OR-NIL BEG END FORWARD) for all cursors.
@@ -855,6 +758,94 @@ the mc session is fully disabled."
           (overlay-put ov 'mark-active t)
           (helixel-mc--update-fake-region ov)))))))
 
+(defmacro helixel-mc-with-regions (regions-var &rest body)
+  "Bind REGIONS-VAR to active (BEG END FORWARD) triples; install BODY's result.
+REGIONS-VAR (a symbol) is bound to a list of (BEG END FORWARD)
+triples — one per cursor (real + fake) with an active
+non-degenerate region, sorted by BEG.  BODY must return a list of
+three-element specs — the new layout to install via
+`helixel-mc--install-regions'.  Returning an empty list disables
+the mc session.
+
+This macro is the shared shape for commands that compute a new
+cursor layout from the existing one: trim, merge, split,
+keep-matching, etc.  Commands that mutate buffer contents while
+relying on cursor overlays staying anchored (e.g.
+`helixel-mc-rotate-content') do NOT fit this pattern."
+  (declare (indent 1) (debug (symbolp body)))
+  `(let* ((,regions-var
+           (mapcar #'cdr (helixel-mc--regions-of-all-cursors))))
+     (helixel-mc--install-regions (progn ,@body))))
+
+;;;###autoload
+(defun helixel-mc-merge ()
+  "Merge real + every fake cursor's active region into ONE big selection.
+The merged region spans from the leftmost edge to the rightmost
+edge of all active regions.  All fakes are cleared."
+  (interactive)
+  (unless (helixel-mc-any-p)
+    (user-error "No fake cursors"))
+  (helixel-mc-with-regions regions
+    (unless regions (user-error "No active regions to merge"))
+    (list (list (apply #'min (mapcar #'car  regions))
+                (apply #'max (mapcar #'cadr regions))
+                t))))
+
+(defun helixel-mc--trim-region (beg end)
+  "Return (TRIMMED-BEG . TRIMMED-END) for region [BEG, END)."
+  (save-excursion
+    (let* ((s (buffer-substring-no-properties beg end))
+           (lead (if (string-match "\\`[ \t\r\n]+" s)
+                     (match-end 0) 0))
+           (trail (if (string-match "[ \t\r\n]+\\'" s)
+                      (- (length s) (match-beginning 0)) 0)))
+      (cons (+ beg lead) (- end trail)))))
+
+(defun helixel-mc-trim ()
+  "Trim leading and trailing whitespace from every cursor's region."
+  (interactive)
+  (helixel-mc-with-regions regions
+    (cl-loop for (b e fwd) in regions
+             for trimmed = (helixel-mc--trim-region b e)
+             when (< (car trimmed) (cdr trimmed))
+             collect (list (car trimmed) (cdr trimmed) fwd))))
+
+;;;###autoload
+(defun helixel-mc-align ()
+  "Insert spaces to align all cursor columns.
+For each line that has multiple cursors, pads earlier ones with
+spaces so every cursor sits at the rightmost cursor's column on
+its group of lines.  Simpler than hel-mode's full multi-column
+align, but covers the common case of column-aligning a vertical
+column-of-cursors created via `s a' / `xs'."
+  (interactive)
+  (unless (helixel-mc-any-p)
+    (user-error "No fake cursors"))
+  (let* ((points
+          (sort (cons (copy-marker (point) t)
+                      (mapcar (lambda (ov)
+                                (copy-marker
+                                 (marker-position
+                                  (overlay-get ov 'helixel-mc-point))
+                                 t))
+                              (helixel-mc-all-cursors)))
+                (lambda (a b) (< (marker-position a)
+                                 (marker-position b)))))
+         ;; Compute max column across all points.
+         (max-col
+          (cl-loop for p in points
+                   maximize (save-excursion
+                              (goto-char (marker-position p))
+                              (current-column)))))
+    ;; Right-to-left so insertions don't shift earlier markers.
+    (dolist (p (reverse points))
+      (save-excursion
+        (goto-char (marker-position p))
+        (let ((need (- max-col (current-column))))
+          (when (> need 0)
+            (insert (make-string need ?\s))))))
+    (dolist (p points) (set-marker p nil))))
+
 ;;;###autoload
 (defun helixel-mc-split-on-regex (regex)
   "Split every cursor's selection on REGEX into multiple cursors.
@@ -863,29 +854,23 @@ REGEX match found inside it.  Selections with no match are
 removed.  If the resulting set is empty the mc session is
 disabled."
   (interactive (list (read-regexp "Split on regex: ")))
-  (let* ((entries (helixel-mc--regions-of-all-cursors))
-         (new-specs
-          (cl-loop
-           for entry in entries
-           for b = (nth 1 entry)
-           for e = (nth 2 entry)
-           for fwd = (nth 3 entry)
-           append
-           (save-excursion
-             (goto-char b)
-             (let (matches)
-               (while (re-search-forward regex e t)
-                 (when (> (match-end 0) (match-beginning 0))
-                   (push (list (match-beginning 0)
-                               (match-end 0)
-                               fwd)
-                         matches)))
-               (nreverse matches))))))
-    (helixel-mc--push-history)
-    (helixel-mc--install-regions new-specs)
+  (helixel-mc--push-history)
+  (let (count)
+    (helixel-mc-with-regions regions
+      (let ((new-specs
+             (cl-loop
+              for (b e fwd) in regions
+              append (save-excursion
+                       (goto-char b)
+                       (cl-loop while (re-search-forward regex e t)
+                                when (> (match-end 0) (match-beginning 0))
+                                collect (list (match-beginning 0)
+                                              (match-end 0)
+                                              fwd))))))
+        (setq count (length new-specs))
+        new-specs))
     (message "helixel-mc: split into %d cursor%s"
-             (length new-specs)
-             (if (= 1 (length new-specs)) "" "s"))))
+             count (if (= 1 count) "" "s"))))
 
 ;;;###autoload
 

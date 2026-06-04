@@ -1304,7 +1304,6 @@ the count so `.' repeats the full chain of textobj selections."
         'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
                     :inline-advance t)
              #'helixel--recreate-textobj
-             ;; display closure
              (lambda (c)
                (if-let* ((command (helixel-sel-textobj-command c)))
                    (replace-regexp-in-string "^helixel-mark-" ""

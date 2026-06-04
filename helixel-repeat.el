@@ -33,7 +33,7 @@
 ;;   `.'                 → helixel-repeat-edit → sel-recreate + op-runner
 ;;
 ;; Both selection recreation and op execution use the `helixel-sel' struct
-;; closures and the operator symbol-property registry in helixel-core.el.
+;; registry lookups in helixel-core.el.
 ;; This module knows nothing about specific kinds or operators.
 ;;
 ;; Depends on helixel-action and helixel-core.

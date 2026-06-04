@@ -315,7 +315,7 @@ User presses `.`
   ▼
 helixel-repeat.el:helixel-repeat-edit
   ├── Resolves helixel--last-event (global, cross-buffer)
-  ├── Decodes prefix via helixel-repeat-prefix.el
+  ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
   │
   ▼
 helixel-repeat-strategy.el:helixel--build-strategy(edit, reverse-p)

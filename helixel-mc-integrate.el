@@ -109,11 +109,6 @@ the override path — mc dispatches the same edit at each fake."
  '(helixel-repeat-edit
    helixel-repeat-selection))
 
-;; ── Atomic undo around mc dispatch ──
-;;
-;; Replace the post-command dispatcher with a wrapper that
-;; amalgamates every fake-cursor execution into one undo step.
-
 ;; ── Substitute commands for fake-cursor dispatch ──
 ;;
 ;; Some commands prompt for input via `(interactive "c")' etc.
@@ -139,10 +134,8 @@ the override path — mc dispatches the same edit at each fake."
 (helixel-mc-defcmd helixel-find-prev-till-char
   :substitute #'helixel-find-repeat)
 
-;; ── Atomic undo around mc dispatch ──
-;;
-;; The dispatcher lives in helixel-mc-core.el as `helixel-mc--post-command'.
-
+;; The dispatcher (with atomic-undo amalgamation) lives in
+;; helixel-mc-core.el as `helixel-mc--post-command'.
 
 ;; ── Chain end: broadcast the new chain tx ──
 
@@ -403,46 +396,20 @@ of commands from modules `mc-integrate' itself depends on."
    ;; eww.el
    eww-back-url eww-forward-url eww-reload))
 
-;; ── Replace-char (`R<char>') / surround-add (`ms<char>') per-cursor ──
+;; ── Per-cursor prompt commands (replace-char, surround-*)
 ;;
-;; ── Per-cursor prompt commands (replace-char / surround-add)
+;; `R<char>', `ms<char>', `md', `mr' all prompt the user.  Their op
+;; runners read the prompted decision from the edit payload (`:char',
+;; `:delimiter') and act on `region-beginning'/`region-end' — so they
+;; are position-independent.  The mc dispatcher's fresh-edit path
+;; detects the just-committed edit via its `by-command' stamp and
+;; replays the runner at every fake — NO advice / NO real-only
+;; marking / NO per-command broadcast logic needed.
 ;;
-;; These commands prompt the user (char or delimiter).  Their op
-;; runners already read the prompted decision from the edit payload
-;; (`:char') and act on `region-beginning'/`region-end' — so they are
-;; position-independent.  The mc dispatcher's fresh-edit path detects
-;; the just-committed edit via its `by-command' stamp and replays the
-;; runner at every fake — NO advice / NO real-cursor-only marking
-;; needed.
-
-(declare-function helixel--replace-region "helixel-editing"
-                  (str beg end))
-(declare-function helixel--surround-add "helixel-surround"
-                  (open close))
-(declare-function helixel-sel-surround-delimiter "helixel-core" (obj))
-(declare-function helixel-delimiter-open "helixel-core" (d))
-(declare-function helixel-delimiter-close "helixel-core" (d))
-
-;; ── Surround-delete / surround-replace per-cursor (md / mr)
-;;
-;; `md' / `mr' have two execution paths:
-;;   A) `helixel--pending-sel' already carries a delimiter at entry —
-;;      the command performs the edit immediately.
-;;   B) No delimiter — the command sets `helixel--pending-surround-op'
-;;      and a transient map; user picks a textobj; the textobj's
-;;      after-select hook re-invokes the surround command (which now
-;;      takes path A).
-;;
-;; Path A produces a normal `helixel-edit' (op=surround-delete /
-;; surround-replace).  The mc dispatcher's fresh-edit path picks it
-;; up via the `by-command' stamp and replays the runner at every fake.
-;; Each runner uses the delimiter struct's finder to re-derive bounds
-;; at the current point, so each fake operates on its OWN enclosing
-;; pair — NO per-command advice needed.
-;;
-;; Path B is real-cursor-only (a transient map; the user picks the
-;; textobj at real); after textobj selection the surround command
-;; re-enters path A, which then broadcasts via fresh-edit dispatch.
+;; For `md' / `mr' path B (no delimiter at entry, transient map
+;; collects a textobj at the real cursor), the real cursor enters
+;; path A after textobj selection and broadcast goes through
+;; fresh-edit dispatch normally.
 
 ;; ── Action cycle (`;') and jump nav (C-o / C-i)
 ;;

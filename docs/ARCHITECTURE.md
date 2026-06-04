@@ -351,3 +351,72 @@ Key invariants:
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.
 - All iterations within a single `.` press are wrapped in one undo step.
+
+---
+
+## Design Invariants (from refactor)
+
+These are load-bearing decisions that the codebase actively depends on
+— change them only with full-suite testing.
+
+1. **Single command-identity stamp.**  Every `helixel-edit` carries
+   `:by-command` (auto-stamped in `helixel-edit-commit`).  Dispatch
+   decisions — mc fresh-edit replay vs `call-interactively`, `.` vs
+   `,` — all key off this one field instead of separate flag
+   networks.
+
+2. **Single replay context.**  The `helixel-replay` struct's `origin`
+   slot (`dot` / `comma` / `chain` / `insert` / `mc-fake` /
+   `mc-batch`) is the one authoritative answer to "what's happening
+   right now", consumed by `helixel-replaying-p` and
+   `helixel-mc-dispatch-in-progress-p`.  Do not reintroduce
+   per-feature inhibit flags.
+
+3. **Runner-replay over advice.**  Prompt commands store their
+   decisions in `helixel-edit-payload`; runners are
+   position-independent (operate on current region/point + payload).
+   Multi-cursor and `.`-repeat both reuse the runner — no per-command
+   `advice-add` needed.
+
+4. **One state struct per subsystem.**  Chain went from 7
+   buffer-locals to 1 (`helixel-chain-session`); replay from 6+ flags
+   to 1 struct (`helixel-replay`).  New per-subsystem state must
+   follow this pattern.
+
+5. **Single keyboard-quit entry point.**  Modules contribute to
+   `helixel-keyboard-quit-functions` (abnormal hook); only one
+   `advice-add` on `keyboard-quit` lives in `helixel-state.el`.
+   Never advise `keyboard-quit` from another module.
+
+## Refactor Lessons (load-bearing gotchas)
+
+1. **`this-command` is nil in batch + ert.**  `call-interactively`
+   does NOT set `this-command` outside the command loop.
+   `helixel-define-command` binds `this-command` to the function
+   symbol on entry to be both production- and test-correct.
+
+2. **Override, not defensive-`or`.**  Use unconditional
+   `(let ((this-command ',name)) ...)` instead of
+   `(or this-command 'NAME)` — the latter preserves stale outer
+   values and causes subtle test failures.
+
+3. **Position-independent runners enable mc replay for free.**
+   Registering an op runner that uses `(region-beginning)`/`(point)`
+   instead of `tx`-stored positions automatically works at fake
+   cursors.
+
+4. **MC tests bypass `post-command-hook`.**  Many call
+   `(helixel-mc--post-command)` directly.  This is FINE because
+   fresh-edit detection uses the `by-command` stamp, not a
+   pre-command snapshot.
+
+5. **Indirect references defeat naive dead-code grep.**  Text
+   objects instantiate symbols via `(intern (format "helixel--%s"
+   sym))`, so grep can report a function as unused even when a macro
+   emits it.  Always recompile + run tests after deletion; the
+   byte-compiler catches what grep misses.
+
+6. **Load-time advice for test-reachability.**  Advices needed by
+   tests that don't enable `helixel-mode` globally (e.g. mc
+   keyboard-quit cleanup) must be installed at module load with a
+   per-fn gate inside, not inside the `helixel-mode` toggle body.

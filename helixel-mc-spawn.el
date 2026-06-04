@@ -736,47 +736,45 @@ rightmost cursor edge.  All fakes are cleared."
     (setq mark-active t)))
 
 ;;;###autoload
+(defun helixel-mc--trim-region (beg end)
+  "Return (TRIMMED-BEG . TRIMMED-END) for region [BEG, END)."
+  (save-excursion
+    (let* ((s (buffer-substring-no-properties beg end))
+           (lead (if (string-match "\\`[ \t\r\n]+" s)
+                     (match-end 0) 0))
+           (trail (if (string-match "[ \t\r\n]+\\'" s)
+                      (- (length s) (match-beginning 0)) 0)))
+      (cons (+ beg lead) (- end trail)))))
+
 (defun helixel-mc-trim ()
-  "Trim leading and trailing whitespace from every cursor's region.
-Each cursor's mark/point pair is shrunk to the inner non-whitespace
-span.  No-op if a region is empty or all-whitespace."
+  "Trim leading and trailing whitespace from every cursor's region."
   (interactive)
-  (let ((process
-         (lambda (beg end)
-           "Return (TRIMMED-BEG . TRIMMED-END) for [beg, end)."
-           (save-excursion
-             (let* ((s (buffer-substring-no-properties beg end))
-                    (lead (if (string-match "\\`[ \t\r\n]+" s)
-                              (match-end 0) 0))
-                    (trail (if (string-match "[ \t\r\n]+\\'" s)
-                               (- (length s) (match-beginning 0)) 0)))
-               (cons (+ beg lead) (- end trail)))))))
-    ;; Real cursor
-    (when (use-region-p)
-      (let* ((trimmed (funcall process (region-beginning) (region-end)))
-             (lo (car trimmed)) (hi (cdr trimmed)))
-        (when (< lo hi)
-          (let ((forward (> (point) (mark t))))
-            (if forward (progn (goto-char hi) (set-marker (mark-marker) lo))
-              (progn (goto-char lo) (set-marker (mark-marker) hi)))
-            (setq mark-active t)))))
-    ;; Fakes
-    (dolist (ov (helixel-mc-all-cursors))
-      (let* ((p (marker-position (overlay-get ov 'helixel-mc-point)))
-             (m (marker-position (overlay-get ov 'helixel-mc-mark)))
-             (a (overlay-get ov 'mark-active)))
-        (when (and a (/= p m))
-          (let* ((trimmed (funcall process (min p m) (max p m)))
-                 (lo (car trimmed)) (hi (cdr trimmed)))
-            (when (< lo hi)
-              (let ((forward (> p m)))
-                (if forward
-                    (progn
-                      (set-marker (overlay-get ov 'helixel-mc-point) hi)
-                      (set-marker (overlay-get ov 'helixel-mc-mark) lo))
-                  (set-marker (overlay-get ov 'helixel-mc-point) lo)
-                  (set-marker (overlay-get ov 'helixel-mc-mark) hi)))
-              (helixel-mc--update-fake-region ov))))))))
+  ;; Real cursor
+  (when (use-region-p)
+    (let* ((trimmed (helixel-mc--trim-region (region-beginning) (region-end)))
+           (lo (car trimmed)) (hi (cdr trimmed)))
+      (when (< lo hi)
+        (let ((forward (> (point) (mark t))))
+          (if forward (progn (goto-char hi) (set-marker (mark-marker) lo))
+            (progn (goto-char lo) (set-marker (mark-marker) hi)))
+          (setq mark-active t)))))
+  ;; Fakes
+  (dolist (ov (helixel-mc-all-cursors))
+    (let* ((p (marker-position (overlay-get ov 'helixel-mc-point)))
+           (m (marker-position (overlay-get ov 'helixel-mc-mark)))
+           (a (overlay-get ov 'mark-active)))
+      (when (and a (/= p m))
+        (let* ((trimmed (helixel-mc--trim-region (min p m) (max p m)))
+               (lo (car trimmed)) (hi (cdr trimmed)))
+          (when (< lo hi)
+            (let ((forward (> p m)))
+              (if forward
+                  (progn
+                    (set-marker (overlay-get ov 'helixel-mc-point) hi)
+                    (set-marker (overlay-get ov 'helixel-mc-mark) lo))
+                (set-marker (overlay-get ov 'helixel-mc-point) lo)
+                (set-marker (overlay-get ov 'helixel-mc-mark) hi)))
+            (helixel-mc--update-fake-region ov)))))))
 
 ;;;###autoload
 (defun helixel-mc-align ()

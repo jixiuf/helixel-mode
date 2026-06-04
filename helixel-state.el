@@ -148,7 +148,8 @@ via `helixel--rect-replay-get' and `helixel--rect-replay-clear'.")
 (defvar helixel-motion-map (make-sparse-keymap))
 (suppress-keymap helixel-motion-map)
 
-(defvar helixel-textobj-map (define-keymap))
+(defvar helixel-textobj-map (make-sparse-keymap))
+(suppress-keymap helixel-textobj-map)
 
 (defvar helixel-textobj-inner-map (make-sparse-keymap))
 (suppress-keymap helixel-textobj-inner-map)

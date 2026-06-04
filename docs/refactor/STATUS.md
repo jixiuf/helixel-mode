@@ -69,7 +69,23 @@ Updated after each commit.
 
 ## Pending
 
-### Phase 7 (partial) — Cleanup
+### Phase 7 (continued) — Code consolidation via macros
+- **Commits**: `646a7c8`, `514e428`, `34ceb45`, `c65a9c7`, `238894c`
+- `editing.el`: dedupe insert-after/insert search-vs-line branches
+  (one `memq kind '(search line)` test), extract `helixel--replace-do`
+  to share the 4-branch rect/line/charwise/no-region replace logic
+  between `helixel-replace` and `helixel-replace-pop` direct-call.
+  Net: -41 lines.
+- `search.el`: extract `helixel-search--find-char-jump` shared between
+  `find-char-exec` and `find-char-core` (the search+adjust step).
+  Collapse 4 find-char wrappers into `helixel--def-find-char` macro.
+  Net: -10 lines.
+- `move.el`: collapse 24 forward/backward × word/WORD/symbol/paragraph/
+  sentence/function start/end commands into `helixel--def-thing-move`
+  macro — 198 lines became 36 one-line declarations.
+  Net: -115 lines.
+
+### Phase 7 (cleanup wave 1) — Dead code
 - **Commits**: `35c0d58`, `5398335`, `7e02f29`, `3719174`,
   `02f2db2`, `390534c`
 - `mc-spawn.el`: extract `helixel-mc--skip-in-dir`; simplify
@@ -116,7 +132,7 @@ advance helpers, examining surround.el for further consolidation).
 | `advice-add` in mc-integrate.el | 6        | **1**  | ≤ 2    |
 | `advice-add` total              | 19       | 18†    | ≤ 8    |
 | Tests passing                   | 847      | 845‡  | ≥ 847  |
-| Total line count                | 14166    | 14246  | ≤ 10500|
+| Total line count                | 14166    | **14088** | ≤ 10500|
 
 † Remaining `advice-add`s are all on third-party emacs primitives
 (`keyboard-quit` × 3) or registered inside macros for the

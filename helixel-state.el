@@ -122,13 +122,30 @@ via `helixel--rect-replay-get' and `helixel--rect-replay-clear'.")
 (defvar helixel-global-mode nil
   "Enable Helixel mode in all buffers.")
 
-;; ── Forward declarations for keymap variables ──
-;; Created as empty keymap shells so `:keymap' in `define-minor-mode'
+;; ── Keymap shells ──
+;;
+;; Convention:
+;;   * State maps    (normal / motion / visual / insert) use
+;;     `define-keymap' — they are full keymaps with many bindings.
+;;     `:suppress' is set on modal states that should ignore
+;;     self-insert (normal, motion, visual); insert state stays
+;;     unsuppressed so typing keys still self-inserts.
+;;   * Prefix maps   (view / goto / window / space / textobj /
+;;     textobj-inner / textobj-outer) use `make-sparse-keymap' +
+;;     `suppress-keymap' — they hold a small number of bindings
+;;     and are entered through a prefix key.
+;;
+;; Shells are created here so `:keymap' in `define-minor-mode'
 ;; captures a real keymap object.  `helixel-keymap' fills them with
 ;; `define-key' (same object — reference never breaks).
 
-(defvar helixel-visual-map (define-keymap))
+;; State maps
+(defvar helixel-normal-map (define-keymap :suppress t))
+(defvar helixel-motion-map (define-keymap :suppress t))
+(defvar helixel-visual-map (define-keymap :suppress t))
 (defvar helixel-insert-map (define-keymap))
+
+;; Prefix maps
 (defvar helixel-view-map (make-sparse-keymap))
 (suppress-keymap helixel-view-map)
 
@@ -141,12 +158,6 @@ via `helixel--rect-replay-get' and `helixel--rect-replay-clear'.")
 
 (defvar helixel-space-map (make-sparse-keymap))
 (suppress-keymap helixel-space-map)
-
-(defvar helixel-normal-map (make-sparse-keymap))
-(suppress-keymap helixel-normal-map)
-
-(defvar helixel-motion-map (make-sparse-keymap))
-(suppress-keymap helixel-motion-map)
 
 (defvar helixel-textobj-map (make-sparse-keymap))
 (suppress-keymap helixel-textobj-map)

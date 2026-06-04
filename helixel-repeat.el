@@ -44,7 +44,6 @@
 (require 'helixel-action)
 (require 'helixel-core)
 (require 'helixel-insert-record)
-(require 'helixel-repeat-prefix)
 (require 'helixel-repeat-strategy)
 
 ;; ── State variables ──

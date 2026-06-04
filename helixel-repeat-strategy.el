@@ -31,7 +31,6 @@
 
 (require 'cl-lib)
 (require 'helixel-core)
-(require 'helixel-repeat-prefix)
 
 (defvar helixel--repeat-permanent-flip)     ; helixel-repeat.el
 

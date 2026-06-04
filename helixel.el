@@ -40,7 +40,6 @@
 (require 'helixel-action)
 
 (require 'helixel-insert-record)
-(require 'helixel-repeat-prefix)
 (require 'helixel-repeat-strategy)
 (require 'helixel-repeat)
 (require 'helixel-chain)

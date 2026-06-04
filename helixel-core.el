@@ -1139,5 +1139,44 @@ reversed at finalize time."
   (when key-vector-list
     (apply #'vconcat (nreverse key-vector-list))))
 
+;; ── Repeat prefix decoder ──
+
+(cl-defstruct helixel-repeat-prefix
+  "Decoded dot-repeat prefix argument."
+  mode      ;; :all-buffer | :all-dir | :n-times
+  n         ;; integer count (>= 1)
+  reverse-p ;; boolean
+  raw)      ;; original raw-prefix
+
+(defun helixel--decode-repeat-prefix (raw-prefix)
+  "Parse RAW-PREFIX into a `helixel-repeat-prefix' struct.
+
+Semantics:
+  \\[universal-argument] .    \\=→ :all-buffer, forward
+  \\[universal-argument] - .  \\=→ :all-buffer, reverse
+  0 .           \\=→ :all-dir, forward
+  - .           \\=→ :n-times 1 (flips direction)
+  -3 .          \\=→ :n-times 3 (flips direction)
+  3 .           \\=→ :n-times 3, forward
+  \\[universal-argument] -3 . \\=→ :n-times 3, reverse (one-time)
+  \\[universal-argument] 3 .  \\=→ :all-buffer (n=3 ignored)
+
+Bare \\='-\\=' (raw-prefix = symbol \\='-) is detected by the caller
+to permanently flip the stored direction (like N for search)."
+  (let* ((all-buffer-p (consp raw-prefix))
+         (all-dir-p (and (integerp raw-prefix) (eql raw-prefix 0)))
+         (n (cond ((not raw-prefix) 1)
+                  ((consp raw-prefix)
+                   (abs (prefix-numeric-value raw-prefix)))
+                  ((integerp raw-prefix) (abs raw-prefix))
+                  (t 1)))
+         (reverse-p (and (consp raw-prefix)
+                         (< (prefix-numeric-value raw-prefix) 0)))
+         (mode (cond (all-buffer-p :all-buffer)
+                     (all-dir-p    :all-dir)
+                     (t            :n-times))))
+    (make-helixel-repeat-prefix
+     :mode mode :n n :reverse-p reverse-p :raw raw-prefix)))
+
 (provide 'helixel-core)
 ;;; helixel-core.el ends here

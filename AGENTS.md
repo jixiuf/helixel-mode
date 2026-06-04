@@ -10,7 +10,7 @@
 | `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
 | `helixel-action.el` | `;` cycling + C-o/C-i jump navigation (thin consumers of event-ring). |
 | `helixel-insert-record.el` | Insert-mode key recording (pre-command-hook based); replay helper `helixel--execute-keys`. |
-| `helixel-repeat-prefix.el` | `helixel-repeat-prefix` struct + `helixel--decode-repeat-prefix` (pure). |
+
 | `helixel-repeat-strategy.el` | `helixel-repeat-strategy` struct, default strategy builder, dispatch, generic advance/apply/preview loops. |
 | `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel, chain strategy builder, chain preview. |

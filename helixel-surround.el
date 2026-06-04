@@ -334,6 +334,25 @@ D is the tag delimiter plist used to locate the tags."
             "surround"))))
       (setq deactivate-mark nil))))
 
+(defun helixel--surround-prompt-target (cmd prefix)
+  "Activate transient textobj map to collect a surround target for CMD.
+PREFIX is the key-prefix label (\"md\" / \"mr\") used in the prompt
+and cancel message.  Sets `helixel--pending-surround-op' to CMD so
+the textobj's after-select hook re-invokes CMD once a target is picked."
+  (setq helixel--pending-surround-op cmd)
+  (let ((map (make-sparse-keymap))
+        (done nil))
+    (set-keymap-parent map helixel-textobj-inner-map)
+    (define-key map "a" helixel-textobj-outer-map)
+    (set-transient-map
+     map
+     (lambda () (prog1 (not done) (setq done t)))
+     (lambda ()
+       (when helixel--pending-surround-op
+         (setq helixel--pending-surround-op nil)
+         (message "%s: no matching target found, cancelled" prefix)))
+     (format "%s: select target (( [ { \" ')" prefix))))
+
 (defun helixel-surround-delete ()
   "Delete surrounding delimiters of the current selection.
 Uses `helixel--pending-sel' to determine the delimiter type.
@@ -351,19 +370,7 @@ so the user can select a target with one keypress."
               (goto-char pos)
               (helixel--tracking-open 'edit 'surround-delete)
               (helixel--record-edit 'surround-delete)))
-        (setq helixel--pending-surround-op #'helixel-surround-delete)
-        (let ((map (make-sparse-keymap))
-              (done nil))
-          (set-keymap-parent map helixel-textobj-inner-map)
-          (define-key map "a" helixel-textobj-outer-map)
-          (set-transient-map
-           map
-           (lambda () (prog1 (not done) (setq done t)))
-           (lambda ()
-             (when helixel--pending-surround-op
-               (setq helixel--pending-surround-op nil)
-               (message "md: no matching target found, cancelled")))
-           "md: select target (( [ { \" ')"))))))
+        (helixel--surround-prompt-target #'helixel-surround-delete "md")))))
 
 (defun helixel-surround-replace ()
   "Replace surrounding delimiters.
@@ -396,19 +403,7 @@ so the user can select a target with one keypress."
                        "surround"))))))
               (_ (helixel--surround-replace-generic d)))
             (setq deactivate-mark nil))
-        (setq helixel--pending-surround-op #'helixel-surround-replace)
-        (let ((map (make-sparse-keymap))
-              (done nil))
-          (set-keymap-parent map helixel-textobj-inner-map)
-          (define-key map "a" helixel-textobj-outer-map)
-          (set-transient-map
-           map
-           (lambda () (prog1 (not done) (setq done t)))
-           (lambda ()
-             (when helixel--pending-surround-op
-               (setq helixel--pending-surround-op nil)
-               (message "mr: no matching target found, cancelled")))
-           "mr: select target (( [ { \" ')"))))))
+        (helixel--surround-prompt-target #'helixel-surround-replace "mr")))))
 
 ;; ============================================================================
 ;; Selection-descriptor method

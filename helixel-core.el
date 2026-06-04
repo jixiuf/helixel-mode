@@ -763,12 +763,12 @@ Two events at different positions are never considered the same."
 
 (defun helixel-event-format (event)
   "Return display string for EVENT.
-Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored."
+Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored;
+otherwise falls back to `helixel--op-display'."
   (let* ((op (helixel-event-op event))
          (sel (helixel-event-sel event))
-         (op-str (or (when (stringp (helixel-event-display event))
-                       (helixel-event-display event))
-                     (symbol-name op)))
+         (op-str (or (helixel-event-display event)
+                     (helixel--op-display op event)))
          (sel-str (when sel (helixel-sel-call-display sel)))
          (count (helixel-sel-count sel)))
     (concat op-str
@@ -783,7 +783,7 @@ Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored."
 ;;
 ;; Dot-repeat transactions are `helixel-event' structs.
 
-(defun helixel--make-tx (op sel-ctx &rest payload-kv)
+(defun helixel-event-create (op sel-ctx &rest payload-kv)
   "Create a `helixel-event' transaction for dot-repeat.
 OP is a registered operator symbol.
 SEL-CTX is a selection descriptor or nil.
@@ -814,13 +814,13 @@ All other keys form the :payload plist."
      :timestamp (float-time)
      :buffer (current-buffer))))
 
-(defun helixel--copy-tx (tx)
+(defun helixel-event-copy (tx)
   "Return a shallow copy of transaction TX."
   (helixel-event--shallow-copy tx))
 
 ;; ── Equality (for event ring dedup) ──
 
-(defun helixel--tx-equal-p (tx1 tx2)
+(defun helixel-event-equal-p (tx1 tx2)
   "Return non-nil if TX1 and TX2 represent the same editing operation.
 Compares op, sel, and payload.  Ignores marker (position differs
 on replay).  Returns t when both are nil."
@@ -834,31 +834,16 @@ on replay).  Returns t when both are nil."
 
 ;; ── Payload helpers ──
 
-(defun helixel--tx-with-payload (tx key value)
+(defun helixel-event-with-payload (tx key value)
   "Return a new transaction equal to TX with :payload KEY set to VALUE.
 Does not mutate TX."
   (let* ((payload (copy-sequence (helixel-event-payload tx)))
          (new-payload (plist-put payload key value))
-         (new-tx (helixel--copy-tx tx)))
+         (new-tx (helixel-event-copy tx)))
     (setf (helixel-event-payload new-tx) new-payload)
     new-tx))
 
 ;; ── Display ──
-
-(defun helixel--tx-display (tx)
-  "Return a short display string for transaction TX.
-Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored;
-otherwise falls back to `helixel--op-display'."
-  (let* ((op (helixel-event-op tx))
-         (sel (helixel-event-sel tx))
-         (op-str (or (helixel-event-display tx)
-                     (helixel--op-display op tx)))
-         (sel-str (when sel (helixel-sel-call-display sel)))
-         (count (helixel-sel-count sel)))
-    (concat op-str
-            (when sel-str (concat "." sel-str))
-            (when (and count (> count 1)) (format "x%d" count)))))
-
 
 ;; ── Deep copy ──
 

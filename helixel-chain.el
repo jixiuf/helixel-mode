@@ -25,7 +25,7 @@
 
 ;;; Code:
 
-(require 'helixel-core)                  ; for helixel--make-tx, keyrec helpers
+(require 'helixel-core) ; helixel-event-create, keyrec helpers
 (require 'helixel-macros)                ; for helixel-with-edit-tracking
 (require 'helixel-repeat)                ; for helixel--last-event, etc.
 
@@ -258,13 +258,13 @@ Determines advance behavior from the initial selection context
                      init-ctx))
          (had-content (and macro (> (length macro) 0))))
     (when had-content
-      (let ((tx (helixel--make-tx 'chain init-ctx
+      (let ((tx (helixel-event-create 'chain init-ctx
                    :runner #'helixel--repeat-chain-runner
                    :display (format "chain(%d)" (length edit-keys))
                    :kmacro edit-keys
                    :chain-move-keys move-keys
                    :chain-init-ctx init-ctx)))
-        (setq helixel--last-event (helixel--copy-tx tx))
+        (setq helixel--last-event (helixel-event-copy tx))
         (helixel-with-edit-tracking
             (:op 'chain :category 'edit :subcat 'chain)
           (helixel--live-edit-set tx))))

@@ -155,7 +155,7 @@ Notes:
 (helixel--sel-pop)                  → sel|nil  ; edit cmds pop
 
 ;; ── Transaction ──
-(helixel--make-tx op sel &rest kv) → struct
+(helixel-event-create op sel &rest kv) → struct
   ;; Special kv: :runner fn, :display str|fn — rest becomes :payload
 (helixel-event-op tx)
 (helixel-event-sel tx)
@@ -163,8 +163,8 @@ Notes:
 (helixel-event-runner tx)
 (helixel-event-mark-region tx)
 (helixel-event-display tx)
-(helixel--tx-with-payload tx k v)  → new tx with payload entry added
-(helixel--copy-tx tx)              → shallow copy
+(helixel-event-with-payload tx k v)  → new tx with payload entry added
+(helixel-event-copy tx)              → shallow copy
 
 ;; ── Event ──
 (helixel-event-op event)
@@ -242,8 +242,8 @@ Stale .elc silently hides changes. `rm -f *.elc && make compile` before testing.
 ### helixel--last-event is buffer-local
 `. ` replays the last edit from the current buffer only.
 
-### helixel--make-tx keyword handling
-`helixel--make-tx` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel--copy-tx` + `setf`.
+### helixel-event-create keyword handling
+`helixel-event-create` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel-event-copy` + `setf`.
 
 ### Never trust match-data in helixel-insert / helixel-insert-after
 Search hooks invalidate `match-data`. Use `(region-beginning)` / `(region-end)` instead.

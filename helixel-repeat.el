@@ -83,7 +83,7 @@ Pops `helixel--pending-sel' via `helixel--sel-pop' (consumes the
 pending selection).  Looks up the runner and display from the operator
 registry and stores them in the transaction so `helixel--execute-edit'
 can dispatch without registry lookups.
-Builds a transaction via `helixel--make-tx', pushes it onto
+Builds a transaction via `helixel-event-create', pushes it onto
 the event ring, and stores the most recent edit in `helixel--last-event'.
 Also notifies the event ring so `;' jumping picks up the new edit.
 
@@ -93,11 +93,11 @@ The `helixel-define-command' macro handles this automatically."
               defining-kbd-macro)
     (let* ((pop-sel (helixel--sel-pop))
            (runner (helixel--op-runner operator))
-           (tx (apply #'helixel--make-tx operator
+           (tx (apply #'helixel-event-create operator
                       pop-sel
                       :runner runner
                       extra)))
-      (let ((new-tx (helixel--copy-tx tx)))
+      (let ((new-tx (helixel-event-copy tx)))
         (setf (helixel-event-display new-tx)
               (helixel--op-display operator tx))
         (setq tx new-tx))
@@ -470,11 +470,11 @@ The chosen event's edit data becomes the new `helixel--last-event'."
            (event (cdr (assoc choice items))))
       (when event
         ;; Reconstruct tx from event.  Payload keys are spread via apply.
-        ;; helixel--make-tx signature: (op sel-ctx &rest payload-kv)
+        ;; helixel-event-create signature: (op sel-ctx &rest payload-kv)
         ;; so sel-ctx is the second positional arg, then
         ;; remaining payload plist keys are spread via apply.
         (helixel--update-last-event
-         (apply #'helixel--make-tx
+         (apply #'helixel-event-create
                 (helixel-event-op event)
                 (helixel-event-sel event)
                 :display (helixel-event-display-format event)
@@ -496,7 +496,7 @@ The chosen event's edit data becomes the new `helixel--last-event'."
         (emacs-lisp-mode)
         (insert ";; helixel--last-event (display: "
                 (or (and helixel--last-event
-                         (helixel--tx-display helixel--last-event))
+                         (helixel-event-format helixel--last-event))
                     "<none>")
                 ")\n")
         (pp helixel--last-event (current-buffer))

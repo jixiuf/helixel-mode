@@ -128,7 +128,7 @@ helixel-repeat-edit
 `helixel--record-edit(op, &rest extra)`:
 1. Pop pending sel via `helixel--sel-pop`
 2. Look up runner from op registry
-3. Create event tx via `helixel--make-tx`
+3. Create event tx via `helixel-event-create`
 4. Store as `helixel--last-tx`
 5. Commit event via `helixel-event-commit`
 
@@ -298,7 +298,7 @@ helixel-core (cl-lib only)
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions
-- For dot-repeat tests: build tx with `helixel--make-tx` and set `helixel--last-tx`
+- For dot-repeat tests: build tx with `helixel-event-create` and set `helixel--last-tx`
 - For chain tests: use `helixel-chain--make-test-tx` helper
 - Max 12s timeout per test run; zero hangs expected
 

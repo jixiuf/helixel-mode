@@ -65,7 +65,7 @@ return EDIT unchanged."
          (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
     (if (and effective-reverse sel flip-fn)
         (let* ((reversed-sel (funcall flip-fn sel))
-               (new-edit (helixel--copy-tx edit)))
+               (new-edit (helixel-event-copy edit)))
           (setf (helixel-event-sel new-edit) reversed-sel)
           new-edit)
       edit)))

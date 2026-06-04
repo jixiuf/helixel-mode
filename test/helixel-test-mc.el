@@ -258,7 +258,7 @@ be re-invoked by the advice (recording already broadcast)."
     ;; Fake a chain TX whose runner would `error' if called.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel--make-tx 'chain sel
+           (tx (helixel-event-create 'chain sel
                  :runner (lambda (_tx) (error "REAPPLIED"))
                  :kmacro (vector ?x))))
       (setq helixel--last-event tx))
@@ -496,7 +496,7 @@ the real cursor's event."
     ;; directly to the overlay snapshots.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel--make-tx 'insert-text sel
+           (tx (helixel-event-create 'insert-text sel
                  :runner (lambda (_tx) (insert "X"))
                  :text "X")))
       (setq helixel--last-event tx)
@@ -531,7 +531,7 @@ property must be updated by `leave-cursor' — otherwise a later
           (let ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                          #'ignore)))
             (setq helixel--last-event
-                  (helixel--make-tx 'noop sel))))
+                  (helixel-event-create 'noop sel))))
         (should (overlay-get ov 'helixel--last-event))))
     (helixel-mc-clear-all)))
 
@@ -545,7 +545,7 @@ fires only when fakes exist."
     (let* ((called 0)
            (sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel--make-tx 'noop sel
+           (tx (helixel-event-create 'noop sel
                  :runner (lambda (_tx) (cl-incf called)))))
       (setq helixel--last-event tx)
       ;; Direct call to advised `.':
@@ -565,7 +565,7 @@ fake then replays the chain TX (not the pre-chain edit)."
     (helixel-mc-create-fake-cursor 2)
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
                                     #'ignore))
-           (tx (helixel--make-tx 'chain sel
+           (tx (helixel-event-create 'chain sel
                  :runner (lambda (_tx) (ignore))
                  :kmacro (vector ?x))))
       (setq helixel--last-event tx)

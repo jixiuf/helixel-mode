@@ -201,12 +201,12 @@ Otherwise RECORD-P defaults to t via the wrapper body."
         (let ((tx helixel--last-event))
           ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
-            (setq tx (helixel--tx-with-payload tx :keys keys)))
+            (setq tx (helixel-event-with-payload tx :keys keys)))
           ;; Store text as replay fallback (tests, programmatic use)
           (when text
-            (setq tx (helixel--tx-with-payload tx :text text))
+            (setq tx (helixel-event-with-payload tx :text text))
             (when (eq (helixel-event-op tx) 'change)
-              (setq tx (helixel--tx-with-payload tx
+              (setq tx (helixel-event-with-payload tx
                                                   :inserted-text text))))
           (helixel--update-last-event tx))))
     (when helixel--change-track-marker
@@ -294,7 +294,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (defun helixel--repeat-change-core (tx)
   "Repeat change TX: delete selection, replay keys or insert text.
-TX is the complete edit transaction (see `helixel--make-tx').
+TX is the complete edit transaction (see `helixel-event-create').
 Keys (primary) capture the full insert-mode keystrokes.
 Text (fallback) is used when keys are unavailable (tests).
 
@@ -652,7 +652,7 @@ Set by the op runner from the transaction's :multiplier payload.")
           (indent-rigidly (region-beginning) (region-end) (- 1))
           (let* ((mult (or (helixel-event-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
-             (helixel--tx-with-payload tx :multiplier (1+ mult))))
+             (helixel-event-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p
@@ -692,7 +692,7 @@ Set by the op runner from the transaction's :multiplier payload.")
           (indent-rigidly (region-beginning) (region-end) 1)
           (let* ((mult (or (helixel-event-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
-             (helixel--tx-with-payload tx :multiplier (1+ mult))))
+             (helixel-event-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p

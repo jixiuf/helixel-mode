@@ -237,15 +237,15 @@
 ;; edit transaction runner/display tests
 
 (ert-deftest helixel-test-edit-make-stores-runner ()
-  "`helixel--make-tx' stores :runner in the struct slot."
+  "`helixel-event-create' stores :runner in the struct slot."
   (let ((dummy-fn #'ignore))
-    (let ((tx (helixel--make-tx 'kill nil :runner dummy-fn)))
+    (let ((tx (helixel-event-create 'kill nil :runner dummy-fn)))
       (should (eq (helixel-event-runner tx) dummy-fn))
       (should (null (plist-get (helixel-event-payload tx) :runner))))))
 
 (ert-deftest helixel-test-edit-make-stores-display ()
-  "`helixel--make-tx' stores :display in DISPLAY-FIELD slot, not in :payload."
-  (let ((tx (helixel--make-tx 'kill nil :display "d.K")))
+  "`helixel-event-create' stores :display in DISPLAY-FIELD slot, not in :payload."
+  (let ((tx (helixel-event-create 'kill nil :display "d.K")))
     (should (string= (helixel-event-display tx) "d.K"))
     (should (null (plist-get (helixel-event-payload tx) :display)))))
 
@@ -254,7 +254,7 @@
   (with-temp-buffer
     (insert "hello")
     (goto-char 1)
-    (let ((tx (helixel--make-tx 'test nil
+    (let ((tx (helixel-event-create 'test nil
                 :runner (lambda (_tx) (insert "X")))))
       (helixel--execute-edit tx)
       (should (string= (buffer-string) "Xhello")))))
@@ -267,15 +267,15 @@
     (insert "hello")
     (goto-char 2)  ; on "e"
     ;; Create a tx without :runner (tests registry fallback)
-    (let ((tx (helixel--make-tx 'kill nil)))
+    (let ((tx (helixel-event-create 'kill nil)))
       (should (helixel--op-runner 'kill)) ;; registry has runner
       ;; Should not error — just verify the fallback path runs
       (should (progn (helixel--execute-edit tx) t)))))
 
 (ert-deftest helixel-test-edit-display-uses-stored-field ()
-  "`helixel--tx-display' prefers :display stored in TX."
-  (let ((tx (helixel--make-tx 'kill nil :display "custom-label")))
-    (should (string= (helixel--tx-display tx) "custom-label"))))
+  "`helixel-event-format' prefers :display stored in TX."
+  (let ((tx (helixel-event-create 'kill nil :display "custom-label")))
+    (should (string= (helixel-event-format tx) "custom-label"))))
 
 (ert-deftest helixel-test-repeat-edit-no-prev ()
   "Test repeat-edit with no previous edit signals error."
@@ -350,7 +350,7 @@
   (helixel-test-with-buffer "hello world foo"
     (goto-char 3)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -400,7 +400,7 @@
   (helixel-test-with-buffer "hello world"
     (goto-char 7)
     (setq helixel--last-event
-          (helixel--make-tx 'insert-text nil :text "INSERTED"))
+          (helixel-event-create 'insert-text nil :text "INSERTED"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "hello INSERTEDworld"))))
 
@@ -409,7 +409,7 @@
   (helixel-test-with-buffer "hello world"
     (goto-char 7)
     (setq helixel--last-event
-          (helixel--make-tx 'insert-text nil :text ""))
+          (helixel-event-create 'insert-text nil :text ""))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "hello world"))))
 
@@ -418,7 +418,7 @@
   (helixel-test-with-buffer "hello world"
     (goto-char 7)
     (setq helixel--last-event
-          (helixel--make-tx 'insert-text nil :text "x"))
+          (helixel-event-create 'insert-text nil :text "x"))
     (helixel-repeat-edit 5)
     (should (string= (buffer-string) "hello xxxxxworld"))))
 
@@ -426,7 +426,7 @@
   "`helixel-repeat-edit' does not discard `helixel--last-event' on failure."
   (helixel-test-with-buffer "hello"
     (setq helixel--last-event
-          (helixel--make-tx 'kill (helixel-sel-create 'unknown-kind-no-method nil #'ignore "?")))
+          (helixel-event-create 'kill (helixel-sel-create 'unknown-kind-no-method nil #'ignore "?")))
     (let ((before helixel--last-event))
       (helixel-repeat-edit)
       (should (equal helixel--last-event before)))))
@@ -482,29 +482,29 @@ deduplication is against the ring front by content."
     (should (helixel-event-p (car helixel--event-ring)))))
 
 (ert-deftest helixel-test-edit-display ()
-  "`helixel--tx-display' formats op + sel + payload hints."
-  (should (string= (helixel--tx-display
-                    (helixel--make-tx 'kill
+  "`helixel-event-format' formats op + sel + payload hints."
+  (should (string= (helixel-event-format
+                    (helixel-event-create 'kill
                       (helixel-sel-create 'line '(:count 3)
                         #'helixel--recreate-line "L")))
                    "d.Lx3"))
-  (should (string= (helixel--tx-display
-                    (helixel--make-tx 'kill
+  (should (string= (helixel-event-format
+                    (helixel-event-create 'kill
                       (helixel-sel-create 'line '(:dir backward :count 2)
                         #'helixel--recreate-line "L^")))
                    "d.L^x2"))
-  (should (string= (helixel--tx-display
-                    (helixel--make-tx 'replace-char nil :char ?Q))
+  (should (string= (helixel-event-format
+                    (helixel-event-create 'replace-char nil :char ?Q))
                    "R[Q]"))
-  (should (string= (helixel--tx-display
-                    (helixel--make-tx 'kill
+  (should (string= (helixel-event-format
+                    (helixel-event-create 'kill
                       (helixel-sel-create 'textobj
                         '(:command helixel-mark-inner-word :count 1)
                         #'helixel--recreate-textobj
                         "inner-word")))
                    "d.inner-word"))
-  (should (string= (helixel--tx-display
-                    (helixel--make-tx 'kill
+  (should (string= (helixel-event-format
+                    (helixel-event-create 'kill
                       (helixel-sel-create 'movement
                         '(:moves ((helixel-forward-word-start . 3)))
                         #'helixel--recreate-movement
@@ -516,7 +516,7 @@ deduplication is against the ring front by content."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'kill
+          (helixel-event-create 'kill
             (helixel-sel-create 'movement '(:moves ((helixel-forward-word-start . 2)))
             #'helixel--recreate-movement
             (format "v%d" 2))))
@@ -528,7 +528,7 @@ deduplication is against the ring front by content."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'movement '(:moves ((helixel-forward-word-start . 1)))
             #'helixel--recreate-movement
             (format "v%d" 1))
@@ -730,7 +730,7 @@ Inserting \='(' without electric-pair should only insert \='('."
       ;; what c X Y <esc> would record.  The keys are only the
       ;; productive insert-mode keystrokes (X Y), not the initiating c.
       (setq helixel--last-event
-            (helixel--make-tx 'change
+            (helixel-event-create 'change
               (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -749,7 +749,7 @@ Inserting \='(' without electric-pair should only insert \='('."
       (goto-char 2)
       ;; Directly construct a tx with :keys payload (simulating i Z <esc>)
       (setq helixel--last-event
-            (helixel--make-tx 'insert-text nil
+            (helixel-event-create 'insert-text nil
               :text "Z" :keys (kbd "Z")))
       (helixel-repeat-edit)
       (should (string= (buffer-string) "aZbc"))
@@ -765,7 +765,7 @@ Inserting \='(' without electric-pair should only insert \='('."
       (goto-char 1)
       ;; Manually construct a tx without :keys (old-format tx)
       (setq helixel--last-event
-            (helixel--make-tx 'insert-text nil :text "OLD"))
+            (helixel-event-create 'insert-text nil :text "OLD"))
       (helixel-repeat-edit)
       (should (string= (buffer-string) "OLDhello")))))
 
@@ -775,7 +775,7 @@ Inserting \='(' without electric-pair should only insert \='('."
     (goto-char 1)
     ;; A tx with both :inserted-text and :keys — :keys wins
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'textobj
               '(:command helixel-mark-inner-word :count 1)
               #'helixel--recreate-textobj
@@ -799,7 +799,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world"
     (goto-char 3)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -814,7 +814,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "line one\nline two\nline three\n"
     (goto-char 3)
     (setq helixel--last-event
-          (helixel--make-tx 'kill
+          (helixel-event-create 'kill
             (helixel-sel-create 'line '(:count 1)
               #'helixel--recreate-line "L")))
     (helixel-repeat-selection)
@@ -826,7 +826,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "line one\nline two\nline three\n"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'kill (helixel-sel-create 'line '(:count 1) #'helixel--recreate-line "L")))
+          (helixel-event-create 'kill (helixel-sel-create 'line '(:count 1) #'helixel--recreate-line "L")))
     (helixel-repeat-selection 2)
     (should (region-active-p))
     (should (= (region-beginning) 1))
@@ -837,7 +837,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world"
     (goto-char 3)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -851,7 +851,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world foo bar"
     (goto-char 3)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -874,7 +874,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'insert-text nil :text "X"))
+          (helixel-event-create 'insert-text nil :text "X"))
     (should-error (helixel-repeat-selection))))
 
 ;; ============================================================================
@@ -886,7 +886,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello   world"
     (goto-char 3)                                ;; on "l" of "hello"
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -901,7 +901,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 3)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'textobj '(:command helixel-mark-inner-word :count 1)
             #'helixel--recreate-textobj
             (replace-regexp-in-string "^helixel-mark-" "" (symbol-name 'helixel-mark-inner-word)))
@@ -923,7 +923,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -937,7 +937,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -953,7 +953,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -968,7 +968,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "a hello b hello c hello d"
     (goto-char 3)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
             #'helixel--recreate-search
             "/hello")
@@ -985,7 +985,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello world hello"
     (goto-char (point-max))
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir backward)
             #'helixel--recreate-search
             "?hello")
@@ -1001,7 +1001,7 @@ keys [f o o DEL o] should produce 'foo' on the next match, not 'o'."
     (goto-char 1)
     ;; Construct the tx that /hello c foo <backspace> o <ESC> records.
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
               #'helixel--recreate-search
               "/hello")
@@ -1019,7 +1019,7 @@ backspace as a symbol (GUI Emacs) instead of DEL (127)."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
               #'helixel--recreate-search
               "/hello")
@@ -1036,7 +1036,7 @@ deletes exactly one char rather than an entire region."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
               #'helixel--recreate-search
               "/hello")
@@ -1056,7 +1056,7 @@ works in the dot-repeat context."
     ;; c ab<C-d>X <esc>: deletes "hello", types "ab", C-d deletes the
     ;; space after "ab", then types "X".
     (setq helixel--last-event
-          (helixel--make-tx 'change
+          (helixel-event-create 'change
             (helixel-sel-create 'search '(:pattern "hello" :dir forward)
               #'helixel--recreate-search
               "/hello")

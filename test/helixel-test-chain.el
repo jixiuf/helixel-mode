@@ -188,7 +188,7 @@
 
 (defun helixel-chain--make-test-tx (&optional sel-ctx)
   "Create a minimal chain TX with SEL-CTX for testing ./, flows."
-  (helixel--make-tx 'chain (or sel-ctx nil)
+  (helixel-event-create 'chain (or sel-ctx nil)
     :runner #'helixel--repeat-chain-runner
     :display "chain(test)"
     :kmacro (vconcat (kbd "x"))
@@ -291,7 +291,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -308,7 +308,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -326,7 +326,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -342,7 +342,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -359,7 +359,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -376,7 +376,7 @@
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -398,7 +398,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)
                   #'ignore "s"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -416,7 +416,7 @@
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)
                   #'ignore "s"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -434,7 +434,7 @@
     (goto-char 10)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
                   #'ignore "l"))
-           (tx (helixel--make-tx 'chain ctx
+           (tx (helixel-event-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :kmacro (vconcat (kbd "x"))))
@@ -491,13 +491,13 @@ an :op (true edits) should switch phases."
                          (apply #'vconcat
                                 (nreverse helixel--chain-edit-keys)))))
         (setq helixel--repeat-chaining nil)
-        (let ((tx (helixel--make-tx 'chain init-ctx
+        (let ((tx (helixel-event-create 'chain init-ctx
                     :runner #'helixel--repeat-chain-runner
                     :display "chain"
                     :kmacro edit-keys
                     :chain-move-keys move-keys
                     :chain-init-ctx init-ctx)))
-          (setq helixel--last-event (helixel--copy-tx tx))
+          (setq helixel--last-event (helixel-event-copy tx))
           ;; Verify chain tx has move-keys
           (should (eq (helixel-event-op helixel--last-event) 'chain))
           (let ((payload (helixel-event-payload helixel--last-event)))
@@ -519,7 +519,7 @@ Also verifies that `helixel--chain-strategy-builder' picks up
     (let ((init-ctx helixel--pending-sel))
       ;; Build a chain tx with move-keys
       (let* ((move-keys-v (vconcat (kbd "b") (kbd "b")))
-             (tx (helixel--make-tx 'chain init-ctx
+             (tx (helixel-event-create 'chain init-ctx
                   :runner #'helixel--repeat-chain-runner
                   :display "chain"
                   :kmacro (vconcat (kbd "d"))

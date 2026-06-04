@@ -89,14 +89,22 @@ BODY is the command's business logic."
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
-       ;; ── Open tracking event (via unified entry point) ──
-       (helixel--tracking-open ',cat ',sub)
-       ;; ── Highlight clearing ──
-       ,@(when clear '((helixel--clear-highlights)))
-       ;; ── Body (pure business logic) ──
-       ,@rest-body
-       ;; ── Visual-mode tracking (for . replay of movements) ──
-       ,@track-visual)))
+       ;; ── Tag this command so `helixel-edit-commit' can stamp
+       ;; `by-command' on committed edits (used by mc dispatcher).
+       ;; Always OVERRIDE `this-command' to this function symbol so
+       ;; the stamp is correct even when the outer scope has a stale
+       ;; value (e.g. in batch tests where the command loop does not
+       ;; set it, or when called as a sub-step of another command).
+       (let ((helixel--current-command ',name)
+             (this-command ',name))
+         ;; ── Open tracking event (via unified entry point) ──
+         (helixel--tracking-open ',cat ',sub)
+         ;; ── Highlight clearing ──
+         ,@(when clear '((helixel--clear-highlights)))
+         ;; ── Body (pure business logic) ──
+         ,@rest-body
+         ;; ── Visual-mode tracking (for . replay of movements) ──
+         ,@track-visual))))
 
 ;; ── Operator definition macro ──
 

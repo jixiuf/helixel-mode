@@ -640,7 +640,12 @@ Slots:
   SUBCAT    — symbol sub-classification (kill search word ...)
   DISPLAY   — string or function (event) → string for history
   TIMESTAMP — float from `float-time'
-  BUFFER    — buffer object where the event occurred"
+  BUFFER    — buffer object where the event occurred
+  BY-COMMAND — symbol of `this-command' at commit time.
+                Used by the multi-cursor dispatcher to detect that
+                an edit was produced by the just-completed command
+                (and therefore should be replayed at each fake)
+                vs. a leftover edit from an earlier command."
   op
   sel
   payload
@@ -650,7 +655,8 @@ Slots:
   subcat
   display
   timestamp
-  buffer)
+  buffer
+  by-command)
 
 (defun helixel-edit--copy (event)
   "Deep-copy `helixel-edit' struct EVENT.
@@ -734,7 +740,8 @@ All other keys form the :payload plist."
      :runner runner
      :display display-field
      :timestamp (float-time)
-     :buffer (current-buffer))))
+     :buffer (current-buffer)
+     :by-command (and (symbolp this-command) this-command))))
 
 (defun helixel-edit-copy (tx)
   "Return a shallow copy of transaction TX."
@@ -1003,6 +1010,27 @@ to inject replay metadata into an existing event in-place."
   "Pointer to the most recent committed event in this buffer.
 Consumed by `.` and `,` for repeat.
 Buffer-local — dot-repeat is scoped to the current buffer.")
+
+(defvar helixel--current-command nil
+  "Symbol of the currently-executing helixel command.
+Bound by `helixel-define-command' (and by `helixel-with-command'
+for manually-defined commands) so that `helixel-edit-commit'
+can stamp `by-command' on each committed edit — enabling the
+multi-cursor dispatcher to detect a fresh edit produced by THIS
+command even when `this-command' isn't set (e.g. in batch tests
+or when called programmatically without going through the
+command loop).")
+
+(defmacro helixel-with-command (name &rest body)
+  "Run BODY tagged as if it were inside the command NAME.
+Binds `helixel--current-command' AND overrides `this-command'
+to NAME so committed edits carry the right `by-command' stamp.
+Use for plain `defun' helixel commands that don't go through
+`helixel-define-command'."
+  (declare (indent 1) (debug t))
+  `(let ((helixel--current-command ',name)
+         (this-command ',name))
+     ,@body))
 
 (defun helixel--update-last-event (new-tx)
   "Update the payload of `helixel--last-edit' from NEW-TX.

@@ -106,6 +106,17 @@ Returns the committed entry or nil."
       (setf (helixel-edit-sel helixel--live-edit)
             (helixel-sel--copy helixel--pending-sel)))
     (let ((entry (helixel-edit--copy helixel--live-edit)))
+      ;; Stamp the committing command symbol — used by the multi-
+      ;; cursor dispatcher to detect a fresh edit produced by the
+      ;; current command (so it knows to replay the edit at fakes).
+      ;; Prefer `this-command' (set by the command loop in production);
+      ;; fall back to `helixel--current-command' (set by
+      ;; `helixel-define-command' / `helixel-with-command') so this
+      ;; works in batch tests and programmatic calls too.
+      (let ((cmd (or (and (symbolp this-command) this-command)
+                     helixel--current-command)))
+        (when cmd
+          (setf (helixel-edit-by-command entry) cmd)))
       (unless (and (car helixel--event-ring)
                    (helixel-edit--same-content-p
                     entry (car helixel--event-ring)))

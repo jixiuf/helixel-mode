@@ -613,6 +613,37 @@ without going through the command loop."
     (helixel-mc-with-each-cursor
       (helixel-mc--call-interactively command))))
 
+;; ── Edit-replay dispatch ──
+;;
+;; If `this-command' produced a new `helixel-edit' (stamped via the
+;; edit's `by-command' slot at record time), dispatch at fakes by
+;; replaying that edit's runner.  Runners already read their
+;; decisions from the edit payload (char, register, delimiter,
+;; pattern, ...), so fakes never re-prompt.  This eliminates the
+;; need for per-command `advice-add' or substitute-alist hacks for
+;; prompt commands like `helixel-replace-char', `helixel-surround-*'.
+
+(defun helixel-mc--fresh-edit-from-real ()
+  "Return the helixel-edit committed by `this-command' at real, or nil.
+The check uses the edit's `by-command' stamp set at record time —
+NO `pre-command-hook' snapshot needed (so this works correctly even
+when tests bypass the command loop).
+
+Returns nil when:
+  - `helixel--last-edit' is unset,
+  - the edit was committed by a DIFFERENT command (leftover),
+  - the edit carries no `op' (movement / search commit — not a real edit),
+  - `this-command' has a `helixel-mc-prepos' property (those manage
+    their own per-fake staging and should NOT replay the edit body)."
+  (when (and (boundp 'helixel--last-edit)
+             (symbolp this-command)
+             (not (get this-command 'helixel-mc-prepos)))
+    (let ((cur helixel--last-edit))
+      (when (and cur
+                 (helixel-edit-op cur)
+                 (eq (helixel-edit-by-command cur) this-command))
+        cur))))
+
 ;; ── post-command-hook integration ──
 ;;
 ;; The former `helixel-mc--inhibit' and
@@ -655,23 +686,19 @@ before the next `self-insert-command' broadcast."
 
 (defun helixel-mc--post-command ()
   "Post-command hook — dispatch `this-command' at every fake cursor.
-Single-undo-step amalgamation; substitutes input-reading commands
-via `helixel-mc--fake-substitute-alist' so fake cursors don't
-re-prompt.  When substituting, shared state (e.g.
-`helixel--active-search') from the real cursor's just-completed
-call is propagated into every fake cursor's snapshot so the
-substitute command has something to act on.
+Single-undo-step amalgamation.  Dispatch strategy:
 
-No-op when:
-  - the multi-cursor minor mode is off,
-  - we are inside our own dispatch loop
-    (`helixel-mc-dispatch-in-progress-p'),
-  - `this-command' is whitelisted off,
-  - we are replaying or recording a keyboard macro
-    (caller is expected to handle iteration manually).
+  - If the real cursor committed a fresh `helixel-edit' this command
+    (detected via `helixel-edit-by-command' stamp —
+    see `helixel-mc--fresh-edit-from-real'), replay that edit's
+    runner at each fake.  Runner payload carries decisions so no
+    prompt fires at fakes.
+  - Otherwise, re-invoke `this-command' at each fake via the
+    substitute-alist (if any), falling back to `call-interactively'
+    for pure movements.
 
-This is the SINGLE dispatcher used in all situations."
-  ;; Pre-position fakes for insert-entry commands first.
+No-op when the mode is off, dispatch is already in progress,
+we're in a keyboard-macro, or `this-command' is whitelisted off."
   (helixel-mc--maybe-preposition)
   (when (and helixel-multi-cursor-mode
              (not (helixel-mc-dispatch-in-progress-p))
@@ -681,16 +708,15 @@ This is the SINGLE dispatcher used in all situations."
              (helixel-mc-any-p)
              (helixel-mc--should-run-for-all-p this-command))
     (helixel-with-replay 'mc-batch
-     (let* ((real-cmd this-command)
-            (substituted (cdr (assq real-cmd
-                                    helixel-mc--fake-substitute-alist)))
+     (let* ((fresh-edit (helixel-mc--fresh-edit-from-real))
+            (real-cmd this-command)
+            (substituted (and (not fresh-edit)
+                              (cdr (assq real-cmd
+                                    helixel-mc--fake-substitute-alist))))
             (cmd (or substituted real-cmd)))
-      ;; When substituting, propagate the real cursor's freshly-set
-      ;; shared state into every fake cursor's overlay so the
-      ;; substitute command (e.g. `helixel-find-repeat') sees the
-      ;; same active search.  Without this, fake cursors restore
-      ;; their own (possibly nil) snapshot and the substitute bails.
-      (when substituted
+      (when (and substituted (not fresh-edit))
+        ;; Substitute path: propagate freshly-set shared search state
+        ;; so the substitute command sees the real cursor's match.
         (let ((shared (and (boundp 'helixel--active-search)
                            (symbol-value 'helixel--active-search))))
           (dolist (ov (helixel-mc-all-cursors))
@@ -700,13 +726,15 @@ This is the SINGLE dispatcher used in all situations."
           (undo-amalgamate-change-group
             (let ((dead nil))
               (helixel-mc-with-each-cursor
-                ;; Per-cursor error trap: a single fake's failure
-                ;; (e.g. `search-failed' from a substituted find-
-                ;; char that doesn't find its char) must NOT abort
-                ;; the whole batch.  Failing fakes are queued for
-                ;; deletion below; the rest dispatch normally.
                 (condition-case e
-                    (helixel-mc--call-interactively cmd)
+                    (if fresh-edit
+                        ;; Replay the just-committed edit at each
+                        ;; fake via its runner.  Payload carries
+                        ;; the prompted decisions so nothing prompts.
+                        (helixel-with-replay-as 'dot
+                          (helixel--execute-edit fresh-edit))
+                      ;; Pure movement / non-edit: re-call command.
+                      (helixel-mc--call-interactively cmd))
                   (search-failed (push cursor dead))
                   (error (message "helixel-mc: %s at fake: %s"
                                   cmd (error-message-string e))
@@ -716,9 +744,6 @@ This is the SINGLE dispatcher used in all situations."
         (error
          (message "helixel-mc: %s outer error: %s"
                   cmd (error-message-string err))))
-      ;; Movement / edits may have collapsed cursors onto each other
-      ;; or onto the real cursor — dedupe so subsequent dispatch and
-      ;; visible overlays stay consistent.
       (helixel-mc-dedupe-cursors)))))
 
 ;; ── Minor mode ──

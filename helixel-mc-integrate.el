@@ -412,9 +412,15 @@ of commands from modules `mc-integrate' itself depends on."
 
 ;; ── Replace-char (`R<char>') / surround-add (`ms<char>') per-cursor ──
 ;;
-;; Both prompt for a delimiter / replacement char interactively.  If
-;; broadcast naively, each fake re-prompts.  Strategy: mark real-only,
-;; capture state in `:after' advice, replay at each fake's region.
+;; ── Per-cursor prompt commands (replace-char / surround-add)
+;;
+;; These commands prompt the user (char or delimiter).  Their op
+;; runners already read the prompted decision from the edit payload
+;; (`:char') and act on `region-beginning'/`region-end' — so they are
+;; position-independent.  The mc dispatcher's fresh-edit path detects
+;; the just-committed edit via its `by-command' stamp and replays the
+;; runner at every fake — NO advice / NO real-cursor-only marking
+;; needed.
 
 (declare-function helixel--replace-region "helixel-editing"
                   (str beg end))
@@ -423,61 +429,6 @@ of commands from modules `mc-integrate' itself depends on."
 (declare-function helixel-sel-surround-delimiter "helixel-core" (obj))
 (declare-function helixel-delimiter-open "helixel-core" (d))
 (declare-function helixel-delimiter-close "helixel-core" (d))
-
-(defvar helixel-mc--last-replace-char nil
-  "Char most recently used by `helixel-replace-char'.
-Captured so fake cursors can replay the replacement without
-re-prompting the user.")
-
-(defun helixel-mc--replace-char-advice (char)
-  "After-advice for `helixel-replace-char'.
-Replays the replacement at every fake cursor's region (or point
-when no region is active), using CHAR captured from the real-
-cursor call."
-  (setq helixel-mc--last-replace-char char)
-  (when (and helixel-multi-cursor-mode (helixel-mc-any-p))
-    (helixel-with-replay-as 'mc-batch
-      (helixel-mc-with-each-cursor
-        (if (use-region-p)
-            (helixel--replace-region
-             (make-string (- (region-end) (region-beginning)) char)
-             (region-beginning) (region-end))
-          (helixel--replace-region
-           (char-to-string char) (point) (1+ (point)))))
-      (helixel-mc-dedupe-cursors))))
-
-(advice-add 'helixel-replace-char :after
-            #'helixel-mc--replace-char-advice)
-
-(helixel-mc-mark-all-for-real-cursor-only '(helixel-replace-char))
-
-(defvar helixel-mc--last-surround-pair nil
-  "Last delimiter struct used by `helixel-surround-add'.
-Captured so fake cursors can replay the surround without re-
-prompting the user.")
-
-(defun helixel-mc--surround-add-advice (&rest _)
-  "After-advice for `helixel-surround-add'.
-Replays the surround at every fake cursor's active region using
-the delimiter pair the real cursor just used (read off the
-pending selection).  Fakes without an active region are skipped."
-  (let* ((sel helixel--pending-sel)
-         (d (and sel (helixel-sel-surround-delimiter sel))))
-    (when d
-      (setq helixel-mc--last-surround-pair d)
-      (when (and helixel-multi-cursor-mode (helixel-mc-any-p))
-        (let* ((open  (helixel-delimiter-open d))
-               (close (helixel-delimiter-close d)))
-          (helixel-with-replay-as 'mc-batch
-            (helixel-mc-with-each-cursor
-              (when (use-region-p)
-                (helixel--surround-add open close)))
-            (helixel-mc-dedupe-cursors)))))))
-
-(advice-add 'helixel-surround-add :after
-            #'helixel-mc--surround-add-advice)
-
-(helixel-mc-mark-all-for-real-cursor-only '(helixel-surround-add))
 
 ;; ── Surround-delete / surround-replace per-cursor (md / mr)
 ;;

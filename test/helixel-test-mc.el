@@ -1034,43 +1034,40 @@ dispatcher / dedupe pipeline."
 
 
 (ert-deftest helixel-test-mc-replace-char-real-only-and-broadcasts ()
-  "`R<ch>' must be real-only; the :after advice replays the
-replacement at every fake's region/point using the captured char."
+  "`R<ch>' broadcasts the replacement to every fake via the
+edit-replay dispatch path (runner reads :char from payload — no
+advice, no real-only marking)."
   (helixel-test-with-buffer "abc def ghi\n"
     (helixel-enter-normal-state)
-    (should (plist-member (symbol-plist 'helixel-replace-char)
-                          'multiple-cursors))
-    (should (null (get 'helixel-replace-char 'multiple-cursors)))
     (goto-char 1)
     (helixel-mc-create-fake-cursor 5)
     (helixel-mc-create-fake-cursor 9)
-    ;; Drive directly (no `c' interactive prompt) by calling the
-    ;; command with a captured char.  The :after advice fires from
-    ;; `helixel-replace-char's actual run.
+    ;; Drive the command (sets `this-command' = helixel-replace-char),
+    ;; then drive the post-command dispatcher which sees the fresh
+    ;; edit (op=replace-char, by-command=helixel-replace-char) and
+    ;; replays its runner at every fake.
     (let ((unread-command-events (list ?X)))
       (call-interactively 'helixel-replace-char))
-    (should (eq ?X helixel-mc--last-replace-char))
+    (let ((this-command 'helixel-replace-char))
+      (helixel-mc--post-command))
     ;; Real at pos 1 → 'a' replaced.  Fakes at 5 ('d') and 9 ('h').
     (should (string-match-p "Xbc Xef Xhi" (buffer-string)))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-surround-add-real-only-and-broadcasts ()
-  "`ms(' must be real-only; the :after advice wraps every fake's
-active region with the same delimiter pair."
+  "`ms(' broadcasts the surround to every fake via the edit-replay
+dispatch path (runner reads :char from payload — no advice)."
   (helixel-test-with-buffer "foo bar baz\n"
     (helixel-enter-normal-state)
-    (should (plist-member (symbol-plist 'helixel-surround-add)
-                          'multiple-cursors))
-    (should (null (get 'helixel-surround-add 'multiple-cursors)))
-    ;; Real selects "foo" (1..4); fakes select "bar" (5..8), "baz"
-    ;; (9..12).
+    ;; Real selects \"foo\" (1..4); fakes select \"bar\" (5..8), \"baz\" (9..12).
     (goto-char 4)
     (set-mark 1)
     (helixel-mc-create-fake-cursor 8 5)
     (helixel-mc-create-fake-cursor 12 9)
-    ;; Drive surround-add: feed `(' as the delimiter char.
     (let ((unread-command-events (list ?\()))
       (call-interactively 'helixel-surround-add))
+    (let ((this-command 'helixel-surround-add))
+      (helixel-mc--post-command))
     ;; All three got wrapped with (...).
     (should (string-match-p "(foo) (bar) (baz)" (buffer-string)))
     (helixel-mc-clear-all)))

@@ -206,7 +206,7 @@
     (setq helixel--current-register nil)))
 
 (ert-deftest helixel-test-register-paste-linewise ()
-  "Test \"ap pastes linewise content from register."
+  "Test \"ap pastes linewise content from register.\"\nFor `helixel-yank' (paste-after), linewise content is inserted on the\nLINE AFTER point's current line (here, after line2)."
   (unwind-protect
       (helixel-test-with-buffer "line1\nline2"
         (helixel-register-set ?a
@@ -216,7 +216,7 @@
         (helixel-yank)
         (should (null helixel--current-register))
         (should (string= (buffer-string)
-                         "line1\nINSERTED\nline2")))
+                         "line1\nline2\nINSERTED")))
     (set-register ?a nil)
     (setq helixel--current-register nil)))
 

@@ -325,6 +325,18 @@ Tracks how many times n was pressed so . repeats the full sequence."
        (format "f%c" char)
        :advance #'helixel--repeat-advance-movement))))
 
+(defun helixel-search--find-char-jump (char type forwardp)
+  "Perform the search-and-position step for find-char.
+CHAR is the target character; TYPE is `next' or `till'; FORWARDP
+is t for forward search.  Caller is responsible for binding
+`case-fold-search' and pushing the pre-mark, etc.  This helper
+adjusts point relative to the character match according to TYPE."
+  (if forwardp
+      (progn (search-forward (char-to-string char))
+             (when (eq type 'till) (backward-char)))
+    (search-backward (char-to-string char))
+    (when (eq type 'till) (forward-char))))
+
 (defun helixel-search--find-char-exec (char type dir)
   "Find CHAR as TYPE (`next' or `till') in direction DIR (>0 forward)."
   (let ((forwardp (> dir 0))
@@ -336,11 +348,7 @@ Tracks how many times n was pressed so . repeats the full sequence."
           (when (eq (char-after) char) (forward-char))
         (when (eq (char-before) char) (backward-char))))
     (helixel--clear-highlights)
-    (if forwardp
-        (progn (search-forward (char-to-string char))
-               (when (eq type 'till) (backward-char)))
-      (search-backward (char-to-string char))
-      (when (eq type 'till) (forward-char)))
+    (helixel-search--find-char-jump char type forwardp)
     (unless (use-region-p)
       (push-mark current t 'activate))
     ;; Push find-char sel with tracked n-count.
@@ -361,22 +369,18 @@ The _action parameter is kept for caller compatibility but ignored."
   (let* ((type (helixel-search--safe-type))
          (char (helixel-search--safe-char)))
     (when (and type char)
-      (let ((fdir (if (eq (or dir (helixel-search--current-dir)) 'forward)
-                      'forward 'backward)))
-        (let* ((case-fold-search
-                (if (char-uppercase-p char) nil case-fold-search))
-               (forwardp (eq fdir 'forward))
-               (current (point)))
-          (when (eq type 'till)
-            (if forwardp (forward-char) (backward-char)))
-          (helixel--clear-highlights)
-          (if forwardp
-              (progn (search-forward (char-to-string char))
-                     (when (eq type 'till) (backward-char)))
-            (search-backward (char-to-string char))
-            (when (eq type 'till) (forward-char)))
-          (unless (use-region-p)
-            (push-mark current t 'activate)))))))
+      (let* ((fdir (if (eq (or dir (helixel-search--current-dir)) 'forward)
+                       'forward 'backward))
+             (forwardp (eq fdir 'forward))
+             (case-fold-search
+              (if (char-uppercase-p char) nil case-fold-search))
+             (current (point)))
+        (when (eq type 'till)
+          (if forwardp (forward-char) (backward-char)))
+        (helixel--clear-highlights)
+        (helixel-search--find-char-jump char type forwardp)
+        (unless (use-region-p)
+          (push-mark current t 'activate))))))
 
 (defun helixel-find-next-char (char)
   "Find next CHAR forward."

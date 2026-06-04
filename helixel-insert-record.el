@@ -32,6 +32,7 @@
 ;;; Code:
 
 (require 'helixel-core)
+(require 'helixel-replay)
 
 (defvar-local helixel--insert-keys nil
   "List of key vectors collected during insert-mode recording.
@@ -73,7 +74,7 @@ For printable characters, uses `insert-char' directly then runs
 `post-self-insert-hook' (for `electric-pair-mode' etc.) with
 `last-command-event' bound to the character.
 For non-printable keys, uses `execute-kbd-macro'."
-  (helixel-with-replay-context
+  (helixel-with-replay-as 'dot
     (when (and keys (> (length keys) 0))
       (dolist (key (append keys nil))
         (if (and (characterp key) (>= key 32) (/= key 127))

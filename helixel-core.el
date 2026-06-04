@@ -884,22 +884,6 @@ falls back to the operator registry."
                          (helixel--op-runner (helixel-edit-op tx)))))
     (funcall runner tx)))
 
-;; ── Replay context ──
-;;
-;; The full context object lives in `helixel-replay'.  This file
-;; only re-exports the legacy `helixel-with-replay-context' macro
-;; (now a thin alias for `(helixel-with-replay-as 'dot ...)') so old
-;; call sites keep working until they migrate.
-
-(require 'helixel-replay)
-
-(defmacro helixel-with-replay-context (&rest body)
-  "Execute BODY inside a replay context tagged `dot'.
-Legacy alias for `(helixel-with-replay-as \='dot ...)'.
-Prefer `helixel-with-replay' / `helixel-with-replay-as' in new code."
-  (declare (indent 0) (debug t))
-  `(helixel-with-replay-as 'dot ,@body))
-
 (defsubst helixel--repeat-echo (count)
   "Echo COUNT of repeated iterations."
   (unless (zerop count)
@@ -1016,6 +1000,70 @@ accumulate by `push'-ing onto a buffer-local list, so the list is
 reversed at finalize time."
   (when key-vector-list
     (apply #'vconcat (nreverse key-vector-list))))
+
+;; ----------------------------------------------------------------------
+;; Part 10 — Generic grouped-ring queries
+;; ----------------------------------------------------------------------
+;;
+;; Pure data primitives: an ordered list of entries with two query
+;; axes — visibility (skip entries the caller wants hidden) and
+;; grouping (consecutive entries that should be treated as one
+;; navigation step).  Consumed by both `;' cycling and C-o/C-i.
+;;
+;; The "ring" is a plain list, NEWEST FIRST.  The caller owns
+;; mutation (push / pop / cap); this section only provides query
+;; primitives parameterised by predicates:
+;;
+;;   visible-pred  : (entry) -> non-nil if entry counts
+;;   same-group-p  : (a b)   -> non-nil if a and b belong to same group
+
+;; ── Group navigation ──
+
+(defun helixel-gr-group-start (list pos same-group-p)
+  "Return the oldest (largest) index in LIST of the group containing POS.
+SAME-GROUP-P is a predicate of two adjacent entries."
+  (let ((len (length list)))
+    (while (and (< (1+ pos) len)
+                (funcall same-group-p
+                         (nth pos list) (nth (1+ pos) list)))
+      (cl-incf pos))
+    pos))
+
+(defun helixel-gr-group-newest (list pos same-group-p)
+  "Return the newest (smallest) index in LIST of the group containing POS.
+SAME-GROUP-P is a predicate of two adjacent entries."
+  (let ((i pos))
+    (while (and (> i 0)
+                (funcall same-group-p
+                         (nth i list) (nth (1- i) list)))
+      (cl-decf i))
+    i))
+
+;; ── Visibility queries ──
+
+(defun helixel-gr-visible-index (list pos visible-p)
+  "Return index of first visible entry at or after POS in LIST, or nil.
+VISIBLE-P is a predicate on entries."
+  (cl-loop for i from pos below (length list)
+           when (funcall visible-p (nth i list))
+           return i))
+
+(defun helixel-gr-visible-count (list visible-p)
+  "Count entries in LIST for which VISIBLE-P returns non-nil."
+  (cl-loop for a in list
+           when (funcall visible-p a)
+           count 1))
+
+(defun helixel-gr-find (list pos direction visible-p)
+  "Find next visible entry index from POS in DIRECTION (+1 or -1).
+LIST is the ring, VISIBLE-P the visibility predicate.  Returns nil
+if no further visible entry exists in that direction."
+  (let ((len (length list)))
+    (cl-loop for i from (+ pos direction) by direction
+             while (if (> direction 0) (< i len) (>= i 0))
+             when (funcall visible-p (nth i list))
+             return i)))
+
 
 (provide 'helixel-core)
 ;;; helixel-core.el ends here

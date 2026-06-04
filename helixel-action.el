@@ -35,7 +35,6 @@
 (require 'cl-lib)
 
 (require 'helixel-core)
-(require 'helixel-grouped-ring)
 (require 'helixel-ring)
 
 ;; ----------------------------------------------------------------------
@@ -157,7 +156,7 @@ category and subcat."
   "Format EVENT for display.  Delegates to `helixel-edit-display-format'."
   (helixel-edit-display-format event))
 
-;; Generic grouped-ring helpers live in `helixel-grouped-ring'.
+;; Generic grouped-ring helpers live in `helixel-core' (Part 10).
 
 ;; ----------------------------------------------------------------------
 ;; Marker jump helper
@@ -239,9 +238,11 @@ Thin orchestrator after step 15 — work split into
 `helixel-action--cycle-mark-region',
 `helixel-action--push-sel-from-event' and
 `helixel-action--cycle-auto-advance'."
-  (let* ((gpos (helixel-action--cycle-group-start pos ring))
+  (let* ((gpos (helixel-gr-group-start ring pos
+                 #'helixel-action--same-group-p))
          (event (nth gpos ring))
-         (newest-pos (helixel-action--cycle-group-newest pos ring))
+         (newest-pos (helixel-gr-group-newest ring pos
+                       #'helixel-action--same-group-p))
          (sel-event (if (= newest-pos gpos) event (nth newest-pos ring)))
          (first-call (null helixel--action-pos)))
     (setq helixel--action-pos gpos)
@@ -258,18 +259,6 @@ category and subcat."
   (and a b
        (eq (helixel-edit-category a) (helixel-edit-category b))
        (eq (helixel-edit-subcat a) (helixel-edit-subcat b))))
-
-(defun helixel-action--cycle-group-start (pos ring)
-  "Return the oldest index in RING of the group containing POS.
-Uses `helixel-action--same-group-p' as the grouping predicate."
-  (helixel-gr-group-start ring pos
-    #'helixel-action--same-group-p))
-
-(defun helixel-action--cycle-group-newest (pos ring)
-  "Return the newest index in RING of the group containing POS.
-Uses `helixel-action--same-group-p' as the grouping predicate."
-  (helixel-gr-group-newest ring pos
-    #'helixel-action--same-group-p))
 
 (defun helixel-action--cycle-auto-advance (did-mark first-call)
   "Auto-advance the action cycle when `;' produced no useful change.
@@ -305,8 +294,9 @@ Optional prefix ARG is passed to the underlying commands."
       ;; C-u ; → go forward (newer)
       (cond
        ((and helixel--action-pos (> helixel--action-pos 0))
-        (let* ((newest (helixel-action--cycle-group-newest
-                        helixel--action-pos helixel--event-ring))
+        (let* ((newest (helixel-gr-group-newest
+                        helixel--event-ring helixel--action-pos
+                        #'helixel-action--same-group-p))
                (prev (when (> newest 0)
                        (helixel-gr-visible-index
                         helixel--event-ring (1- newest)
@@ -334,8 +324,9 @@ Optional prefix ARG is passed to the underlying commands."
             (helixel-action--cycle-show pos helixel--event-ring)
           ;; No older group: jump to current group-start marker
           ;; to expand the visible region (first-`;' span wrap).
-          (let ((gpos (helixel-action--cycle-group-start
-                       helixel--action-pos helixel--event-ring)))
+          (let ((gpos (helixel-gr-group-start
+                       helixel--event-ring helixel--action-pos
+                       #'helixel-action--same-group-p)))
             (push-mark (car (helixel-edit-mark-region
                                 (nth gpos helixel--event-ring))) t t)
             (message "%s"
@@ -403,19 +394,10 @@ Adds :before advice to record position before SYMBOL runs."
        (eq (plist-get a :subcat) (plist-get b :subcat))
        (eq (plist-get a :buffer) (plist-get b :buffer))))
 
-(defun helixel--jump-group-start (pos)
-  "Return group-start index for jump entry at POS."
-  (helixel-gr-group-start helixel--global-jump-log pos
-    #'helixel--jump-same-group-p))
-
-(defun helixel--jump-group-newest (pos)
-  "Return newest index for jump group containing POS."
-  (helixel-gr-group-newest helixel--global-jump-log pos
-    #'helixel--jump-same-group-p))
-
 (defun helixel--jump-goto (pos)
   "Go to the group-start of jump entry at POS, switching buffers as needed."
-  (let* ((gpos (helixel--jump-group-start pos))
+  (let* ((gpos (helixel-gr-group-start helixel--global-jump-log pos
+                 #'helixel--jump-same-group-p))
          (entry (nth gpos helixel--global-jump-log)))
     (while (and (not (helixel--jump-visible-p entry))
                 (> gpos 0)
@@ -465,7 +447,9 @@ Adds :before advice to record position before SYMBOL runs."
   "Jump to next (newer) position in `helixel--global-jump-log'."
   (interactive)
   (if helixel--jump-pos
-      (let ((newest (helixel--jump-group-newest helixel--jump-pos))
+      (let ((newest (helixel-gr-group-newest
+                     helixel--global-jump-log helixel--jump-pos
+                     #'helixel--jump-same-group-p))
             (pos nil))
         (while (and (not pos) (> newest 0))
           (setq pos (helixel-gr-visible-index

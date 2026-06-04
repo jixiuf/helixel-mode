@@ -327,7 +327,7 @@ helixel-repeat-strategy.el:helixel--build-strategy(edit, reverse-p)
   │     └── Reads :all-buffer-fn/:all-dir-fn from kind registry
   │
   ▼
-helixel-repeat.el:advance+apply loop (with helixel-with-replay-context)
+helixel-repeat.el:advance+apply loop (with helixel-with-replay-as 'dot)
   ├── Advance: recreate sel at next target
   │     ├── helixel-core.el:helixel-sel-call-recreate → struct closure
   │     └── (recreate functions live in helixel-move.el,
@@ -346,7 +346,7 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-context)
 
 Key invariants:
 - Both `helixel--inhibit-repeat-record` and `helixel--inhibit-action-track`
-  are bound to t during replay (via `helixel-with-replay-context`).
+  are bound to t during replay (via `helixel-with-replay-as').
 - `helixel--last-edit` is NOT buffer-local — `.` replays cross-buffer.
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.

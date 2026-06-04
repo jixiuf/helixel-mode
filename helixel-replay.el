@@ -16,7 +16,7 @@
 ;; flags:
 ;;
 ;;   helixel--in-replay
-;;   helixel-with-replay-context
+;;   helixel--in-replay (eliminated; use `helixel-replaying-p')
 ;;   helixel-mc--inhibit
 ;;   helixel-mc-executing-command-for-fake-cursor
 ;;

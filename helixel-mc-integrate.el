@@ -80,7 +80,7 @@ the override path — mc dispatches the same edit at each fake."
   (when (and (bound-and-true-p helixel-multi-cursor-mode)
              (helixel-mc-any-p)
              helixel--last-edit)
-    (helixel-with-replay-context
+    (helixel-with-replay-as 'dot
       (helixel--execute-edit helixel--last-edit))
     t))
 

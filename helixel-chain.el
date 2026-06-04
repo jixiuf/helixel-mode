@@ -123,7 +123,7 @@ before replay, matching the behaviour of the original recording
 where `helixel-insert' calls `(goto-char (region-beginning))'."
   (let* ((sel (helixel-edit-sel tx))
          (edit-keys (helixel-edit-payload-get tx :kmacro)))
-    (helixel-with-replay-context
+    (helixel-with-replay-as 'dot
     (when edit-keys
       ;; Reposition cursor at match-beginning for search sel chains.
       ;; The advance fn leaves point at match-end, but the original

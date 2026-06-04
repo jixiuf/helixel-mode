@@ -496,7 +496,7 @@ the full f x n n sequence.  Extends region back to origin when
   (let ((n (or (plist-get ctx :n-count) 0))
         (dir (or (helixel-sel-find-char-dir ctx)
                  (helixel-search--current-dir))))
-    (helixel-with-replay-context
+    (helixel-with-replay-as 'dot
      (helixel--with-span ctx
       (helixel-search--find-char-core nil dir)
       (when (> n 0)

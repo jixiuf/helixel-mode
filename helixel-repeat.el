@@ -358,7 +358,7 @@ All iterations are amalgamated into a single undo step."
            (mode (helixel-repeat-prefix-mode prefix))
            (sel (helixel-edit-sel tx)))
       (setq helixel--repeat-has-preview nil)
-      (helixel-with-replay-context
+      (helixel-with-replay-as 'dot
        (unwind-protect
           (condition-case err
               (undo-amalgamate-change-group
@@ -406,7 +406,7 @@ preview position."
   (interactive "P")
   (cl-destructuring-bind (tx prefix saved-state)
       (helixel--repeat-setup raw-prefix)
-    (helixel-with-replay-context
+    (helixel-with-replay-as 'dot
       (unless (helixel-edit-sel tx)
         (user-error (concat "Previous edit has no selection to repeat."
                             "  Use a textobj (e.g. ciw)"

@@ -169,7 +169,7 @@ number of walk iterations), breaking dot-repeat at fake cursors."
       (user-error "No mc-spawn / advance for kind `%s'" kind))
     (helixel-mc-with-saved-state
       (save-excursion
-        (helixel-with-replay-context
+        (helixel-with-replay-as 'dot
             (deactivate-mark)
             (goto-char (point-min))
             ;; Search-advance scratch lives on the replay ctx the macro

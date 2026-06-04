@@ -54,34 +54,21 @@
   "Define a movement command NAME wrapping BUILTIN with TYPE.
 
 OPTIONS is a plist supporting:
-  :advice              — inject :before advice instead of creating wrapper
   :clear-highlights BOOL — clear highlights before executing (default t)
 
-Wrapper mode (default): delegates to `helixel-define-command'.
   (helixel-define-movement helixel-forward-char forward-char char)
-
-Advice mode:
-  (helixel-define-movement nil forward-char char :advice)
 
 Without highlights clearing:
   (helixel-define-movement helixel-scroll-up scroll-up-command scroll
                         :clear-highlights nil)"
   (declare (indent 1))
-  (let* ((advicep (plist-get options :advice))
-         (clear (if (plist-member options :clear-highlights)
-                    (plist-get options :clear-highlights)
-                  t)))
-    (if advicep
-        `(advice-add #',builtin :before
-                     (lambda (&rest _)
-                       ,(format "Helixel %s movement advice." type)
-                       (helixel--tracking-open 'movement ',type)
-                       ,@(when clear
-                           '((helixel--clear-highlights)))))
-      `(helixel-define-command ,name
-           (:category movement :subcat ,type
-                      :clear-highlights ,clear)
-         (call-interactively #',builtin)))))
+  (let ((clear (if (plist-member options :clear-highlights)
+                   (plist-get options :clear-highlights)
+                 t)))
+    `(helixel-define-command ,name
+         (:category movement :subcat ,type
+                    :clear-highlights ,clear)
+       (call-interactively #',builtin))))
 
 (defmacro helixel-define-movements (&rest specs)
   "Register multiple movements from SPECS.

@@ -138,7 +138,7 @@ are the delimiters of a string or comment."
         ;; use the larger one.
         (cond
          ((and (not op) (not cl-end))
-          (error "No surrounding delimiters found"))
+          (user-error "No surrounding delimiters found"))
          ((or (not op) ; first not found
               (and cl-end ; second found
                    (>= (car op-end) (car op)) ; second smaller
@@ -206,7 +206,7 @@ are the delimiters of a string or comment."
         (cond
          ((and (equal op orig-beg) (equal cl orig-end)
                (or (not countcurrent) (/= count 1)))
-          (error "No surrounding delimiters found"))
+          (user-error "No surrounding delimiters found"))
          ((save-excursion
             (and (not (and helixel-textobj-visual-state-p-function
                            (funcall helixel-textobj-visual-state-p-function)))
@@ -329,9 +329,9 @@ is ignored."
                      ;; from putting cursor inside deleted `()` after `prova`.
                      ;; Without this, it would go to the 2nd paren
                      ;; (the unbalanced one inside the quotes).
-                     (error "No surrounding delimiters found")
+                     (user-error "No surrounding delimiters found")
                    res)))
-           (error "No surrounding delimiters found")))))))
+           (user-error "No surrounding delimiters found")))))))
 
 ;; ── String / comment bounds helpers ──
 
@@ -615,7 +615,7 @@ INCLUSIVE indicates whether to include the delimiters."
       (when (not bnd)
         (unless (and (zerop (forward-thing thing dir))
                      (setq bnd (bounds-of-thing-at-point thing)))
-          (error "No quoted string found"))
+          (user-error "No quoted string found"))
         (if (> dir 0)
             (setq end (point))
           (setq beg (point)))
@@ -633,7 +633,7 @@ INCLUSIVE indicates whether to include the delimiters."
       (goto-char (if (> dir 0) end beg))
       (when (and (not addcurrent)
                  (= count (forward-thing thing count)))
-        (error "No quoted string found"))
+        (user-error "No quoted string found"))
       (if (> dir 0) (setq end (point)) (setq beg (point)))
       ;; add whitespace
       (cond

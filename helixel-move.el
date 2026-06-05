@@ -62,17 +62,16 @@ Without highlights clearing:
   (helixel-define-movement helixel-scroll-up scroll-up-command scroll
                         :clear-highlights nil)
 
-Auto-emits a `:tx-runner' that re-invokes BUILTIN at replay time so
-the movement participates in the unified mc replay path."
+Movement commands are replayed at fake cursors via
+\=`call-interactively` (the mc dispatcher falls back to it when
+the action carries no tx with a runner)."
   (declare (indent 1))
   (let ((clear (if (plist-member options :clear-highlights)
                    (plist-get options :clear-highlights)
                  t)))
     `(helixel-define-command ,name
          (:category movement :subcat ,type
-                    :clear-highlights ,clear
-                    :tx-runner (lambda (_tx)
-                                 (call-interactively #',builtin)))
+                    :clear-highlights ,clear)
        (call-interactively #',builtin))))
 
 (defmacro helixel-define-movements (&rest specs)
@@ -143,8 +142,7 @@ relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner."
   (let ((fn (intern (format "helixel--%s" fwd-fn))))
     `(helixel-define-command ,name
          (:category movement :subcat ,subcat
-          :params (&optional count)
-          :tx-runner (lambda (_tx) (,name (or current-prefix-arg 1))))
+          :params (&optional count))
        (interactive "p")
        (helixel--with-movement-surround
         (,fn ',thing (* ,sign (or count 1))))
@@ -368,8 +366,7 @@ ORIG is the original point before jumping."
       (error nil))))
 
 (helixel-define-command helixel-jump-to-match
-    (:category movement :subcat match
-     :tx-runner (lambda (_tx) (helixel-jump-to-match)))
+    (:category movement :subcat match)
   "Jump between matching delimiters.
 Uses the textobj delimiter protocol to find the matching end of
 any pair (parens, brackets, braces, quotes, angle-brackets),
@@ -436,8 +433,7 @@ for unmatched bracket characters."
       (message "No matching bracket found"))))
 
 (helixel-define-command helixel-go-beginning-buffer
-    (:category movement :subcat goto
-     :tx-runner (lambda (_tx) (helixel-go-beginning-buffer)))
+    (:category movement :subcat goto)
   (if current-prefix-arg
       (let ((n (prefix-numeric-value current-prefix-arg)))
         (goto-char (point-min))
@@ -445,8 +441,7 @@ for unmatched bracket characters."
     (call-interactively #'beginning-of-buffer)))
 
 (helixel-define-command helixel-goto-line
-    (:category movement :subcat goto :params (&optional arg)
-     :tx-runner (lambda (_tx) (helixel-goto-line current-prefix-arg)))
+    (:category movement :subcat goto :params (&optional arg))
   (interactive "P")
   (let ((n (if arg
                (prefix-numeric-value arg)
@@ -498,9 +493,7 @@ new direction."
 
 (helixel-define-command helixel-select-line
     (:category movement :subcat lineselect
-               :params (&optional count) :clear-highlights nil
-               :tx-runner (lambda (_tx)
-                            (helixel-select-line current-prefix-arg)))
+               :params (&optional count) :clear-highlights nil)
   (interactive "p")
   (let* ((n (or count 1))
          (abs-n (abs n))
@@ -540,9 +533,7 @@ new direction."
 
 (helixel-define-command helixel-select-line-up
     (:category movement :subcat lineselect
-               :params (&optional count) :clear-highlights nil
-               :tx-runner (lambda (_tx)
-                            (helixel-select-line-up current-prefix-arg)))
+               :params (&optional count) :clear-highlights nil)
   (interactive "p")
   (let* ((n (or count 1))
          (abs-n (abs n))
@@ -582,9 +573,7 @@ new direction."
 
 (helixel-define-command helixel-select-rectangle
     (:category movement :subcat rectselect
-               :params (&optional count) :clear-highlights nil
-               :tx-runner (lambda (_tx)
-                            (helixel-select-rectangle current-prefix-arg)))
+               :params (&optional count) :clear-highlights nil)
   (interactive "p")
   (let ((n (or count 1))
         (extending rectangle-mark-mode)

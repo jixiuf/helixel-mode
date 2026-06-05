@@ -259,7 +259,7 @@ be re-invoked by the advice (recording already broadcast)."
                                     #'ignore))
            (tx (helixel-tx-create 'chain sel
                  :runner (lambda (_tx) (error "REAPPLIED"))
-                 :kmacro (vector ?x))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore)))))
       (setq helixel--last-tx tx))
     ;; The hook impl returns its `message' string — just ensure
     ;; it does not signal (i.e. the runner is NOT invoked).
@@ -296,16 +296,20 @@ application path; chain-end does not re-replay."
 ;; and yields the user-visible "chain applied at 0 fake cursors".
 
 (ert-deftest helixel-test-mc-chain-end-excludes-normal-escape ()
-  "`helixel--chain-pre-cmd' must skip `helixel-normal-escape' so the
-chain's edit-keys do not contain the trailing chain-end ESC."
+  "`helixel--chain-on-commit' must skip chain-control commands so the
+chain's tx-list does not contain entries for chain-start /
+chain-end / chain-cancel / normal-escape."
   (helixel-test-with-buffer "abc\n"
     (setq helixel--chain-session
           (make-helixel-chain-session
-           :active-p t :edit-phase-p t :edit-keys nil :move-keys nil))
-    (let ((this-command 'helixel-normal-escape))
-      (helixel--chain-pre-cmd))
-    (should (null (helixel-chain-session-edit-keys helixel--chain-session)))
-    ;; Cleanup chain state.
+           :active-p t :tx-list nil))
+    ;; Build an action stamped with `helixel-normal-escape' as by-cmd.
+    (let ((entry (make-helixel-action
+                  :category 'state :subcat 'escape
+                  :by-command 'helixel-normal-escape
+                  :tx (helixel-tx-create 'noop nil :runner #'ignore))))
+      (helixel--chain-on-commit entry))
+    (should (null (helixel-chain-session-tx-list helixel--chain-session)))
     (setq helixel--chain-session nil)))
 
 ;; ── Regression: bulk whitelist must mark ALL helixel-* commands.
@@ -560,7 +564,7 @@ fake then replays the chain TX (not the pre-chain edit)."
                                     #'ignore))
            (tx (helixel-tx-create 'chain sel
                  :runner (lambda (_tx) (ignore))
-                 :kmacro (vector ?x))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore)))))
       (setq helixel--last-tx tx)
       (helixel-mc--broadcast-last-event)
       ;; Every fake's overlay holds the chain TX as last-event.

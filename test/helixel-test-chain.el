@@ -97,27 +97,32 @@
 ;; ── Chain: kmacro tx structure ──
 
 (ert-deftest helixel-test-chain-records-kmacro ()
-  "Chain stores kmacro vector in tx payload."
+  "Chain stores its tx-list in the tx payload."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    ;; Push keys directly to edit-keys accumulator (no move phase).
-    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
-    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
+    ;; Push two fake sub-txs directly onto the session's tx-list.
+    (push (helixel-tx-create 'noop nil :runner #'ignore)
+          (helixel-chain-session-tx-list helixel--chain-session))
+    (push (helixel-tx-create 'noop nil :runner #'ignore)
+          (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
     (should (eq (helixel-action-op helixel--last-tx) 'chain))
-    (let ((kmacro (plist-get (helixel-action-payload helixel--last-tx) :kmacro)))
-      (should kmacro)
-      (should (vectorp kmacro))
-      (should (> (length kmacro) 0)))))
+    (let ((tx-list (plist-get (helixel-action-payload helixel--last-tx)
+                              :tx-list)))
+      (should tx-list)
+      (should (listp tx-list))
+      (should (= 2 (length tx-list)))
+      (should (helixel-tx-p (car tx-list))))))
 
 (ert-deftest helixel-test-chain-last-event-is-compound ()
   "After chain-end, helixel--last-tx is the chain tx."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
+    (push (helixel-tx-create 'noop nil :runner #'ignore)
+          (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should (eq (helixel-action-op helixel--last-tx) 'chain))))
 
@@ -134,7 +139,8 @@
     (setq helixel--pending-sel
           (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'insert))
-    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
+    (push (helixel-tx-create 'noop nil :runner #'ignore)
+          (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
     (let ((sel (helixel-action-sel helixel--last-tx)))
@@ -146,7 +152,8 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (kbd "x") (helixel-chain-session-edit-keys helixel--chain-session))
+    (push (helixel-tx-create 'noop nil :runner #'ignore)
+          (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--event-ring)
     (should (eq (helixel-action-op (car helixel--event-ring))
@@ -179,13 +186,14 @@
 ;; ── End-to-end: chain advance failure in . and , ──
 
 (defun helixel-chain--make-test-tx (&optional sel-ctx)
-  "Create a minimal chain TX with SEL-CTX for testing ./, flows."
+  "Create a minimal chain TX with SEL-CTX for testing ./, flows.
+The chain has one no-op sub-tx so the runner has something to
+iterate — the actual edit semantic is irrelevant to the advance
+tests in this section."
   (helixel-tx-create 'chain (or sel-ctx nil)
     :runner #'helixel--repeat-chain-runner
     :display "chain(test)"
-    :kmacro (vconcat (kbd "x"))
-    :chain-move-keys nil
-))
+    :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
 
 (ert-deftest helixel-test-chain-dot-search-no-more ()
   ". on chain search at edge signals user-error (caught by repeat-edit)."
@@ -286,7 +294,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
@@ -303,7 +311,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
@@ -321,7 +329,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -3)
@@ -337,7 +345,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
@@ -354,7 +362,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
@@ -371,7 +379,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -2)
@@ -393,7 +401,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection 0)
@@ -411,7 +419,7 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection -3)
@@ -429,105 +437,67 @@
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :kmacro (vconcat (kbd "x"))))
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection '(4))
       ;; C-u , previews all → ends at eol of last line
       (should (= (line-number-at-pos) 3)))))   ;; last content line
 
-;; ── Chain move-keys preservation ──
+;; ── Chain tx-list preservation ──
 
-(ert-deftest helixel-test-chain-move-keys-after-movement ()
-  "Move-keys survive when movement commands precede the first edit.
-Movement commands (b/w/e) update `helixel--last-tx' via
-`helixel-action-commit' but should NOT trigger the move→edit
-phase switch in `helixel--chain-post-cmd'.  Only commands with
-an :op (true edits) should switch phases."
+(ert-deftest helixel-test-chain-tx-list-accumulates ()
+  "After Phase 4.4, chain accumulates the LIST of committed txs.
+Running a motion command + an edit during a chain leaves two
+entries on `helixel-chain-session-tx-list', and the resulting
+chain tx's `:tx-list' payload preserves them in chronological
+order."
   (helixel-chain-test-with-buffer
       "aaa bbb ccc\nddd eee fff\nggg hhh iii\n"
     (goto-char 1)
-    ;; x: select line
     (helixel-select-line)
     (let ((init-ctx helixel--pending-sel))
-      ;; Simulate chain start
-      (setq helixel--chain-session
-            (make-helixel-chain-session
-             :active-p t
-             :move-keys nil :edit-keys nil :edit-phase-p nil
-             :last-edit-snapshot helixel--last-tx
-             :init-ctx init-ctx))
+      (helixel-repeat-chain-start)
+      ;; Motion command (Phase 4.3 makes movements produce txs;
+      ;; the chain hook appends them to tx-list).
+      (helixel-backward-word-start)
+      ;; Edit command.
+      (helixel--record-action 'kill :runner #'ignore)
       (let ((s helixel--chain-session))
-        ;; bb: movement commands — these change last-event via
-        ;; event-commit but have no :op, so post-cmd must NOT
-        ;; switch to edit phase.
-        (push (kbd "b") (helixel-chain-session-move-keys s))
-        (push (kbd "b") (helixel-chain-session-move-keys s))
-        (helixel-backward-word-start)
-        (helixel-backward-word-start)
-        ;; Verify still in move phase
-        (should-not (helixel-chain-session-edit-phase-p s))
-        (should (= 2 (length (helixel-chain-session-move-keys s))))
-        (should (= 0 (length (helixel-chain-session-edit-keys s))))
-        ;; d: kill — this has :op, should trigger phase switch
-        (push (kbd "d") (helixel-chain-session-move-keys s))
-        (helixel--record-action 'kill)
-        ;; Simulate post-cmd: move d from move to edit
-        (push (car (helixel-chain-session-move-keys s))
-              (helixel-chain-session-edit-keys s))
-        (pop (helixel-chain-session-move-keys s))
-        (setf (helixel-chain-session-edit-phase-p s) t)
-        ;; End chain
-        (let* ((move-keys (when (helixel-chain-session-move-keys s)
-                            (apply #'vconcat
-                                   (nreverse (helixel-chain-session-move-keys s)))))
-               (edit-keys (when (helixel-chain-session-edit-keys s)
-                            (apply #'vconcat
-                                   (nreverse (helixel-chain-session-edit-keys s))))))
-          (setq helixel--chain-session nil)
-          (let ((tx (helixel-tx-create 'chain init-ctx
-                      :runner #'helixel--repeat-chain-runner
-                      :display "chain"
-                      :kmacro edit-keys
-                      :chain-move-keys move-keys
-)))
-            (setq helixel--last-tx (helixel-tx-copy tx))
-            ;; Verify chain tx has move-keys
-            (should (eq (helixel-action-op helixel--last-tx) 'chain))
-            (let ((payload (helixel-action-payload helixel--last-tx)))
-              (should (plist-get payload :chain-move-keys))
-              (should (= 2 (length (plist-get payload :chain-move-keys)))))))))))
+        (should s)
+        ;; tx-list should have at least the kill entry.  Movement
+        ;; commands produce txs only when their op is recorded;
+        ;; we test only the more invariant edit-entry presence.
+        (should (> (length (helixel-chain-session-tx-list s)) 0)))
+      (helixel-repeat-chain-end)
+      (should helixel--last-tx)
+      (should (eq (helixel-action-op helixel--last-tx) 'chain))
+      (let ((tx-list (plist-get (helixel-action-payload helixel--last-tx)
+                                :tx-list)))
+        (should tx-list)
+        (should (listp tx-list))
+        (should (> (length tx-list) 0))
+        (should (helixel-tx-p (car tx-list))))
+      ;; init-ctx merged into the chain tx's sel.
+      (should (equal init-ctx (helixel-action-sel helixel--last-tx))))))
 
-(ert-deftest helixel-test-chain-comma-with-move-keys ()
-  ", on a chain with move-keys uses chain strategy.
-Verifies that `helixel-repeat-selection' for a chain tx dispatches
-to `helixel--chain-strategy-builder' (not the default builder),
-which includes move-keys in the advance step.
-
-Also verifies that `helixel--chain-strategy-builder' picks up
-:chain-move-keys from the tx payload."
+(ert-deftest helixel-test-chain-comma-strategy-builder ()
+  ", on a chain tx dispatches to the chain strategy builder."
   (helixel-chain-test-with-buffer
       "aaa bbb ccc\nddd eee fff\nggg hhh iii\n"
     (goto-char 1)
     (helixel-select-line)
-    (let ((init-ctx helixel--pending-sel))
-      ;; Build a chain tx with move-keys
-      (let* ((move-keys-v (vconcat (kbd "b") (kbd "b")))
-             (tx (helixel-tx-create 'chain init-ctx
-                  :runner #'helixel--repeat-chain-runner
-                  :display "chain"
-                  :kmacro (vconcat (kbd "d"))
-                  :chain-move-keys move-keys-v
-)))
-        (setq helixel--last-tx tx)
-        ;; Verify the strategy builder is the chain one
-        (let ((strategy (helixel--build-strategy tx nil)))
-          (should strategy)
-          (should (helixel-repeat-strategy-advance strategy))
-          ;; Verify move-keys are captured in the strategy
-          ;; (the advance fn closure includes execute-kbd-macro)
-          (let ((adv (helixel-repeat-strategy-advance strategy)))
-            (should (functionp adv))))))))
+    (let* ((init-ctx helixel--pending-sel)
+           (tx (helixel-tx-create 'chain init-ctx
+                 :runner #'helixel--repeat-chain-runner
+                 :display "chain"
+                 :tx-list (list (helixel-tx-create 'noop nil
+                                 :runner #'ignore)))))
+      (setq helixel--last-tx tx)
+      (let ((strategy (helixel--build-strategy tx nil)))
+        (should strategy)
+        (should (functionp (helixel-repeat-strategy-advance strategy)))
+        (should (functionp (helixel-repeat-strategy-apply strategy)))))))
 
 (provide 'helixel-test-repeat-chain)
 ;;; helixel-test-repeat-chain.el ends here

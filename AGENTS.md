@@ -8,10 +8,10 @@
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
 | `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
-| `helixel-insert-record.el` | Insert-mode key recording (pre-command-hook based); replay helper `helixel--execute-keys`. |
+| `helixel-insert-record.el` | Insert-mode recording.  Phase 4.4: segment-based capture (after-change-functions per command) — each insert-mode command becomes either `(:keys VEC)` (no buffer change — motion, etc.) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replays text segments verbatim without re-running `post-self-insert-hook' so `electric-pair-mode' / completion-preview / snippet expansion don't double-insert.  Replay helper `helixel--execute-keys' accepts both segment lists and legacy raw key vectors. |
 
 | `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
-| `helixel-chain.el` | Chain lifecycle: start/end/cancel, chain strategy builder, chain preview. |
+| `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Phase 4.4 — chain accumulates a list of `helixel-tx' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:tx-list' payload.  Replay iterates the list and `helixel-tx-replay`s each entry.  No more kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |

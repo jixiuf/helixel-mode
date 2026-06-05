@@ -6,8 +6,10 @@ Do not edit by hand; run `make depgraph' to refresh.
 ```mermaid
 graph TD
   helixel-chain --> helixel-core
+  helixel-chain --> helixel-ring
   helixel-chain --> helixel-macros
   helixel-chain --> helixel-repeat
+  helixel-chain --> helixel-replay
   helixel-editing --> helixel-state
   helixel-editing --> helixel-move
   helixel-editing --> helixel-core

@@ -89,6 +89,19 @@ Releases markers of evicted entries to prevent leaks."
                     helixel--event-ring)
             nil)))
 
+(defvar helixel-action-commit-hook nil
+  "Abnormal hook run by `helixel-action-commit' after pushing to the ring.
+Each function receives one argument: the just-committed
+`helixel-action' (the deep-copied entry now sitting at the front
+of `helixel--event-ring').
+
+Used by chain recording (`helixel-chain.el') to accumulate the
+list of txs run during the chain; the chain transaction simply
+replays each tx in order.
+
+Keep handlers fast — this fires on every command that commits an
+action.")
+
 (defun helixel-action-commit ()
   "Commit `helixel--live-action' to `helixel--event-ring'.
 Deep-copies the event (marker + sel) so ring entries are independent.
@@ -133,6 +146,7 @@ Returns the committed entry or nil."
         (setq helixel--last-tx tx))
       (helixel--global-jump-log-push entry)
       (setq helixel--live-action nil)
+      (run-hook-with-args 'helixel-action-commit-hook entry)
       entry)))
 
 ;; ── Live-event helpers ──

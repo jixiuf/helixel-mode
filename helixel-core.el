@@ -1102,29 +1102,19 @@ already committed."
 ;; Part 9 — Shared key-sequence recording utilities
 ;; ----------------------------------------------------------------------
 ;;
-;; Tiny utilities shared by insert-mode recording
-;; (`helixel-insert-record.el') and chain recording
-;; (`helixel-chain.el').  Both use a `pre-command-hook' that pushes
-;; `this-single-command-keys' onto a reversed list, then concatenate
-;; at the end.  These two functions isolate the one operation they
-;; unambiguously share.
+;; Tiny utility shared by insert-mode recording
+;; (`helixel-insert-record.el').  Chain recording used to share
+;; this with insert-record but Phase 4.4 replaced chain's
+;; keystroke capture with tx-list accumulation — only the
+;; per-keystroke insert recorder still needs `keyrec-capture'.
 
 (defsubst helixel-keyrec-capture ()
   "Return the current single-command key sequence for hook capture.
 
-A semantic alias for `this-single-command-keys'.  Both recorders
-push the return value of this function onto their accumulator
-inside `pre-command-hook'."
+A semantic alias for `this-single-command-keys'.  The insert
+recorder pushes the return value of this function onto its
+accumulator inside `pre-command-hook'."
   (this-single-command-keys))
-
-(defsubst helixel-keyrec-finalize-list (key-vector-list)
-  "Concatenate KEY-VECTOR-LIST (reversed) into a single key vector.
-
-Returns nil when KEY-VECTOR-LIST is empty.  Both recorders
-accumulate by `push'-ing onto a buffer-local list, so the list is
-reversed at finalize time."
-  (when key-vector-list
-    (apply #'vconcat (nreverse key-vector-list))))
 
 ;; ----------------------------------------------------------------------
 ;; Part 10 — Generic grouped-ring queries

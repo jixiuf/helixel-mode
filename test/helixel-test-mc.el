@@ -2453,17 +2453,13 @@ pre-spawn cursor, the pre-spawn active region is restored."
     (helixel-enter-normal-state)
     (goto-char 4)                       ; point at end of "foo"
     (push-mark 1 t t)                   ; region: "foo" (1..4)
-    (let ((orig-fn (plist-get
-                    (gethash 'line helixel--kind-registry)
-                    :mc-spawn-fn)))
+    (let* ((entry (gethash 'line helixel--kind-registry))
+           (orig-fn (helixel-kind-mc-spawn-fn entry)))
       (unwind-protect
           (progn
-            (puthash 'line
-                     (plist-put (gethash 'line helixel--kind-registry)
-                                :mc-spawn-fn
-                                (lambda (_sel)
-                                  (list (helixel-mc--make-target 4))))
-                     helixel--kind-registry)
+            (setf (helixel-kind-mc-spawn-fn entry)
+                  (lambda (_sel)
+                    (list (helixel-mc--make-target 4))))
             (helixel-mc-spawn-from-sel
              (helixel-sel-create 'line '(:count 1)))
             ;; Realize-targets cleared mark-active (degenerate target),
@@ -2472,10 +2468,7 @@ pre-spawn cursor, the pre-spawn active region is restored."
             (should mark-active)
             (should (= 4 (point)))
             (should (= 1 (mark t))))
-        (puthash 'line
-                 (plist-put (gethash 'line helixel--kind-registry)
-                            :mc-spawn-fn orig-fn)
-                 helixel--kind-registry)))))
+        (setf (helixel-kind-mc-spawn-fn entry) orig-fn)))))
 
 (ert-deftest helixel-test-mc-spawn-from-sel-no-restore-when-different-pt ()
   "When the chosen target is at a DIFFERENT point, the pre-spawn
@@ -2484,25 +2477,18 @@ region is NOT restored (the new target replaces it correctly)."
     (helixel-enter-normal-state)
     (goto-char 4)
     (push-mark 1 t t)                   ; region "foo" (1..4)
-    (let ((orig-fn (plist-get
-                    (gethash 'line helixel--kind-registry)
-                    :mc-spawn-fn)))
+    (let* ((entry (gethash 'line helixel--kind-registry))
+           (orig-fn (helixel-kind-mc-spawn-fn entry)))
       (unwind-protect
           (progn
-            (puthash 'line
-                     (plist-put (gethash 'line helixel--kind-registry)
-                                :mc-spawn-fn
-                                (lambda (_sel)
-                                  (list (helixel-mc--make-target 8))))
-                     helixel--kind-registry)
+            (setf (helixel-kind-mc-spawn-fn entry)
+                  (lambda (_sel)
+                    (list (helixel-mc--make-target 8))))
             (helixel-mc-spawn-from-sel
              (helixel-sel-create 'line '(:count 1)))
             (should (= 8 (point)))
             (should-not mark-active))
-        (puthash 'line
-                 (plist-put (gethash 'line helixel--kind-registry)
-                            :mc-spawn-fn orig-fn)
-                 helixel--kind-registry)))))
+        (setf (helixel-kind-mc-spawn-fn entry) orig-fn)))))
 
 ;; ── save/restore around enter/leave cycle ──
 

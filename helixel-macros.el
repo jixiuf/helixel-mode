@@ -104,19 +104,18 @@ BODY is the command's business logic."
           (when tx-runner
             `((unless (helixel-replaying-p)
                 (when helixel--live-action
-                  ;; Ensure the live action has a tx, then stash the
-                  ;; pre-replay-fn in its payload.  For movement
-                  ;; commands this tx is the whole story (op nil,
-                  ;; runner nil, payload carries the prepos).  For
-                  ;; insert-entry commands `record-action' later
-                  ;; replaces the tx but preserves :pre-replay-fn.
+                  ;; Ensure the live action has a tx, then set the
+                  ;; pre-replay-fn slot on it.  For movement commands
+                  ;; this tx is the whole story (op nil, runner nil,
+                  ;; only pre-replay-fn).  For insert-entry commands
+                  ;; `record-action' later replaces the tx but
+                  ;; preserves the pre-replay-fn slot.
                   (unless (helixel-action-tx helixel--live-action)
                     (setf (helixel-action-tx helixel--live-action)
                           (make-helixel-tx)))
-                  (let ((tx (helixel-action-tx helixel--live-action)))
-                    (setf (helixel-tx-payload tx)
-                          (plist-put (helixel-tx-payload tx)
-                                     :pre-replay-fn ,tx-runner)))))))))
+                  (setf (helixel-tx-pre-replay-fn
+                         (helixel-action-tx helixel--live-action))
+                        ,tx-runner)))))))
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form

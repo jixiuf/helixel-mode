@@ -95,7 +95,7 @@ Checks:
 Signals `helixel-ctx-error' on mismatch with details."
   (or (not helixel--ctx-validation-enabled)
       (let* ((entry (gethash kind helixel--kind-registry))
-             (spec (plist-get entry :ctx-schema)))
+             (spec (and entry (helixel-kind-ctx-schema entry))))
         ;; Kinds with no :ctx-schema in their registration are
         ;; permissive — useful for transient/internal kinds.
         (or (null spec)
@@ -529,43 +529,65 @@ Slots:
 ;; registry, eliminating kind-specific cond branches.
 
 (defvar helixel--kind-registry (make-hash-table :test #'eq)
-  "Hash table: kind symbol → plist.
-Keys: :recreate :advance :display :all-buffer-fn.")
+  "Hash table: kind symbol → `helixel-kind' struct.")
+
+(cl-defstruct (helixel-kind (:constructor helixel--make-kind)
+                            (:copier nil))
+  "Selection-kind protocol struct.  Lives in `helixel--kind-registry'.
+Slots map 1:1 to the keyword properties documented for
+`helixel-register-kind'."
+  recreate advance display
+  all-buffer-fn all-dir-fn flip-dir-fn mc-spawn-fn
+  ctx-schema)
 
 (cl-defmacro helixel-register-kind (kind &rest props)
   "Register selection KIND with protocol PROPS.
-PROPS is a keyword plist."
+PROPS is a keyword plist supporting:
+  :recreate :advance :display
+  :all-buffer-fn :all-dir-fn :flip-dir-fn :mc-spawn-fn
+  :ctx-schema (:required (...) :optional (...))"
   (declare (indent 1))
-  `(puthash ',kind (list ,@props) helixel--kind-registry))
+  `(puthash ',kind (helixel--make-kind ,@props) helixel--kind-registry))
 
-;; Kind-registry accessors.  All seven look up KIND in
-;; `helixel--kind-registry' and return one plist field.  Generated
-;; via `helixel--def-kind-accessor' so the table is the schema.
+;; Kind-registry accessors.  Thin wrappers around the struct accessors
+;; that handle the \"kind not registered\" case (gethash returns nil)
+;; by returning nil, matching the previous plist-get-on-nil semantics.
 
-(defmacro helixel--def-kind-accessor (name key doc)
-  "Define `defun' NAME with docstring DOC returning KEY from kind registry.
-Generated function takes one argument KIND."
-  `(defun ,name (kind)
-     ,doc
-     (plist-get (gethash kind helixel--kind-registry) ,key)))
+(defun helixel--kind-recreate (kind)
+  "Return the :recreate function for KIND from the registry."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-recreate k)))
 
-(helixel--def-kind-accessor helixel--kind-advance :advance
-  "Return the :advance function for KIND from the registry.")
-(helixel--def-kind-accessor helixel--kind-recreate :recreate
-  "Return the :recreate function for KIND from the registry.")
-(helixel--def-kind-accessor helixel--kind-display :display
-  "Return the :display function/string for KIND from the registry.")
-(helixel--def-kind-accessor helixel--kind-all-buffer-fn :all-buffer-fn
-  "Return the :all-buffer-fn for KIND from the registry, or nil.")
-(helixel--def-kind-accessor helixel--kind-mc-spawn-fn :mc-spawn-fn
+(defun helixel--kind-advance (kind)
+  "Return the :advance function for KIND from the registry."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-advance k)))
+
+(defun helixel--kind-display (kind)
+  "Return the :display function/string for KIND from the registry."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-display k)))
+
+(defun helixel--kind-all-buffer-fn (kind)
+  "Return the :all-buffer-fn for KIND from the registry, or nil."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-all-buffer-fn k)))
+
+(defun helixel--kind-mc-spawn-fn (kind)
   "Return the :mc-spawn-fn for KIND from the registry, or nil.
 The spawn function takes one argument SEL (a `helixel-sel') and
 returns a list of (POINT . MARK) marker pairs — one fake cursor
 target per element.  When nil, the multi-cursor module falls back
-to walking the kind's :advance function from `point-min'.")
-(helixel--def-kind-accessor helixel--kind-all-dir-fn :all-dir-fn
-  "Return the :all-dir-fn for KIND from the registry, or nil.")
-(helixel--def-kind-accessor helixel--kind-flip-dir-fn :flip-dir-fn
+to walking the kind's :advance function from `point-min'."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-mc-spawn-fn k)))
+
+(defun helixel--kind-all-dir-fn (kind)
+  "Return the :all-dir-fn for KIND from the registry, or nil."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-all-dir-fn k)))
+
+(defun helixel--kind-flip-dir-fn (kind)
   "Return the :flip-dir-fn for KIND from the registry, or nil.
 The flip-dir function takes a `helixel-sel' and returns a new
 sel with its direction reversed.  Used by `.' /
@@ -574,7 +596,9 @@ sel with its direction reversed.  Used by `.' /
 
 Kinds whose selections have no notion of direction (e.g. textobj,
 rect, movement, find-char) leave this nil; the repeat engine
-then simply does not flip.")
+then simply does not flip."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-flip-dir-fn k)))
 
 
 ;; ----------------------------------------------------------------------
@@ -593,19 +617,24 @@ then simply does not flip.")
   "Replayable editing transaction.  Carries everything needed to
 re-execute an edit at a different position with no I/O.  Immutable.
 Slots:
-  OP          — symbol: registered operator name (kill, change, ...)
-  SEL         — `helixel-sel' struct or nil
-  PAYLOAD     — plist of operator-specific data (:text :keys ...)
-  RUNNER      — function (TX) → nil, executes the edit at replay time
-  MARK-REGION — cons (START . END) of two markers; the position
-                where the tx was originally recorded.  Replay may
-                or may not use this depending on the runner."
+  OP            — symbol: registered operator name (kill, change, ...)
+  SEL           — `helixel-sel' struct or nil
+  PAYLOAD       — plist of operator-specific data (:text :keys ...)
+  RUNNER        — function (TX) → nil, executes the edit at replay time
+  MARK-REGION   — cons (START . END) of two markers; the position
+                  where the tx was originally recorded.  Replay may
+                  or may not use this depending on the runner.
+  PRE-REPLAY-FN — optional function (TX) → nil, called BEFORE RUNNER
+                  at replay time.  Used by `:tx-runner' clauses on
+                  insert-entry commands (mc fake prepositioning).
+                  Single-write invariant: at most one per command."
   op
   sel
   payload
   runner
   mark-region
-  display)
+  display
+  pre-replay-fn)
 
 (defun helixel-tx-create (op sel-ctx &rest payload-kv)
   "Create a `helixel-tx' for dot-repeat.
@@ -1014,14 +1043,14 @@ dispatches on struct closures."
   "Execute transaction TX on the current buffer.
 Does NOT record, does NOT switch state.
 
-If TX's payload carries a `:pre-replay-fn', call it first (used by
-mc-fake replay of insert-entry commands to position point before the
-main runner inserts text).  Then call the :runner stored in TX.
-If :runner is missing, falls back to the operator registry.  If
-neither runner nor op resolves but a pre-replay-fn ran, TX is treated
-as a pure positioner (used by movement commands at fake cursors)."
-  (let ((pre (helixel-action-payload-get tx :pre-replay-fn)))
-    (when pre (funcall pre tx)))
+If TX has a `pre-replay-fn', call it first (used by mc-fake replay
+of insert-entry commands to position point before the main runner
+inserts text).  Then call the :runner stored in TX.  If :runner is
+missing, falls back to the operator registry.  If neither runner nor
+op resolves but a pre-replay-fn ran, TX is treated as a pure
+positioner (used by movement commands at fake cursors)."
+  (when-let* ((pre (helixel-tx-pre-replay-fn tx)))
+    (funcall pre tx))
   (when-let* ((runner (or (helixel-tx-runner tx)
                           (and (helixel-tx-op tx)
                                (helixel--op-runner (helixel-tx-op tx))))))

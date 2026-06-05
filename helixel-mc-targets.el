@@ -356,22 +356,17 @@ motion or operator."
 
 (defun helixel-mc--register-default-spawn-fns ()
   "Attach :mc-spawn-fn to kinds with sane defaults.
-Idempotent — re-registering merges via `helixel-register-kind'."
+Mutates the `helixel-kind' struct entries in-place via
+`setf'.  Idempotent: re-running overwrites with the same fn."
   ;; line / rect → per-line / per-row cursors with own region.
-  (puthash 'line
-           (plist-put (gethash 'line helixel--kind-registry)
-                      :mc-spawn-fn #'helixel-mc-spawn-from-line)
-           helixel--kind-registry)
-  (puthash 'rect
-           (plist-put (gethash 'rect helixel--kind-registry)
-                      :mc-spawn-fn #'helixel-mc-spawn-from-rect)
-           helixel--kind-registry)
+  (when-let* ((k (gethash 'line helixel--kind-registry)))
+    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc-spawn-from-line))
+  (when-let* ((k (gethash 'rect helixel--kind-registry)))
+    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc-spawn-from-rect))
   ;; find-char → scan all char occurrences (advance-walk would only
   ;; visit from origin so we need a buffer-wide scan).
-  (puthash 'find-char
-           (plist-put (or (gethash 'find-char helixel--kind-registry) nil)
-                      :mc-spawn-fn #'helixel-mc-spawn-from-find-char)
-           helixel--kind-registry)
+  (when-let* ((k (gethash 'find-char helixel--kind-registry)))
+    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc-spawn-from-find-char))
   ;; search / textobj / movement inherit the advance-walk fallback
   ;; automatically (no entry needed).
   )

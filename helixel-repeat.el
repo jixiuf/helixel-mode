@@ -301,23 +301,20 @@ The `helixel-define-command' macro handles this automatically."
               defining-kbd-macro)
     (let* ((pop-sel (helixel--sel-pop))
            (runner (helixel--op-runner operator))
-           ;; Preserve any :pre-replay-fn attached to the live action's
+           ;; Preserve any pre-replay-fn attached to the live action's
            ;; tx by an earlier `:tx-runner' clause (e.g. insert-entry
-           ;; commands' prepos).  Without this, `record-action 'insert-text`
+           ;; commands' prepos).  Without this, `record-action 'insert-text'
            ;; would clobber the prepos and mc fakes would not position.
-           (prev-tx (and helixel--live-action
-                         (helixel-action-tx helixel--live-action)))
-           (prev-pre (and prev-tx
-                          (helixel-action-payload-get prev-tx
-                                                      :pre-replay-fn)))
+           (prev-pre (and helixel--live-action
+                          (helixel-action-tx helixel--live-action)
+                          (helixel-tx-pre-replay-fn
+                           (helixel-action-tx helixel--live-action))))
            (tx (apply #'helixel-tx-create operator
                       pop-sel
                       :runner runner
                       extra)))
       (when prev-pre
-        (setf (helixel-tx-payload tx)
-              (plist-put (helixel-tx-payload tx)
-                         :pre-replay-fn prev-pre)))
+        (setf (helixel-tx-pre-replay-fn tx) prev-pre))
       (let ((new-tx (helixel-tx-copy tx)))
         ;; Pre-compute and stash display on the live action (tx-replay
         ;; itself doesn't need display, but the action ring formatter does).

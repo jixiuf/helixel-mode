@@ -693,10 +693,10 @@ Slots:
                  edit was produced by the just-completed command
                  and therefore should be replayed at each fake.
   TX          — `helixel-tx' for edit actions, nil otherwise.
-  MC-TX       — optional alternate `helixel-tx' used by the mc
-                 dispatcher in preference to TX.  Lets a command
-                 record a different runner for fake-cursor replay
-                 than for `.' / ring-pick replay.  Set by
+                 May carry a `:pre-replay-fn' payload entry for
+                 commands that need to position point before the
+                 main runner runs (e.g. mc fake replay of
+                 insert-entry commands).  See
                  `helixel-define-command's `:tx-runner' clause."
   category
   subcat
@@ -705,8 +705,7 @@ Slots:
   timestamp
   buffer
   by-command
-  tx
-  mc-tx)
+  tx)
 
 (defsubst helixel-action-op (obj)
   "Return the op of OBJ.  OBJ may be a `helixel-tx' or `helixel-action'.
@@ -1014,10 +1013,18 @@ dispatches on struct closures."
 (defun helixel-tx-replay (tx)
   "Execute transaction TX on the current buffer.
 Does NOT record, does NOT switch state.
-Calls the :runner stored in TX.  If :runner is missing, falls back
-to the operator registry."
+
+If TX's payload carries a `:pre-replay-fn', call it first (used by
+mc-fake replay of insert-entry commands to position point before the
+main runner inserts text).  Then call the :runner stored in TX.
+If :runner is missing, falls back to the operator registry.  If
+neither runner nor op resolves but a pre-replay-fn ran, TX is treated
+as a pure positioner (used by movement commands at fake cursors)."
+  (let ((pre (helixel-action-payload-get tx :pre-replay-fn)))
+    (when pre (funcall pre tx)))
   (when-let* ((runner (or (helixel-tx-runner tx)
-                          (helixel--op-runner (helixel-tx-op tx)))))
+                          (and (helixel-tx-op tx)
+                               (helixel--op-runner (helixel-tx-op tx))))))
     (funcall runner tx)))
 
 (defsubst helixel--repeat-echo (count)

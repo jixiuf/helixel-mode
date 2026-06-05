@@ -83,10 +83,10 @@ chain-end / chain-cancel are not themselves replayed)."
                       helixel-repeat-chain-end
                       helixel-repeat-chain-cancel
                       helixel-normal-escape))
-        ;; Prefer the tx slot (edit replay) over mc-tx (mc-only
-        ;; runner).  An action with neither contributes nothing.
-        (let ((tx (or (helixel-action-tx entry)
-                      (helixel-action-mc-tx entry))))
+        ;; Only edit txs (those with a runner) contribute to the chain.
+        ;; Movement-only txs (op nil, pre-replay-fn only) are not
+        ;; replayed as part of chain dot-repeat.
+        (let ((tx (helixel-action-tx entry)))
           (when (and tx (helixel-tx-runner tx))
             (push tx (helixel-chain-session-tx-list
                       helixel--chain-session))))))))

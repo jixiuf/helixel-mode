@@ -2567,7 +2567,7 @@ region is NOT restored (the new target replaces it correctly)."
       (should (string= "X\nYX\nYX\n" (buffer-string)))
       (helixel-mc-clear-all))))
 
-;; ── post-command-amalgamated: find-char uses unified mc-tx path ──
+;; ── post-command-amalgamated: find-char uses unified pre-replay path ──
 
 (ert-deftest helixel-test-mc-find-char-unified-tx ()
   "After Phase 4.3 the find-char prompting commands record a tx whose

@@ -33,7 +33,7 @@ and the jump list (`C-o` / `C-i`).
 | `:dir` | symbol | Direction for `n`/`N` repeat: `forward`, `backward` |
 | `:params` | list | Function parameter list, e.g. `(&optional count)` |
 | `:clear-highlights` | boolean | Clear search highlights before executing. Default `t` for `:category movement`, `nil` otherwise. |
-| `:tx-runner` | function `(TX) -> nil` | Multi-cursor unifier. Stored as the command's per-fake replay closure (see Phase 4.3). When set, the mc dispatcher calls this at every fake cursor; otherwise it falls back to `call-interactively`. Use for movements, find-char prompts, and insert-entry prepositioners. |
+| `:tx-runner` | function `(TX) -> nil` | Replay-time pre-hook.  Stored as a `:pre-replay-fn` payload entry on the live action's tx; `helixel-tx-replay` calls it BEFORE the main runner (at the real cursor on `.`-repeat, at fake cursors during mc dispatch, etc.).  For movement commands (no body record-action), the pre-replay-fn is the entire replay payload — the tx has nil op so `.` ignores it, but mc still replays at fakes.  For insert-entry commands, the prepos survives the later insert-text tx via payload preservation in `helixel--record-action`. |
 
 ### Auto-Injected Behavior
 

@@ -66,11 +66,19 @@ METADATA is a plist:
   :clear-highlights — default t for :category movement, nil otherwise
   :params   PARAM-LIST — optional function parameter list
   :tx-runner FN — optional unary function (TX) to attach to the live
-                   action's tx slot after the body runs.  Used to make
-                   the command's effect replayable at multi-cursors
-                   (and, eventually, by `.' once 4.3 unifies dispatch).
-                   When omitted, no tx is attached — the command is
-                   real-cursor-only as far as mc replay is concerned.
+                   action's tx as a `:pre-replay-fn' payload entry.
+                   Used to make the command's effect replayable at
+                   multi-cursors and other replay sites: FN is called
+                   before the main runner in `helixel-tx-replay'.
+                   For movement commands (no body record-action), the
+                   :pre-replay-fn IS the entire replay payload — the
+                   tx has nil op (so `.' will not pick it up) but the
+                   mc dispatcher still replays it.
+                   For insert-entry commands, the prepos FN survives
+                   the later `record-action' for \='insert-text that
+                   creates the insert-text tx (preserved by
+                   `helixel--record-action').
+                   When omitted, no pre-replay-fn is attached.
 
 For :category movement:
   - Auto-injects `helixel--track-visual-move' for \=`.\=` replay.
@@ -97,8 +105,19 @@ BODY is the command's business logic."
           (when tx-runner
             `((unless (helixel-replaying-p)
                 (when helixel--live-action
-                  (setf (helixel-action-mc-tx helixel--live-action)
-                        (make-helixel-tx :runner ,tx-runner))))))))
+                  ;; Ensure the live action has a tx, then stash the
+                  ;; pre-replay-fn in its payload.  For movement
+                  ;; commands this tx is the whole story (op nil,
+                  ;; runner nil, payload carries the prepos).  For
+                  ;; insert-entry commands `record-action' later
+                  ;; replaces the tx but preserves :pre-replay-fn.
+                  (unless (helixel-action-tx helixel--live-action)
+                    (setf (helixel-action-tx helixel--live-action)
+                          (make-helixel-tx)))
+                  (let ((tx (helixel-action-tx helixel--live-action)))
+                    (setf (helixel-tx-payload tx)
+                          (plist-put (helixel-tx-payload tx)
+                                     :pre-replay-fn ,tx-runner)))))))))
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
@@ -112,10 +131,10 @@ BODY is the command's business logic."
              (this-command ',name))
          ;; ── Open tracking event (via unified entry point) ──
          (helixel--tracking-open ',cat ',sub)
-         ;; ── Optional mc-tx attachment (for unified mc replay) ──
+         ;; ── Optional :pre-replay-fn attachment (for unified replay) ──
          ;; Attach BEFORE the body so eager record-action commits keep
-         ;; the mc-tx on the committed ring entry.  `live-action-set'
-         ;; only writes the `tx' slot, leaving mc-tx untouched.
+         ;; the prepos fn on the committed ring entry's tx payload.
+         ;; `record-action' transfers :pre-replay-fn into the new tx.
          ,@attach-tx
          ;; ── Highlight clearing ──
          ,@(when clear '((helixel--clear-highlights)))

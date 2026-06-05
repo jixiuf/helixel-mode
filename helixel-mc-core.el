@@ -543,9 +543,9 @@ Keyword options:
      property to nil).  Any other value sets the property to t.
 
 The legacy `:substitute' and `:prepos' arms (Phase 4.3 cleanup) are
-gone — commands now produce a `helixel-tx' (or write to `mc-tx' via
-`helixel-define-command's `:tx-runner' clause) which the unified
-dispatcher replays at every fake cursor."
+gone — commands now produce a `helixel-tx' (or store a
+`:pre-replay-fn' on it via `helixel-define-command's `:tx-runner'
+clause) which the unified dispatcher replays at every fake cursor."
   (declare (indent 1))
   (let ((real-only (eq policy 'real)))
     `(progn
@@ -673,20 +673,18 @@ without going through the command loop."
 (defun helixel-mc--fresh-action-from-real ()
   "Return the `helixel-tx' committed by `this-command' at real, or nil.
 Looks at the front of `helixel--event-ring' — the most recent committed
-action.  Returns its `mc-tx' (preferred) or `tx' if and only if:
-  - the action carries either an `mc-tx' or a `tx',
+action.  Returns its `tx' if and only if:
+  - the action carries a `tx',
   - the action's `by-command' stamp matches `this-command'.
 
-The `mc-tx' slot lets a command record a different runner for fake
-cursor replay than for `.' / ring-pick.  Insert-entry commands use
-it to install a per-fake prepositioner (move point + clear mark)
-without overriding the underlying insert-text TX that powers `.'."
+The tx may have a nil op (movement commands) or a `:pre-replay-fn'
+payload entry (insert-entry commands' prepos).  `helixel-tx-replay'
+handles both uniformly: pre-replay-fn runs first, then runner if any."
   (when (symbolp this-command)
     (let ((entry (car helixel--event-ring)))
       (when (and entry
                  (eq (helixel-action-by-command entry) this-command))
-        (or (helixel-action-mc-tx entry)
-            (helixel-action-tx entry))))))
+        (helixel-action-tx entry)))))
 
 ;; ── post-command-hook integration ──
 ;;
@@ -712,8 +710,9 @@ without overriding the underlying insert-text TX that powers `.'."
 The tx attached to the freshly-committed action (front of
 `helixel--event-ring' with matching `by-command' stamp) is replayed
 at each fake inside one `undo-amalgamate-change-group'.  Insert-entry
-commands install a per-fake prepositioner via the action's `mc-tx'
-slot — see `helixel-mc--fresh-action-from-real' for slot precedence.
+commands install a per-fake prepositioner as a `:pre-replay-fn'
+payload on the action's tx — `helixel-tx-replay' calls it before
+the main runner.
 
 No-op when the mode is off, dispatch is already in progress, we're in
 a keyboard-macro, the command is whitelisted off, or no fresh tx
@@ -835,11 +834,12 @@ deactivated when the last one is removed."
    helixel-enter-motion-state
    ;; Insert-entry commands themselves remain real-only — except
    ;; they're now broadcast via the unified dispatcher.  Each
-   ;; insert-entry command declares an `mc-tx' prepos runner via
-   ;; `:tx-runner' on its `helixel-define-command' form; the
-   ;; dispatcher invokes it at every fake.  So they MUST be
-   ;; whitelisted (multiple-cursors property = t).  `insert-exit'
-   ;; stays whitelisted too — fakes need to leave insert state.
+   ;; insert-entry command declares a prepos via `:tx-runner' on its
+   ;; `helixel-define-command' form; it lands as a `:pre-replay-fn'
+   ;; payload on the tx and runs at every fake during replay.  So
+   ;; they MUST be whitelisted (multiple-cursors property = t).
+   ;; `insert-exit' stays whitelisted too — fakes need to leave
+   ;; insert state.
    ;; Nothing here.
    ))
 

@@ -113,22 +113,22 @@ Used as the shared kill core by `helixel-kill-thing-at-point',
 ;;   3. Enter insert mode
 ;;
 ;; `helixel--prepare-insert-entry' encapsulates this tail.
-;; Commands that have already called `helixel--record-edit' earlier
+;; Commands that have already called `helixel--record-action' earlier
 ;; (to interleave setup between record and marker snap) pass nil for
 ;; RECORD-P to skip the redundant record call.
 
 (defun helixel--prepare-insert-entry (&optional record-p)
   "Prepare for insert-mode entry: record, snap marker, enter insert.
-Calls `helixel--record-edit' (unless RECORD-P is nil).
+Calls `helixel--record-action' (unless RECORD-P is nil).
 After recording, snaps `helixel--change-track-marker' at point
 and enters insert mode.
 
 Pass nil for RECORD-P when the caller has already called
-`helixel--record-edit' earlier (e.g. `helixel-insert-newline').
+`helixel--record-action' earlier (e.g. `helixel-insert-newline').
 Otherwise RECORD-P defaults to t via the wrapper body."
   (setq record-p (or record-p t))
   (when record-p
-    (helixel--record-edit 'insert-text))
+    (helixel--record-action 'insert-text))
   (setq helixel--change-track-marker (point-marker))
   (helixel--enter-insert))
 
@@ -197,16 +197,16 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                       (buffer-substring
                        helixel--change-track-marker (point))))))
     (unless executing-kbd-macro
-      (when helixel--last-edit
-        (let ((tx helixel--last-edit))
+      (when helixel--last-action
+        (let ((tx helixel--last-action))
           ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
-            (setq tx (helixel-edit-with-payload tx :keys keys)))
+            (setq tx (helixel-action-with-payload tx :keys keys)))
           ;; Store text as replay fallback (tests, programmatic use)
           (when text
-            (setq tx (helixel-edit-with-payload tx :text text))
-            (when (eq (helixel-edit-op tx) 'change)
-              (setq tx (helixel-edit-with-payload tx
+            (setq tx (helixel-action-with-payload tx :text text))
+            (when (eq (helixel-action-op tx) 'change)
+              (setq tx (helixel-action-with-payload tx
                                                   :inserted-text text))))
           (helixel--update-last-event tx))))
     (when helixel--change-track-marker
@@ -267,7 +267,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-newline
     (:category state :subcat insert)
-  (helixel--record-edit 'insert-text)
+  (helixel--record-action 'insert-text)
   (helixel--clear-data)
   (end-of-line)
   (newline-and-indent)
@@ -275,7 +275,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-prevline
     (:category state :subcat insert)
-  (helixel--record-edit 'insert-text)
+  (helixel--record-action 'insert-text)
   (helixel--clear-data)
   (beginning-of-line)
   (let ((electric-indent-mode nil))
@@ -289,7 +289,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (defun helixel--repeat-change-core (tx)
   "Repeat change TX: delete selection, replay keys or insert text.
-TX is the complete edit transaction (see `helixel-edit-create').
+TX is the complete edit transaction (see `helixel-action-create').
 Keys (primary) capture the full insert-mode keystrokes.
 Text (fallback) is used when keys are unavailable (tests).
 
@@ -297,7 +297,7 @@ For rect selections the stored text is replayed on every subsequent
 rectangle line via `helixel--rect-replay' — no state-switching side
 -effect (avoids an unnecessary helixel-insert-exit during replay)."
   (let* ((keys (helixel--repeat-get-keys tx))
-         (text (helixel-edit-payload-get tx :inserted-text)))
+         (text (helixel-action-payload-get tx :inserted-text)))
     (cond
      ((and (use-region-p) (eq (helixel--selection-type) 'rect))
       (helixel--rect-change)
@@ -336,18 +336,18 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 (helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
-             (let ((c (helixel-edit-payload-get tx :char)))
+             (let ((c (helixel-action-payload-get tx :char)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
             (helixel-replace-char
-             (helixel-edit-payload-get tx :char))))
+             (helixel-action-payload-get tx :char))))
 
 (helixel-register-op insert-text :display "i" :moves-point-p nil
   :runner (lambda (tx)
-            (let ((keys (helixel-edit-payload-get tx :keys)))
+            (let ((keys (helixel-action-payload-get tx :keys)))
               (if keys
                   (helixel--execute-keys keys)
-                (insert (or (helixel-edit-payload-get tx :text)
+                (insert (or (helixel-action-payload-get tx :text)
                             ""))))))
 
 
@@ -355,14 +355,14 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 (helixel-define-operator helixel-kill-thing-at-point
     (:op kill :display "d" :moves-point-p t)
-  (helixel--record-edit 'kill)
+  (helixel--record-action 'kill)
   (helixel--delete-selection)
   (helixel--register-consume)
   (helixel--clear-data))
 
 (helixel-define-command helixel-change-thing-at-point
     (:category edit :subcat change)
-  (helixel--record-edit 'change)
+  (helixel--record-action 'change)
   (if (and (use-region-p) (eq (helixel--selection-type) 'rect))
       (progn (helixel--rect-change)
              (helixel--register-consume))
@@ -433,7 +433,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
 
 (helixel-define-operator helixel-replace
     (:op replace :display "r" :moves-point-p nil)
-  (helixel--record-edit 'replace)
+  (helixel--record-action 'replace)
   (if (and (not (helixel--register-active-p))
            (= 0 (length kill-ring)))
       (message "nothing to yank")
@@ -509,7 +509,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
 
 (helixel-define-operator helixel-kill-ring-save
     (:op copy :display "y" :moves-point-p nil)
-  (helixel--record-edit 'copy)
+  (helixel--record-action 'copy)
   (when (use-region-p)
     (let ((swap-source
            (list :beg (copy-marker (region-beginning))
@@ -567,14 +567,14 @@ the register."
     (:op paste-after :display "p" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
-  (helixel--record-edit 'paste-after)
+  (helixel--record-action 'paste-after)
   (helixel--yank-body arg))
 
 (helixel-define-operator helixel-yank-before
     (:op paste-before :display "P" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
-  (helixel--record-edit 'paste-before)
+  (helixel--record-action 'paste-before)
   (helixel--yank-body arg))
 
 ;; ── Indent ──
@@ -595,18 +595,18 @@ INDENT-SIGN is +1 (right) or -1 (left)."
     (unless (use-region-p)
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last event.
-      (when-let* ((tx helixel--last-edit)
-                  (sel (helixel-edit-sel tx)))
-        (when (eq (helixel-edit-op tx) op)
-          (when-let* ((m (car (helixel-edit-mark-region tx)))
+      (when-let* ((tx helixel--last-action)
+                  (sel (helixel-action-sel tx)))
+        (when (eq (helixel-action-op tx) op)
+          (when-let* ((m (car (helixel-action-mark-region tx)))
                       (pos (marker-position m)))
             (goto-char pos))
           (helixel-with-replay-as 'dot
             (helixel--recreate-selection sel))
           (indent-rigidly (region-beginning) (region-end) indent-sign)
-          (let* ((mult (or (helixel-edit-payload-get tx :multiplier) 1)))
+          (let* ((mult (or (helixel-action-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
-             (helixel-edit-with-payload tx :multiplier (1+ mult))))
+             (helixel-action-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p
@@ -617,7 +617,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
                           (line-end-position) delta)))
       (when (use-region-p)
         (goto-char (region-beginning)))
-      (helixel--record-edit op :multiplier n)))
+      (helixel--record-action op :multiplier n)))
   (helixel--clear-data))
 
 (helixel-define-operator helixel-indent-left
@@ -629,7 +629,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
 (helixel-op-set-runner 'indent-left
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (helixel-edit-payload-get tx :multiplier) 1)))
+              (or (helixel-action-payload-get tx :multiplier) 1)))
          (helixel-indent-left))))
 
 (helixel-define-operator helixel-indent-right
@@ -641,7 +641,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
 (helixel-op-set-runner 'indent-right
      (lambda (tx)
        (let ((helixel--replay-multiplier
-              (or (helixel-edit-payload-get tx :multiplier) 1)))
+              (or (helixel-action-payload-get tx :multiplier) 1)))
          (helixel-indent-right))))
 
 ;; ── Case operations ──
@@ -650,7 +650,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
     (:op toggle-case :display "~" :moves-point-p nil
      :subcat case :params (&optional count))
   (interactive "p")
-  (helixel--record-edit 'toggle-case :count (or count 1))
+  (helixel--record-action 'toggle-case :count (or count 1))
   (if (use-region-p)
       (let ((text (buffer-substring (region-beginning) (region-end))))
         (delete-region (region-beginning) (region-end))
@@ -672,7 +672,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
        (:op ,op :display ,display :moves-point-p nil
         :subcat ,subcat :params (&optional count))
      (interactive "p")
-     (helixel--record-edit ',op :count (or count 1))
+     (helixel--record-action ',op :count (or count 1))
      (if (use-region-p)
          (,region-fn (region-beginning) (region-end))
        (,word-fn (or count 1)))
@@ -688,7 +688,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 (helixel-define-operator helixel-comment-toggle
     (:op comment-toggle :display "gc" :moves-point-p nil
      :subcat comment)
-  (helixel--record-edit 'comment-toggle)
+  (helixel--record-action 'comment-toggle)
   (if (use-region-p)
       (comment-or-uncomment-region (region-beginning) (region-end))
     (comment-dwim nil))
@@ -699,7 +699,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 (helixel-define-operator helixel-shell-command
     (:op shell-command :display "!" :moves-point-p nil
      :subcat shell)
-  (helixel--record-edit 'shell-command)
+  (helixel--record-action 'shell-command)
   (let ((cmd (read-shell-command "!")))
     (if (use-region-p)
         (shell-command-on-region
@@ -716,7 +716,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 
 (helixel-define-operator helixel-fill
     (:op fill :display "gq" :subcat fill)
-  (helixel--record-edit 'fill)
+  (helixel--record-action 'fill)
   (if (use-region-p)
       (fill-region (region-beginning) (region-end))
     (fill-paragraph nil))
@@ -726,7 +726,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 
 (helixel-register-op join-lines :display "J" :moves-point-p t
   :runner (lambda (tx)
-            (let ((n (or (helixel-edit-payload-get tx :count) 2)))
+            (let ((n (or (helixel-action-payload-get tx :count) 2)))
               (dotimes (_ (1- n))
                 (join-line 1)))))
 
@@ -734,7 +734,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
     (:category edit :subcat join-lines :params (&optional count))
   (interactive "p")
   (let ((n (max (or count 1) 2)))
-    (helixel--record-edit 'join-lines :count n)
+    (helixel--record-action 'join-lines :count n)
     (dotimes (_ (1- n))
       (join-line 1))
     (helixel--clear-data)))
@@ -848,7 +848,7 @@ Replay typed text on all rectangle lines."
 (helixel-define-command helixel-replace-char
     (:category edit :subcat replace-char :params (char))
   (interactive "c")
-  (helixel--record-edit 'replace-char :char char)
+  (helixel--record-action 'replace-char :char char)
   (if (use-region-p)
       (helixel--replace-region
        (make-string (- (region-end) (region-beginning)) char)

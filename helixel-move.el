@@ -702,7 +702,7 @@ After advancing, recreates the line selection to position point
 correctly (bol for insert, eol for append).  Returns nil at buffer edge.
 Deactivates any prior region so `helixel-select-line-up' starts
 fresh rather than extending a stale mark."
-  (let* ((sel (helixel-edit-sel tx))
+  (let* ((sel (helixel-action-sel tx))
          (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
          (entry-kind (plist-get (helixel-sel-ctx sel) :entry-kind))
          (count (if (eq entry-kind 'append) 1
@@ -724,7 +724,7 @@ inherently create the region).  Returns t on success, nil when
 point does not move.
 The strategy skips the separate `recreate-selection' call for inline
 advance functions to avoid double-moving."
-  (let ((sel (helixel-edit-sel tx)))
+  (let ((sel (helixel-action-sel tx)))
     (when sel
       (condition-case nil
           (progn (helixel--recreate-selection sel) t)

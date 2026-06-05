@@ -66,7 +66,7 @@ Does NOT call `helixel--switch-state' -- that stays in helixel-editing.el."
 
 (defsubst helixel--repeat-get-keys (tx)
   "Return the :keys key-sequence vector from TX payload, or nil."
-  (helixel-edit-payload-get tx :keys))
+  (helixel-action-payload-get tx :keys))
 
 (defun helixel--execute-keys (keys)
   "Execute recorded KEYS (a key vector).

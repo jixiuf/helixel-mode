@@ -30,7 +30,7 @@
 ;;   Part 1 — helixel-sel          : selection descriptor + pending-sel
 ;;   Part 2 — Delimiter Protocol   : delimiter plist accessors
 ;;   Part 3 — Kind Registry        : centralised kind protocol
-;;   Part 4 — helixel-edit        : unified event struct
+;;   Part 4 — helixel-action      : unified event struct
 ;;   Part 5 — Transaction helpers  : make-tx, copy-tx, tx-display, etc.
 ;;   Part 6 — Operator Registry    : hash-table based op registration
 ;;   Part 7 — Swap-source type     : helper for editing and swap modules
@@ -578,14 +578,14 @@ then simply does not flip.")
 
 
 ;; ----------------------------------------------------------------------
-;; Part 4 — helixel-edit: Unified Event Struct
+;; Part 4 — helixel-action: Unified Event Struct
 ;; ----------------------------------------------------------------------
 ;;
 ;; Unified event struct for dot-repeat (`.`) replay, `;` jumping,
 ;; and history selection.
 
-(cl-defstruct (helixel-edit (:conc-name helixel-edit-)
-                             (:copier helixel-edit--shallow-copy))
+(cl-defstruct (helixel-action (:conc-name helixel-action-)
+                             (:copier helixel-action--shallow-copy))
   "Immutable editing event — serves both `.` replay and `;` jumping.
 Slots:
   OP        — symbol: operator name (kill, change, chain, ...)
@@ -617,44 +617,44 @@ Slots:
   buffer
   by-command)
 
-(defun helixel-edit--copy (event)
-  "Deep-copy `helixel-edit' struct EVENT.
+(defun helixel-action--copy (event)
+  "Deep-copy `helixel-action' struct EVENT.
 Copies marker (via `copy-marker') and sel (via `helixel-sel--copy')
 so the copy is fully independent of the original."
-  (when (helixel-edit-p event)
-    (let ((copy (helixel-edit--shallow-copy event)))
-      (when-let* ((mr (helixel-edit-mark-region event))
+  (when (helixel-action-p event)
+    (let ((copy (helixel-action--shallow-copy event)))
+      (when-let* ((mr (helixel-action-mark-region event))
                   ((consp mr)))
-        (setf (helixel-edit-mark-region copy)
+        (setf (helixel-action-mark-region copy)
               (cons (copy-marker (car mr))
                     (copy-marker (cdr mr) t))))
-      (when-let* ((s (helixel-edit-sel event)))
-        (setf (helixel-edit-sel copy) (helixel-sel--copy s)))
+      (when-let* ((s (helixel-action-sel event)))
+        (setf (helixel-action-sel copy) (helixel-sel--copy s)))
       copy)))
 
-(defun helixel-edit--same-content-p (e1 e2)
+(defun helixel-action--same-content-p (e1 e2)
   "Return non-nil if E1 and E2 have identical key content.
 Compares op, sel, payload, category, subcat, and marker position.
 Two events at different positions are never considered the same."
   (if (or (null e1) (null e2))
       (eq e1 e2)
-    (and (eq (helixel-edit-op e1) (helixel-edit-op e2))
-         (eq (helixel-edit-category e1) (helixel-edit-category e2))
-         (eq (helixel-edit-subcat e1) (helixel-edit-subcat e2))
-         (helixel-sel-equal-p (helixel-edit-sel e1)
-                              (helixel-edit-sel e2))
-         (equal (helixel-edit-payload e1)
-                (helixel-edit-payload e2))
-         (= (marker-position (car (helixel-edit-mark-region e1)))
-            (marker-position (car (helixel-edit-mark-region e2)))))))
+    (and (eq (helixel-action-op e1) (helixel-action-op e2))
+         (eq (helixel-action-category e1) (helixel-action-category e2))
+         (eq (helixel-action-subcat e1) (helixel-action-subcat e2))
+         (helixel-sel-equal-p (helixel-action-sel e1)
+                              (helixel-action-sel e2))
+         (equal (helixel-action-payload e1)
+                (helixel-action-payload e2))
+         (= (marker-position (car (helixel-action-mark-region e1)))
+            (marker-position (car (helixel-action-mark-region e2)))))))
 
-(defun helixel-edit-format (event)
+(defun helixel-action-format (event)
   "Return display string for EVENT.
 Format: OP[.SEL][xCOUNT].  Uses DISPLAY slot if stored;
 otherwise falls back to `helixel--op-display'."
-  (let* ((op (helixel-edit-op event))
-         (sel (helixel-edit-sel event))
-         (op-str (or (helixel-edit-display event)
+  (let* ((op (helixel-action-op event))
+         (sel (helixel-action-sel event))
+         (op-str (or (helixel-action-display event)
                      (helixel--op-display op event)))
          (sel-str (when sel (helixel-sel-call-display sel)))
          (count (helixel-sel-count sel)))
@@ -665,13 +665,13 @@ otherwise falls back to `helixel--op-display'."
 
 ;; ----------------------------------------------------------------------
 ;; ----------------------------------------------------------------------
-;; Part 5 — Transaction helpers (build on `helixel-edit')
+;; Part 5 — Transaction helpers (build on `helixel-action')
 ;; ----------------------------------------------------------------------
 ;;
-;; Dot-repeat transactions are `helixel-edit' structs.
+;; Dot-repeat transactions are `helixel-action' structs.
 
-(defun helixel-edit-create (op sel-ctx &rest payload-kv)
-  "Create a `helixel-edit' transaction for dot-repeat.
+(defun helixel-action-create (op sel-ctx &rest payload-kv)
+  "Create a `helixel-action' transaction for dot-repeat.
 OP is a registered operator symbol.
 SEL-CTX is a selection descriptor or nil.
 PAYLOAD-KV are keyword/value pairs.  Special keys:
@@ -691,7 +691,7 @@ All other keys form the :payload plist."
          (push (car payload-kv) rest)
          (push (cadr payload-kv) rest)
          (setq payload-kv (cddr payload-kv)))))
-    (make-helixel-edit
+    (make-helixel-action
      :op op
      :sel sel-ctx
      :payload (nreverse rest)
@@ -702,19 +702,19 @@ All other keys form the :payload plist."
      :buffer (current-buffer)
      :by-command (and (symbolp this-command) this-command))))
 
-(defun helixel-edit-copy (tx)
+(defun helixel-action-copy (tx)
   "Return a shallow copy of transaction TX."
-  (helixel-edit--shallow-copy tx))
+  (helixel-action--shallow-copy tx))
 
 ;; ── Payload helpers ──
 
-(defun helixel-edit-with-payload (tx key value)
+(defun helixel-action-with-payload (tx key value)
   "Return a new transaction equal to TX with :payload KEY set to VALUE.
 Does not mutate TX."
-  (let* ((payload (copy-sequence (helixel-edit-payload tx)))
+  (let* ((payload (copy-sequence (helixel-action-payload tx)))
          (new-payload (plist-put payload key value))
-         (new-tx (helixel-edit-copy tx)))
-    (setf (helixel-edit-payload new-tx) new-payload)
+         (new-tx (helixel-action-copy tx)))
+    (setf (helixel-action-payload new-tx) new-payload)
     new-tx))
 
 ;; ── Display ──
@@ -884,14 +884,14 @@ dispatches on struct closures."
   (when sel-ctx
     (helixel-sel-call-recreate sel-ctx)))
 
-(defun helixel--execute-edit (tx)
+(defun helixel--execute-action (tx)
   "Execute transaction TX on the current buffer.
 Does NOT record, does NOT switch state.
 Calls the :runner stored in TX (set at record time by
 `helixel--op-runner').  If :runner is missing,
 falls back to the operator registry."
-  (when-let* ((runner (or (helixel-edit-runner tx)
-                         (helixel--op-runner (helixel-edit-op tx)))))
+  (when-let* ((runner (or (helixel-action-runner tx)
+                         (helixel--op-runner (helixel-action-op tx)))))
     (funcall runner tx)))
 
 (defsubst helixel--repeat-echo (count)
@@ -925,27 +925,27 @@ Supports `line', `rect' and `textobj'."
 
 ;; ── Payload accessors ──
 
-(defsubst helixel-edit-payload-get (event key)
+(defsubst helixel-action-payload-get (event key)
   "Return the KEY entry from EVENT's payload plist, or nil.
-Preferred over raw `(plist-get (helixel-edit-payload EVENT) KEY)'
+Preferred over raw `(plist-get (helixel-action-payload EVENT) KEY)'
 at call sites; keeps payload access greppable and centralised."
-  (plist-get (helixel-edit-payload event) key))
+  (plist-get (helixel-action-payload event) key))
 
-(defsubst helixel-edit-payload-put (event key value)
+(defsubst helixel-action-payload-put (event key value)
   "Set KEY → VALUE in EVENT's payload plist (mutating EVENT).
 Returns the updated payload list.  Used by op runners that need
 to inject replay metadata into an existing event in-place."
-  (setf (helixel-edit-payload event)
-        (plist-put (helixel-edit-payload event) key value)))
+  (setf (helixel-action-payload event)
+        (plist-put (helixel-action-payload event) key value)))
 
 
 ;; ----------------------------------------------------------------------
 ;; Part 8 — Most-recent-edit pointer (single source of truth)
 ;; ----------------------------------------------------------------------
 ;;
-;; `helixel--last-edit' is the pointer that `.` (dot-repeat) and
+;; `helixel--last-action' is the pointer that `.` (dot-repeat) and
 ;; `,` (selection-repeat) consume.  It is global (NOT buffer-local)
-(defvar-local helixel--last-edit nil
+(defvar-local helixel--last-action nil
   "Pointer to the most recent committed event in this buffer.
 Consumed by `.` and `,` for repeat.
 Buffer-local — dot-repeat is scoped to the current buffer.")
@@ -953,7 +953,7 @@ Buffer-local — dot-repeat is scoped to the current buffer.")
 (defvar helixel--current-command nil
   "Symbol of the currently-executing helixel command.
 Bound by `helixel-define-command' (and by `helixel-with-command'
-for manually-defined commands) so that `helixel-edit-commit'
+for manually-defined commands) so that `helixel-action-commit'
 can stamp `by-command' on each committed edit — enabling the
 multi-cursor dispatcher to detect a fresh edit produced by THIS
 command even when `this-command' isn't set (e.g. in batch tests
@@ -972,16 +972,16 @@ Use for plain `defun' helixel commands that don't go through
      ,@body))
 
 (defun helixel--update-last-event (new-tx)
-  "Update the payload of `helixel--last-edit' from NEW-TX.
+  "Update the payload of `helixel--last-action' from NEW-TX.
 
 Only the payload plist is copied; the operator, selection and
-runner of the existing `helixel--last-edit' are left untouched.
+runner of the existing `helixel--last-action' are left untouched.
 Used by operator commands that need to inject replay metadata
 \(e.g. `:keys', `:replacement') into the most recent edit after
 it was already committed."
-  (when (and helixel--last-edit (helixel-edit-p helixel--last-edit))
-    (setf (helixel-edit-payload helixel--last-edit)
-          (helixel-edit-payload new-tx))))
+  (when (and helixel--last-action (helixel-action-p helixel--last-action))
+    (setf (helixel-action-payload helixel--last-action)
+          (helixel-action-payload new-tx))))
 
 ;; ----------------------------------------------------------------------
 ;; Part 9 — Shared key-sequence recording utilities

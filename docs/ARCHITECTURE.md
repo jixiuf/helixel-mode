@@ -22,8 +22,8 @@
 | Struct | Role | Mutable? |
 |--------|------|----------|
 | `helixel-sel` | Selection descriptor (kind + ctx + recreate closure) | Immutable (copy on update) |
-| `helixel-edit` | Transaction and ring entry (op + sel + payload + runner + category + subcat) | `helixel--last-tx` is mutable; ring entries are copies |
-| `helixel-edit` | Unified event for ring storage (`;` jumping + event history) | Immutable after commit |
+| `helixel-action` | Transaction and ring entry (op + sel + payload + runner + category + subcat) | `helixel--last-tx` is mutable; ring entries are copies |
+| `helixel-action` | Unified event for ring storage (`;` jumping + event history) | Immutable after commit |
 
 ### Kind Registry
 
@@ -63,14 +63,14 @@ Access: `(helixel--op-runner 'kill)`, `(helixel--op-moves-point-p 'insert-text)`
 | `helixel--event-ring` | buffer-local | `;` cycling, dot-repeat picker | C-g |
 | `helixel--jump-list` | global | C-o/C-i jump navigation | C-o |
 
-Both store `helixel-edit` structs. The jump-list stores a subset of ring events (filtered by `helixel-jump-categories`).
+Both store `helixel-action` structs. The jump-list stores a subset of ring events (filtered by `helixel-jump-categories`).
 
 ### Commit Pipeline
 
 ```
 Editing command
-  → helixel--record-edit (creates an event tx, stores as helixel--last-tx)
-  → helixel-edit-commit
+  → helixel--record-action (creates an event tx, stores as helixel--last-tx)
+  → helixel-action-commit
     → push to helixel--event-ring (dedup, cap)
       → push to helixel--jump-list (filtered)
 ```
@@ -125,12 +125,12 @@ helixel-repeat-edit
 
 ### Recording
 
-`helixel--record-edit(op, &rest extra)`:
+`helixel--record-action(op, &rest extra)`:
 1. Pop pending sel via `helixel--sel-pop`
 2. Look up runner from op registry
-3. Create event tx via `helixel-edit-create`
+3. Create event tx via `helixel-action-create`
 4. Store as `helixel--last-tx`
-5. Commit event via `helixel-edit-commit`
+5. Commit event via `helixel-action-commit`
 
 ### Insert Recording
 
@@ -232,7 +232,7 @@ is the single entry point; no bridge functions needed.
 Single function for opening a tracking event: commits the previous
 live-event and creates a new one.  Used by all three command-definition
 paths: `helixel-define-command`, `helixel-define-operator`, and
-`helixel-with-edit-tracking`.
+`helixel-with-action-tracking`.
 
 ### `helixel-define-command`
 
@@ -246,7 +246,7 @@ Defines a helixel command.  Expands to a `defun` that calls
 Like `helixel-define-command` but also registers the operator via
 `helixel-register-op` for `.` repeat.
 
-### `helixel-with-edit-tracking`
+### `helixel-with-action-tracking`
 
 For self-contained commands (chain).  Wraps body in
 `helixel--tracking-open` + `unwind-protect` commit.
@@ -286,7 +286,7 @@ helixel-core (cl-lib only)
 |----------|----------|---------|
 | `helixel--pending-sel` | `helixel-core.el` | Pending selection descriptor |
 | `helixel--last-tx` | `helixel-core.el` | Most recent edit transaction |
-| `helixel--live-edit` | `helixel-ring.el` | Current in-progress event |
+| `helixel--live-action` | `helixel-ring.el` | Current in-progress event |
 | `helixel--active-search` | `helixel-search.el` | Active search direction+pattern |
 
 ---
@@ -298,7 +298,7 @@ helixel-core (cl-lib only)
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions
-- For dot-repeat tests: build tx with `helixel-edit-create` and set `helixel--last-tx`
+- For dot-repeat tests: build tx with `helixel-action-create` and set `helixel--last-tx`
 - For chain tests: use `helixel-chain--make-test-tx` helper
 - Max 12s timeout per test run; zero hangs expected
 
@@ -314,7 +314,7 @@ User presses `.`
   │
   ▼
 helixel-repeat.el:helixel-repeat-edit
-  ├── Resolves helixel--last-edit (global, cross-buffer)
+  ├── Resolves helixel--last-action (global, cross-buffer)
   ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
   │
   ▼
@@ -334,8 +334,8 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-as 'dot)
   │          helixel-search.el, helixel-textobj.el)
   │
   ├── Apply: execute edit at current position
-  │     ├── helixel-core.el:helixel--execute-edit(tx)
-  │     │     └── calls helixel-edit-runner(tx) — closure stored at record time
+  │     ├── helixel-core.el:helixel--execute-action(tx)
+  │     │     └── calls helixel-action-runner(tx) — closure stored at record time
   │     └── (runners live in helixel-editing.el, registered via
   │          helixel-register-op / helixel-define-operator)
   │
@@ -347,7 +347,7 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-as 'dot)
 Key invariants:
 - Both `helixel--inhibit-repeat-record` and `helixel--inhibit-action-track`
   are bound to t during replay (via `helixel-with-replay-as').
-- `helixel--last-edit` is NOT buffer-local — `.` replays cross-buffer.
+- `helixel--last-action` is NOT buffer-local — `.` replays cross-buffer.
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.
 - All iterations within a single `.` press are wrapped in one undo step.
@@ -359,8 +359,8 @@ Key invariants:
 These are load-bearing decisions that the codebase actively depends on
 — change them only with full-suite testing.
 
-1. **Single command-identity stamp.**  Every `helixel-edit` carries
-   `:by-command` (auto-stamped in `helixel-edit-commit`).  Dispatch
+1. **Single command-identity stamp.**  Every `helixel-action` carries
+   `:by-command` (auto-stamped in `helixel-action-commit`).  Dispatch
    decisions — mc fresh-edit replay vs `call-interactively`, `.` vs
    `,` — all key off this one field instead of separate flag
    networks.
@@ -373,7 +373,7 @@ These are load-bearing decisions that the codebase actively depends on
    per-feature inhibit flags.
 
 3. **Runner-replay over advice.**  Prompt commands store their
-   decisions in `helixel-edit-payload`; runners are
+   decisions in `helixel-action-payload`; runners are
    position-independent (operate on current region/point + payload).
    Multi-cursor and `.`-repeat both reuse the runner — no per-command
    `advice-add` needed.

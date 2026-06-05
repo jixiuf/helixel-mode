@@ -73,7 +73,7 @@ and the jump list (`C-o` / `C-i`).
     (helixel--switch-state 'normal)))
 ```
 
-**Edit command with explicit `helixel--record-edit`:**
+**Edit command with explicit `helixel--record-action`:**
 
 Use this pattern when the command's `.` runner is NOT the command itself
 (e.g. `change` uses `helixel--repeat-change-core` as runner):
@@ -81,7 +81,7 @@ Use this pattern when the command's `.` runner is NOT the command itself
 ```elisp
 (helixel-define-command helixel-change-thing-at-point
     (:category edit :subcat change)
-  (helixel--record-edit 'change)  ;; explicit record call
+  (helixel--record-action 'change)  ;; explicit record call
   (if (and (use-region-p) (eq (helixel--selection-type) 'rect))
       (helixel--rect-change)
     (helixel--delete-selection)
@@ -96,7 +96,7 @@ Or when the command has extra payload for `.` replay:
     (:category edit :subcat join-lines :params (&optional count))
   (interactive "p")
   (let ((n (max (or count 1) 2)))
-    (helixel--record-edit 'join-lines :count n)  ;; explicit with payload
+    (helixel--record-action 'join-lines :count n)  ;; explicit with payload
     (dotimes (_ (1- n))
       (join-line 1))
     (helixel--clear-data)))
@@ -141,21 +141,21 @@ replay it.  This is a data-only registration — no command is defined.
 ```elisp
 (helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-edit-payload tx) :char)))
+             (let ((c (plist-get (helixel-action-payload tx) :char)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
             (helixel-replace-char
-             (plist-get (helixel-edit-payload tx) :char))))
+             (plist-get (helixel-action-payload tx) :char))))
 ```
 
 **No corresponding interactive command:**
 ```elisp
 (helixel-register-op insert-text :display "i" :moves-point-p nil
   :runner (lambda (tx)
-            (let ((keys (plist-get (helixel-edit-payload tx) :keys)))
+            (let ((keys (plist-get (helixel-action-payload tx) :keys)))
               (if keys
                   (helixel--execute-keys keys)
-                (insert (or (plist-get (helixel-edit-payload tx) :text)
+                (insert (or (plist-get (helixel-action-payload tx) :text)
                             ""))))))
 ```
 
@@ -169,10 +169,10 @@ replay it.  This is a data-only registration — no command is defined.
 ```elisp
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-edit-payload tx) :char)))
+             (let ((c (plist-get (helixel-action-payload tx) :char)))
                (if c (format "ms[%c]" c) "ms")))
   :runner (lambda (tx)
-            (when-let* ((char (plist-get (helixel-edit-payload tx) :char))
+            (when-let* ((char (plist-get (helixel-action-payload tx) :char))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 ```
@@ -218,7 +218,7 @@ form.  Use this when the `.` runner IS the command itself.
 
 ### Body Convention
 
-The command body **must** call `(helixel--record-edit OP ...)` to record
+The command body **must** call `(helixel--record-action OP ...)` to record
 the edit for `.` replay.  The record call should happen before any side
 effects that might change the selection or cursor position.
 
@@ -228,7 +228,7 @@ effects that might change the selection or cursor position.
 ```elisp
 (helixel-define-operator helixel-kill-thing-at-point
     (:op kill :display "d" :moves-point-p t)
-  (helixel--record-edit 'kill)
+  (helixel--record-action 'kill)
   (helixel--delete-selection)
   (helixel--clear-data))
 ```
@@ -237,7 +237,7 @@ effects that might change the selection or cursor position.
 ```elisp
 (helixel-define-operator helixel-kill-ring-save
     (:op copy :display "y" :moves-point-p nil)
-  (helixel--record-edit 'copy)
+  (helixel--record-action 'copy)
   (when (use-region-p)
     (cond
      ((eq (helixel--selection-type) 'rect)
@@ -253,7 +253,7 @@ effects that might change the selection or cursor position.
     (:op paste-after :display "p" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
-  (helixel--record-edit 'paste-after)
+  (helixel--record-action 'paste-after)
   (cond
    ((helixel--rect-wise-kill-p) ...)
    ((helixel--linewise-kill-p) ...)
@@ -266,7 +266,7 @@ effects that might change the selection or cursor position.
     (:op toggle-case :display "~" :subcat case
      :params (&optional count))
   (interactive "p")
-  (helixel--record-edit 'toggle-case :count (or count 1))
+  (helixel--record-action 'toggle-case :count (or count 1))
   (if (use-region-p)
       (let ((text (buffer-substring ...)))
         (delete-region ...)
@@ -280,7 +280,7 @@ effects that might change the selection or cursor position.
 ```elisp
 (helixel-define-operator helixel-comment-toggle
     (:op comment-toggle :display "gc" :subcat comment)
-  (helixel--record-edit 'comment-toggle)
+  (helixel--record-action 'comment-toggle)
   (if (use-region-p)
       (comment-or-uncomment-region ...)
     (comment-dwim nil))
@@ -298,7 +298,7 @@ Need a command?
 │  │  └─ YES → helixel-define-operator
 │  └─ NO (runner needs payload, or runner is a different fn)
 │     ├─ helixel-register-op  +  helixel-define-command
-│     └─ Call (helixel--record-edit OP ...) in the body
+│     └─ Call (helixel--record-action OP ...) in the body
 │
 └─ Not an editing command (movement, search, state)?
    └─ helixel-define-command

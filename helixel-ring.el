@@ -52,62 +52,62 @@ nil = live event.  0 = newest ring entry.  N = older.")
 ;; Buffer-local event ring
 ;; ----------------------------------------------------------------------
 
-(defcustom helixel-edit-ring-max 50
+(defcustom helixel-action-ring-max 50
   "Maximum number of events stored in `helixel--event-ring'."
   :type 'integer
   :group 'helixel)
 
 (defvar-local helixel--event-ring nil
-  "Event ring, most recent first.  Capped at `helixel-edit-ring-max'.
-Each entry is a `helixel-edit' struct.
+  "Event ring, most recent first.  Capped at `helixel-action-ring-max'.
+Each entry is a `helixel-action' struct.
 Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
 
-(defvar-local helixel--live-edit nil
-  "The currently in-progress `helixel-edit'.
+(defvar-local helixel--live-action nil
+  "The currently in-progress `helixel-action'.
 Set at command start, committed to ring when complete.")
 
-;; `helixel--last-edit' is defined in helixel-core.el.
+;; `helixel--last-action' is defined in helixel-core.el.
 ;; It is available transitively through the require chain.
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
   "Event categories that carry a selection descriptor.
-Used by `helixel-edit-commit' to sync `helixel--pending-sel'
+Used by `helixel-action-commit' to sync `helixel--pending-sel'
 into the committed event's :sel slot when the event's own :sel
 is nil.  Categories not listed here never carry a pending-sel.")
 
-(defun helixel-edit--ring-cap ()
-  "Truncate `helixel--event-ring' to `helixel-edit-ring-max' entries.
+(defun helixel-action--ring-cap ()
+  "Truncate `helixel--event-ring' to `helixel-action-ring-max' entries.
 Releases markers of evicted entries to prevent leaks."
-  (when (> (length helixel--event-ring) helixel-edit-ring-max)
-    (let ((tail (nthcdr helixel-edit-ring-max helixel--event-ring)))
+  (when (> (length helixel--event-ring) helixel-action-ring-max)
+    (let ((tail (nthcdr helixel-action-ring-max helixel--event-ring)))
       (dolist (e tail)
-        (when-let* ((mr (helixel-edit-mark-region e))
+        (when-let* ((mr (helixel-action-mark-region e))
                     ((consp mr)))
           (set-marker (car mr) nil)
           (set-marker (cdr mr) nil))))
-    (setcdr (nthcdr (1- helixel-edit-ring-max)
+    (setcdr (nthcdr (1- helixel-action-ring-max)
                     helixel--event-ring)
             nil)))
 
-(defun helixel-edit-commit ()
-  "Commit `helixel--live-edit' to `helixel--event-ring'.
+(defun helixel-action-commit ()
+  "Commit `helixel--live-action' to `helixel--event-ring'.
 Deep-copies the event (marker + sel) so ring entries are independent.
 Deduplicates against the ring front — same (op sel payload) skips push.
 Also mirrors to `helixel--global-jump-log'.
-Sets `helixel--last-edit' to the committed entry.
+Sets `helixel--last-action' to the committed entry.
 Returns the committed entry or nil."
-  (when helixel--live-edit
+  (when helixel--live-action
     ;; Sync pending-sel into the live-event so movement/search
     ;; events in the ring carry their selection descriptor.
     ;; Only for selection-creating categories; edits already set
-    ;; sel via `helixel--live-edit-set'.
+    ;; sel via `helixel--live-action-set'.
     (when (and helixel--pending-sel
-               (not (helixel-edit-sel helixel--live-edit))
-               (memq (helixel-edit-category helixel--live-edit)
+               (not (helixel-action-sel helixel--live-action))
+               (memq (helixel-action-category helixel--live-action)
                      helixel--sel-categories))
-      (setf (helixel-edit-sel helixel--live-edit)
+      (setf (helixel-action-sel helixel--live-action)
             (helixel-sel--copy helixel--pending-sel)))
-    (let ((entry (helixel-edit--copy helixel--live-edit)))
+    (let ((entry (helixel-action--copy helixel--live-action)))
       ;; Stamp the committing command symbol — used by the multi-
       ;; cursor dispatcher to detect a fresh edit produced by the
       ;; current command (so it knows to replay the edit at fakes).
@@ -118,15 +118,15 @@ Returns the committed entry or nil."
       (let ((cmd (or (and (symbolp this-command) this-command)
                      helixel--current-command)))
         (when cmd
-          (setf (helixel-edit-by-command entry) cmd)))
+          (setf (helixel-action-by-command entry) cmd)))
       (unless (and (car helixel--event-ring)
-                   (helixel-edit--same-content-p
+                   (helixel-action--same-content-p
                     entry (car helixel--event-ring)))
         (push entry helixel--event-ring)
-        (helixel-edit--ring-cap))
-      (setq helixel--last-edit entry)
+        (helixel-action--ring-cap))
+      (setq helixel--last-action entry)
       (helixel--global-jump-log-push entry)
-      (setq helixel--live-edit nil)
+      (setq helixel--live-action nil)
       entry)))
 
 ;; ── Live-event helpers ──
@@ -135,34 +135,34 @@ Returns the committed entry or nil."
   "Cancel the current action via \\[keyboard-quit].
 Commits meaningful events, pushes a state/cancel sentinel,
 and clears the live state."
-  (helixel-edit-commit)
+  (helixel-action-commit)
   ;; Push cancel sentinel for dedup boundary
-  (setq helixel--live-edit
-        (make-helixel-edit
+  (setq helixel--live-action
+        (make-helixel-action
          :category 'state
          :subcat 'cancel
          :mark-region (let ((pm (point-marker)))
                          (cons pm (copy-marker pm t)))
          :timestamp (float-time)
          :buffer (current-buffer)))
-  (helixel-edit-commit))
+  (helixel-action-commit))
 
-(defun helixel--live-edit-set (tx)
-  "Set edit details from TX on `helixel--live-edit'."
-  (when (and helixel--live-edit (helixel-edit-p tx))
-    (setf (helixel-edit-op helixel--live-edit) (helixel-edit-op tx))
-    (setf (helixel-edit-sel helixel--live-edit) (helixel-edit-sel tx))
-    (setf (helixel-edit-payload helixel--live-edit)
-          (helixel-edit-payload tx))
-    (setf (helixel-edit-runner helixel--live-edit)
-          (helixel-edit-runner tx))
-    (when-let* ((disp (helixel-edit-display tx)))
-      (setf (helixel-edit-display helixel--live-edit) disp))))
+(defun helixel--live-action-set (tx)
+  "Set edit details from TX on `helixel--live-action'."
+  (when (and helixel--live-action (helixel-action-p tx))
+    (setf (helixel-action-op helixel--live-action) (helixel-action-op tx))
+    (setf (helixel-action-sel helixel--live-action) (helixel-action-sel tx))
+    (setf (helixel-action-payload helixel--live-action)
+          (helixel-action-payload tx))
+    (setf (helixel-action-runner helixel--live-action)
+          (helixel-action-runner tx))
+    (when-let* ((disp (helixel-action-display tx)))
+      (setf (helixel-action-display helixel--live-action) disp))))
 
 ;; ── Unified entry point: open event (commit prev, create new) ──
 
 (defun helixel--tracking-open (category subcat &optional op)
-  "Commit previous `helixel--live-edit' and create a new one.
+  "Commit previous `helixel--live-action' and create a new one.
 CATEGORY and SUBCAT classify the event for \=`;\=` and jump-list.
 OP is an optional operator symbol (nil for movement/search).
 
@@ -173,9 +173,9 @@ Does NOT commit the new event — caller is responsible for eventual commit."
     (when (and (eq helixel--raw-selection-type 'textobj)
                (not (eq category 'textobj)))
       (setq helixel--raw-selection-type nil))
-    (helixel-edit-commit)
-    (setq helixel--live-edit
-          (make-helixel-edit
+    (helixel-action-commit)
+    (setq helixel--live-action
+          (make-helixel-action
            :op op
            :category category
            :subcat subcat
@@ -252,11 +252,11 @@ Compares :buffer, :category, :subcat, and marker position."
 Only pushes if EVENT's :category is in `helixel-jump-categories'.
 Creates independent marker copy; the jump-log entry is lightweight."
   (when (and event
-             (memq (helixel-edit-category event) helixel-jump-categories)
+             (memq (helixel-action-category event) helixel-jump-categories)
              ;; Don't pollute the global (cross-buffer) jump log
              ;; with events committed during fake-cursor dispatch.
              (not (helixel-replay-in-fake-p)))
-    (let* ((src-mr (helixel-edit-mark-region event))
+    (let* ((src-mr (helixel-action-mark-region event))
            (buf (if (and (consp src-mr) (markerp (car src-mr)))
                     (marker-buffer (car src-mr))
                   (current-buffer)))
@@ -264,8 +264,8 @@ Creates independent marker copy; the jump-log entry is lightweight."
                                     (cons (copy-marker (car src-mr))
                                           (copy-marker (cdr src-mr) t)))
                     :buffer ,buf
-                    :category ,(helixel-edit-category event)
-                    :subcat ,(helixel-edit-subcat event))))
+                    :category ,(helixel-action-category event)
+                    :subcat ,(helixel-action-subcat event))))
       (unless (helixel--jump-same-content-p
                entry (car helixel--global-jump-log))
         (push entry helixel--global-jump-log)
@@ -319,7 +319,7 @@ Returns (BEG . END) or nil if no bounds found."
       (cons (car b) (cdr b)))))
 
 (defun helixel--set-mark-region (thing-or-bounds &optional outer-p)
-  "Set the \=:mark-region slot of `helixel--live-edit'.
+  "Set the \=:mark-region slot of `helixel--live-action'.
 If THING-OR-BOUNDS is a cons (BEG . END), use it as pre-computed bounds.
 If it is a thingatpt symbol, compute bounds via
 `helixel--compute-mark-bounds' at point.
@@ -333,13 +333,13 @@ to mark the region without re-computing bounds.
 
 Old markers are freed before replacement to prevent leaks."
   (when (and (not (helixel-replaying-p))
-             helixel--live-edit)
-    (let* ((old (helixel-edit-mark-region helixel--live-edit))
+             helixel--live-action)
+    (let* ((old (helixel-action-mark-region helixel--live-action))
            (bounds (if (consp thing-or-bounds)
                        thing-or-bounds
                      (save-excursion
-                       (goto-char (car (helixel-edit-mark-region
-                                         helixel--live-edit)))
+                       (goto-char (car (helixel-action-mark-region
+                                         helixel--live-action)))
                        (helixel--compute-mark-bounds
                         thing-or-bounds outer-p)))))
       (when bounds
@@ -349,7 +349,7 @@ Old markers are freed before replacement to prevent leaks."
           (set-marker (cdr old) nil))
         (let ((beg-marker (copy-marker (car bounds)))
               (end-marker (copy-marker (cdr bounds) t)))
-          (setf (helixel-edit-mark-region helixel--live-edit)
+          (setf (helixel-action-mark-region helixel--live-action)
                 (cons beg-marker end-marker)))))))
 
 ;; ----------------------------------------------------------------------
@@ -388,9 +388,9 @@ Consults `helixel-semicolon-mark-thing'."
   (cl-some
    (lambda (entry)
      (if (consp entry)
-         (and (eq (helixel-edit-category event) (car entry))
-              (eq (helixel-edit-subcat event) (cdr entry)))
-       (eq (helixel-edit-category event) entry)))
+         (and (eq (helixel-action-category event) (car entry))
+              (eq (helixel-action-subcat event) (cdr entry)))
+       (eq (helixel-action-category event) entry)))
    helixel-semicolon-mark-thing))
 
 ;; ----------------------------------------------------------------------
@@ -405,20 +405,16 @@ Typically `helixel--clear-data'.")
 ;; Event display
 ;; ----------------------------------------------------------------------
 
-(defun helixel-edit-display-format (event)
-  "Format `helixel-edit' EVENT for display in cycling messages.
-Uses `helixel-edit-display' if set, otherwise builds from
+(defun helixel-action-display-format (event)
+  "Format `helixel-action' EVENT for display in cycling messages.
+Uses `helixel-action-display' if set, otherwise builds from
 category and subcat."
-  (or (helixel-edit-display event)
-      (let ((cat (helixel-edit-category event))
-            (sub (helixel-edit-subcat event)))
+  (or (helixel-action-display event)
+      (let ((cat (helixel-action-category event))
+            (sub (helixel-action-subcat event)))
         (cond
          ((and (eq cat 'state) (eq sub 'cancel)) "C-g")
          (t (format "%s.%s" cat sub))))))
-
-(defun helixel-action-display (event)
-  "Format EVENT for display.  Delegates to `helixel-edit-display-format'."
-  (helixel-edit-display-format event))
 
 ;; Generic grouped-ring helpers live in `helixel-core' (Part 10).
 
@@ -432,7 +428,7 @@ category and subcat."
 
 (defun helixel-action--cycle-visible-p (event)
   "Return non-nil if EVENT should be visible during `;' cycling."
-  (memq (helixel-edit-category event) helixel-action-cycle-categories))
+  (memq (helixel-action-category event) helixel-action-cycle-categories))
 
 (defun helixel-action--cycle-display (event pos ring)
   "Format cycling message for EVENT at POS in RING."
@@ -442,7 +438,7 @@ category and subcat."
                                    count (helixel-action--cycle-visible-p
                                           (nth i ring))))))
     (format "[%d/%d] %s" display-pos total
-            (helixel-edit-display-format event))))
+            (helixel-action-display-format event))))
 
 (defun helixel-action--push-sel-from-event (event)
   "Push a `helixel-sel' from EVENT for `.' repeat.
@@ -452,7 +448,7 @@ the selection descriptor stored in EVENT.
 Adds `:span t' so the strategy builder extends the region
 to session-start, matching `;''s behaviour."
   (let ((pending helixel--pending-sel)
-        (event-sel (helixel-edit-sel event))
+        (event-sel (helixel-action-sel event))
         sel)
     (cond
      ((and pending event-sel
@@ -475,7 +471,7 @@ If EVENT has a non-degenerate :mark-region and matches
 activate a real region pointing at the far edge from point
 and return t (did-mark).  Otherwise just push the mark to the
 begin marker and return nil."
-  (let* ((mr (helixel-edit-mark-region event))
+  (let* ((mr (helixel-action-mark-region event))
          (a (marker-position (car mr)))
          (b (marker-position (cdr mr)))
          (degenerate (= a b)))
@@ -517,12 +513,12 @@ Thin orchestrator after step 15 — work split into
       (helixel-action--cycle-auto-advance did-mark first-call))))
 
 (defun helixel-action--same-group-p (a b)
-  "Return non-nil if `helixel-edit' structs A and B share a group.
+  "Return non-nil if `helixel-action' structs A and B share a group.
 Two events are in the same group when they share both
 category and subcat."
   (and a b
-       (eq (helixel-edit-category a) (helixel-edit-category b))
-       (eq (helixel-edit-subcat a) (helixel-edit-subcat b))))
+       (eq (helixel-action-category a) (helixel-action-category b))
+       (eq (helixel-action-subcat a) (helixel-action-subcat b))))
 
 (defun helixel-action--cycle-auto-advance (did-mark first-call)
   "Auto-advance the action cycle when `;' produced no useful change.
@@ -569,13 +565,13 @@ Optional prefix ARG is passed to the underlying commands."
               (helixel-action--cycle-show prev helixel--event-ring)
             (message "At newest"))))
        ((eq helixel--action-pos 0)
-        (if helixel--live-edit
+        (if helixel--live-action
             (progn
               (setq helixel--action-pos nil)
-              (push-mark (car (helixel-edit-mark-region
-                                  helixel--live-edit)) t t)
+              (push-mark (car (helixel-action-mark-region
+                                  helixel--live-action)) t t)
               (message "[live] %s"
-                       (helixel-edit-display-format helixel--live-edit)))
+                       (helixel-action-display-format helixel--live-action)))
           (message "At newest")))
        (t (message "At newest")))
     ;; ; → go back (older)
@@ -591,15 +587,15 @@ Optional prefix ARG is passed to the underlying commands."
           (let ((gpos (helixel-gr-group-start
                        helixel--event-ring helixel--action-pos
                        #'helixel-action--same-group-p)))
-            (push-mark (car (helixel-edit-mark-region
+            (push-mark (car (helixel-action-mark-region
                                 (nth gpos helixel--event-ring))) t t)
             (message "%s"
                      (helixel-action--cycle-display
                       (nth gpos helixel--event-ring)
                       gpos helixel--event-ring))))))
-     (helixel--live-edit
+     (helixel--live-action
       ;; Commit live event first, then show ring[0]
-      (helixel-edit-commit)
+      (helixel-action-commit)
       (let ((pos (helixel-gr-visible-index
                   helixel--event-ring 0
                   #'helixel-action--cycle-visible-p)))
@@ -625,7 +621,7 @@ CATEGORY defaults to `user', SUBCAT defaults to `jump'."
   (let ((cat (or category 'user))
         (sub (or subcat 'jump)))
     (helixel--global-jump-log-push
-     (make-helixel-edit
+     (make-helixel-action
       :category cat
       :subcat sub
       :mark-region (let ((pm (point-marker))) (cons pm (copy-marker pm t)))

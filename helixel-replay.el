@@ -50,7 +50,7 @@
   (origin nil :read-only t)
   ;; Fake-cursor overlay (only set when origin = mc-fake).
   fake-cursor
-  ;; Edit being replayed (helixel-edit struct), if any.
+  ;; Edit being replayed (helixel-action struct), if any.
   edit
   ;; t when this replay is direction-flipped (e.g. `-.').
   reverse-p

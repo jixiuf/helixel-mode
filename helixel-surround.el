@@ -50,7 +50,7 @@
 (require 'cl-lib)
 (require 'helixel-core)
 (require 'helixel-ring)                 ; helixel--tracking-open, live-edit-set
-(require 'helixel-repeat)               ; for helixel--record-edit
+(require 'helixel-repeat)               ; for helixel--record-action
 (require 'helixel-textobj)
 
 (defvar helixel--surround-pairs)
@@ -247,7 +247,7 @@ The prompt shows the old delimiter being replaced."
     (helixel--surround-add (helixel-delimiter-open new-d)
                           (helixel-delimiter-close new-d))
     (helixel--tracking-open 'edit 'surround-replace)
-    (helixel--record-edit 'surround-replace :new-char new-char)
+    (helixel--record-action 'surround-replace :new-char new-char)
      (helixel--sel-push
           (helixel-sel-create
            'surround `(:delimiter ,new-d)
@@ -301,7 +301,7 @@ D is the tag delimiter plist used to locate the tags."
         (user-error "Unknown surround delimiter: %c" char))
       (helixel--surround-add open close)
       (helixel--tracking-open 'edit 'surround-add)
-      (helixel--record-edit 'surround-add :char char)
+      (helixel--record-action 'surround-add :char char)
       (helixel--sel-push
        (helixel-sel-create
         'surround `(:delimiter ,(if is-block
@@ -323,7 +323,7 @@ D is the tag delimiter plist used to locate the tags."
     (let ((tag (read-string "Tag: ")))
       (helixel--surround-add-tag tag)
       (helixel--tracking-open 'edit 'surround-add)
-      (helixel--record-edit 'surround-add-tag :tag tag)
+      (helixel--record-action 'surround-add-tag :tag tag)
       (helixel--sel-push
        (helixel-sel-create
         'surround `(:delimiter ,(helixel--make-tag-delimiter))
@@ -369,7 +369,7 @@ so the user can select a target with one keypress."
             (let ((pos (helixel--surround-delete-delimiter d)))
               (goto-char pos)
               (helixel--tracking-open 'edit 'surround-delete)
-              (helixel--record-edit 'surround-delete)))
+              (helixel--record-action 'surround-delete)))
         (helixel--surround-prompt-target #'helixel-surround-delete "md")))))
 
 (defun helixel-surround-replace ()
@@ -391,7 +391,7 @@ so the user can select a target with one keypress."
                    (goto-char (/ (+ (region-beginning) (region-end)) 2)))
                  (helixel--surround-replace-tag new-tag d)
                  (helixel--tracking-open 'edit 'surround-replace)
-                 (helixel--record-edit 'surround-replace :tag new-tag
+                 (helixel--record-action 'surround-replace :tag new-tag
                                        :surround-type 'tag)
                  (helixel--sel-push
                   (helixel-sel-create
@@ -414,42 +414,42 @@ so the user can select a target with one keypress."
 
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (helixel-edit-payload-get tx :char)))
+             (let ((c (helixel-action-payload-get tx :char)))
                (if c (format "ms[%c]" c) "ms")))
   :moves-point-p nil
   :runner (lambda (tx)
-            (when-let* ((char (helixel-edit-payload-get tx :char))
+            (when-let* ((char (helixel-action-payload-get tx :char))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 
 (helixel-register-op surround-add-tag
   :display (lambda (tx)
-             (let ((tag (helixel-edit-payload-get tx :tag)))
+             (let ((tag (helixel-action-payload-get tx :tag)))
                (if tag (format "mt[%s]" tag) "mt")))
   :moves-point-p nil
   :runner (lambda (tx)
             (helixel--surround-add-tag
-             (helixel-edit-payload-get tx :tag))))
+             (helixel-action-payload-get tx :tag))))
 
 (helixel-register-op surround-delete :display "md"
   :runner (lambda (tx)
             (when-let* ((d (helixel-sel-surround-delimiter
-                           (helixel-edit-sel tx))))
+                           (helixel-action-sel tx))))
               (goto-char (helixel--surround-delete-delimiter d)))))
 
 (helixel-register-op surround-replace
   :display (lambda (tx)
-             (let* ((p (helixel-edit-payload tx))
+             (let* ((p (helixel-action-payload tx))
                     (label (or (plist-get p :tag)
                                (when-let* ((c (plist-get p :new-char)))
                                  (string c)))))
                (if label (format "mr[%s]" label) "mr")))
   :runner (lambda (tx)
-            (let* ((sel-ctx (helixel-edit-sel tx))
+            (let* ((sel-ctx (helixel-action-sel tx))
                    (d (helixel-sel-surround-delimiter sel-ctx))
                    (type (and d (helixel-delimiter-type d)))
-                   (new-char (helixel-edit-payload-get tx :new-char))
-                   (tag (helixel-edit-payload-get tx :tag)))
+                   (new-char (helixel-action-payload-get tx :new-char))
+                   (tag (helixel-action-payload-get tx :tag)))
               (when d
                 (pcase type
                   ('tag

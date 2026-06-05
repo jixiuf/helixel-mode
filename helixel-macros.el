@@ -22,12 +22,12 @@
 ;;
 ;; Command definition macros for helixel-mode.
 ;;
-;; `helixel-with-edit-tracking'  — full wrapper: open + body + commit
+;; `helixel-with-action-tracking'  — full wrapper: open + body + commit
 ;; `helixel-define-command'      — define command with auto-injected tracking
 ;; `helixel-define-operator'     — editing operator (command + op reg)
 ;;
 ;; All macros expand to inline code (zero hooks).  They depend on
-;; `helixel--tracking-open' and `helixel-edit-commit' from
+;; `helixel--tracking-open' and `helixel-action-commit' from
 ;; `helixel-ring', and `helixel-register-op' from `helixel-core'.
 
 ;;; Code:
@@ -38,7 +38,7 @@
 
 ;; ── Full tracking macro: open + body + commit ──
 
-(cl-defmacro helixel-with-edit-tracking ((&key op category subcat)
+(cl-defmacro helixel-with-action-tracking ((&key op category subcat)
                                          &body body)
   "Execute BODY with full event tracking (open → body → commit).
 
@@ -53,7 +53,7 @@ event in an `unwind-protect' so it always finalises even on error."
      (unwind-protect
          (progn ,@body)
        (unless (helixel-replaying-p)
-         (helixel-edit-commit)))))
+         (helixel-action-commit)))))
 
 ;; ── Command definition macro ──
 
@@ -89,7 +89,7 @@ BODY is the command's business logic."
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
-       ;; ── Tag this command so `helixel-edit-commit' can stamp
+       ;; ── Tag this command so `helixel-action-commit' can stamp
        ;; `by-command' on committed edits (used by mc dispatcher).
        ;; Always OVERRIDE `this-command' to this function symbol so
        ;; the stamp is correct even when the outer scope has a stale
@@ -126,7 +126,7 @@ Expands to:
   1. (helixel-register-op OP :display ... :runner (lambda () (NAME)))
   2. (helixel-define-command NAME (:category edit ...) BODY)
 
-The command body SHOULD call (helixel--record-edit OP ...) to record
+The command body SHOULD call (helixel--record-action OP ...) to record
 the edit for \=`.\=` replay."
   (declare (indent 2))
   (let* ((op (plist-get metadata :op))

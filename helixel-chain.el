@@ -25,9 +25,9 @@
 
 ;;; Code:
 
-(require 'helixel-core) ; helixel-edit-create, keyrec helpers
-(require 'helixel-macros)                ; for helixel-with-edit-tracking
-(require 'helixel-repeat)                ; for helixel--last-edit, etc.
+(require 'helixel-core) ; helixel-action-create, keyrec helpers
+(require 'helixel-macros)                ; for helixel-with-action-tracking
+(require 'helixel-repeat)                ; for helixel--last-action, etc.
 
 ;; ── Session state ──
 ;;
@@ -52,9 +52,9 @@ Slots:
                  advance behaviour at replay time.
   INIT-BOUNDS — (BEG . END) markers of the initial region at start,
                  or nil; released on teardown.
-  LAST-EDIT-SNAPSHOT — `helixel--last-edit' at chain-start; used to
+  LAST-EDIT-SNAPSHOT — `helixel--last-action' at chain-start; used to
                        detect the first edit (a different value of
-                       `helixel--last-edit' carrying an :op)."
+                       `helixel--last-action' carrying an :op)."
   active-p edit-phase-p
   move-keys edit-keys
   init-ctx init-bounds
@@ -97,16 +97,16 @@ Skips chain start/end/cancel commands."
 
 (defun helixel--chain-post-cmd ()
   "Post-command-hook: detect first edit, switch from move to edit phase.
-Once `helixel--last-edit' changes AND carries an :op (meaning
-`helixel--record-edit' was called, not a mere movement commit),
+Once `helixel--last-action' changes AND carries an :op (meaning
+`helixel--record-action' was called, not a mere movement commit),
 all subsequent keys go to EDIT-KEYS."
   (let ((s helixel--chain-session))
     (when (and s
                (helixel-chain-session-active-p s)
                (not (helixel-chain-session-edit-phase-p s))
-               helixel--last-edit
-               (helixel-edit-op helixel--last-edit)
-               (not (eq helixel--last-edit
+               helixel--last-action
+               (helixel-action-op helixel--last-action)
+               (not (eq helixel--last-action
                         (helixel-chain-session-last-edit-snapshot s))))
       ;; Move the edit command's own key from move-keys to edit-keys.
       (when (helixel-chain-session-move-keys s)
@@ -121,8 +121,8 @@ all subsequent keys go to EDIT-KEYS."
 For search-initiated chains, positions cursor at `match-beginning'
 before replay, matching the behaviour of the original recording
 where `helixel-insert' calls `(goto-char (region-beginning))'."
-  (let* ((sel (helixel-edit-sel tx))
-         (edit-keys (helixel-edit-payload-get tx :kmacro)))
+  (let* ((sel (helixel-action-sel tx))
+         (edit-keys (helixel-action-payload-get tx :kmacro)))
     (helixel-with-replay-as 'dot
     (when edit-keys
       ;; Reposition cursor at match-beginning for search sel chains.
@@ -140,15 +140,15 @@ where `helixel-insert' calls `(goto-char (region-beginning))'."
 
 (defun helixel--chain-strategy-builder (edit &optional reverse-p)
   "Build a repeat strategy for chain EDIT with optional REVERSE-P.
-Direction flip is delegated to `helixel--maybe-flip-dir-edit'.
+Direction flip is delegated to `helixel--maybe-flip-dir-action'.
 Advance: sel advance + move-keys + edit-keys.
 Apply: edit-keys only.
 Reset: goto marker."
-  (let* ((sel (helixel-edit-sel edit))
+  (let* ((sel (helixel-action-sel edit))
          (kind (and sel (helixel-sel-kind sel)))
          (advance-fn (helixel--kind-advance kind))
-         (move-keys (helixel-edit-payload-get edit :chain-move-keys))
-         (effective-edit (helixel--maybe-flip-dir-edit edit reverse-p)))
+         (move-keys (helixel-action-payload-get edit :chain-move-keys))
+         (effective-edit (helixel--maybe-flip-dir-action edit reverse-p)))
     (make-helixel-repeat-strategy
      :advance (lambda (_edit)
                 (and (or (null advance-fn)
@@ -158,9 +158,9 @@ Reset: goto marker."
                          (execute-kbd-macro move-keys))
                        t)))
      :apply (lambda (_edit)
-              (helixel--execute-edit effective-edit))
+              (helixel--execute-action effective-edit))
      :reset (lambda (_edit)
-              (when-let* ((m (car (helixel-edit-mark-region effective-edit))))
+              (when-let* ((m (car (helixel-action-mark-region effective-edit))))
                 (goto-char (marker-position m))))
      :all-buffer-fn (helixel--kind-all-buffer-fn kind))))
 
@@ -204,7 +204,7 @@ transaction, or `helixel-repeat-chain-cancel' to discard."
          :init-bounds (when (use-region-p)
                         (cons (copy-marker (region-beginning))
                               (copy-marker (region-end))))
-         :last-edit-snapshot helixel--last-edit))
+         :last-edit-snapshot helixel--last-action))
   (deactivate-mark)
   (add-hook 'pre-command-hook #'helixel--chain-pre-cmd t)
   (add-hook 'post-command-hook #'helixel--chain-post-cmd nil t)
@@ -250,16 +250,16 @@ Determines advance behavior from the initial selection context
          (had-content (and macro (> (length macro) 0)))
          (chain-tx nil))
     (when had-content
-      (let ((tx (helixel-edit-create 'chain init-ctx
+      (let ((tx (helixel-action-create 'chain init-ctx
                    :runner #'helixel--repeat-chain-runner
                    :display (format "chain(%d)" (length edit-keys))
                    :kmacro edit-keys
                    :chain-move-keys move-keys)))
         (setq chain-tx tx)
-        (setq helixel--last-edit (helixel-edit-copy tx))
-        (helixel-with-edit-tracking
+        (setq helixel--last-action (helixel-action-copy tx))
+        (helixel-with-action-tracking
             (:op 'chain :category 'edit :subcat 'chain)
-          (helixel--live-edit-set tx))))
+          (helixel--live-action-set tx))))
     ;; Single point of teardown for both success and empty paths.
     (let ((edit-len (length (or edit-keys [])))
           (move-len (length (or move-keys []))))
@@ -275,8 +275,8 @@ Determines advance behavior from the initial selection context
 (defvar helixel-chain-recorded-functions nil
   "Abnormal hook run after a chain is successfully recorded.
 Each function is called with one argument, the new chain
-`helixel-edit'.  Runs synchronously inside
-`helixel-repeat-chain-end' AFTER `helixel--last-edit' has been
+`helixel-action'.  Runs synchronously inside
+`helixel-repeat-chain-end' AFTER `helixel--last-action' has been
 updated to point at the new chain.
 
 Use this hook from integration layers (e.g. `helixel-mc-integrate')

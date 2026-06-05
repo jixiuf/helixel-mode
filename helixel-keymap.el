@@ -406,7 +406,7 @@ used selection management lives here under `s'."
   "P"   #'helixel-mc-skip-previous
   "u"   #'helixel-mc-unmark-next
   "U"   #'helixel-mc-unmark-previous
-  "."   #'helixel-mc-apply-last-edit
+  "."   #'helixel-mc-apply-last-action
   ;; Helix-style selection ops
   ","   #'helixel-mc-clear-all       ; Helix `,' = remove fakes
   "v"   #'helixel-mc-restore-cursors ; like Helix gv

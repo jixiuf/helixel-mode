@@ -142,16 +142,16 @@ can register their own state to ride along."
   "Per-cursor mark history.")
 (helixel-mc-register-cursor-var 'helixel--pending-sel
   "Per-cursor pending selection descriptor (for chain / repeat).")
-(helixel-mc-register-cursor-var 'helixel--last-edit
+(helixel-mc-register-cursor-var 'helixel--last-action
   "Per-cursor last edit transaction (replayed by `.').")
 (helixel-mc-register-cursor-var 'helixel--active-search
   "Per-cursor active search state (pattern + direction).")
 (helixel-mc-register-cursor-var 'helixel--event-ring
   "Per-cursor event ring for `;' cycling.  Each fake builds its
 own private history of motions/edits run AFTER spawn.  Capped
-by `helixel-edit-ring-max'.")
-(helixel-mc-register-cursor-var 'helixel--live-edit
-  "Per-cursor in-progress `helixel-edit' (committed at the
+by `helixel-action-ring-max'.")
+(helixel-mc-register-cursor-var 'helixel--live-action
+  "Per-cursor in-progress `helixel-action' (committed at the
 next `helixel--tracking-open').  Required so each fake's events
 go into its OWN ring rather than the shared buffer-local one.")
 (helixel-mc-register-cursor-var 'helixel--action-pos
@@ -587,7 +587,7 @@ overlay or by checking `helixel-mc-fake-cursor-p' afterwards."
 (defun helixel-mc--leave-cursor (cursor)
   "Snapshot current globals back into CURSOR overlay and repaint.
 After the fake's body ran, the per-cursor variables registered
-in `helixel-mc-cursor-vars' (including `helixel--live-edit' and
+in `helixel-mc-cursor-vars' (including `helixel--live-action' and
 `helixel--event-ring') hold this fake's state — snapshot them
 back into the overlay.  Also re-snap the fake's point/mark and
 repaint its visual overlay."
@@ -611,7 +611,7 @@ without going through the command loop."
 
 ;; ── Edit-replay dispatch ──
 ;;
-;; If `this-command' produced a new `helixel-edit' (stamped via the
+;; If `this-command' produced a new `helixel-action' (stamped via the
 ;; edit's `by-command' slot at record time), dispatch at fakes by
 ;; replaying that edit's runner.  Runners already read their
 ;; decisions from the edit payload (char, register, delimiter,
@@ -619,25 +619,25 @@ without going through the command loop."
 ;; need for per-command `advice-add' or substitute-alist hacks for
 ;; prompt commands like `helixel-replace-char', `helixel-surround-*'.
 
-(defun helixel-mc--fresh-edit-from-real ()
-  "Return the helixel-edit committed by `this-command' at real, or nil.
+(defun helixel-mc--fresh-action-from-real ()
+  "Return the helixel-action committed by `this-command' at real, or nil.
 The check uses the edit's `by-command' stamp set at record time —
 NO `pre-command-hook' snapshot needed (so this works correctly even
 when tests bypass the command loop).
 
 Returns nil when:
-  - `helixel--last-edit' is unset,
+  - `helixel--last-action' is unset,
   - the edit was committed by a DIFFERENT command (leftover),
   - the edit carries no `op' (movement / search commit — not a real edit),
   - `this-command' has a `helixel-mc-prepos' property (those manage
     their own per-fake staging and should NOT replay the edit body)."
-  (when (and (boundp 'helixel--last-edit)
+  (when (and (boundp 'helixel--last-action)
              (symbolp this-command)
              (not (get this-command 'helixel-mc-prepos)))
-    (let ((cur helixel--last-edit))
+    (let ((cur helixel--last-action))
       (when (and cur
-                 (helixel-edit-op cur)
-                 (eq (helixel-edit-by-command cur) this-command))
+                 (helixel-action-op cur)
+                 (eq (helixel-action-by-command cur) this-command))
         cur))))
 
 ;; ── post-command-hook integration ──
@@ -684,9 +684,9 @@ before the next `self-insert-command' broadcast."
   "Post-command hook — dispatch `this-command' at every fake cursor.
 Single-undo-step amalgamation.  Dispatch strategy:
 
-  - If the real cursor committed a fresh `helixel-edit' this command
-    (detected via `helixel-edit-by-command' stamp —
-    see `helixel-mc--fresh-edit-from-real'), replay that edit's
+  - If the real cursor committed a fresh `helixel-action' this command
+    (detected via `helixel-action-by-command' stamp —
+    see `helixel-mc--fresh-action-from-real'), replay that edit's
     runner at each fake.  Runner payload carries decisions so no
     prompt fires at fakes.
   - Otherwise, re-invoke `this-command' at each fake via the
@@ -704,7 +704,7 @@ we're in a keyboard-macro, or `this-command' is whitelisted off."
              (helixel-mc-any-p)
              (helixel-mc--should-run-for-all-p this-command))
     (helixel-with-replay 'mc-batch
-     (let* ((fresh-edit (helixel-mc--fresh-edit-from-real))
+     (let* ((fresh-edit (helixel-mc--fresh-action-from-real))
             (real-cmd this-command)
             (substituted (and (not fresh-edit)
                               (cdr (assq real-cmd
@@ -728,7 +728,7 @@ we're in a keyboard-macro, or `this-command' is whitelisted off."
                         ;; fake via its runner.  Payload carries
                         ;; the prompted decisions so nothing prompts.
                         (helixel-with-replay-as 'dot
-                          (helixel--execute-edit fresh-edit))
+                          (helixel--execute-action fresh-edit))
                       ;; Pure movement / non-edit: re-call command.
                       (helixel-mc--call-interactively cmd))
                   (search-failed (push cursor dead))

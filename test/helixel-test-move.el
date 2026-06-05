@@ -935,10 +935,10 @@ On a single-char symbol at eob, w selects it."
     (goto-char 9)
     
     (helixel-outer-paren)
-    (should (helixel-edit-mark-region helixel--live-edit))
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
+    (should (helixel-action-mark-region helixel--live-action))
     ;; Simulate ; — use stored markers from mark-region
-    (let ((mr (helixel-edit-mark-region helixel--live-edit)))
+    (let ((mr (helixel-action-mark-region helixel--live-action)))
       (push-mark (car mr) t t)
       (goto-char (cdr mr))
       (activate-mark))
@@ -1082,9 +1082,9 @@ On a single-char symbol at eob, w selects it."
     (deactivate-mark)
     (goto-char 2)
     (helixel-forward-function-end)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     ;; Mark using stored mark-region from event
-    (let ((mr (helixel-edit-mark-region helixel--live-edit)))
+    (let ((mr (helixel-action-mark-region helixel--live-action)))
       (push-mark (car mr) t t)
       (goto-char (cdr mr))
       (activate-mark))
@@ -1098,14 +1098,14 @@ On a single-char symbol at eob, w selects it."
      ,(format "Test ; after %s selects the thing." name)
      (with-temp-buffer
        (transient-mark-mode 1)
-       (setq helixel--event-ring nil helixel--live-edit nil
+       (setq helixel--event-ring nil helixel--live-action nil
           helixel--action-pos nil)
        (insert ,buffer-content)
        (deactivate-mark)
        (goto-char ,init-pos)
        (setq last-command nil)
        (call-interactively ,movement-cmd)
-       (should (helixel-edit-mark-region helixel--live-edit))
+       (should (helixel-action-mark-region helixel--live-action))
        ;; Simulate ;
        (helixel--action-cycle)
        (should (use-region-p))
@@ -1135,7 +1135,7 @@ On a single-char symbol at eob, w selects it."
   "Test second ; after mark-thing does action cycle."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-edit nil
+    (setq helixel--event-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "hello world")
     (deactivate-mark)
@@ -1155,7 +1155,7 @@ On a single-char symbol at eob, w selects it."
   (let ((helixel-semicolon-mark-thing nil))
     (with-temp-buffer
       (transient-mark-mode 1)
-      (setq helixel--event-ring nil helixel--live-edit nil
+      (setq helixel--event-ring nil helixel--live-action nil
           helixel--action-pos nil)
       (insert "hello world")
       (deactivate-mark)
@@ -1172,7 +1172,7 @@ On a single-char symbol at eob, w selects it."
   "Test [t; after pair movement marks the enclosing tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-edit nil
+    (setq helixel--event-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<p>\n<div>\nhe\n</div>\n</p>")
     (deactivate-mark)
@@ -1180,7 +1180,7 @@ On a single-char symbol at eob, w selects it."
     (search-forward "he")
     ;; [t from inside <div> content
     (helixel-outer-tag)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the stored bounds
     (helixel--action-cycle)
     (should (use-region-p))
@@ -1192,7 +1192,7 @@ On a single-char symbol at eob, w selects it."
   "Test [t from between inner close and outer close finds the outer tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-edit nil
+    (setq helixel--event-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<p>\n<div>\nhe\n</div>\n</p>")
     (deactivate-mark)
@@ -1200,7 +1200,7 @@ On a single-char symbol at eob, w selects it."
     (goto-char 20)
     ;; [t finds <p>...</p> (the outer enclosing tag)
     (helixel-outer-tag)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the stored bounds (outer <p>)
     (helixel--action-cycle)
     (should (use-region-p))
@@ -1212,14 +1212,14 @@ On a single-char symbol at eob, w selects it."
   "Test {t; marks the inner content of the enclosing tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-edit nil
+    (setq helixel--event-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<p>\ninner\n</p>")
     (deactivate-mark)
     (goto-char 7)
     ;; {t from inside <p> content
     (helixel-inner-outer-tag)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the stored inner bounds
     (helixel--action-cycle)
     (should (use-region-p))
@@ -1231,14 +1231,14 @@ On a single-char symbol at eob, w selects it."
   "Test ]t; marks the current enclosing tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-edit nil
+    (setq helixel--event-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<a>x</a> <b>y</b>")
     (deactivate-mark)
     (goto-char 4)  ; inside <a> content (the "x")
     ;; ]t from inside <a>
     (helixel-next-tag-end)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the current enclosing tag <a>
     (helixel--action-cycle)
     (should (use-region-p))
@@ -1417,7 +1417,7 @@ On a single-char symbol at eob, w selects it."
     (condition-case nil
         (helixel-next-paren-end)
       (error nil))
-    (let ((mr (helixel-edit-mark-region helixel--live-edit)))
+    (let ((mr (helixel-action-mark-region helixel--live-action)))
       (should (= (marker-position (car mr)) (marker-position (cdr mr)))))))
 
 (ert-deftest helixel-test-pair-outer-paren-no-pair ()
@@ -1429,7 +1429,7 @@ On a single-char symbol at eob, w selects it."
     (condition-case nil
         (helixel-outer-paren)
       (error nil))
-    (let ((mr (helixel-edit-mark-region helixel--live-edit)))
+    (let ((mr (helixel-action-mark-region helixel--live-action)))
       (should (= (marker-position (car mr)) (marker-position (cdr mr)))))))
 
 ;;; Block movement (org-mode)
@@ -1445,7 +1445,7 @@ On a single-char symbol at eob, w selects it."
     (condition-case nil
         (helixel-outer-block)
       (error nil))
-    (when-let* ((mr (helixel-edit-mark-region helixel--live-edit)))
+    (when-let* ((mr (helixel-action-mark-region helixel--live-action)))
       (should (<= (marker-position (car mr)) 10)))))
 
 (ert-deftest helixel-test-pair-next-block-end-org ()
@@ -1459,7 +1459,7 @@ On a single-char symbol at eob, w selects it."
     (condition-case nil
         (helixel-next-block-end)
       (error nil))
-    (when-let* ((mr (helixel-edit-mark-region helixel--live-edit)))
+    (when-let* ((mr (helixel-action-mark-region helixel--live-action)))
       (should (>= (marker-position (cdr mr)) 10)))))
 
 ;;; ; mark-thing for paragraph/sentence/function movements
@@ -1473,7 +1473,7 @@ On a single-char symbol at eob, w selects it."
     (goto-char 1)
     (setq helixel--action-pos nil)
     (helixel-forward-paragraph-start)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     (helixel--action-cycle)
     (should (use-region-p))))
 
@@ -1486,7 +1486,7 @@ On a single-char symbol at eob, w selects it."
     (goto-char 1)
     (setq helixel--action-pos nil)
     (helixel-forward-sentence-end)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     (helixel--action-cycle)
     (should (use-region-p))))
 
@@ -1500,7 +1500,7 @@ On a single-char symbol at eob, w selects it."
     (goto-char 1)
     (setq helixel--action-pos nil)
     (helixel-forward-function-end)
-    (should (helixel-edit-mark-region helixel--live-edit))
+    (should (helixel-action-mark-region helixel--live-action))
     (helixel--action-cycle)
     (should (use-region-p))))
 

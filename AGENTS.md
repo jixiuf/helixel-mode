@@ -58,8 +58,9 @@
 helixel-core (cl-lib only, zero helixel deps)
   │
   ├── helixel-ring (→ core)
-  │     ├── helixel-macros (→ core + ring)
-  │     └── helixel-action (→ core + ring)
+  │     └── helixel-macros (→ core + ring)
+  │
+  ├── helixel-insert-record (→ core)
   │
   ├── helixel-textobj-engine (→ core)
   │     ├── helixel-textobj-pair (→ core + textobj-engine)
@@ -71,14 +72,16 @@ helixel-core (cl-lib only, zero helixel deps)
   │     └── helixel-textobj (facade: requires the four above)
   │     └── helixel-surround (→ core + ring + repeat + textobj)
   │
-  ├── helixel-repeat (→ core + action)   [action→ring→core]
-  │     └── helixel-chain (→ core + macros + repeat)
+  ├── helixel-repeat (→ core + ring + insert-record)
+  │     └── helixel-chain (→ core + ring + macros + repeat)
   │
-  ├── helixel-mc-core (→ core)
-  │     ├── helixel-mc-spawn (→ core + mc-core)
+  ├── helixel-mc-core (→ core + ring)
+  │     ├── helixel-mc-targets (→ core + mc-core)
+  │     │     └── helixel-mc-spawn (→ core + mc-core + mc-targets)
   │     └── helixel-mc-integrate (→ core + mc-core + repeat + chain)
   │
-  └── helixel-state (→ core + ring + macros + repeat + textobj + surround)
+  └── helixel-state (→ core + ring + macros + repeat
+                      + textobj + surround)
         │
         ├── helixel-move (→ state + macros)
         │     │

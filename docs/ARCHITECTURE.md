@@ -354,7 +354,7 @@ User presses `.`
   │
   ▼
 helixel-repeat.el:helixel-repeat-edit
-  ├── Resolves helixel--last-tx (global, cross-buffer)
+  ├── Resolves helixel--last-tx (per-buffer)
   ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
   │
   ▼
@@ -387,7 +387,8 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-as 'dot)
 Key invariants:
 - Both `helixel--inhibit-repeat-record` and `helixel--inhibit-action-track`
   are bound to t during replay (via `helixel-with-replay-as').
-- `helixel--last-tx` is NOT buffer-local — `.` replays cross-buffer.
+- `helixel--last-tx` IS buffer-local (`defvar-local`).  `.' replays
+  the last edit in the current buffer only.
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.
 - All iterations within a single `.` press are wrapped in one undo step.
@@ -454,6 +455,16 @@ Why rejected:
   for keeping the split) demonstrated that the split is a CONTAINER
   that absorbs architectural changes, not a CONSTRAINT that obstructs
   them.
+
+Costs accepted with this decision (documented explicitly so future
+readers understand the trade-off):
+1. `helixel-action--ensure-tx' silently allocates a fresh tx inside an
+   action on first `setf' of any tx-field — mutation on an
+   otherwise-immutable struct.
+2. Ring commit triggers a 3-level deep copy (action → tx → sel → ctx
+   plist).
+3. Polymorphic accessors dispatch invisibly — reading
+   `(helixel-action-op x)' does not reveal `x's type at the call site.
 
 ### 2. Context-aware runners `(lambda (tx &optional context) ...)` — REJECTED
 

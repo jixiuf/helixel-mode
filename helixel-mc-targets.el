@@ -50,7 +50,7 @@
 ;; Special vars from helixel-repeat / helixel-search — must be `defvar'
 ;; so the `let' binding below is treated as dynamic, not lexical.
 (defvar helixel--pending-sel)
-(defvar helixel--last-action)
+(defvar helixel--last-tx)
 (defvar helixel--live-action)
 (defvar helixel--active-search)
 (defvar helixel--event-ring)
@@ -137,13 +137,11 @@ Returns count of fake cursors created."
 ;; ── Advance-walk fallback ──
 
 (defun helixel-mc--make-dummy-tx (sel)
-  "Build a minimal `helixel-action' carrying SEL for advance fns."
+  "Build a minimal `helixel-tx' carrying SEL for advance fns."
   (let ((m (point-marker)))
-    (make-helixel-action
+    (make-helixel-tx
      :sel sel :op nil :payload nil
-     :mark-region (cons m (copy-marker m t))
-     :timestamp (float-time)
-     :buffer (current-buffer))))
+     :mark-region (cons m (copy-marker m t)))))
 
 (defun helixel-mc--walk-advance (sel)
   "Walk SEL's :advance function from `point-min', collect target pairs.
@@ -155,11 +153,11 @@ next iteration lands on a fresh target.  Bounded by
 `helixel-mc-max-cursors' to avoid runaways.
 
 Fully isolates helixel's event / selection / tracking globals so
-the walk does NOT pollute `helixel--last-action',
+the walk does NOT pollute `helixel--last-tx',
 `helixel--pending-sel', `helixel--live-action' or
 `helixel--raw-selection-type'.  Without this, textobj advance
 functions (which internally re-run the textobj command and
-capture `this-command') would clobber `helixel--last-action'
+capture `this-command') would clobber `helixel--last-tx'
 with a sel whose `:command' is the outer mc command (e.g.
 `helixel-mc-toggle' with an accumulated `:count' equal to the
 number of walk iterations), breaking dot-repeat at fake cursors."

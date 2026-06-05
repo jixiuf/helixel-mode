@@ -32,44 +32,49 @@
 ;;; Event commit basics
 
 (ert-deftest helixel-test-ring-commit-basic ()
-  "`helixel-action-commit' pushes live-event to ring and sets last-event."
+  "`helixel-action-commit' pushes live-event to ring (movement: no tx)."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil))
+        (helixel--last-tx nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
       (let ((entry (helixel-action-commit)))
         (should entry)
         (should (helixel-action-p entry))
         (should (= (length helixel--event-ring) 1))
-        (should (eq (car helixel--event-ring) helixel--last-action))
-        (should (eq entry helixel--last-action))
+        (should (eq (car helixel--event-ring) entry))
+        ;; Movement has no tx — last-tx unchanged.
+        (should (null helixel--last-tx))
         (should (null helixel--live-action))))))
 
 (ert-deftest helixel-test-ring-commit-nil-live ()
   "`helixel-action-commit' with nil live-event returns nil."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil))
+        (helixel--last-tx nil))
     (should (null (helixel-action-commit)))
     (should (null helixel--event-ring))
-    (should (null helixel--last-action))))
+    (should (null helixel--last-tx))))
 
 (ert-deftest helixel-test-ring-commit-sets-last-event ()
-  "After commit, `helixel--last-action' points to committed entry."
+  "After committing an EDIT (with tx), `helixel--last-tx' points to its tx.
+Movement commits leave `helixel--last-tx' unchanged."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil))
+        (helixel--last-tx nil))
     (helixel-test-with-buffer "hello world"
-      (helixel--tracking-open 'movement 'line)
-      (let ((e1 (helixel-action-commit)))
+      (helixel--tracking-open 'edit 'kill 'kill)
+      (let* ((e1 (helixel-action-commit))
+             (tx1 (helixel-action-tx e1)))
         (should e1)
-        (should (eq helixel--last-action e1))
-        (helixel--tracking-open 'movement 'char)
-        (let ((e2 (helixel-action-commit)))
+        (should tx1)
+        (should (eq helixel--last-tx tx1))
+        (helixel--tracking-open 'edit 'change 'change)
+        (let* ((e2 (helixel-action-commit))
+               (tx2 (helixel-action-tx e2)))
           (should e2)
-          (should (eq helixel--last-action e2))
-          (should (not (eq e1 e2)))
+          (should (eq helixel--last-tx tx2))
+          (should (not (eq tx1 tx2)))
           (should (= (length helixel--event-ring) 2)))))))
 
 ;;; Dedup
@@ -78,7 +83,7 @@
   "Committing same event twice in a row pushes only once."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil))
+        (helixel--last-tx nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
       (let ((sel (helixel-sel-create 'line '(:dir forward :count 1)
@@ -103,7 +108,7 @@
   "Different ops are NOT deduped."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil))
+        (helixel--last-tx nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
       (setf (helixel-action-op helixel--live-action) 'kill)
@@ -119,7 +124,7 @@
   "Events with different sel but same op/payload are still deduped\n(sel content is compared via `helixel-sel-equal-p')."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil))
+        (helixel--last-tx nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
       (let ((sel (helixel-sel-create 'line '(:dir forward :count 2)
@@ -143,7 +148,7 @@
   "Event ring respects `helixel-action-ring-max' truncation."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil)
+        (helixel--last-tx nil)
         (helixel-action-ring-max 3))
     (helixel-test-with-buffer "hello"
       (dotimes (i 5)
@@ -164,7 +169,7 @@
   "Evicted entries have their markers released."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil)
+        (helixel--last-tx nil)
         (helixel-action-ring-max 1))
     (helixel-test-with-buffer "hello"
       (helixel--tracking-open 'movement 'char)
@@ -184,7 +189,7 @@
   "Event commit also pushes to global jump log."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil)
+        (helixel--last-tx nil)
         (helixel--global-jump-log nil)
         (helixel--jump-pos nil))
     (helixel-test-with-buffer "hello world"
@@ -197,7 +202,7 @@
   "Jump log deduplicates on same content (same category + marker position)."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
-        (helixel--last-action nil)
+        (helixel--last-tx nil)
         (helixel--global-jump-log nil)
         (helixel--jump-pos nil))
     (helixel-test-with-buffer "hello world"

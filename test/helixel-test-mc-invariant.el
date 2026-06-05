@@ -5,7 +5,7 @@
 ;; Smoke tests for the mc dispatch contract:
 ;;
 ;;   1. Per-cursor helixel vars (`helixel--pending-sel',
-;;      `helixel--last-action', `helixel--active-search',
+;;      `helixel--last-tx', `helixel--active-search',
 ;;      `helixel--event-ring', `helixel--live-action',
 ;;      `helixel--action-pos') are restored to their pre-dispatch
 ;;      values by `helixel-mc-with-each-cursor', and per-fake
@@ -32,7 +32,7 @@ real cursor's bindings of any registered per-cursor var."
     (helixel-mc-create-fake-cursor 5)   ; on 'd'
     (helixel-mc-create-fake-cursor 9)   ; on 'h'
     (let ((helixel--pending-sel  'REAL-SEL)
-          (helixel--last-action   'REAL-EVT)
+          (helixel--last-tx   'REAL-EVT)
           (helixel--active-search 'REAL-SEARCH)
           (helixel--event-ring   '(real-evt))
           (helixel--live-action   'REAL-LIVE)
@@ -40,14 +40,14 @@ real cursor's bindings of any registered per-cursor var."
       ;; Per-fake mutation
       (helixel-mc-with-each-cursor
         (setq helixel--pending-sel   'FAKE-SEL
-              helixel--last-action    'FAKE-EVT
+              helixel--last-tx    'FAKE-EVT
               helixel--active-search 'FAKE-SEARCH
               helixel--event-ring    '(fake-evt)
               helixel--live-action    'FAKE-LIVE
               helixel--action-pos    99))
       ;; Real cursor's bindings untouched
       (should (eq helixel--pending-sel   'REAL-SEL))
-      (should (eq helixel--last-action    'REAL-EVT))
+      (should (eq helixel--last-tx    'REAL-EVT))
       (should (eq helixel--active-search 'REAL-SEARCH))
       (should (equal helixel--event-ring '(real-evt)))
       (should (eq helixel--live-action    'REAL-LIVE))

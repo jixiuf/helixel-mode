@@ -27,7 +27,7 @@
 ;;                               dispatcher.  Nothing else to do.
 ;;   * dot-repeat (`.')        — whitelisted ON: each cursor runs
 ;;                               `helixel-repeat-edit' with its own
-;;                               snapshotted `helixel--last-action'.
+;;                               snapshotted `helixel--last-tx'.
 ;;   * repeat-selection (`,')  — same.
 ;;   * chain end               — `:after' advice: if any fake cursors,
 ;;                               propagate the newly built chain
@@ -45,7 +45,7 @@
 (require 'helixel-repeat)
 (require 'helixel-chain)
 
-(defvar helixel--last-action)
+(defvar helixel--last-tx)
 ;; defined in helixel-last-edit.el (loaded transitively via
 ;; helixel-mc-core → ...; explicit defvar here keeps byte-compile happy).
 
@@ -64,7 +64,7 @@
 ;; `helixel-repeat-edit-function' hook (set up in
 ;; `helixel-multi-cursor-mode' enable below) so that whenever fake
 ;; cursors exist, both the real-cursor invocation AND the per-fake
-;; dispatches collapse to a single `helixel--execute-action' (no
+;; dispatches collapse to a single `helixel-tx-replay' (no
 ;; advance loop).  All N applications are then amalgamated into
 ;; one undo step by the dispatcher's `undo-amalgamate-change-group'
 ;; wrapper.
@@ -72,16 +72,16 @@
 (defun helixel-mc--repeat-edit-apply-only (raw-prefix)
   "Hook-impl for `helixel-repeat-edit-function' under mc.
 Return non-nil (handled) when `helixel-multi-cursor-mode' is on AND
-fake cursors exist; run `helixel--execute-action' once at point
+fake cursors exist; run `helixel-tx-replay' once at point
 instead of the full advance + apply loop.  Return nil to fall
 through to the default `.' otherwise.  RAW-PREFIX is ignored in
 the override path — mc dispatches the same edit at each fake."
   (ignore raw-prefix)
   (when (and (bound-and-true-p helixel-multi-cursor-mode)
              (helixel-mc-any-p)
-             helixel--last-action)
+             helixel--last-tx)
     (helixel-with-replay-as 'dot
-      (helixel--execute-action helixel--last-action))
+      (helixel-tx-replay helixel--last-tx))
     t))
 
 ;; Install / uninstall the override on mc-mode toggle.
@@ -134,29 +134,29 @@ the override path — mc dispatches the same edit at each fake."
 ;; ── Chain end: broadcast the new chain tx ──
 
 (defun helixel-mc--broadcast-last-event ()
-  "Snapshot `helixel--last-action' into every fake cursor's overlay.
+  "Snapshot `helixel--last-tx' into every fake cursor's overlay.
 Call after building a new chain transaction so subsequent `.' at
 each fake cursor replays the chain (not the pre-chain edit)."
   (dolist (ov (helixel-mc-all-cursors))
-    (setf (helixel-cs-last-action (overlay-get ov 'helixel-cs)) helixel--last-action)))
+    (setf (helixel-cs-last-action (overlay-get ov 'helixel-cs)) helixel--last-tx)))
 
 (defun helixel-mc--apply-chain-once ()
-  "Execute `helixel--last-action' once at every fake cursor.
-Assumes the current `helixel--last-action' is a chain transaction
+  "Execute `helixel--last-tx' once at every fake cursor.
+Assumes the current `helixel--last-tx' is a chain transaction
 \(or any replayable edit).  Wraps the batch in one undo step."
-  (when (and helixel-multi-cursor-mode helixel--last-action)
+  (when (and helixel-multi-cursor-mode helixel--last-tx)
     (helixel-with-replay-as 'mc-batch
-      (let ((tx helixel--last-action))
+      (let ((tx helixel--last-tx))
         (undo-amalgamate-change-group
           (helixel-mc-with-each-cursor
             (helixel-with-replay-as 'dot
-              (helixel--execute-action tx))))))))
+              (helixel-tx-replay tx))))))))
 
 (defun helixel-mc--on-chain-recorded (chain-tx)
   "Hook impl: broadcast a newly-recorded CHAIN-TX to all fake cursors.
 Runs from `helixel-chain-recorded-functions' inside
 `helixel-repeat-chain-end' after the new chain has been committed
-to `helixel--last-action'.  During chain recording, the per-command
+to `helixel--last-tx'.  During chain recording, the per-command
 broadcast at `post-command-hook' already applied every keystroke at
 every fake cursor live, so the chain TX is just stored for later
 `.' replay — we do NOT re-run it here (that would double the edit
@@ -253,14 +253,14 @@ Called from `helixel-mode-off-hook'."
 
 ;;;###autoload
 (defun helixel-mc-apply-last-action ()
-  "Apply `helixel--last-action' once at every fake cursor.
+  "Apply `helixel--last-tx' once at every fake cursor.
 Useful when you spawned cursors AFTER an edit and want to retro-
 fit it onto the new positions.  Acts on the real cursor's
-`helixel--last-action' so cursors all replay the SAME edit."
+`helixel--last-tx' so cursors all replay the SAME edit."
   (interactive)
   (unless (helixel-mc-any-p)
     (user-error "No fake cursors"))
-  (unless helixel--last-action
+  (unless helixel--last-tx
     (user-error "No edit to apply"))
   (helixel-mc--broadcast-last-event)
   (helixel-mc--apply-chain-once))

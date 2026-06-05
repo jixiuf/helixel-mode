@@ -66,7 +66,7 @@ Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
   "The currently in-progress `helixel-action'.
 Set at command start, committed to ring when complete.")
 
-;; `helixel--last-action' is defined in helixel-core.el.
+;; `helixel--last-tx' is defined in helixel-core.el.
 ;; It is available transitively through the require chain.
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
@@ -94,7 +94,7 @@ Releases markers of evicted entries to prevent leaks."
 Deep-copies the event (marker + sel) so ring entries are independent.
 Deduplicates against the ring front — same (op sel payload) skips push.
 Also mirrors to `helixel--global-jump-log'.
-Sets `helixel--last-action' to the committed entry.
+Sets `helixel--last-tx' to the committed entry.
 Returns the committed entry or nil."
   (when helixel--live-action
     ;; Sync pending-sel into the live-event so movement/search
@@ -124,7 +124,11 @@ Returns the committed entry or nil."
                     entry (car helixel--event-ring)))
         (push entry helixel--event-ring)
         (helixel-action--ring-cap))
-      (setq helixel--last-action entry)
+      ;; `helixel--last-tx' should be the embedded TX (when present),
+      ;; not the entire action.  Pure movement actions have nil tx —
+      ;; in that case, leave last-tx alone (preserve the previous edit).
+      (when (helixel-action-tx entry)
+        (setq helixel--last-tx (helixel-action-tx entry)))
       (helixel--global-jump-log-push entry)
       (setq helixel--live-action nil)
       entry)))
@@ -148,16 +152,11 @@ and clears the live state."
   (helixel-action-commit))
 
 (defun helixel--live-action-set (tx)
-  "Set edit details from TX on `helixel--live-action'."
-  (when (and helixel--live-action (helixel-action-p tx))
-    (setf (helixel-action-op helixel--live-action) (helixel-action-op tx))
-    (setf (helixel-action-sel helixel--live-action) (helixel-action-sel tx))
-    (setf (helixel-action-payload helixel--live-action)
-          (helixel-action-payload tx))
-    (setf (helixel-action-runner helixel--live-action)
-          (helixel-action-runner tx))
-    (when-let* ((disp (helixel-action-display tx)))
-      (setf (helixel-action-display helixel--live-action) disp))))
+  "Attach TX to `helixel--live-action' and lift its display, if any.
+TX is a `helixel-tx' produced by `helixel-tx-create' (or equivalent).
+No-op if no live action or TX isn't a tx."
+  (when (and helixel--live-action (helixel-tx-p tx))
+    (setf (helixel-action-tx helixel--live-action) tx)))
 
 ;; ── Unified entry point: open event (commit prev, create new) ──
 
@@ -176,13 +175,13 @@ Does NOT commit the new event — caller is responsible for eventual commit."
     (helixel-action-commit)
     (setq helixel--live-action
           (make-helixel-action
-           :op op
            :category category
            :subcat subcat
            :mark-region (let ((pm (point-marker)))
                            (cons pm (copy-marker pm t)))
            :timestamp (float-time)
-           :buffer (current-buffer))
+           :buffer (current-buffer)
+           :tx (when op (make-helixel-tx :op op)))
           helixel--action-pos nil)))
 
 ;; ----------------------------------------------------------------------

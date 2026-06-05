@@ -29,7 +29,7 @@
 ;;
 ;; Architecture:
 ;;   Selection commands  → set helixel--pending-sel (selection descriptor)
-;;   Editing commands    → helixel--record-action → helixel--last-action + ring
+;;   Editing commands    → helixel--record-action → helixel--last-tx + ring
 ;;   `.'                 → helixel-repeat-edit → sel-recreate + op-runner
 ;;
 ;; Both selection recreation and op execution use the `helixel-sel' struct
@@ -132,7 +132,7 @@ return EDIT unchanged."
          (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
     (if (and effective-reverse sel flip-fn)
         (let* ((reversed-sel (funcall flip-fn sel))
-               (new-edit (helixel-action-copy edit)))
+               (new-edit (helixel-tx-copy edit)))
           (setf (helixel-action-sel new-edit) reversed-sel)
           new-edit)
       edit)))
@@ -183,9 +183,9 @@ the advance just recreates the selection at the current position
                 (error nil)))))))
     (make-helixel-repeat-strategy
      :advance (lambda (_ed) (funcall advance-fn effective-edit))
-     :apply   (lambda (_ed) (helixel--execute-action effective-edit))
+     :apply   (lambda (_ed) (helixel-tx-replay effective-edit))
      :reset   (lambda (_ed)
-                (when-let* ((m (car (helixel-action-mark-region
+                (when-let* ((m (car (helixel-tx-mark-region
                                        effective-edit))))
                   (goto-char (marker-position m))))
      :all-buffer-fn (helixel--kind-all-buffer-fn kind)
@@ -289,10 +289,10 @@ to extract :change-text.")
   "Record edit OPERATOR with current selection context and EXTRA payload.
 Pops `helixel--pending-sel' via `helixel--sel-pop' (consumes the
 pending selection).  Looks up the runner and display from the operator
-registry and stores them in the transaction so `helixel--execute-action'
+registry and stores them in the transaction so `helixel-tx-replay'
 can dispatch without registry lookups.
-Builds a transaction via `helixel-action-create', pushes it onto
-the event ring, and stores the most recent edit in `helixel--last-action'.
+Builds a transaction via `helixel-tx-create', pushes it onto
+the event ring, and stores the most recent edit in `helixel--last-tx'.
 Also notifies the event ring so `;' jumping picks up the new edit.
 
 NOTE: Caller is responsible for calling `helixel--tracking-open' first.
@@ -301,20 +301,23 @@ The `helixel-define-command' macro handles this automatically."
               defining-kbd-macro)
     (let* ((pop-sel (helixel--sel-pop))
            (runner (helixel--op-runner operator))
-           (tx (apply #'helixel-action-create operator
+           (tx (apply #'helixel-tx-create operator
                       pop-sel
                       :runner runner
                       extra)))
-      (let ((new-tx (helixel-action-copy tx)))
-        (setf (helixel-action-display new-tx)
-              (helixel--op-display operator tx))
+      (let ((new-tx (helixel-tx-copy tx)))
+        ;; Pre-compute and stash display on the live action (tx-replay
+        ;; itself doesn't need display, but the action ring formatter does).
+        (when helixel--live-action
+          (setf (helixel-action-display helixel--live-action)
+                (helixel--op-display operator tx)))
         (setq tx new-tx))
       (setq helixel--repeat-permanent-flip nil)
       (helixel--live-action-set tx)
       ;; Always set last-event so callers that skip tracking-open
       ;; (tests, programmatic use) still have a valid edit to replay.
       ;; `helixel-action-commit' may be a no-op when live-event is nil.
-      (setq helixel--last-action tx)
+      (setq helixel--last-tx tx)
       (helixel-action-commit))))
 
 
@@ -350,7 +353,7 @@ OP-MOVES-POINT chooses the stepping algorithm:
           (deactivate-mark)
           (helixel--recreate-selection sel)
           (unless preview-p
-            (helixel--execute-action tx))
+            (helixel-tx-replay tx))
           (if (not op-moves-point)
               (progn
                 (when (/= (forward-line dir) 0)
@@ -392,7 +395,7 @@ For chain ops, does a single pass from the buffer edge."
          (op (helixel-action-op edit))
          (op-moves-point (helixel--op-moves-point-p op))
          (reverse-p (helixel-repeat-prefix-reverse-p prefix))
-         (marker (car (helixel-action-mark-region edit)))
+         (marker (car (helixel-tx-mark-region edit)))
          (chain-p (eq op 'chain)))
     (if chain-p
         (let* ((dir (if reverse-p -1
@@ -402,7 +405,7 @@ For chain ops, does a single pass from the buffer edge."
           (save-excursion
             (goto-char start)
             (unless (helixel--blank-line-p)
-              (helixel--execute-action edit)))
+              (helixel-tx-replay edit)))
           ;; Chain ops use line-stepping algorithm regardless.
           (setq cnt (helixel--repeat-line-pass
                      edit sel nil
@@ -464,7 +467,7 @@ moment the user moves point (the equality check in
 Like \=`N\=` for search, \=`-.\=` permanently reverses dot-repeat direction.
 No-op for movement, textobj, or nil selections.
 Returns t on success, nil otherwise."
-  (when-let* ((tx helixel--last-action)
+  (when-let* ((tx helixel--last-tx)
               (sel (helixel-action-sel tx))
               (kind (helixel-sel-kind sel)))
     (when (memq kind '(line search))
@@ -478,7 +481,7 @@ Returns t on success, nil otherwise."
   "Common setup for `helixel-repeat-edit' and `helixel-repeat-selection'.
 Takes RAW-PREFIX (the raw prefix argument from `interactive').
 Gets the last edit transaction (falling back to the event ring if
-`helixel--last-action' is not an edit), parses the prefix argument,
+`helixel--last-tx' is not an edit), parses the prefix argument,
 handles permanent direction flip, and resets search-advance state.
 
 Returns (TX PREFIX SAVED-STATE) where:
@@ -487,7 +490,7 @@ Returns (TX PREFIX SAVED-STATE) where:
   SAVED-STATE  — previous `helixel--current-state'
 
 Signals `user-error' when no edit is available."
-  (let ((tx helixel--last-action))
+  (let ((tx helixel--last-tx))
     (unless tx
       (user-error "No previous edit"))
     ;; Fall back to most recent edit in ring if last-event is
@@ -548,7 +551,7 @@ repeats in the new direction.  `-.' again flips back.
 
 All iterations are amalgamated into a single undo step."
   (interactive "P")
-  (when (and executing-kbd-macro (not helixel--last-action))
+  (when (and executing-kbd-macro (not helixel--last-tx))
     (user-error "No previous edit to repeat (kmacro playback)"))
   (cl-destructuring-bind (tx prefix saved-state)
       (helixel--repeat-setup raw-prefix)
@@ -572,19 +575,19 @@ All iterations are amalgamated into a single undo step."
                     (:all-buffer
                      (if sel
                          (helixel--repeat-all-buffer strategy tx prefix)
-                       (helixel--execute-action tx)))
+                       (helixel-tx-replay tx)))
                     (:all-dir
                      (if sel
                          (helixel--repeat-all-dir strategy tx)
-                       (helixel--execute-action tx)))
+                       (helixel-tx-replay tx)))
                     (:n-times
                      (if use-preview
                          (dotimes (_ (helixel-repeat-prefix-n prefix))
-                           (helixel--execute-action tx))
+                           (helixel-tx-replay tx))
                        (helixel--repeat-n strategy tx
                                           (helixel-repeat-prefix-n prefix))))
                     (:preview
-                     (helixel--execute-action tx)))))
+                     (helixel-tx-replay tx)))))
             ((error quit)
              (message "helixel-repeat-edit aborted: %s"
                       (error-message-string err))))
@@ -642,7 +645,7 @@ automatically invalidates the preview."
 (defun helixel-repeat-edit-pick ()
   "Choose a past edit from the event ring and replay it.
 Scans `helixel--event-ring' for entries with an :op.
-The chosen event's edit data becomes the new `helixel--last-action'."
+The chosen event's edit data becomes the new `helixel--last-tx'."
   (interactive)
   (let* ((edit-entries
           (cl-loop for event in helixel--event-ring
@@ -668,11 +671,11 @@ The chosen event's edit data becomes the new `helixel--last-action'."
            (event (cdr (assoc choice items))))
       (when event
         ;; Reconstruct tx from event.  Payload keys are spread via apply.
-        ;; helixel-action-create signature: (op sel-ctx &rest payload-kv)
+        ;; helixel-tx-create signature: (op sel-ctx &rest payload-kv)
         ;; so sel-ctx is the second positional arg, then
         ;; remaining payload plist keys are spread via apply.
         (helixel--update-last-event
-         (apply #'helixel-action-create
+         (apply #'helixel-tx-create
                 (helixel-action-op event)
                 (helixel-action-sel event)
                 :display (helixel-action-display-format event)
@@ -681,7 +684,7 @@ The chosen event's edit data becomes the new `helixel--last-action'."
         (helixel-repeat-edit)))))
 
 (defun helixel-repeat-debug ()
-  "Pretty-print `helixel--last-action' and edit events in the event ring."
+  "Pretty-print `helixel--last-tx' and edit events in the event ring."
   (interactive)
   (require 'pp)
   (let* ((events (cl-loop for e in helixel--event-ring
@@ -692,12 +695,12 @@ The chosen event's edit data becomes the new `helixel--last-action'."
       (let ((inhibit-read-only t))
         (erase-buffer)
         (emacs-lisp-mode)
-        (insert ";; helixel--last-action (display: "
-                (or (and helixel--last-action
-                         (helixel-action-format helixel--last-action))
+        (insert ";; helixel--last-tx (display: "
+                (or (and helixel--last-tx
+                         (helixel-action-format helixel--last-tx))
                     "<none>")
                 ")\n")
-        (pp helixel--last-action (current-buffer))
+        (pp helixel--last-tx (current-buffer))
         (insert "\n;; Edit events in event ring ("
                 (number-to-string (length events))
                 " entries):\n")

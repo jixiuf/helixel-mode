@@ -4,7 +4,7 @@
 
 | File | Role |
 |------|------|
-| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-action`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
 | `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
@@ -107,7 +107,7 @@ Notes:
 - `helixel--replace-region` lives in `helixel-editing.el`.
 - `helixel--delete-selection` lives in `helixel-editing.el` (moved from state.el in Phase 5).
 - `helixel--swap-source-type` lives in `helixel-core.el`.
-- `helixel--last-action` lives in `helixel-core.el` (buffer-local).
+- `helixel--last-tx` lives in `helixel-core.el` (buffer-local).
   Every module that requires `helixel-core` can read/write the most recent transaction.
 - `declare-function` counts are minimal and only for third-party packages:
   - `helixel-keymap.el`: 7 (flymake, eglot)
@@ -136,11 +136,27 @@ Notes:
 ;;   insert-selection-*  :cursor-offset
 ;;   insert-search-offset :offset
 
-### helixel-action (unified transaction and ring storage)
+### helixel-tx (replay transaction)
 ```elisp
-(cl-defstruct helixel-action op sel payload runner mark-region
-              category subcat display timestamp buffer)
+(cl-defstruct helixel-tx op sel payload runner mark-region display)
 ```
+Immutable, position-agnostic.  Carries everything needed to re-execute
+an edit at a different position.  Stored in `helixel--last-tx' for `.'
+and `,' replay.
+
+### helixel-action (history/ring event)
+```elisp
+(cl-defstruct helixel-action category subcat mark-region display
+              timestamp buffer by-command tx)
+```
+Lightweight event recorded in `helixel--event-ring' and the global
+jump log.  For edits, the `tx' slot carries a `helixel-tx'.  Pure
+movement / search / state actions have `tx = nil'.
+
+Polymorphic helpers `helixel-action-op'/-sel/-payload/-runner accept
+either struct — on a `helixel-tx' they read directly; on a
+`helixel-action' they delegate to its embedded tx.  Setters auto-allocate
+a tx on actions if none exists.
 
 ### helixel-repeat-strategy (dot-repeat strategy, lives in `helixel-repeat.el`)
 ```elisp
@@ -169,7 +185,7 @@ Notes:
 (helixel--sel-pop)                  → sel|nil  ; edit cmds pop
 
 ;; ── Transaction ──
-(helixel-action-create op sel &rest kv) → struct
+(helixel-tx-create op sel &rest kv) → struct
   ;; Special kv: :runner fn, :display str|fn — rest becomes :payload
 (helixel-action-op tx)
 (helixel-action-sel tx)
@@ -177,7 +193,7 @@ Notes:
 (helixel-action-runner tx)
 (helixel-action-mark-region tx)
 (helixel-action-display tx)
-(helixel-action-with-payload tx k v)  → new tx with payload entry added
+(helixel-tx-with-payload tx k v)  → new tx with payload entry added
 (helixel-action-copy tx)              → shallow copy
 
 ;; ── Event ──
@@ -206,7 +222,7 @@ Notes:
 
 ;; ── Repeat ──
 (helixel--record-action op &rest extra)  ; stores tx + commits event
-(helixel--execute-action tx)             ; calls :runner on tx
+(helixel-tx-replay tx)             ; calls :runner on tx
 (helixel-repeat-edit &optional prefix) ; bound to .
 (helixel-repeat-selection &optional prefix) ; bound to ,
 (helixel--build-strategy edit &optional reverse-p) → strategy struct
@@ -253,11 +269,11 @@ Stale .elc silently hides changes. `rm -f *.elc && make compile` before testing.
 - First line must be a complete sentence
 - Function args must appear in docstring (uppercase)
 
-### helixel--last-action is buffer-local
+### helixel--last-tx is buffer-local
 `. ` replays the last edit from the current buffer only.
 
-### helixel-action-create keyword handling
-`helixel-action-create` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel-action-copy` + `setf`.
+### helixel-tx-create keyword handling
+`helixel-tx-create` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel-action-copy` + `setf`.
 
 ### Never trust match-data in helixel-insert / helixel-insert-after
 Search hooks invalidate `match-data`. Use `(region-beginning)` / `(region-end)` instead.
@@ -313,7 +329,7 @@ C-o / C-i remain real-only.
 
 ### Multi-cursor + `.` / `q` integration
 `helixel-repeat-edit' is whitelisted ON for multi-cursors: each
-cursor's snapshotted `helixel--last-action' is replayed at its own
+cursor's snapshotted `helixel--last-tx' is replayed at its own
 position.  After `helixel-repeat-chain-end' an `:after' advice
 broadcasts the new chain tx to every fake cursor and applies it once
 immediately — so `q ... ESC' on N cursors gives N parallel chain

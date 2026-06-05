@@ -793,7 +793,7 @@ using advance+apply without recursion."
       (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
              (forced-dir (if reverse-p 'backward 'forward))
              (forced-sel (helixel-sel-update-ctx sel :dir forced-dir))
-             (forced-tx (helixel-action-copy edit))
+             (forced-tx (helixel-tx-copy edit))
              (strategy (helixel--build-strategy forced-tx)))
         (setf (helixel-action-sel forced-tx) forced-sel)
         (funcall (helixel-repeat-strategy-reset strategy) forced-tx)

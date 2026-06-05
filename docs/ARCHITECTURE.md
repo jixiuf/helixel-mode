@@ -128,7 +128,7 @@ helixel-repeat-edit
 `helixel--record-action(op, &rest extra)`:
 1. Pop pending sel via `helixel--sel-pop`
 2. Look up runner from op registry
-3. Create event tx via `helixel-action-create`
+3. Create event tx via `helixel-tx-create`
 4. Store as `helixel--last-tx`
 5. Commit event via `helixel-action-commit`
 
@@ -298,7 +298,7 @@ helixel-core (cl-lib only)
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions
-- For dot-repeat tests: build tx with `helixel-action-create` and set `helixel--last-tx`
+- For dot-repeat tests: build tx with `helixel-tx-create` and set `helixel--last-tx`
 - For chain tests: use `helixel-chain--make-test-tx` helper
 - Max 12s timeout per test run; zero hangs expected
 
@@ -314,7 +314,7 @@ User presses `.`
   │
   ▼
 helixel-repeat.el:helixel-repeat-edit
-  ├── Resolves helixel--last-action (global, cross-buffer)
+  ├── Resolves helixel--last-tx (global, cross-buffer)
   ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
   │
   ▼
@@ -334,7 +334,7 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-as 'dot)
   │          helixel-search.el, helixel-textobj.el)
   │
   ├── Apply: execute edit at current position
-  │     ├── helixel-core.el:helixel--execute-action(tx)
+  │     ├── helixel-core.el:helixel-tx-replay(tx)
   │     │     └── calls helixel-action-runner(tx) — closure stored at record time
   │     └── (runners live in helixel-editing.el, registered via
   │          helixel-register-op / helixel-define-operator)
@@ -347,7 +347,7 @@ helixel-repeat.el:advance+apply loop (with helixel-with-replay-as 'dot)
 Key invariants:
 - Both `helixel--inhibit-repeat-record` and `helixel--inhibit-action-track`
   are bound to t during replay (via `helixel-with-replay-as').
-- `helixel--last-action` is NOT buffer-local — `.` replays cross-buffer.
+- `helixel--last-tx` is NOT buffer-local — `.` replays cross-buffer.
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.
 - All iterations within a single `.` press are wrapped in one undo step.

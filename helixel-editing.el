@@ -197,16 +197,16 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                       (buffer-substring
                        helixel--change-track-marker (point))))))
     (unless executing-kbd-macro
-      (when helixel--last-action
-        (let ((tx helixel--last-action))
+      (when helixel--last-tx
+        (let ((tx helixel--last-tx))
           ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
-            (setq tx (helixel-action-with-payload tx :keys keys)))
+            (setq tx (helixel-tx-with-payload tx :keys keys)))
           ;; Store text as replay fallback (tests, programmatic use)
           (when text
-            (setq tx (helixel-action-with-payload tx :text text))
+            (setq tx (helixel-tx-with-payload tx :text text))
             (when (eq (helixel-action-op tx) 'change)
-              (setq tx (helixel-action-with-payload tx
+              (setq tx (helixel-tx-with-payload tx
                                                   :inserted-text text))))
           (helixel--update-last-event tx))))
     (when helixel--change-track-marker
@@ -289,7 +289,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (defun helixel--repeat-change-core (tx)
   "Repeat change TX: delete selection, replay keys or insert text.
-TX is the complete edit transaction (see `helixel-action-create').
+TX is the complete edit transaction (see `helixel-tx-create').
 Keys (primary) capture the full insert-mode keystrokes.
 Text (fallback) is used when keys are unavailable (tests).
 
@@ -595,7 +595,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
     (unless (use-region-p)
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last event.
-      (when-let* ((tx helixel--last-action)
+      (when-let* ((tx helixel--last-tx)
                   (sel (helixel-action-sel tx)))
         (when (eq (helixel-action-op tx) op)
           (when-let* ((m (car (helixel-action-mark-region tx)))
@@ -606,7 +606,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
           (indent-rigidly (region-beginning) (region-end) indent-sign)
           (let* ((mult (or (helixel-action-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
-             (helixel-action-with-payload tx :multiplier (1+ mult))))
+             (helixel-tx-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p

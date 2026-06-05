@@ -51,7 +51,7 @@
 ;; so the byte compiler doesn't flag them when this file is built
 ;; before those modules are loaded.
 (defvar helixel--pending-sel)             ; from `helixel-core'
-(defvar helixel--last-action)             ; from `helixel-core'
+(defvar helixel--last-tx)             ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
 (defvar helixel--event-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
@@ -148,7 +148,7 @@ so on — broadcasts at one cursor never leak into another."
   kill-ring-yank-pointer ; sublist of kill-ring
   mark-ring              ; list of markers
   pending-sel            ; `helixel-sel' or nil  (helixel--pending-sel)
-  last-action            ; `helixel-action'      (helixel--last-action)
+  last-action            ; `helixel-action'      (helixel--last-tx)
   active-search          ; `helixel-active-search' (helixel--active-search)
   event-ring             ; list of `helixel-action' (helixel--event-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
@@ -166,7 +166,7 @@ independent of any later movement of point / mark."
    :kill-ring-yank-pointer    kill-ring-yank-pointer
    :mark-ring                 mark-ring
    :pending-sel               helixel--pending-sel
-   :last-action               helixel--last-action
+   :last-action               helixel--last-tx
    :active-search             helixel--active-search
    :event-ring                helixel--event-ring
    :live-action               helixel--live-action
@@ -183,7 +183,7 @@ Moves point and the mark-marker to CS's positions, sets
         kill-ring-yank-pointer (helixel-cs-kill-ring-yank-pointer cs)
         mark-ring              (helixel-cs-mark-ring cs)
         helixel--pending-sel   (helixel-cs-pending-sel cs)
-        helixel--last-action   (helixel-cs-last-action cs)
+        helixel--last-tx   (helixel-cs-last-action cs)
         helixel--active-search (helixel-cs-active-search cs)
         helixel--event-ring    (helixel-cs-event-ring cs)
         helixel--live-action   (helixel-cs-live-action cs)
@@ -208,7 +208,7 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-cs-kill-ring-yank-pointer cs) kill-ring-yank-pointer
         (helixel-cs-mark-ring cs)              mark-ring
         (helixel-cs-pending-sel cs)            helixel--pending-sel
-        (helixel-cs-last-action cs)            helixel--last-action
+        (helixel-cs-last-action cs)            helixel--last-tx
         (helixel-cs-active-search cs)          helixel--active-search
         (helixel-cs-event-ring cs)             helixel--event-ring
         (helixel-cs-live-action cs)            helixel--live-action
@@ -611,7 +611,7 @@ state (kill-ring, event-ring, last-action, …)."
                kill-ring-yank-pointer (helixel-cs-kill-ring-yank-pointer ,cs)
                mark-ring              (helixel-cs-mark-ring ,cs)
                helixel--pending-sel   (helixel-cs-pending-sel ,cs)
-               helixel--last-action   (helixel-cs-last-action ,cs)
+               helixel--last-tx   (helixel-cs-last-action ,cs)
                helixel--active-search (helixel-cs-active-search ,cs)
                helixel--event-ring    (helixel-cs-event-ring ,cs)
                helixel--live-action   (helixel-cs-live-action ,cs)
@@ -681,25 +681,20 @@ without going through the command loop."
 ;; prompt commands like `helixel-replace-char', `helixel-surround-*'.
 
 (defun helixel-mc--fresh-action-from-real ()
-  "Return the helixel-action committed by `this-command' at real, or nil.
-The check uses the edit's `by-command' stamp set at record time —
-NO `pre-command-hook' snapshot needed (so this works correctly even
-when tests bypass the command loop).
-
-Returns nil when:
-  - `helixel--last-action' is unset,
-  - the edit was committed by a DIFFERENT command (leftover),
-  - the edit carries no `op' (movement / search commit — not a real edit),
-  - `this-command' has a `helixel-mc-prepos' property (those manage
+  "Return the `helixel-tx' committed by `this-command' at real, or nil.
+Looks at the front of `helixel--event-ring' — the most recent committed
+action.  Returns its tx if and only if:
+  - the action carries a tx (i.e., it's a real edit, not pure movement),
+  - the action's `by-command' stamp matches `this-command',
+  - `this-command' has no `helixel-mc-prepos' property (those manage
     their own per-fake staging and should NOT replay the edit body)."
-  (when (and (boundp 'helixel--last-action)
-             (symbolp this-command)
+  (when (and (symbolp this-command)
              (not (get this-command 'helixel-mc-prepos)))
-    (let ((cur helixel--last-action))
-      (when (and cur
-                 (helixel-action-op cur)
-                 (eq (helixel-action-by-command cur) this-command))
-        cur))))
+    (let* ((entry (car helixel--event-ring))
+           (tx (and entry (helixel-action-tx entry))))
+      (when (and entry tx
+                 (eq (helixel-action-by-command entry) this-command))
+        tx))))
 
 ;; ── post-command-hook integration ──
 ;;
@@ -791,7 +786,7 @@ we're in a keyboard-macro, or `this-command' is whitelisted off."
                         ;; fake via its runner.  Payload carries
                         ;; the prompted decisions so nothing prompts.
                         (helixel-with-replay-as 'dot
-                          (helixel--execute-action fresh-edit))
+                          (helixel-tx-replay fresh-edit))
                       ;; Pure movement / non-edit: re-call command.
                       (helixel-mc--call-interactively cmd))
                   (search-failed (push cursor dead))

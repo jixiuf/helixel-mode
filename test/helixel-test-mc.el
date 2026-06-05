@@ -2878,5 +2878,116 @@ context so electric-pair inserts the matching `)' there too."
       (electric-pair-mode -1)
       (helixel-mc-clear-all))))
 
+;; ----------------------------------------------------------------------
+;; user-error at a fake cursor must NOT delete the cursor
+;; (Fix A for the completion-preview-insert bug, regression test)
+;; ----------------------------------------------------------------------
+
+(defun helixel-test-mc--always-user-error ()
+  "Test helper: a command that unconditionally signals `user-error'."
+  (interactive)
+  (user-error "not applicable here"))
+(put 'helixel-test-mc--always-user-error 'multiple-cursors t)
+
+(ert-deftest helixel-test-mc-user-error-at-fake-keeps-cursor ()
+  "A whitelisted command that signals `user-error' at a fake cursor
+must NOT delete the cursor.  Before the completion-preview fix, the
+dispatcher's broad `(error ...)' clause caught `user-error' (a
+subtype of error) and pushed the fake onto the `dead' list, so all
+fakes vanished after one keystroke that happened to not apply at
+them.
+
+Regression: command yields `user-error' at every fake -> all fakes
+must still exist after the post-command dispatch."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (unwind-protect
+        (progn
+          (goto-char 1)
+          (helixel-mc-create-fake-cursor 5)   ; on second line
+          (helixel-mc-create-fake-cursor 9)   ; on third line
+          (should (= 2 (length (helixel-mc-all-cursors))))
+          (let ((this-command 'helixel-test-mc--always-user-error))
+            ;; Real cursor would also user-error in real usage, but
+            ;; `helixel-mc--post-command' assumes the real call ran
+            ;; first.  Skip it; what we're testing is the per-fake
+            ;; handler.  The dispatcher should swallow `user-error'
+            ;; at each fake and leave the cursor alive.
+            (helixel-mc--post-command))
+          ;; All fakes still present.
+          (should (= 2 (length (helixel-mc-all-cursors)))))
+      (helixel-mc-clear-all))))
+
+;; ----------------------------------------------------------------------
+;; completion-preview sync: real cursor insert mirrors to fakes
+;; (Fix B for the completion-preview-insert bug)
+;; ----------------------------------------------------------------------
+
+(ert-deftest helixel-test-mc-completion-preview-sync-mirrors-text ()
+  "`helixel-mc--completion-preview-sync' must capture text inserted
+at the real cursor by the wrapped command and insert the same text
+at every fake cursor, atomically in one undo group.
+
+We drive it with a synthetic ORIG that just inserts a literal
+string, so the test does not depend on `completion-preview' being
+loadable in the batch environment."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (unwind-protect
+        (progn
+          (goto-char 4)                       ; eol of first line
+          (helixel-mc-create-fake-cursor 8)   ; eol of second line
+          (helixel-mc-create-fake-cursor 12)  ; eol of third line
+          (helixel-mc--completion-preview-sync
+           (lambda () (insert "XYZ")))
+          ;; Real cursor + both fakes each got `XYZ' inserted at eol.
+          (should (string= "aaaXYZ\nbbbXYZ\ncccXYZ\n"
+                           (buffer-string))))
+      (helixel-mc-clear-all))))
+
+(ert-deftest helixel-test-mc-completion-preview-sync-noop-when-no-fakes ()
+  "`helixel-mc--completion-preview-sync' is a no-op (modulo running
+ORIG) when there are no fake cursors -- the real cursor's command
+should still execute exactly once."
+  (helixel-test-with-buffer "abc\n"
+    (goto-char 4)
+    (let ((calls 0))
+      (helixel-mc--completion-preview-sync
+       (lambda ()
+         (cl-incf calls)
+         (insert "X")))
+      (should (= 1 calls))
+      (should (string= "abcX\n" (buffer-string))))))
+
+(ert-deftest helixel-test-mc-completion-preview-sync-noop-when-no-insert ()
+  "When ORIG does not advance point (e.g. preview not active and
+the wrapped command silently returns), the sync must NOT broadcast
+an empty insert to fakes."
+  (helixel-test-with-buffer "abc\ndef\n"
+    (helixel-enter-normal-state)
+    (unwind-protect
+        (progn
+          (goto-char 1)
+          (helixel-mc-create-fake-cursor 5)
+          (let ((orig-text (buffer-string)))
+            (helixel-mc--completion-preview-sync (lambda () nil))
+            ;; Buffer unchanged.
+            (should (string= orig-text (buffer-string)))))
+      (helixel-mc-clear-all))))
+
+(ert-deftest helixel-test-mc-completion-preview-commands-real-only ()
+  "The completion-preview insert commands must be marked real-only
+so the dispatcher does not try to call them at fakes (which would
+barf with `user-error').  This verifies the setup function attaches
+the correct `multiple-cursors' property to each command in the
+canonical list."
+  ;; Setup function does not need completion-preview loaded -- it
+  ;; only sets symbol properties and adds advice (advice-add accepts
+  ;; unknown symbols, the advice is installed lazily).
+  (helixel-mc--setup-completion-preview)
+  (dolist (cmd helixel-mc-completion-preview-commands)
+    (should (plist-member (symbol-plist cmd) 'multiple-cursors))
+    (should-not (get cmd 'multiple-cursors))))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

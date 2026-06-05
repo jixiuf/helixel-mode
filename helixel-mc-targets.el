@@ -52,6 +52,9 @@
 (defvar helixel--pending-sel)
 (defvar helixel--last-action)
 (defvar helixel--live-action)
+(defvar helixel--active-search)
+(defvar helixel--event-ring)
+(defvar helixel--action-pos)
 (defvar helixel--raw-selection-type)
 
 ;; ── Helpers ──

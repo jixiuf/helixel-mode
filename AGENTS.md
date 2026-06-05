@@ -282,22 +282,27 @@ When `transient-mark-mode` is on, `helixel-select-line-up`/`helixel-select-line`
 
 ### Multi-cursor (mc) — fake cursor model
 `helixel-mc-core.el` provides REAL fake cursors with per-cursor state
-(point/mark/mark-active + kill-ring, pending-sel, last-event,
-active-search, **event-ring, live-event, action-pos**).  Per-cursor
-state is registered via `helixel-mc-register-cursor-var'; the dispatcher
-snapshots/restores it around each fake's body via `--enter-cursor' /
-`--leave-cursor'.  `post-command-hook` dispatches `this-command` at each
-fake cursor when the command's `multiple-cursors` symbol property is t
-(or default policy is `all`).  All N dispatches are wrapped in a single
-`undo-amalgamate-change-group`.  `with-each-cursor` also binds
+held in a single `helixel-cursor-state' (`helixel-cs-') struct
+attached to each fake-cursor overlay under the `helixel-cs' property.
+Slots: point, mark, mark-active, kill-ring, kill-ring-yank-pointer,
+mark-ring, pending-sel, last-action, active-search, event-ring,
+live-action, action-pos.  The dispatcher swaps the struct in/out
+around each fake's body via `helixel-mc--enter-cursor' /
+`--leave-cursor', which call `helixel-cs-restore' /
+`helixel-cs-update-from-globals'.  Real cursor uses the SAME struct
+through `helixel-mc--save-main-state' — one type, one snapshot/restore
+path, no per-var registry.  `post-command-hook` dispatches `this-command`
+at each fake cursor when the command's `multiple-cursors` symbol property
+is t (or default policy is `all`).  All N dispatches are wrapped in a
+single `undo-amalgamate-change-group`.  `with-each-cursor` also binds
 `inhibit-message t' so chatty commands (e.g. `;') don't echo N times.
-`mark-active' must NOT be in `helixel-mc-cursor-vars' — it would
-clobber the per-cursor flag set at creation time; it lives on the
-overlay as a property.
+`mark-active' lives inside the struct just like every other slot —
+restoring CS sets globals' `mark-active' to the cursor's stored value.
 
 ### `;' multi-cursor: per-fake event ring
-Each fake owns its own `helixel--event-ring' / `--live-event' /
-`--action-pos' (registered as cursor-vars).  When `;' broadcasts, each
+Each fake owns its own `helixel--event-ring' / `--live-action' /
+`--action-pos' (slots of its `helixel-cursor-state').  When `;'
+broadcasts, each
 fake runs `helixel-action--cycle-show' against its OWN ring —
 first-press span selection, prev/next cycling, and group-start logic all
 work via the real cycle code path with no mc-specific bookkeeping.

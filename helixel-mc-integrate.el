@@ -138,7 +138,7 @@ the override path — mc dispatches the same edit at each fake."
 Call after building a new chain transaction so subsequent `.' at
 each fake cursor replays the chain (not the pre-chain edit)."
   (dolist (ov (helixel-mc-all-cursors))
-    (overlay-put ov 'helixel--last-action helixel--last-action)))
+    (setf (helixel-cs-last-action (overlay-get ov 'helixel-cs)) helixel--last-action)))
 
 (defun helixel-mc--apply-chain-once ()
   "Execute `helixel--last-action' once at every fake cursor.

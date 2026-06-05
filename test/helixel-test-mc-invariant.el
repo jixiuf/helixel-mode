@@ -2,20 +2,24 @@
 
 ;;; Commentary:
 ;;
-;; Step 16 of docs/REFACTOR_PLAN.md.
+;; Smoke tests for the mc dispatch contract:
 ;;
-;; Smoke tests that exercise the mc dispatch contract:
+;;   1. Per-cursor helixel vars (`helixel--pending-sel',
+;;      `helixel--last-action', `helixel--active-search',
+;;      `helixel--event-ring', `helixel--live-action',
+;;      `helixel--action-pos') are restored to their pre-dispatch
+;;      values by `helixel-mc-with-each-cursor', and per-fake
+;;      mutation persists across dispatches in the fake's own
+;;      `helixel-cursor-state' struct.
 ;;
-;;   1. Every variable in `helixel-mc-cursor-vars' is restored to its
-;;      snapshot when `helixel-mc-with-each-cursor' enters a fake,
-;;      and the fake's mutation does not leak into the real cursor.
-;;
-;;   2. The contract is symmetric across all registered vars — adding
-;;      a new var via `helixel-mc-register-cursor-var' just works.
+;;   2. `helixel-cursor-state' struct shape — every documented
+;;      slot is present and CONSTRUCTOR / ACCESSORS exist.  This
+;;      catches accidental slot drift.
 
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'helixel-mc-core)
 (require 'helixel-test-common)
 
@@ -70,19 +74,38 @@ without leaking into other fakes."
       (should (equal (sort seen #'<) '(1 2))))
     (helixel-mc-clear-all)))
 
-(ert-deftest helixel-test-mc-invariant-registry-symmetric ()
-  "All entries in `helixel-mc-cursor-vars' have non-empty names —
-sanity check the registry isn't accidentally polluted by nil."
+(ert-deftest helixel-test-mc-invariant-cursor-state-slots ()
+  "`helixel-cursor-state' struct exposes every per-cursor slot.
+Guards against accidental slot drift — every slot listed here
+MUST exist on the struct or the snapshot/restore machinery in
+`helixel-mc-core' silently misses state."
   :tags '(mc invariant)
-  (dolist (var helixel-mc-cursor-vars)
-    (should (symbolp var))
-    (should (> (length (symbol-name var)) 0))))
+  (dolist (accessor '(helixel-cs-point
+                      helixel-cs-mark
+                      helixel-cs-mark-active
+                      helixel-cs-kill-ring
+                      helixel-cs-kill-ring-yank-pointer
+                      helixel-cs-mark-ring
+                      helixel-cs-pending-sel
+                      helixel-cs-last-action
+                      helixel-cs-active-search
+                      helixel-cs-event-ring
+                      helixel-cs-live-action
+                      helixel-cs-action-pos))
+    (should (fboundp accessor))))
 
-(ert-deftest helixel-test-mc-invariant-mark-active-not-registered ()
-  "`mark-active' must NOT be in `helixel-mc-cursor-vars' (would
-clobber the per-fake flag stored on the overlay)."
+(ert-deftest helixel-test-mc-invariant-mark-active-in-struct ()
+  "`mark-active' is now a slot of `helixel-cursor-state' — historically
+it was managed separately as an overlay property; the struct-based
+refactor brought it inside the standard snapshot/restore path."
   :tags '(mc invariant)
-  (should-not (memq 'mark-active helixel-mc-cursor-vars)))
+  (should (fboundp 'helixel-cs-mark-active))
+  ;; And the snapshot fn reads it.
+  (helixel-test-with-buffer ""
+    (setq mark-active t)
+    (should (helixel-cs-mark-active (helixel-cs-snapshot)))
+    (setq mark-active nil)
+    (should-not (helixel-cs-mark-active (helixel-cs-snapshot)))))
 
 (provide 'helixel-test-mc-invariant)
 ;;; helixel-test-mc-invariant.el ends here

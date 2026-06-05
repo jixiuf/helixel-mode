@@ -2853,5 +2853,29 @@ region cursor per line (Helix `Alt-s' semantics)."
                      (helixel-mc-cursor-point (cadr sorted))))))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-textobj-mark-inner-symbol ()
+  "Regression: `mo' (mark-inner-symbol) must execute at fake cursors.
+The textobj live-action gets an auto-allocated tx (sel-only, no
+runner) via the polymorphic sel setter; the dispatcher must NOT
+treat that as a replayable tx — it must fall back to
+`call-interactively' at every fake."
+  (helixel-test-with-buffer "foo bar baz\nfoo bar baz\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 13)
+    (let ((this-command 'helixel-mark-inner-symbol))
+      (call-interactively 'helixel-mark-inner-symbol)
+      (helixel-mc--post-command))
+    ;; Real: selected "foo" on line 1 (1..4).
+    (should (= 4 (point)))
+    (should (= 1 (mark)))
+    ;; Fake on line 2 must have selected "foo" there (13..16).
+    (let* ((ov (car (helixel-mc-all-cursors)))
+           (cs (overlay-get ov 'helixel-cs)))
+      (should (= 16 (marker-position (helixel-cs-point cs))))
+      (should (= 13 (marker-position (helixel-cs-mark cs))))
+      (should (helixel-cs-mark-active cs)))
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

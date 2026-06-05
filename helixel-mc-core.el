@@ -732,8 +732,13 @@ exists (e.g. for real-cursor-only commands like
     ;; not eagerly commit (only `record-action' does), so without this
     ;; the dispatcher would see the PRIOR action's tx.
     (helixel-action-commit)
-    (let ((fresh-tx (helixel-mc--fresh-action-from-real))
-          (cmd this-command))
+    (let* ((fresh (helixel-mc--fresh-action-from-real))
+           ;; A fresh tx is only useful for replay when it carries a
+           ;; runner.  Auto-allocated txs (e.g. textobj sel-only,
+           ;; pure jump entries) have a sel but no runner — they fall
+           ;; back to the call-interactively path below.
+           (fresh-tx (and fresh (helixel-tx-runner fresh) fresh))
+           (cmd this-command))
       (helixel-with-replay 'mc-batch
         (condition-case err
             (undo-amalgamate-change-group

@@ -116,10 +116,10 @@ Signals `helixel-ctx-error' on mismatch with details."
                                          kind k))))
               t)))))
 
-(defun helixel-sel-create (kind ctx &rest _)
+(defun helixel-sel-create (kind ctx)
   "Create a `helixel-sel' struct for selection KIND with data CTX.
 All protocol methods (recreate, advance, display) are looked up
-from the kind registry.  Extra args accepted for legacy callers.
+from the kind registry.
 When `helixel--ctx-validation-enabled' is non-nil, validates CTX
 against the schema for KIND."
   (when helixel--ctx-validation-enabled
@@ -316,9 +316,9 @@ previous selection command."
 
 ;; ── Convenience: push a freshly created selection ──
 
-(defun helixel--push-selection (kind ctx &rest _)
+(defun helixel--push-selection (kind ctx)
   "Create a `helixel-sel' of KIND with CTX and push as pending selection.
-Extra args accepted for legacy callers.  Returns the created sel."
+Returns the created sel."
   (let ((sel (helixel-sel-create kind ctx)))
     (helixel--sel-push sel)
     sel))
@@ -664,15 +664,6 @@ Does not mutate TX."
     (setf (helixel-tx-payload new-tx) new-payload)
     new-tx))
 
-(defsubst helixel-tx-payload-get (tx key)
-  "Return KEY from TX's payload plist, or nil."
-  (plist-get (helixel-tx-payload tx) key))
-
-(defsubst helixel-tx-payload-put (tx key value)
-  "Set KEY → VALUE in TX's payload plist (mutating TX)."
-  (setf (helixel-tx-payload tx)
-        (plist-put (helixel-tx-payload tx) key value)))
-
 
 ;; ----------------------------------------------------------------------
 ;; Part 5 — helixel-action: History/Ring Event Struct
@@ -801,15 +792,6 @@ Used by find-char (next | till)."
   "Return the :dir payload from OBJ (tx or action).
 Used by find-char (forward | backward)."
   (helixel-action-payload-get obj :dir)) ; ctx-lint-ok
-
-(defsubst helixel-action-payload-put (obj key value)
-  "Set KEY → VALUE in OBJ's payload plist (polymorphic, mutating)."
-  (cond ((helixel-tx-p obj)
-         (setf (helixel-tx-payload obj)
-               (plist-put (helixel-tx-payload obj) key value)))
-        (t (let ((tx (helixel-action--ensure-tx obj)))
-             (setf (helixel-tx-payload tx)
-                   (plist-put (helixel-tx-payload tx) key value))))))
 
 ;; ── Mark-region: also polymorphic ──
 ;; helixel-action-mark-region is the struct slot accessor on actions.

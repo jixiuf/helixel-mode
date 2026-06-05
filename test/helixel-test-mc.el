@@ -83,8 +83,7 @@
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 1)
     (push-mark (point-max) t t)
-    (let* ((sel (helixel-sel-create 'line '(:count 3)
-                                    #'ignore "L"))
+    (let* ((sel (helixel-sel-create 'line '(:count 3)))
            (targets (helixel-mc-spawn-from-line sel)))
       (should (= 3 (length targets))))))
 
@@ -94,8 +93,7 @@
   (helixel-test-with-buffer "abc\n  de\nfghi\n"
     (goto-char 1)
     (push-mark (point-max) t t)
-    (let* ((sel (helixel-sel-create 'line '(:count 3)
-                                    #'ignore "L"))
+    (let* ((sel (helixel-sel-create 'line '(:count 3)))
            (targets (helixel-mc-spawn-from-line sel)))
       ;; one target per line; each target is (eol . bol) so the fake
       ;; cursor will select its own line
@@ -255,8 +253,7 @@ be re-invoked by the advice (recording already broadcast)."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
     ;; Fake a chain TX whose runner would `error' if called.
-    (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
-                                    #'ignore))
+    (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'chain sel
                  :runner (lambda (_tx) (error "REAPPLIED"))
                  :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore)))))
@@ -491,8 +488,7 @@ the real cursor's event."
     (helixel-mc-create-fake-cursor 9)
     ;; Manufacture distinct events on each cursor by writing
     ;; directly to the overlay snapshots.
-    (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
-                                    #'ignore))
+    (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'insert-text sel
                  :runner (lambda (_tx) (insert "X"))
                  :text "X")))
@@ -525,8 +521,7 @@ property must be updated by `leave-cursor' — otherwise a later
       (let ((ov (car (helixel-mc-all-cursors))))
         (should-not (helixel-cs-last-action (overlay-get ov 'helixel-cs)))
         (helixel-mc-with-each-cursor
-          (let ((sel (helixel-sel-create 'line '(:dir forward :count 1)
-                                         #'ignore)))
+          (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
             (setq helixel--last-tx
                   (helixel-tx-create 'noop sel))))
         (should (helixel-cs-last-action (overlay-get ov 'helixel-cs)))))
@@ -540,8 +535,7 @@ fires only when fakes exist."
     (helixel-mc-create-fake-cursor 2)
     ;; Stub last-event with a counter.
     (let* ((called 0)
-           (sel (helixel-sel-create 'line '(:dir forward :count 1)
-                                    #'ignore))
+           (sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'noop sel
                  :runner (lambda (_tx) (cl-incf called)))))
       (setq helixel--last-tx tx)
@@ -560,8 +554,7 @@ fires only when fakes exist."
 fake then replays the chain TX (not the pre-chain edit)."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
-    (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)
-                                    #'ignore))
+    (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'chain sel
                  :runner (lambda (_tx) (ignore))
                  :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore)))))
@@ -881,8 +874,7 @@ Fix: the sync only acts on transitions INTO / OUT OF `visual'."
     (set-mark (match-beginning 0))
     (helixel--sel-push
      (helixel-sel-create 'search
-                         (list :pattern "hello" :dir 'forward)
-                         #'helixel--recreate-search))
+                         (list :pattern "hello" :dir 'forward)))
     ;; ss: spawn fakes on remaining matches.
     (helixel-mc-toggle)
     (should (= 2 (length (helixel-mc-all-cursors))))
@@ -1083,8 +1075,7 @@ OWN enclosing pair — no per-cursor advice needed."
            (d (helixel--make-pair-delimiter (car pair) (cdr pair)))
            (mk-sel
             (lambda ()
-              (helixel-sel-create 'surround `(:delimiter ,d)
-                                  (lambda (_) nil)))))
+              (helixel-sel-create 'surround `(:delimiter ,d)))))
       ;; Real at first pair, fakes at others.
       (goto-char 3)                    ; inside first (foo)
       (helixel--sel-push (funcall mk-sel))
@@ -1509,8 +1500,7 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
   (helixel-sel-create
    'textobj
    '(:command helixel-mark-inner-word :count 1
-     :delimiter nil :inline-advance t)
-   #'helixel--recreate-textobj))
+     :delimiter nil :inline-advance t)))
 
 (ert-deftest helixel-test-mc-walk-advance-no-stale-mark-eob ()
   "Walk-advance must not produce a spurious target at EOB / empty line.
@@ -1795,8 +1785,7 @@ point=eol); lighter must report 3 cursors; second `s s' clears."
     ;; Simulate `x x x' → 3 lines selected line-wise.
     (push-mark 1 t t)
     (goto-char (line-end-position 3))
-    (let* ((sel (helixel-sel-create 'line '(:count 3)
-                                    #'ignore "L")))
+    (let* ((sel (helixel-sel-create 'line '(:count 3))))
       (helixel-mc-spawn-from-sel sel)
       ;; 2 fake cursors + 1 real = 3 cursors.
       (should (= 3 (helixel-mc-num-cursors)))
@@ -1827,8 +1816,7 @@ The cursor selects the (possibly empty) line content."
     (goto-char 1)
     (push-mark 1 t t)
     (goto-char (point-max))
-    (let* ((sel (helixel-sel-create 'line '(:count 3)
-                                    #'ignore "L")))
+    (let* ((sel (helixel-sel-create 'line '(:count 3))))
       (helixel-mc-spawn-from-sel sel)
       ;; 3 lines → 1 real + 2 fakes.
       (should (= 3 (helixel-mc-num-cursors)))
@@ -1847,8 +1835,7 @@ the same on real and fakes."
     (goto-char 4)                       ; end of first "foo"
     (let* ((sel (helixel-sel-create
                  'search
-                 '(:pattern "foo" :dir forward :entry-kind nil)
-                 #'ignore "/foo"))
+                 '(:pattern "foo" :dir forward :entry-kind nil)))
            (pt-before (point))
            (mk-before (mark t))
            (active-before mark-active))
@@ -1884,8 +1871,7 @@ whitespace / EOB; filter must drop it."
     (goto-char 1)
     (let* ((sel (helixel-sel-create
                  'find-char
-                 '(:char ?x :type next :dir forward :inline-advance t)
-                 #'ignore "fx")))
+                 '(:char ?x :type next :dir forward :inline-advance t))))
       (helixel-mc-spawn-from-sel sel)
       ;; 4 x's → 1 real + 3 fakes.
       (should (= 4 (helixel-mc-num-cursors)))
@@ -1897,8 +1883,7 @@ whitespace / EOB; filter must drop it."
     (helixel-enter-normal-state)
     (let ((sel (helixel-sel-create
                 'find-char
-                '(:char ?z :type next :dir forward :inline-advance t)
-                #'ignore "fz")))
+                '(:char ?z :type next :dir forward :inline-advance t))))
       (should-error (helixel-mc-spawn-from-sel sel)
                     :type 'user-error))))
 
@@ -2379,8 +2364,7 @@ before real point."
     (helixel-enter-normal-state)
     (let ((sel (helixel-sel-create
                 'find-char
-                '(:char ?X :type next :dir forward :inline-advance t)
-                #'ignore "fX")))
+                '(:char ?X :type next :dir forward :inline-advance t))))
       (helixel-mc-spawn-from-sel sel)
       ;; Only 2 X's (not the 2 x's).
       (should (= 2 (helixel-mc-num-cursors)))
@@ -2477,7 +2461,7 @@ pre-spawn cursor, the pre-spawn active region is restored."
                                   (list (helixel-mc--make-target 4))))
                      helixel--kind-registry)
             (helixel-mc-spawn-from-sel
-             (helixel-sel-create 'line '(:count 1) #'ignore "L"))
+             (helixel-sel-create 'line '(:count 1)))
             ;; Realize-targets cleared mark-active (degenerate target),
             ;; but spawn-from-sel's restore guard put it back because
             ;; the target was at saved-pt.
@@ -2508,7 +2492,7 @@ region is NOT restored (the new target replaces it correctly)."
                                   (list (helixel-mc--make-target 8))))
                      helixel--kind-registry)
             (helixel-mc-spawn-from-sel
-             (helixel-sel-create 'line '(:count 1) #'ignore "L"))
+             (helixel-sel-create 'line '(:count 1)))
             (should (= 8 (point)))
             (should-not mark-active))
         (puthash 'line
@@ -2557,7 +2541,7 @@ region is NOT restored (the new target replaces it correctly)."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 1)
     (push-mark (point-max) t t)
-    (let* ((sel (helixel-sel-create 'rect '(:count 3) #'ignore "R"))
+    (let* ((sel (helixel-sel-create 'rect '(:count 3)))
            (targets (helixel-mc-spawn-from-rect sel)))
       (should (= 3 (length targets))))))
 

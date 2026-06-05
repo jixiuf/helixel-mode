@@ -132,8 +132,7 @@
     (goto-char 1)
     (setq helixel--pending-sel
           (helixel-sel-create 'search
-            '(:pattern "foo" :dir forward)
-            #'ignore "s"))
+            '(:pattern "foo" :dir forward)))
     (helixel-repeat-chain-start)
     ;; Simulate i updating live ctx after snapshot
     (setq helixel--pending-sel
@@ -200,8 +199,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "foo bar\n"
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
@@ -212,8 +210,7 @@ tests in this section."
   ". on chain line at last line operates on current line."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char (point-max))
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
-                  #'ignore "l"))
+    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
@@ -226,8 +223,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "foo bar\n"
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
@@ -238,8 +234,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "foo bar foo baz\n"
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t)
@@ -252,8 +247,7 @@ tests in this section."
   ", on chain line skips blank lines like dot does."
   (helixel-chain-test-with-buffer "aaa\n   \nbbb\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
-                  #'ignore "l"))
+    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t)
@@ -266,8 +260,7 @@ tests in this section."
   "Chain tx with no advance data does not error on ."
   (helixel-chain-test-with-buffer "test\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'movement '(:moves ((forward-word . 1)))
-                   #'ignore "m"))
+    (let* ((ctx (helixel-sel-create 'movement '(:moves ((forward-word . 1)))))
             (tx (helixel-chain--make-test-tx ctx))
             (helixel--last-tx tx)
             (helixel--inhibit-action-track t))
@@ -289,8 +282,7 @@ tests in this section."
     (goto-char 1)
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
@@ -306,8 +298,7 @@ tests in this section."
     (goto-char 8)
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
@@ -324,8 +315,7 @@ tests in this section."
     (search-backward "foo d")
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
@@ -340,8 +330,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 1)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
-                  #'ignore "l"))
+    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
@@ -357,8 +346,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 10)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
-                  #'ignore "l"))
+    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
@@ -374,8 +362,7 @@ tests in this section."
     (goto-char (point-max))
     (forward-line -1)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
-                  #'ignore "l"))
+    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
@@ -396,8 +383,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "foo x foo y foo z\n"
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
@@ -414,8 +400,7 @@ tests in this section."
     (goto-char (point-max))
     (search-backward "foo d")
     (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)
-                  #'ignore "s"))
+                  '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
@@ -432,8 +417,7 @@ tests in this section."
   "C-u , on chain line previews all lines from point-min."
   (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 10)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)
-                  #'ignore "l"))
+    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"

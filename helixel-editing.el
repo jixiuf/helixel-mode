@@ -233,9 +233,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
      ;; Manual region
      ((use-region-p)
       (helixel--sel-push
-       (helixel-sel-create
-        'insert-selection-start nil
-        #'helixel--recreate-insert-selection-start "is"))
+       (helixel-sel-create 'insert-selection-start nil))
       (goto-char (region-beginning)))
      ;; No context
      (t
@@ -290,9 +288,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
      ;; Manual region
      ((use-region-p)
       (helixel--sel-push
-       (helixel-sel-create
-        'insert-selection-end nil
-        #'helixel--recreate-insert-selection-end "ie"))
+       (helixel-sel-create 'insert-selection-end nil))
       (goto-char (region-end)))
      ;; No context
      (t
@@ -306,9 +302,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
      :tx-runner (lambda (_tx) (helixel-mc--prepos-bol)))
   (beginning-of-line)
    (helixel--sel-push
-        (helixel-sel-create
-         'insert-beginning-line nil
-         #'helixel--recreate-insert-beginning-line "I"))
+        (helixel-sel-create 'insert-beginning-line nil))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-after-end-line
@@ -316,9 +310,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
      :tx-runner (lambda (_tx) (helixel-mc--prepos-eol)))
   (end-of-line)
    (helixel--sel-push
-        (helixel-sel-create
-         'insert-end-line nil
-         #'helixel--recreate-insert-end-line "A"))
+        (helixel-sel-create 'insert-end-line nil))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-newline

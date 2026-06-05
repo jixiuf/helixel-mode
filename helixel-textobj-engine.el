@@ -643,13 +643,7 @@ the count so `.' repeats the full chain of textobj selections."
       (helixel--sel-push
        (helixel-sel-create
         'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
-                    :inline-advance t)
-             #'helixel--recreate-textobj
-             (lambda (c)
-               (if-let* ((command (helixel-sel-textobj-command c)))
-                   (replace-regexp-in-string "^helixel-mark-" ""
-                                            (symbol-name command))
-                 "textobj"))))
+                    :inline-advance t)))
       (run-hook-with-args 'helixel-textobj-after-select-functions))))
 
 

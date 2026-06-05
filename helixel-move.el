@@ -536,12 +536,7 @@ new direction."
              (dir (if extending
                       (helixel-sel-line-dir helixel--pending-sel)
                     'forward)))
-      (helixel--push-selection 'line `(:count ,new-count :dir ,dir)
-                               #'helixel--recreate-line
-                               (if (> new-count 1)
-                                   (format "Lx%d" new-count)
-                                 "L")
-                               :advance #'helixel--repeat-advance-line)))))
+      (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
 
 (helixel-define-command helixel-select-line-up
     (:category movement :subcat lineselect
@@ -583,12 +578,7 @@ new direction."
              (dir (if extending
                       (helixel-sel-line-dir helixel--pending-sel)
                     'backward)))
-      (helixel--push-selection 'line `(:count ,new-count :dir ,dir)
-                               #'helixel--recreate-line
-                               (if (> new-count 1)
-                                   (format "L^x%d" new-count)
-                                 "L^")
-                               :advance #'helixel--repeat-advance-line)))))
+      (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
 
 (helixel-define-command helixel-select-rectangle
     (:category movement :subcat rectselect
@@ -616,12 +606,7 @@ new direction."
     (setq helixel--raw-selection-type 'rect)
     (let* ((prev-count (helixel-sel-count helixel--pending-sel))
            (new-count (if extending (+ prev-count n) n)))
-      (helixel--push-selection 'rect `(:count ,new-count)
-                               #'helixel--recreate-rect
-                               (if (> new-count 1)
-                                   (format "rx%d" new-count)
-                                 "r")
-                               :advance #'helixel--repeat-advance-line))))
+      (helixel--push-selection 'rect `(:count ,new-count)))))
 
 
 ;; ── Line / Rect recreate functions ──
@@ -804,13 +789,7 @@ No-op during dot-repeat replay, or when no region is active."
                              `(:moves (,entry) :inline-advance t
                                       :normal-mode
                                       ,(eq helixel--current-state
-                                           'normal))
-                             #'helixel--recreate-movement
-                             (lambda (c)
-                               (let ((ms (helixel-sel-movement-moves c)))
-                                 (let ((n (apply #'+ (mapcar #'cdr ms))))
-                                   (format "v%d" n))))
-                             :advance #'helixel--repeat-advance-movement)))))))
+                                           'normal)))))))))
 
 (provide 'helixel-move)
 ;;; helixel-move.el ends here

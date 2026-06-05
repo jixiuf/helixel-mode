@@ -86,8 +86,7 @@ Movement commits leave `helixel--last-tx' unchanged."
         (helixel--last-tx nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1)
-                   #'ignore "L")))
+      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill)
         (setf (helixel-action-payload helixel--live-action) '(:text "x")))
@@ -95,8 +94,7 @@ Movement commits leave `helixel--last-tx' unchanged."
       (should (= (length helixel--event-ring) 1))
       ;; Re-create identical live-event and commit again
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1)
-                   #'ignore "L")))
+      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill)
         (setf (helixel-action-payload helixel--live-action) '(:text "x")))
@@ -127,16 +125,14 @@ Movement commits leave `helixel--last-tx' unchanged."
         (helixel--last-tx nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 2)
-                   #'ignore "L")))
+      (let ((sel (helixel-sel-create 'line '(:dir forward :count 2))))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill))
       (helixel-action-commit)
       (should (= (length helixel--event-ring) 1))
       ;; Different sel — should NOT be deduped
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1)
-                   #'ignore "L")))
+      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill))
       (helixel-action-commit)

@@ -280,8 +280,7 @@ exact-case 'Hello' still matches 'Hello'."
     (helixel-test-with-buffer "axb axb axb"
       ;; Create a find-char sel with type/char/dir for history replay
       (let ((sel (helixel-sel-create 'find-char
-                   '(:char ?b :type next :dir forward :inline-advance t)
-                   #'ignore "fb")))
+                   '(:char ?b :type next :dir forward :inline-advance t))))
         (helixel--tracking-open 'find-char 'next)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -318,8 +317,7 @@ exact-case 'Hello' still matches 'Hello'."
       (helixel--tracking-open 'search 'search)
       (setf (helixel-action-sel helixel--live-action)
             (helixel-sel-create 'search
-              '(:pattern "test" :dir forward)
-              #'ignore "/test/"))
+              '(:pattern "test" :dir forward)))
       (helixel-action-commit)
       (let ((alist (helixel-search--history-collect)))
         (should (= (length alist) 1))
@@ -333,8 +331,7 @@ exact-case 'Hello' still matches 'Hello'."
       (helixel--tracking-open 'find-char 'next)
       (setf (helixel-action-sel helixel--live-action)
             (helixel-sel-create 'find-char
-              '(:char ?b :type next :dir forward :inline-advance t)
-              #'ignore "fb"))
+              '(:char ?b :type next :dir forward :inline-advance t)))
       (helixel-action-commit)
       (let ((alist (helixel-search--history-collect)))
         (should (= (length alist) 1))
@@ -351,8 +348,7 @@ exact-case 'Hello' still matches 'Hello'."
       (helixel--tracking-open 'search 'search)
       (setf (helixel-action-sel helixel--live-action)
             (helixel-sel-create 'search
-              '(:pattern "hello" :dir forward)
-              #'ignore "/hello/"))
+              '(:pattern "hello" :dir forward)))
       (helixel-action-commit)
       (let ((alist (helixel-search--history-collect)))
         (should (= (length alist) 1))
@@ -398,8 +394,7 @@ without a display."
     (helixel-test-with-buffer "axb axb axb"
       ;; Create a find-char till entry in ring
       (let ((sel (helixel-sel-create 'find-char
-                   '(:char ?b :type till :dir forward :inline-advance t)
-                   #'ignore "tb")))
+                   '(:char ?b :type till :dir forward :inline-advance t))))
         (helixel--tracking-open 'find-char 'till)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -421,8 +416,7 @@ For find-char events, the stored direction comes from
     (helixel-test-with-buffer "axb axb axb"
       (goto-char 8)
       (let ((sel (helixel-sel-create 'find-char
-                   '(:char ?b :type next :dir backward :inline-advance t)
-                   #'ignore "Fb")))
+                   '(:char ?b :type next :dir backward :inline-advance t))))
         (helixel--tracking-open 'find-char 'next)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -442,8 +436,7 @@ For find-char events, the stored direction comes from
       (goto-char 10)
       ;; Push a search event to ring
       (let ((sel (helixel-sel-create 'search
-                   '(:pattern "hello" :dir forward)
-                   #'ignore "/hello/")))
+                   '(:pattern "hello" :dir forward))))
         (helixel--tracking-open 'search 'search)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -463,8 +456,7 @@ For find-char events, the stored direction comes from
     (helixel-test-with-buffer "axb axb axb"
       (goto-char 8)
       (let ((sel (helixel-sel-create 'find-char
-                   '(:char ?b :type next :dir forward :inline-advance t)
-                   #'ignore "fb")))
+                   '(:char ?b :type next :dir forward :inline-advance t))))
         (helixel--tracking-open 'find-char 'next)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -483,8 +475,7 @@ For find-char events, the stored direction comes from
     (helixel-test-with-buffer "hello X hello Y"
       (goto-char 20)
       (let ((sel (helixel-sel-create 'search
-                   '(:pattern "hello" :dir forward)
-                   #'ignore "/hello/")))
+                   '(:pattern "hello" :dir forward))))
         (helixel--tracking-open 'search 'search)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -502,8 +493,7 @@ For find-char events, the stored direction comes from
         (helixel--active-search (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'forward)))
     (helixel-test-with-buffer "axb axb axb"
       (let ((sel (helixel-sel-create 'find-char
-                   '(:char ?b :type next :dir forward :inline-advance t)
-                   #'ignore "fb")))
+                   '(:char ?b :type next :dir forward :inline-advance t))))
         (helixel--tracking-open 'find-char 'next)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -564,8 +554,7 @@ Buffer content and point stay unchanged when search fails."
       (goto-char 1)
       ;; Push a search event for a pattern not in buffer
       (let ((sel (helixel-sel-create 'search
-                   '(:pattern "xyzzy" :dir forward)
-                   #'ignore "/xyzzy/")))
+                   '(:pattern "xyzzy" :dir forward))))
         (helixel--tracking-open 'search 'search)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
@@ -588,8 +577,7 @@ when the event's sel has no pattern in its ctx (fallback path)."
     (helixel-test-with-buffer "hello world"
       (goto-char 1)
       ;; Create an event with sel lacking :pattern, pattern in payload
-      (let ((sel (helixel-sel-create 'search '(:dir forward)
-                   #'ignore "search")))
+      (let ((sel (helixel-sel-create 'search '(:dir forward))))
         (helixel--tracking-open 'search 'search)
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-payload helixel--live-action)

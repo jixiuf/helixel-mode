@@ -172,11 +172,7 @@ matches to match the original n count."
                               :n-count))
            (n-count (if prev-n (1+ prev-n) 0)))
       (helixel--push-selection
-       'search `(:pattern ,pat :dir ,dir :n-count ,n-count)
-       #'helixel--recreate-search
-       (lambda (c)
-         (concat "/" (or (helixel-sel-search-pattern c) "?")))
-       :advance #'helixel--repeat-advance-search))))
+       'search `(:pattern ,pat :dir ,dir :n-count ,n-count)))))
 
 (defun helixel-search--done-hook ()
   "Hook called at the end of isearch to mark the match."
@@ -320,10 +316,7 @@ Tracks how many times n was pressed so . repeats the full sequence."
     (helixel--sel-push
      (helixel-sel-create 'find-char
        `(:char ,char :type ,type :dir ,dir :inline-advance t
-         :n-count ,n-count)
-       #'helixel--recreate-find-char
-       (format "f%c" char)
-       :advance #'helixel--repeat-advance-movement))))
+         :n-count ,n-count)))))
 
 (defun helixel-search--find-char-jump (char type forwardp)
   "Perform the search-and-position step for find-char.
@@ -372,17 +365,16 @@ adjusts point relative to the character match according to TYPE."
                                  (make-helixel-active-search
                                   :category 'find-char :type ty
                                   :char c :dir d))
-                           (helixel-search--find-char-core nil d))))))
+                           (helixel-search--find-char-core d))))))
       (helixel-action-commit)
       (helixel-search--set-dir sym-dir)
       (setq helixel--active-search
             (make-helixel-active-search
              :category 'find-char :type type :char char :dir sym-dir)))))
 
-(defun helixel-search--find-char-core (&optional _action dir)
+(defun helixel-search--find-char-core (&optional dir)
   "Execute find-char in direction DIR.
-Reads type/char from `helixel--active-search'.
-The _action parameter is kept for caller compatibility but ignored."
+Reads type/char from `helixel--active-search'."
   (let* ((type (helixel-search--safe-type))
          (char (helixel-search--safe-char)))
     (when (and type char)
@@ -520,11 +512,11 @@ the full f x n n sequence.  Extends region back to origin when
                  (helixel-search--current-dir))))
     (helixel-with-replay-as 'dot
      (helixel--with-span ctx
-      (helixel-search--find-char-core nil dir)
+      (helixel-search--find-char-core dir)
       (when (> n 0)
         (condition-case nil
             (dotimes (_ n)
-              (helixel-search--find-char-core nil dir))
+              (helixel-search--find-char-core dir))
           (search-failed nil))))
      t)))
 
@@ -538,7 +530,7 @@ Updates n-count in the pending sel so . repeats the full sequence."
     (if (and type char)
         (progn
           (helixel--tracking-open 'find-char type)
-          (helixel-search--find-char-core nil dir)
+          (helixel-search--find-char-core dir)
           ;; Track n-count so . repeats the full n sequence.
           (helixel-search--find-char-set-sel char type dir))
       (message "No find-char to repeat"))))
@@ -628,7 +620,7 @@ Returns the chosen action plist or nil."
          (setq helixel--active-search
                (make-helixel-active-search
                 :category 'find-char :type type :char char :dir use-dir))
-         (helixel-search--find-char-core event use-dir)))
+         (helixel-search--find-char-core use-dir)))
        ('search
         (let* ((sel (helixel-action-sel event))
                (pattern (and sel (helixel-sel-search-pattern sel)))

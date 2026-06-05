@@ -70,15 +70,14 @@ METADATA is a plist:
                    Used to make the command's effect replayable at
                    multi-cursors and other replay sites: FN is called
                    before the main runner in `helixel-tx-replay'.
-                   For movement commands (no body record-action), the
-                   :pre-replay-fn IS the entire replay payload — the
-                   tx has nil op (so `.' will not pick it up) but the
-                   mc dispatcher still replays it.
                    For insert-entry commands, the prepos FN survives
                    the later `record-action' for \='insert-text that
                    creates the insert-text tx (preserved by
                    `helixel--record-action').
                    When omitted, no pre-replay-fn is attached.
+                   Invariant: at most one :tx-runner per command.
+                   A second :tx-runner silently overwrites the first
+                   (the payload plist holds a single :pre-replay-fn).
 
 For :category movement:
   - Auto-injects `helixel--track-visual-move' for \=`.\=` replay.

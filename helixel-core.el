@@ -774,6 +774,34 @@ For an action, returns the op of its embedded tx (or nil)."
   "Return KEY from OBJ's payload plist (polymorphic), or nil."
   (plist-get (helixel-action-payload obj) key))
 
+;; ── Convenience accessors for common payload keys ──
+;;
+;; A handful of payload keys are shared across many prompted
+;; commands: find-char (:char :type :dir), replace-char (:char),
+;; surround (:char).  These thin wrappers replace raw
+;; `helixel-action-payload-get' / `plist-get' call sites for
+;; consistency with the `helixel-sel-{kind}-{key}' accessor family
+;; in part 4 of this file.
+;;
+;; Each accepts EITHER a `helixel-tx' or a `helixel-action' (via
+;; polymorphic `helixel-action-payload-get').
+
+(defsubst helixel-tx-char (obj)
+  "Return the :char payload from OBJ (tx or action).
+Used by find-char, replace-char, and surround commands whose
+prompted character lives in the tx payload."
+  (helixel-action-payload-get obj :char)) ; ctx-lint-ok
+
+(defsubst helixel-tx-type (obj)
+  "Return the :type payload from OBJ (tx or action).
+Used by find-char (next | till)."
+  (helixel-action-payload-get obj :type)) ; ctx-lint-ok
+
+(defsubst helixel-tx-dir (obj)
+  "Return the :dir payload from OBJ (tx or action).
+Used by find-char (forward | backward)."
+  (helixel-action-payload-get obj :dir)) ; ctx-lint-ok
+
 (defsubst helixel-action-payload-put (obj key value)
   "Set KEY → VALUE in OBJ's payload plist (polymorphic, mutating)."
   (cond ((helixel-tx-p obj)

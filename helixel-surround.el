@@ -414,11 +414,11 @@ so the user can select a target with one keypress."
 
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (helixel-action-payload-get tx :char)))
+             (let ((c (helixel-tx-char tx)))
                (if c (format "ms[%c]" c) "ms")))
   :moves-point-p nil
   :runner (lambda (tx)
-            (when-let* ((char (helixel-action-payload-get tx :char))
+            (when-let* ((char (helixel-tx-char tx))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 

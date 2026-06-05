@@ -40,16 +40,57 @@
 (require 'helixel-macros)
 (require 'helixel-search)
 
-;; Multi-cursor prepos helpers (defined in helixel-mc-integrate.el).
-;; Referenced only from `:tx-runner' closures in insert-entry commands
-;; below, which are invoked at dispatch time (well after mc-integrate
-;; loads).  Forward-declare so byte-compile is happy.
-(declare-function helixel-mc--prepos-region-begin "helixel-mc-integrate" ())
-(declare-function helixel-mc--prepos-region-end "helixel-mc-integrate" ())
-(declare-function helixel-mc--prepos-bol "helixel-mc-integrate" ())
-(declare-function helixel-mc--prepos-eol "helixel-mc-integrate" ())
-(declare-function helixel-mc--prepos-newline-after "helixel-mc-integrate" ())
-(declare-function helixel-mc--prepos-newline-before "helixel-mc-integrate" ())
+;; ── Insert-entry prepositioner helpers ──
+;;
+;; Each insert-entry command (`helixel-insert' / `-after' / `-bol' /
+;; `-eol' / `-newline' / `-prevline') declares a `:tx-runner' that
+;; just calls one of these helpers.  The multi-cursor dispatcher
+;; invokes the runner at every fake cursor through the unified
+;; `helixel-tx-replay' path — each helper runs in the fake's
+;; restored context (point, mark, mark-active per `helixel-cs').
+;;
+;; They live here (NOT in `helixel-mc-integrate.el') so the
+;; insert-entry commands have a direct same-file reference and no
+;; forward `declare-function' is needed.  Tests still find them by
+;; name.
+
+(defun helixel-mc--prepos-region-begin ()
+  "Move to `region-beginning' if `mark-active', else stay.
+For `i' / `helixel-insert' semantics: enter insert with point at
+the START of any active selection."
+  (when (and mark-active (mark t))
+    (goto-char (min (point) (mark t))))
+  (setq mark-active nil))
+
+(defun helixel-mc--prepos-region-end ()
+  "Move to `region-end' if `mark-active', else `forward-char'.
+For `a' / `helixel-insert-after' semantics: enter insert with
+point AFTER the selection (or one char past point if no region)."
+  (if (and mark-active (mark t))
+      (goto-char (max (point) (mark t)))
+    (unless (eolp) (forward-char)))
+  (setq mark-active nil))
+
+(defun helixel-mc--prepos-bol ()
+  "Move to beginning of line at this fake cursor (`I' semantics)."
+  (beginning-of-line))
+
+(defun helixel-mc--prepos-eol ()
+  "Move to end of line at this fake cursor (`A' semantics)."
+  (end-of-line))
+
+(defun helixel-mc--prepos-newline-after ()
+  "Open a new line below this fake cursor (`o' semantics)."
+  (end-of-line)
+  (newline-and-indent))
+
+(defun helixel-mc--prepos-newline-before ()
+  "Open a new line above this fake cursor (`O' semantics)."
+  (beginning-of-line)
+  (let ((electric-indent-mode nil))
+    (newline nil t)
+    (forward-line -1)
+    (indent-according-to-mode)))
 
 ;; ── Shared kill core ──
 
@@ -353,11 +394,10 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 (helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
-             (let ((c (helixel-action-payload-get tx :char)))
+             (let ((c (helixel-tx-char tx)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
-            (helixel-replace-char
-             (helixel-action-payload-get tx :char))))
+            (helixel-replace-char (helixel-tx-char tx))))
 
 (helixel-register-op insert-text :display "i" :moves-point-p nil
   :runner (lambda (tx)

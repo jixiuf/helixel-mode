@@ -499,5 +499,88 @@ order."
         (should (functionp (helixel-repeat-strategy-advance strategy)))
         (should (functionp (helixel-repeat-strategy-apply strategy)))))))
 
+;; ── Chain + insert + electric-pair replay (unit test) ──
+
+(ert-deftest helixel-test-chain-insert-electric-pair-replay ()
+  "A chain whose `:tx-list' contains an insert-text tx with a
+multi-char `:text' segment replays the segment verbatim at the
+new position — the pattern produced when `electric-pair-mode' is
+on and user types `(' inside a chain (captured as a single `()'
+segment).
+
+We build the chain tx by hand rather than driving the full
+`pre/post-command-hook' pipeline (batch mode does not auto-run
+those hooks reliably) — the invariant under test is the
+chain-runner → insert-text-runner replay path, not capture."
+  (helixel-chain-test-with-buffer "abc\nxyz\n"
+    (let* ((insert-tx (helixel-tx-create 'insert-text nil
+                        :runner (helixel--op-runner 'insert-text)
+                        :keys (list (list :text "()"
+                                          :delete-before 0
+                                          :offset -1))))
+           (chain-tx  (helixel-tx-create 'chain nil
+                        :runner #'helixel--repeat-chain-runner
+                        :display "chain"
+                        :tx-list (list insert-tx))))
+      (setq helixel--last-tx chain-tx)
+      ;; Replay at start of line 2.
+      (goto-char (point-min))
+      (forward-line 1)
+      (let ((before (point)))
+        (helixel-repeat-edit)
+        (goto-char before)
+        (should (looking-at-p "()"))))))
+
+;; ── Insert-record IME / composition edge case ──
+
+(ert-deftest helixel-test-insert-record-composition-multi-event ()
+  "Two after-change events in one command (e.g. composition / IME)
+are collapsed into a single `:text' segment carrying the
+MIN..MAX buffer substring.
+
+Simulates a composition that fires (BEG END 0) then
+(BEG END+2 0) within one command — covered by min/max span
+collapse in `helixel--insert-classify-segment'."
+  (helixel-test-with-buffer ""
+    (helixel--insert-begin)
+    ;; Simulate a custom "composition" command that fires two
+    ;; after-change events on the same insertion site.
+    (let ((this-command 'my-fake-composition))
+      (run-hooks 'pre-command-hook)
+      (insert "a")
+      (insert "明天")                ; another insertion
+      (run-hooks 'post-command-hook))
+    (let ((segs (helixel--insert-finish)))
+      (should (= 1 (length segs)))
+      (should (eq :text (caar segs)))
+      (should (equal "a明天" (plist-get (car segs) :text))))))
+
+(ert-deftest helixel-test-insert-record-replace-with-delete-before ()
+  "A command that DELETES some prefix then INSERTS new text
+(`completion-preview-insert' replacing `fo' → `foo') is captured
+as a single `:text' segment with `:delete-before' set, so replay
+deletes the prefix before inserting."
+  (helixel-test-with-buffer "fo"
+    (goto-char (point-max))
+    (helixel--insert-begin)
+    ;; Simulate the completion-accept command:
+    ;;   delete the 2-char prefix "fo", insert "foo".
+    (let ((this-command 'my-fake-completion))
+      (run-hooks 'pre-command-hook)
+      (delete-region (- (point) 2) (point))
+      (insert "foo")
+      (run-hooks 'post-command-hook))
+    (let* ((segs (helixel--insert-finish))
+           (seg  (car segs)))
+      (should (= 1 (length segs)))
+      (should (eq :text (car seg)))
+      (should (equal "foo" (plist-get seg :text)))
+      (should (= 2 (plist-get seg :delete-before)))
+      ;; Replay in a buffer with the same prefix typed.
+      (helixel-test-with-buffer "fo"
+        (goto-char (point-max))
+        (helixel--execute-keys segs)
+        (should (string= "foo" (buffer-string)))))))
+
 (provide 'helixel-test-repeat-chain)
 ;;; helixel-test-repeat-chain.el ends here

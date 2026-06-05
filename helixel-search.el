@@ -365,9 +365,9 @@ adjusts point relative to the character match according to TYPE."
               (make-helixel-tx
                :payload (list :char char :type type :dir sym-dir)
                :runner (lambda (tx)
-                         (let ((c (helixel-action-payload-get tx :char))
-                               (ty (helixel-action-payload-get tx :type))
-                               (d (helixel-action-payload-get tx :dir)))
+                         (let ((c (helixel-tx-char tx))
+                               (ty (helixel-tx-type tx))
+                               (d (helixel-tx-dir tx)))
                            (setq helixel--active-search
                                  (make-helixel-active-search
                                   :category 'find-char :type ty

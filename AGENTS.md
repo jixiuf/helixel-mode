@@ -362,6 +362,18 @@ The kind-specific accessors accept either a `helixel-sel` struct or a
 raw ctx plist (for use inside recreate closures).  They are the
 preferred way to read ctx fields.
 
+  helixel--action-payload-* removed in favor of payload accessors.
+  See `helixel-tx-char`, `helixel-tx-type`, `helixel-tx-dir` for
+  shared-payload-key convenience accessors (find-char, replace-char,
+  surround).
+
+### `helixel-action-commit-hook`
+
+Abnormal hook fired after every action commits to the ring.  Called
+with one arg — the committed `helixel-action`.  Chain accumulator
+is the sole consumer today; extend here rather than touching
+`helixel-action-commit` or the ring.
+
 ### `defsubst` Compilation Order
 
 Several `defsubst` functions in `helixel-core.el` are inlined across

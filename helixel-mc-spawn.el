@@ -295,7 +295,7 @@ cursor — so real never moves and never collides with a fake."
   (interactive)
   (helixel-mc--mark-like-this -1))
 
-;;;###autoload
+;; Internal helper — not autoloaded (private "--" name).
 (defun helixel-mc--skip-in-dir (dir)
   "Skip occurrence in DIR (+1 / -1) without adding a cursor."
   (let* ((text (helixel-mc--region-text))

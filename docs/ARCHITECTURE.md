@@ -22,8 +22,14 @@
 | Struct | Role | Mutable? |
 |--------|------|----------|
 | `helixel-sel` | Selection descriptor (kind + ctx + recreate closure) | Immutable (copy on update) |
-| `helixel-action` | Transaction and ring entry (op + sel + payload + runner + category + subcat) | `helixel--last-tx` is mutable; ring entries are copies |
-| `helixel-action` | Unified event for ring storage (`;` jumping + event history) | Immutable after commit |
+| `helixel-tx` | Replay transaction (op + sel + payload + runner + display) | `helixel--last-tx` is the latest tx, mutable cell |
+| `helixel-action` | Ring/jump-log event (category + subcat + by-command + optional embedded `tx`) | Immutable after commit |
+
+Phase 4.1 split: `helixel-tx` carries everything needed to re-execute
+an edit (Pass 1).  `helixel-action` wraps it with history metadata
+(Pass 2).  Polymorphic helpers (`helixel-action-op`, `-sel`,
+`-payload`, `-runner`) accept either struct — on a tx they read
+directly, on an action they delegate to its embedded `tx`.
 
 ### Kind Registry
 
@@ -71,9 +77,17 @@ Both store `helixel-action` structs. The jump-list stores a subset of ring event
 Editing command
   → helixel--record-action (creates an event tx, stores as helixel--last-tx)
   → helixel-action-commit
+    → stamp :by-command
     → push to helixel--event-ring (dedup, cap)
-      → push to helixel--jump-list (filtered)
+    → push to helixel--jump-list (filtered)
+    → run helixel-action-commit-hook (entry)   ; chain accumulator
 ```
+
+`helixel-action-commit-hook` is an abnormal hook called with the
+committed entry.  It is the sole integration point for cross-cutting
+observers — chain (`helixel-chain.el`) hooks into it to append the
+committed tx onto the chain session's `:tx-list`.  Adding new
+observers should not require touching ring or commit code.
 
 ### Dedup
 
@@ -132,9 +146,24 @@ helixel-repeat-edit
 4. Store as `helixel--last-tx`
 5. Commit event via `helixel-action-commit`
 
-### Insert Recording
+### Insert Recording (Phase 4.4)
 
-Insert-mode keystrokes are recorded via `pre-command-hook` → `helixel--insert-keys` (vectors from `this-single-command-keys`). On exit: keys stored in tx payload as `:keys`, text as `:text` fallback. No kmacro, no `:commands` layer.
+Insert-mode commands are captured as a list of **segments** via
+`after-change-functions` + `pre-command-hook` / `post-command-hook`:
+
+- `(:keys VEC)` — command did not modify the buffer (motion, no-op).
+  Replay via `execute-kbd-macro`.
+- `(:text STR :delete-before N :offset O)` — command modified the
+  buffer.  STR is the post-state text in the change span; N is
+  characters to delete BEFORE the insertion point at replay (for
+  completion-style replace); O is the offset from end-of-insertion to
+  final point (e.g. `-1` for `electric-pair-mode' `()`).
+
+Replay for `:text` segments uses `delete-char` + `insert` +
+`goto-char` directly — it does NOT re-fire `post-self-insert-hook`,
+so `electric-pair-mode`, snippet expansion, and completion
+providers never double-trigger on replay.  `helixel--execute-keys`
+accepts a segment list, a raw key vector, or a kbd string.
 
 ### Line Advance
 
@@ -168,22 +197,37 @@ Insert-mode keystrokes are recorded via `pre-command-hook` → `helixel--insert-
 
 ## Chain (`helixel-chain.el`)
 
-Chain records a compound operation (move + edit) as a single repeatable unit.
+Chain records a compound operation (any sequence of motions + edits)
+as a single repeatable unit.  Phase 4.4 reworked chain to be a
+list-of-txs rather than a kmacro recorder.
 
 ### Lifecycle
 
-1. `helixel-repeat-chain-start` — begin recording (pre-command-hook collects keys)
-2. Move keys → `helixel--chain-move-keys`; First edit triggers phase switch
-3. Edit keys → `helixel--chain-edit-keys`
-4. `helixel-repeat-chain-end` — create tx with op='chain', payload includes kmacro
-5. `.` replays: strategy builder = `helixel--chain-strategy-builder`
+1. `helixel-repeat-chain-start` — snapshot pending sel + bounds;
+   set session active; `helixel-action-commit-hook` becomes the
+   accumulator.
+2. Each helixel command commits an action via
+   `helixel-action-commit`; if the action's tx has a runner AND the
+   by-command is not in the chain-control set
+   (chain-start / -end / -cancel / normal-escape), the tx is appended
+   to `helixel-chain-session-tx-list`.
+3. `helixel-repeat-chain-end` — finalize: merge init-ctx into a
+   chain tx with op=`chain`, payload `:tx-list LIST`; runner
+   iterates LIST and replays each sub-tx; broadcast to fake cursors
+   via `helixel-chain-recorded-functions`.
+4. `.` replays via custom `:strategy-builder` registered for `chain`:
+   - Advance: kind's `advance-fn`
+   - Apply: `helixel--repeat-chain-runner` iterates `:tx-list`
 
-### Strategy
+### Why list-of-txs (vs kmacro)
 
-Chain has a custom `:strategy-builder` in the op registry:
-- Advance: kind's advance-fn + replay move-keys
-- Apply: replay edit-keys via chain runner
-- All-buffer-fn: from kind registry
+Every helixel command already produces a `helixel-tx` (Phase 4.3),
+and each tx is fully position-agnostic with its own runner.  Chain
+just collects them; replay just dispatches each in order.  No
+`execute-kbd-macro`, no separate move-keys / edit-keys phases, no
+key-capture pre-command-hook.  Result in Phase 4.4: chain session
+struct shrank from 7 slots to 4, and per-cursor chain replay reuses
+the same `helixel-tx-replay` path as `.`-repeat on a single fake.
 
 ---
 
@@ -293,8 +337,7 @@ helixel-core (cl-lib only)
 
 ## Test Architecture
 
-817 ERT tests across 17 test files (mc layer adds
-`test/helixel-test-mc.el`). Key conventions:
+852 ERT tests across 17 test files.  Key conventions:
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions

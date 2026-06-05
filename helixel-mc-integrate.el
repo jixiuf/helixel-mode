@@ -164,47 +164,14 @@ any fake replays the same chain."
 ;; The helixel-insert / -after / -beginning-line / -after-end-line /
 ;; -newline / -prevline commands each declare a `:tx-runner' in their
 ;; `helixel-define-command' form (see helixel-editing.el).  The runner
-;; calls one of the helpers below; the unified mc dispatcher invokes
-;; it at every fake cursor via the standard fresh-action replay path.
+;; calls one of the `helixel-mc--prepos-*' helpers; the unified mc
+;; dispatcher invokes it at every fake cursor via the standard
+;; fresh-action replay path.
 ;;
-;; The previous `helixel-mc-prepos' symbol-property mechanism (and its
-;; `helixel-mc--maybe-preposition' dispatcher branch) has been deleted
-;; in Phase 4.3 — these helpers stay as named, testable functions but
-;; are wired purely through `:tx-runner'.
-
-(defun helixel-mc--prepos-region-begin ()
-  "Move to region-begin if `mark-active', else stay."
-  (when (and mark-active (mark t))
-    (goto-char (min (point) (mark t))))
-  (setq mark-active nil))
-
-(defun helixel-mc--prepos-region-end ()
-  "Move to `region-end' if `mark-active', else `forward-char'."
-  (if (and mark-active (mark t))
-      (goto-char (max (point) (mark t)))
-    (unless (eolp) (forward-char)))
-  (setq mark-active nil))
-
-(defun helixel-mc--prepos-bol ()
-  "Move to beginning of line at this fake cursor."
-  (beginning-of-line))
-
-(defun helixel-mc--prepos-eol ()
-  "Move to end of line at this fake cursor."
-  (end-of-line))
-
-(defun helixel-mc--prepos-newline-after ()
-  "Open a new line below this fake cursor (`o' semantics)."
-  (end-of-line)
-  (newline-and-indent))
-
-(defun helixel-mc--prepos-newline-before ()
-  "Open a new line above this fake cursor (`O' semantics)."
-  (beginning-of-line)
-  (let ((electric-indent-mode nil))
-    (newline nil t)
-    (forward-line -1)
-    (indent-according-to-mode)))
+;; Phase 4.4 follow-up: the helpers themselves now live in
+;; `helixel-editing.el' alongside the commands that reference them —
+;; this eliminates the cross-module forward `declare-function' that
+;; used to be required here.  Nothing left to define in this section.
 
 ;; ── Lifecycle: ensure mc cleans up with helixel-mode ──
 

@@ -754,6 +754,13 @@ exists (e.g. for real-cursor-only commands like
                         ;; ...) have no tx — just re-call interactively.
                         (helixel-mc--call-interactively cmd))
                     (search-failed (push cursor dead))
+                    (user-error
+                     ;; Recoverable: command isn't applicable at this
+                     ;; fake (e.g. `completion-preview-insert' with no
+                     ;; preview active at the fake's position, or a
+                     ;; movement command at bobp).  Keep the cursor
+                     ;; alive — only operational failures kill cursors.
+                     (ignore e))
                     (error (message "helixel-mc: %s at fake: %s"
                                     cmd (error-message-string e))
                            (push cursor dead))))

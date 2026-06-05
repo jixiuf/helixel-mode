@@ -362,5 +362,65 @@ of commands from modules `mc-integrate' itself depends on."
 ;; the history, and group-start logic all work naturally with
 ;; no mc-specific bookkeeping.
 
+;; ── completion-preview integration ──
+;;
+;; `completion-preview-mode' is single-buffer-wide: only the position
+;; at the real cursor has an active preview overlay.  When the user
+;; accepts the preview via `completion-preview-insert' (or its
+;; -word / -sexp variants), the function signals `user-error' at any
+;; cursor where the preview overlay is not active — i.e. at every
+;; fake.  Before Fix A in helixel-mc-core.el, the dispatcher's broad
+;; `error' handler caught that `user-error' and killed the cursors;
+;; with Fix A fakes survive but still don't get the completion text.
+;;
+;; Strategy: mark the three insert commands as real-only (no
+;; dispatcher broadcast) and add `:around' advice that captures the
+;; text inserted at the real cursor and inserts the same string at
+;; every fake, all in one undo group.
+
+(declare-function completion-preview-insert "completion-preview")
+(declare-function completion-preview-insert-word "completion-preview")
+(declare-function completion-preview-insert-sexp "completion-preview")
+
+(defvar helixel-mc-completion-preview-commands
+  '(completion-preview-insert
+    completion-preview-insert-word
+    completion-preview-insert-sexp)
+  "Commands whose inserted text should be mirrored to fake cursors.
+Each command runs only at the real cursor (per its `multiple-cursors'
+property), then `helixel-mc--completion-preview-sync' inserts the
+same text at every fake.")
+
+(defun helixel-mc--completion-preview-sync (orig &rest args)
+  "Around-advice: run ORIG with ARGS at real cursor, mirror to fakes.
+ORIG is one of the `completion-preview-*' insert commands.  Captures
+the text inserted between point-before and point-after the original
+call and inserts the same string at every fake cursor.
+
+No-op when multi-cursor mode is off, no fakes exist, dispatch is
+already in progress (nested call), or the original call did not
+advance point (preview not active / nothing inserted)."
+  (let ((start (point)))
+    (apply orig args)
+    (when (and helixel-multi-cursor-mode
+               (helixel-mc-any-p)
+               (not (helixel-mc-dispatch-in-progress-p))
+               (> (point) start))
+      (let ((text (buffer-substring-no-properties start (point))))
+        (undo-amalgamate-change-group
+          (helixel-mc-with-each-cursor
+            (insert text)))))))
+
+(defun helixel-mc--setup-completion-preview ()
+  "Wire `completion-preview-*' insert commands into multi-cursor sync.
+Marks each command real-only (so the `post-command-hook' dispatcher
+doesn't try to call it at fakes) and installs the sync advice."
+  (dolist (cmd helixel-mc-completion-preview-commands)
+    (put cmd 'multiple-cursors nil)
+    (advice-add cmd :around #'helixel-mc--completion-preview-sync)))
+
+(with-eval-after-load 'completion-preview
+  (helixel-mc--setup-completion-preview))
+
 (provide 'helixel-mc-integrate)
 ;;; helixel-mc-integrate.el ends here

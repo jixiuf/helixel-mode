@@ -1225,21 +1225,17 @@ if no further visible entry exists in that direction."
 ;; ──────────────────────────────────────────────────────────────────────
 
 (cl-defstruct (helixel-replay (:conc-name helixel-replay--))
-  "Replay-time context.  Bound dynamically via `helixel-with-replay'."
-  ;; What kind of replay?  One of:
-  ;;   dot       — `.' dot-repeat
-  ;;   comma     — `,' selection-repeat (preview)
-  ;;   chain     — chain runner replaying a compound edit
-  ;;   mc-fake   — dispatcher running at a fake cursor
-  ;;   mc-batch  — mc broadcast outer loop (suppress re-dispatch)
-  ;;   insert    — insert-mode replay
+  "Replay-time context.  Bound dynamically via `helixel-with-replay'.
+The ORIGIN field is one of:
+  dot       — `.' / `,' / chain / insert replay of a stored edit
+  mc-fake   — dispatcher running a command at a fake cursor
+  mc-batch  — mc broadcast outer loop (suppresses re-dispatch)
+
+The three search-advance fields are per-replay scratch used by
+`helixel--repeat-advance-search' to prevent infinite loops on
+zero-width patterns ($ / ^) at buffer edges.  They live here so
+nested replays don't clobber each other."
   (origin nil :read-only t)
-  ;; Fake-cursor overlay (only set when origin = mc-fake).
-  fake-cursor
-  ;; Edit being replayed (helixel-action struct), if any.
-  edit
-  ;; t when this replay is direction-flipped (e.g. `-.').
-  reverse-p
   ;; --- search-advance scratch (per-session) ---
   search-last-pos
   search-edge-seen
@@ -1251,26 +1247,18 @@ Dynamically bound by `helixel-with-replay'.")
 
 (defsubst helixel-replaying-p ()
   "Return non-nil when the current replay is replaying a stored edit.
-Does NOT include `mc-fake' / `mc-batch' origins — those wrap normal
-command execution at fake cursors and should not suppress per-fake
-recording.  Use `helixel-replay-in-fake-p' / `helixel-replay-origin-p'
-for mc-specific guards."
+True only for the `dot' origin (used by `.' / `,' / chain / insert
+replay paths).  Does NOT include `mc-fake' / `mc-batch' origins —
+those wrap normal command execution at fake cursors and should not
+suppress per-fake recording.  Use `helixel-replay-in-fake-p' /
+`helixel-mc-dispatch-in-progress-p' for mc-specific guards."
   (and helixel--replay
-       (memq (helixel-replay--origin helixel--replay)
-             '(dot comma chain insert))))
-
-(defsubst helixel-replay-origin ()
-  "Return the origin of the current replay context, or nil."
-  (and helixel--replay (helixel-replay--origin helixel--replay)))
-
-(defsubst helixel-replay-origin-p (origin)
-  "Return non-nil when current replay origin is ORIGIN."
-  (and helixel--replay
-       (eq (helixel-replay--origin helixel--replay) origin)))
+       (eq (helixel-replay--origin helixel--replay) 'dot)))
 
 (defsubst helixel-replay-in-fake-p ()
   "Return non-nil when replaying inside a fake cursor body."
-  (helixel-replay-origin-p 'mc-fake))
+  (and helixel--replay
+       (eq (helixel-replay--origin helixel--replay) 'mc-fake)))
 
 (defsubst helixel-mc-dispatch-in-progress-p ()
   "Return non-nil when an mc dispatch is in progress.

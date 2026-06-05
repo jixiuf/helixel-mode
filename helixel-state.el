@@ -454,16 +454,16 @@ The default state is determined by `helixel--default-state-for-buffer'."
 
 Argument STATUS is passed through to `helixel-mode-maybe-activate'."
   (interactive)
-  (helixel--tracking-open 'state 'toggle)
-  ;; Set global mode to t before iterating over the buffers so that we
-  ;; send the status directly to `helixel-normal-state' (which checks for
-  ;; a non-nil value of `helixel-global-mode'.
-  (setq helixel-global-mode t)
-  (mapc (lambda (buf)
-          (with-current-buffer buf
-            (helixel-mode-maybe-activate status)))
-        (buffer-list))
-  (setq helixel-global-mode (if status status 1)))
+  (helixel-with-action-tracking (:category 'state :subcat 'toggle)
+    ;; Set global mode to t before iterating over the buffers so that we
+    ;; send the status directly to `helixel-normal-state' (which checks
+    ;; for a non-nil value of `helixel-global-mode'.
+    (setq helixel-global-mode t)
+    (mapc (lambda (buf)
+            (with-current-buffer buf
+              (helixel-mode-maybe-activate status)))
+          (buffer-list))
+    (setq helixel-global-mode (if status status 1))))
 
 (defvar helixel-keyboard-quit-functions
   '(helixel--clear-data helixel--cancel-action)
@@ -488,20 +488,22 @@ is installed at module load (see below).")
 (defun helixel-mode ()
   "Toggle global Helixel mode."
   (interactive)
-  (helixel--tracking-open 'state 'toggle)
-  (setq helixel-global-mode (not helixel-global-mode))
-  (if helixel-global-mode
-      (progn
-        (add-hook 'after-change-major-mode-hook #'helixel-mode-maybe-activate)
-        (run-hooks 'helixel-mode-on-hook)
-        (helixel-mode-maybe-activate 1))
-    (cond
-     (helixel-normal-state (helixel-normal-state -1))
-     (helixel-insert-state (helixel-insert-state -1))
-     (helixel-motion-state (helixel-motion-state -1))
-     (helixel-visual-state (helixel-visual-state -1)))
-    (remove-hook 'after-change-major-mode-hook #'helixel-mode-maybe-activate)
-    (run-hooks 'helixel-mode-off-hook)))
+  (helixel-with-action-tracking (:category 'state :subcat 'toggle)
+    (setq helixel-global-mode (not helixel-global-mode))
+    (if helixel-global-mode
+        (progn
+          (add-hook 'after-change-major-mode-hook
+                    #'helixel-mode-maybe-activate)
+          (run-hooks 'helixel-mode-on-hook)
+          (helixel-mode-maybe-activate 1))
+      (cond
+       (helixel-normal-state (helixel-normal-state -1))
+       (helixel-insert-state (helixel-insert-state -1))
+       (helixel-motion-state (helixel-motion-state -1))
+       (helixel-visual-state (helixel-visual-state -1)))
+      (remove-hook 'after-change-major-mode-hook
+                   #'helixel-mode-maybe-activate)
+      (run-hooks 'helixel-mode-off-hook))))
     ;; helixel-action-push-functions removed — event-ring handles this now
 
 ;; Register xref/eglot jump commands so they push to the jump list.

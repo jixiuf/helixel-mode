@@ -466,16 +466,43 @@ conceptual unification at lower cost (no runner signature change, no
 N small conditionals scattered across runners).  See
 `helixel-tx-replay' in `helixel-core.el'.
 
-### 3. Eliminate deferred commit / audit all `helixel--tracking-open' raw call sites — REJECTED
+### 3. Eliminate deferred commit / audit all `helixel--tracking-open' raw call sites — PARTIALLY EXECUTED
 
 Proposal: force every command body through
 `helixel-with-action-tracking'; commit immediately in unwind-protect.
 
-Why rejected: the 11 raw call sites are legitimate.  Surround commands
-(5/11) have a prompt→mark→wrap→commit lifecycle that spans multiple
-interactive steps and does not fit a single-body macro.  Search
-commands (4/11) call `tracking-open' from non-command helpers.  Mode
-toggles (2/11) have their own lifecycle.
+Resolution: a full mechanical audit of all 11 raw call sites was
+rejected; a targeted fix of the 4 sites that ACTUALLY deferred commit
+was executed.
+
+Empirical breakdown of the 11 raw sites:
+- **7 sites commit immediately** — the 5 surround sites, the find-char
+  def macro, and the n/N search branch all call `record-action' or
+  `helixel-action-commit' in the same command body.  Wrapping them in
+  `helixel-with-action-tracking' is a pure cosmetic change with no
+  behavioral difference.  Left as-is.
+- **4 sites were deferred** — 2 state-toggle sites (`helixel-mode',
+  `helixel-mode-all') and 2 search repeat sites (find-char repeat,
+  n/N find-char branch).  These have been converted to immediate
+  commit (state via `with-action-tracking', search via explicit
+  `helixel-action-commit' calls).
+
+Why a FULL audit was still rejected:
+- The 7 immediate-commit sites have no observable lifecycle smell
+  — their `action-commit-hook' fires within the originating command,
+  not the next one.
+- The dual-source `by-command' stamp `(or helixel--current-command
+  this-command)' is NOT solely a deferred-commit workaround — it is
+  also required for ERT/batch use where `this-command' is nil (see
+  Refactor Lesson #1).  Eliminating deferred commit does not let us
+  simplify it.
+- Surround commands have a multi-step prompt→mark→wrap→commit
+  lifecycle that wraps awkwardly in a single-body macro.
+
+What WAS achieved by the targeted fix: zero deferred-commit sites
+remain in the codebase.  Any future hook handler can safely read
+`this-command' inside `action-commit-hook' and find it matches the
+action's `by-command' (modulo the ERT/batch nil case).
 
 ### 4. Generalize `:pre-replay-fn' to a list of hooks — REJECTED
 

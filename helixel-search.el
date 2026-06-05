@@ -531,6 +531,7 @@ Updates n-count in the pending sel so . repeats the full sequence."
         (progn
           (helixel--tracking-open 'find-char type)
           (helixel-search--find-char-core dir)
+          (helixel-action-commit)
           ;; Track n-count so . repeats the full n sequence.
           (helixel-search--find-char-set-sel char type dir))
       (message "No find-char to repeat"))))
@@ -616,6 +617,7 @@ Returns the chosen action plist or nil."
               (type (helixel-sel-find-char-type ctx))
               (char (helixel-sel-find-char-char ctx)))
          (helixel--tracking-open cat (helixel-action-subcat event))
+         (helixel-action-commit)
          
          (setq helixel--active-search
                (make-helixel-active-search

@@ -65,6 +65,12 @@ METADATA is a plist:
   :subcat   SUB — action subcategory (word, kill, insert, etc.)
   :clear-highlights — default t for :category movement, nil otherwise
   :params   PARAM-LIST — optional function parameter list
+  :tx-runner FN — optional unary function (TX) to attach to the live
+                   action's tx slot after the body runs.  Used to make
+                   the command's effect replayable at multi-cursors
+                   (and, eventually, by `.' once 4.3 unifies dispatch).
+                   When omitted, no tx is attached — the command is
+                   real-cursor-only as far as mc replay is concerned.
 
 For :category movement:
   - Auto-injects `helixel--track-visual-move' for \=`.\=` replay.
@@ -83,9 +89,16 @@ BODY is the command's business logic."
          (interactive-form (if has-interactive (car body) '(interactive)))
          (rest-body (if has-interactive (cdr body) body))
          (params (plist-get metadata :params))
+         (tx-runner (plist-get metadata :tx-runner))
          (track-visual
           (when (eq cat 'movement)
-            `((helixel--track-visual-move ',name)))))
+            `((helixel--track-visual-move ',name))))
+         (attach-tx
+          (when tx-runner
+            `((unless (helixel-replaying-p)
+                (when helixel--live-action
+                  (setf (helixel-action-tx helixel--live-action)
+                        (make-helixel-tx :runner ,tx-runner)))))))) 
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
@@ -104,7 +117,9 @@ BODY is the command's business logic."
          ;; ── Body (pure business logic) ──
          ,@rest-body
          ;; ── Visual-mode tracking (for . replay of movements) ──
-         ,@track-visual))))
+         ,@track-visual
+         ;; ── Optional tx-runner attachment (for unified mc replay) ──
+         ,@attach-tx))))
 
 ;; ── Operator definition macro ──
 

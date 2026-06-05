@@ -124,11 +124,15 @@ Returns the committed entry or nil."
                     entry (car helixel--event-ring)))
         (push entry helixel--event-ring)
         (helixel-action--ring-cap))
-      ;; `helixel--last-tx' should be the embedded TX (when present),
-      ;; not the entire action.  Pure movement actions have nil tx —
-      ;; in that case, leave last-tx alone (preserve the previous edit).
-      (when (helixel-action-tx entry)
-        (setq helixel--last-tx (helixel-action-tx entry)))
+      ;; `helixel--last-tx' tracks the most recent EDIT for `.' replay.
+      ;; Movement txs (op = nil, runner-only) participate in mc dispatch
+      ;; but must NOT advance last-tx — that would shadow the prior
+      ;; edit and break dot-repeat semantics.  The op-presence check
+      ;; distinguishes real edits (kill, change, insert-text, …) from
+      ;; mc-replay movement shims.
+      (when-let* ((tx (helixel-action-tx entry))
+                  ((helixel-tx-op tx)))
+        (setq helixel--last-tx tx))
       (helixel--global-jump-log-push entry)
       (setq helixel--live-action nil)
       entry)))

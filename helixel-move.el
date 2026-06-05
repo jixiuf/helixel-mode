@@ -60,14 +60,19 @@ OPTIONS is a plist supporting:
 
 Without highlights clearing:
   (helixel-define-movement helixel-scroll-up scroll-up-command scroll
-                        :clear-highlights nil)"
+                        :clear-highlights nil)
+
+Auto-emits a `:tx-runner' that re-invokes BUILTIN at replay time so
+the movement participates in the unified mc replay path."
   (declare (indent 1))
   (let ((clear (if (plist-member options :clear-highlights)
                    (plist-get options :clear-highlights)
                  t)))
     `(helixel-define-command ,name
          (:category movement :subcat ,type
-                    :clear-highlights ,clear)
+                    :clear-highlights ,clear
+                    :tx-runner (lambda (_tx)
+                                 (call-interactively #',builtin)))
        (call-interactively #',builtin))))
 
 (defmacro helixel-define-movements (&rest specs)
@@ -138,7 +143,8 @@ relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner."
   (let ((fn (intern (format "helixel--%s" fwd-fn))))
     `(helixel-define-command ,name
          (:category movement :subcat ,subcat
-          :params (&optional count))
+          :params (&optional count)
+          :tx-runner (lambda (_tx) (,name (or current-prefix-arg 1))))
        (interactive "p")
        (helixel--with-movement-surround
         (,fn ',thing (* ,sign (or count 1))))

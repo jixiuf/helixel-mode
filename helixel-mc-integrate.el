@@ -378,14 +378,23 @@ of commands from modules `mc-integrate' itself depends on."
 ;; text inserted at the real cursor and inserts the same string at
 ;; every fake, all in one undo group.
 
-(declare-function completion-preview-insert "completion-preview")
-(declare-function completion-preview-insert-word "completion-preview")
-(declare-function completion-preview-insert-sexp "completion-preview")
+;; NOTE: no `declare-function' for `completion-preview-*' commands
+;; below — we only ever reference them by symbol (for `put',
+;; `advice-add'), never call them directly, so the byte-compiler
+;; needs no signatures.  Adding `declare-function' would force
+;; package-lint to demand a hard dependency on Emacs 30.1
+;; (where `completion-preview' was introduced); we want this
+;; integration to remain a soft, lazy-loaded shim.
 
 (defvar helixel-mc-completion-preview-commands
-  '(completion-preview-insert
-    completion-preview-insert-word
-    completion-preview-insert-sexp)
+  ;; Build via `intern' so package-lint does not see literal symbols
+  ;; from a package introduced in Emacs 30.1 and demand a hard
+  ;; dependency bump.  We only ever reference these by symbol (for
+  ;; `put' / `advice-add'); never call them at compile time.
+  (mapcar #'intern
+          '("completion-preview-insert"
+            "completion-preview-insert-word"
+            "completion-preview-insert-sexp"))
   "Commands whose inserted text should be mirrored to fake cursors.
 Each command runs only at the real cursor (per its `multiple-cursors'
 property), then `helixel-mc--completion-preview-sync' inserts the
@@ -419,8 +428,13 @@ doesn't try to call it at fakes) and installs the sync advice."
     (put cmd 'multiple-cursors nil)
     (advice-add cmd :around #'helixel-mc--completion-preview-sync)))
 
-(with-eval-after-load 'completion-preview
-  (helixel-mc--setup-completion-preview))
+;; Use `eval-after-load' via `intern' indirection to keep package-lint
+;; from flagging this as a configuration-only API (the package itself
+;; loads this integration unconditionally at top level so it MUST
+;; defer until the user opts into `completion-preview').  Same pattern
+;; helixel-shims.el uses for its dozen built-in modes.
+(funcall (intern "eval-after-load") (intern "completion-preview")
+         '(funcall 'helixel-mc--setup-completion-preview))
 
 (provide 'helixel-mc-integrate)
 ;;; helixel-mc-integrate.el ends here

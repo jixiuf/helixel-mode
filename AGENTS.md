@@ -7,7 +7,6 @@
 | `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
-| `helixel-register.el` | **Named register system**: register backends (kill-ring, clipboard, primary), `helixel--kill-new`, `helixel--current-kill`, `helixel--yank`, register-aware wrappers. |
 | `helixel-insert-record.el` | Insert-mode recording.  Phase 4.4: segment-based capture (after-change-functions per command) — each insert-mode command becomes either `(:keys VEC)` (no buffer change — motion, etc.) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replays text segments verbatim without re-running `post-self-insert-hook' so `electric-pair-mode' / completion-preview / snippet expansion don't double-insert.  Replay helper `helixel--execute-keys' accepts both segment lists and legacy raw key vectors. |
 
 | `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
@@ -62,8 +61,6 @@ helixel-core (cl-lib only, zero helixel deps)
   │     ├── helixel-macros (→ core + ring)
   │     └── helixel-action (→ core + ring)
   │
-  ├── helixel-register (→ core)
-  │
   ├── helixel-textobj-engine (→ core)
   │     ├── helixel-textobj-pair (→ core + textobj-engine)
   │     │     └── helixel-textobj-block (→ core + textobj-engine
@@ -81,8 +78,7 @@ helixel-core (cl-lib only, zero helixel deps)
   │     ├── helixel-mc-spawn (→ core + mc-core)
   │     └── helixel-mc-integrate (→ core + mc-core + repeat + chain)
   │
-  └── helixel-state (→ core + ring + macros + register + action
-                      + repeat + textobj + surround)
+  └── helixel-state (→ core + ring + macros + repeat + textobj + surround)
         │
         ├── helixel-move (→ state + macros)
         │     │
@@ -150,8 +146,13 @@ and `,' replay.
               timestamp buffer by-command tx)
 ```
 Lightweight event recorded in `helixel--event-ring' and the global
-jump log.  For edits, the `tx' slot carries a `helixel-tx'.  Pure
-movement / search / state actions have `tx = nil'.
+jump log.  The `tx' slot carries a `helixel-tx'.  Pure movement /
+search / state actions have `tx' with nil `op' and nil `runner'.
+
+The tx `:payload' may hold a `:pre-replay-fn' — a unary function
+called by `helixel-tx-replay' before the main runner.  Insert-entry
+commands use this for per-fake prepositioning via the `:tx-runner'
+clause on `helixel-define-command'.
 
 Polymorphic helpers `helixel-action-op'/-sel/-payload/-runner accept
 either struct — on a `helixel-tx' they read directly; on a
@@ -187,6 +188,7 @@ a tx on actions if none exists.
 ;; ── Transaction ──
 (helixel-tx-create op sel &rest kv) → struct
   ;; Special kv: :runner fn, :display str|fn — rest becomes :payload
+  ;; Common payload keys: :keys, :text, :char, :pre-replay-fn
 (helixel-action-op tx)
 (helixel-action-sel tx)
 (helixel-action-payload tx)
@@ -222,7 +224,7 @@ a tx on actions if none exists.
 
 ;; ── Repeat ──
 (helixel--record-action op &rest extra)  ; stores tx + commits event
-(helixel-tx-replay tx)             ; calls :runner on tx
+(helixel-tx-replay tx)             ; calls :pre-replay-fn (if any), then :runner on tx
 (helixel-repeat-edit &optional prefix) ; bound to .
 (helixel-repeat-selection &optional prefix) ; bound to ,
 (helixel--build-strategy edit &optional reverse-p) → strategy struct
@@ -330,10 +332,11 @@ C-o / C-i remain real-only.
 ### Multi-cursor + `.` / `q` integration
 `helixel-repeat-edit' is whitelisted ON for multi-cursors: each
 cursor's snapshotted `helixel--last-tx' is replayed at its own
-position.  After `helixel-repeat-chain-end' an `:after' advice
-broadcasts the new chain tx to every fake cursor and applies it once
-immediately — so `q ... ESC' on N cursors gives N parallel chain
-applications, all in one undo step.
+position.  `helixel-repeat-chain-end' commits a chain action whose
+`by-command' stamp is `helixel-repeat-chain-end'; mc-integrate's
+`action-commit-hook' handler detects this and broadcasts the new
+chain tx to every fake cursor — so `q ... ESC' on N cursors gives N
+parallel chain applications, all in one undo step.
 
 ### ctx-lint keys
 CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-field`, `helixel-sel-textobj-command`, etc.).
@@ -370,9 +373,10 @@ preferred way to read ctx fields.
 ### `helixel-action-commit-hook`
 
 Abnormal hook fired after every action commits to the ring.  Called
-with one arg — the committed `helixel-action`.  Chain accumulator
-is the sole consumer today; extend here rather than touching
-`helixel-action-commit` or the ring.
+with one arg — the committed `helixel-action'.  Consumers: chain
+accumulator (`helixel--chain-on-commit') and mc-integrate
+(`helixel-mc--on-chain-end').  Extend here rather than touching
+`helixel-action-commit' or the ring.
 
 ### `defsubst` Compilation Order
 

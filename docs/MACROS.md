@@ -33,6 +33,7 @@ and the jump list (`C-o` / `C-i`).
 | `:dir` | symbol | Direction for `n`/`N` repeat: `forward`, `backward` |
 | `:params` | list | Function parameter list, e.g. `(&optional count)` |
 | `:clear-highlights` | boolean | Clear search highlights before executing. Default `t` for `:category movement`, `nil` otherwise. |
+| `:tx-runner` | function `(TX) -> nil` | Multi-cursor unifier. Stored as the command's per-fake replay closure (see Phase 4.3). When set, the mc dispatcher calls this at every fake cursor; otherwise it falls back to `call-interactively`. Use for movements, find-char prompts, and insert-entry prepositioners. |
 
 ### Auto-Injected Behavior
 
@@ -141,21 +142,28 @@ replay it.  This is a data-only registration — no command is defined.
 ```elisp
 (helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-action-payload tx) :char)))
+             (let ((c (helixel-tx-char tx)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
-            (helixel-replace-char
-             (plist-get (helixel-action-payload tx) :char))))
+            (helixel-replace-char (helixel-tx-char tx))))
 ```
+
+Prefer the convenience accessors in `helixel-core.el`
+(`helixel-tx-char` / `helixel-tx-type` / `helixel-tx-dir` for
+find-char + replace-char + surround; `helixel-sel-field` for
+ctx-key lookups; `helixel-action-payload-get' for arbitrary payload
+keys) over raw `plist-get` on the payload — the accessors document
+intent and stay consistent with the `helixel-sel-{kind}-{key}'
+family.
 
 **No corresponding interactive command:**
 ```elisp
 (helixel-register-op insert-text :display "i" :moves-point-p nil
   :runner (lambda (tx)
-            (let ((keys (plist-get (helixel-action-payload tx) :keys)))
+            (let ((keys (helixel-action-payload-get tx :keys)))
               (if keys
                   (helixel--execute-keys keys)
-                (insert (or (plist-get (helixel-action-payload tx) :text)
+                (insert (or (helixel-action-payload-get tx :text)
                             ""))))))
 ```
 
@@ -169,10 +177,10 @@ replay it.  This is a data-only registration — no command is defined.
 ```elisp
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (plist-get (helixel-action-payload tx) :char)))
+             (let ((c (helixel-tx-char tx)))
                (if c (format "ms[%c]" c) "ms")))
   :runner (lambda (tx)
-            (when-let* ((char (plist-get (helixel-action-payload tx) :char))
+            (when-let* ((char (helixel-tx-char tx))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 ```

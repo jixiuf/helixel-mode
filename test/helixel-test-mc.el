@@ -2877,5 +2877,28 @@ treat that as a replayable tx — it must fall back to
       (should (helixel-cs-mark-active cs)))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-self-insert-electric-pair ()
+  "With `electric-pair-mode' on, typing `(' in insert mode at
+multiple cursors must produce a balanced `()' at every cursor.
+Dispatcher path: `self-insert-command' broadcasts to fakes via
+`call-interactively'; `post-self-insert-hook' fires in each fake's
+context so electric-pair inserts the matching `)' there too."
+  (helixel-test-with-buffer "foo\nbar\nbaz\n"
+    (helixel-enter-normal-state)
+    (electric-pair-mode 1)
+    (unwind-protect
+        (progn
+          (goto-char 1) (end-of-line)              ; after `foo'
+          (helixel-mc-create-fake-cursor 8)        ; after `bar'
+          (helixel-mc-create-fake-cursor 12)       ; after `baz'
+          (helixel-enter-insert-state)
+          (let ((this-command 'self-insert-command)
+                (last-command-event ?\())
+            (call-interactively 'self-insert-command)
+            (helixel-mc--post-command))
+          (should (string= "foo()\nbar()\nbaz()\n" (buffer-string))))
+      (electric-pair-mode -1)
+      (helixel-mc-clear-all))))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

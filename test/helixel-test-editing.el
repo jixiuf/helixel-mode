@@ -1656,4 +1656,85 @@ The leading newline is part of content so mt adds newline only before close."
     ;; The tx sel should have count 2
     (should (= (helixel-sel-count (helixel-action-sel helixel--last-tx)) 2))))
 
+;; ── Segment-based insert recording (text-chunk path) ──
+
+(ert-deftest helixel-test-insert-record-text-segment-electric-pair ()
+  "Insert-mode recording captures `()' as one :text segment when
+`electric-pair-mode' is active.  Replay re-inserts the literal
+`()' (no double-pair) and lands point between the parens."
+  (helixel-test-with-buffer ""
+    (electric-pair-mode 1)
+    (unwind-protect
+        (progn
+          (helixel--insert-begin)
+          ;; Simulate typing `(' — self-insert + post-self-insert hook.
+          (let ((this-command 'self-insert-command)
+                (last-command-event ?\())
+            (run-hooks 'pre-command-hook)
+            (call-interactively 'self-insert-command)
+            (run-hooks 'post-command-hook))
+          (let ((segs (helixel--insert-finish)))
+            ;; One segment, text "()", point-offset -1.
+            (should (= 1 (length segs)))
+            (should (equal :text (caar segs)))
+            (should (equal "()" (plist-get (car segs) :text)))
+            (should (= -1 (plist-get (car segs) :offset)))
+            ;; Replay into a fresh buffer: re-inserts `()' verbatim.
+            (erase-buffer)
+            (helixel--execute-keys segs)
+            (should (string= "()" (buffer-string)))
+            ;; Point is between the parens, just like during typing.
+            (should (= 2 (point)))))
+      (electric-pair-mode -1))))
+
+(ert-deftest helixel-test-insert-record-text-segment-completion ()
+  "Insert-mode recording captures completion-style insertion as a
+:text segment (the FULL inserted string), regardless of which
+command performed it.  Models `completion-preview-insert' / snippet
+expansion / any non-self-insert insertion command."
+  (helixel-test-with-buffer ""
+    (helixel--insert-begin)
+    ;; Type a couple of chars normally.
+    (dolist (ch '(?f ?o))
+      (let ((this-command 'self-insert-command)
+            (last-command-event ch))
+        (run-hooks 'pre-command-hook)
+        (call-interactively 'self-insert-command)
+        (run-hooks 'post-command-hook)))
+    ;; Now simulate a completion-accept command that inserts `obar'.
+    (let ((this-command 'my-fake-completion-insert))
+      (run-hooks 'pre-command-hook)
+      (insert "obar")
+      (run-hooks 'post-command-hook))
+    (let ((segs (helixel--insert-finish)))
+      (should (= 3 (length segs)))
+      (should (equal :text (caar (last segs))))
+      (should (equal "obar" (plist-get (car (last segs)) :text)))
+      ;; Replay in a fresh buffer reproduces `foobar'.
+      (erase-buffer)
+      (helixel--execute-keys segs)
+      (should (string= "foobar" (buffer-string))))))
+
+(ert-deftest helixel-test-insert-record-key-segment-motion ()
+  "Insert-mode recording keeps a :keys segment for non-modifying
+commands (motion, no-op).  Models M-f / C-f / etc. between
+insertions."
+  (helixel-test-with-buffer ""
+    (helixel--insert-begin)
+    ;; Insert `a'.
+    (let ((this-command 'self-insert-command) (last-command-event ?a))
+      (run-hooks 'pre-command-hook)
+      (call-interactively 'self-insert-command)
+      (run-hooks 'post-command-hook))
+    ;; A motion command (no buffer change).
+    (let ((this-command 'forward-char))
+      (run-hooks 'pre-command-hook)
+      (ignore-errors (call-interactively 'forward-char))
+      (run-hooks 'post-command-hook))
+    (let ((segs (helixel--insert-finish)))
+      ;; First segment :text "a"; second segment :keys (motion).
+      (should (= 2 (length segs)))
+      (should (equal :text (caar segs)))
+      (should (equal :keys (caar (cdr segs)))))))
+
 ;;; helixel-test-edit.el ends here

@@ -344,28 +344,26 @@ OP-MOVES-POINT chooses the stepping algorithm:
   (save-excursion
     (goto-char start-pos)
     (forward-line dir)
-    (condition-case nil
-        (while t
-          (when (if (eq dir -1) (bobp) (eobp))
-            (signal 'user-error nil))
-          (setq cnt (1+ cnt))
-          (deactivate-mark)
-          (helixel--recreate-selection sel)
-          (unless preview-p
-            (helixel-tx-replay tx))
-          (if (not op-moves-point)
-              (progn
-                (when (/= (forward-line dir) 0)
-                  (signal 'user-error nil))
-                (when (if (eq dir -1) (bobp) (eobp))
-                  (signal 'user-error nil)))
-            (if (if (eq dir -1) (bobp) (eobp))
-                (signal 'user-error nil)
-              (unless (if (eq dir -1) (eolp) (bolp))
-                (forward-line dir))
-              (when (if (eq dir -1) (bobp) (eobp))
-                (signal 'user-error nil)))))
-      (user-error nil)))
+    (let ((at-edge (lambda () (if (eq dir -1) (bobp) (eobp))))
+          (done nil))
+      (while (not (or done (funcall at-edge)))
+        (setq cnt (1+ cnt))
+        (deactivate-mark)
+        (helixel--recreate-selection sel)
+        (unless preview-p
+          (helixel-tx-replay tx))
+        ;; Step to next line.  Two algorithms:
+        ;;   op-moves-point=nil → simple `forward-line'
+        ;;   op-moves-point=t   → skip the step if the op already
+        ;;                        left point at line edge (it ate
+        ;;                        the current line)
+        (cond
+         ((not op-moves-point)
+          (when (/= (forward-line dir) 0)
+            (setq done t)))
+         (t
+          (unless (if (eq dir -1) (eolp) (bolp))
+            (forward-line dir)))))))
   cnt)
 
 (defun helixel--repeat-line-preview (tx sel reverse-p)

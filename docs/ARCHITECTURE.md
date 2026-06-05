@@ -8,10 +8,9 @@
 
 | Module | Role |
 |--------|------|
-| `helixel-core.el` | Pure data layer: structs, registries, delimiter protocol, tx helpers |
+| `helixel-core.el` | Pure data layer: structs, registries, delimiter protocol, tx helpers, replay context, named registers |
 | `helixel-ring.el` | Event storage: ring + jump-log + tracking-open + live-event |
 | `helixel-macros.el` | Command/operator definition macros |
-| `helixel-register.el` | Named register system + kill-ring wrappers |
 
 ---
 
@@ -300,12 +299,10 @@ For self-contained commands (chain).  Wraps body in
 ## File Dependency Graph
 
 ```
-helixel-core (cl-lib only)
+helixel-core (cl-lib only; includes replay context + named registers)
   ├── helixel-ring (→ core)
   │     ├── helixel-macros (→ core + ring)
   │     └── helixel-action (→ core + ring)
-  │
-  ├── helixel-register (→ core)
   │
   ├── helixel-repeat (→ core + action)
   │     └── helixel-chain (→ core + repeat + macros)
@@ -313,7 +310,7 @@ helixel-core (cl-lib only)
   ├── helixel-textobj (→ core)
   │     └── helixel-surround (→ core + ring + repeat + textobj)
   │
-  └── helixel-state (→ core + ring + macros + register + action
+  └── helixel-state (→ core + ring + macros + action
                       + repeat + textobj + surround)
         ├── helixel-move (→ state + macros)
         ├── helixel-editing (→ state + move + core + macros + search)
@@ -430,6 +427,90 @@ These are load-bearing decisions that the codebase actively depends on
    `helixel-keyboard-quit-functions` (abnormal hook); only one
    `advice-add` on `keyboard-quit` lives in `helixel-state.el`.
    Never advise `keyboard-quit` from another module.
+
+## Decisions Considered and Rejected
+
+These alternatives were proposed during architectural review and
+explicitly rejected.  Documented so future contributors do not
+re-litigate them without new evidence.
+
+### 1. Merge `helixel-tx` into `helixel-action` — REJECTED
+
+Proposal: collapse the two structs into one 11-slot struct, eliminating
+~56 LOC of polymorphic accessors.
+
+Why rejected:
+- The split encodes two genuine domains: **history** (ring, `;`,
+  C-o/C-i, consumed by `helixel-ring` + jump-log) and **replay**
+  (`.`, `,`, chain, mc, consumed by `helixel-repeat` + `helixel-chain`
+  + `helixel-mc-*`).  Most callsites operate in ONE domain.
+- Polymorphic accessors are a BRIDGE at the ~67 sites where the two
+  domains genuinely overlap, not a tax at every call site.  The other
+  ~150 callsites use `helixel-tx-*` directly with no polymorphism.
+- A merged 11-slot struct would surface 4 always-nil slots on every
+  movement entry to every reader; the current nested-tx structure
+  visually groups the replay fields.
+- The `mc-tx` deletion (which removed the strongest practical argument
+  for keeping the split) demonstrated that the split is a CONTAINER
+  that absorbs architectural changes, not a CONSTRAINT that obstructs
+  them.
+
+### 2. Context-aware runners `(lambda (tx &optional context) ...)` — REJECTED
+
+Proposal: replace the dual-tx (`tx` + `mc-tx`) model with a single
+runner that branches internally on a `:real` / `:fake` context
+parameter.
+
+Why rejected: the `:pre-replay-fn` payload approach achieves the same
+conceptual unification at lower cost (no runner signature change, no
+N small conditionals scattered across runners).  See
+`helixel-tx-replay' in `helixel-core.el'.
+
+### 3. Eliminate deferred commit / audit all `helixel--tracking-open' raw call sites — REJECTED
+
+Proposal: force every command body through
+`helixel-with-action-tracking'; commit immediately in unwind-protect.
+
+Why rejected: the 11 raw call sites are legitimate.  Surround commands
+(5/11) have a prompt→mark→wrap→commit lifecycle that spans multiple
+interactive steps and does not fit a single-body macro.  Search
+commands (4/11) call `tracking-open' from non-command helpers.  Mode
+toggles (2/11) have their own lifecycle.
+
+### 4. Generalize `:pre-replay-fn' to a list of hooks — REJECTED
+
+Proposal: change the payload entry from a single function to a list.
+
+Why rejected: no command currently attaches more than one
+`:tx-runner'.  Generalizing is a 5-line change when actually needed,
+so pre-solving has negative value.  The single-write invariant is
+documented in `helixel-define-command's docstring.
+
+### 5. Marker → integer for `helixel-repeat-preview-pos' — REJECTED
+
+Proposal: replace the marker with a buffer-position integer.
+
+Why rejected: regression risk.  Markers auto-track buffer edits
+between `,` and `.'; integers don't.  Any intermediate insertion
+would shift the target position.
+
+### 6. Consolidate `helixel-keyboard-quit-functions' into `helixel-state-change-hook' — REJECTED
+
+Why rejected: C-g does not always trigger a state change (e.g. C-g
+in normal mode stays in normal).  Hooks model independent events.
+
+### 7. Replace `helixel-repeat-edit-function' with `:around' advice — REJECTED
+
+Why rejected: violates Design Invariant #3 ("Runner-replay over
+advice. No per-command advice-add").
+
+### 8. File merges beyond `helixel-replay.el' + `helixel-register.el' — REJECTED
+
+Proposals to merge: `macros.el' → `ring.el' (cycle), `chain.el' →
+`repeat.el' (produces 1000-LOC mega-file), `mc-integrate.el' →
+`mc-core.el' (pulls repeat+chain deps into mc-core, violating
+mc-core's minimal-deps invariant), `insert-record.el' → `repeat.el'
+(no callsite reduction).
 
 ## Refactor Lessons (load-bearing gotchas)
 

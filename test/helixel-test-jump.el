@@ -178,6 +178,53 @@
     (kill-buffer buf-a)
     (kill-buffer buf-b)))
 
+(ert-deftest helixel-test-jump-dead-buffer ()
+  "C-o skips entries whose buffer has been killed."
+  (let ((helixel--global-jump-log nil)
+        (helixel--jump-pos nil)
+        (buf (generate-new-buffer "jump-dead")))
+    (with-current-buffer buf
+      (insert "line1\nline2")
+      (goto-char 2)
+      (helixel-register-jump 'goto 'test)
+      (goto-char 7)
+      (helixel-register-jump 'search 'foo))
+    (kill-buffer buf)
+    (with-temp-buffer
+      (insert "fresh")
+      (let ((msg nil))
+        (cl-letf (((symbol-function 'message)
+                   (lambda (fmt &rest args)
+                     (setq msg (apply #'format fmt args)))))
+          (helixel-jump-backward)
+          (should (string= msg "No jump positions")))))))
+
+(ert-deftest helixel-test-jump-capacity-cap ()
+  "Jump log truncates at helixel-jump-log-max; navigation survives."
+  (let ((helixel--global-jump-log nil)
+        (helixel--jump-pos nil)
+        (helixel-jump-log-max 5))
+    (with-temp-buffer
+      (transient-mark-mode 1)
+      (insert (make-string 100 ?x))
+      (dotimes (i 10)
+        (goto-char (1+ i))
+        (helixel-register-jump 'goto 'test))
+      ;; Log should be capped at 5
+      (should (<= (length helixel--global-jump-log) 5))
+      ;; The oldest entry should be position 7 (the return jump eats one cap slot)
+      (goto-char 10)
+      (helixel-jump-backward)
+      (should (= (point) 7))
+      (helixel-jump-forward)  ;; back to original position
+      (should (= (point) 10))
+      (let ((msg nil))
+        (cl-letf (((symbol-function 'message)
+                   (lambda (fmt &rest args)
+                     (setq msg (apply #'format fmt args)))))
+          (helixel-jump-forward)  ;; now at newest
+          (should (string= msg "At newest")))))))
+
 ;; ============================================================================
 ;; P0.1: ring-head sync — verify pick replays full payload
 ;; ============================================================================

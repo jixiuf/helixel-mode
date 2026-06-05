@@ -5,6 +5,12 @@
 
 Helix-style modal editing for Emacs.
 
+Helixel is *selection-first*: you select a region first, then act on it.
+This is the opposite of Vim's operator-pending model (~d3w~ = "delete 3 words"
+where the operator comes first).  In Helixel you type ~w w w d~ — select three
+words, then delete.  If you're coming from Vim, this is the one paradigmatic
+difference to internalize.
+
 ** Install
 
 #+begin_src elisp
@@ -22,6 +28,25 @@ Or manually:
 #+end_src
 
 Requires Emacs >= 29.1.
+
+** Quick Setup
+
+The three settings most users change:
+
+#+begin_src elisp
+  ;; Cursor: bar in insert, box in normal (default)
+  (setq helixel-mode-cursor-color "#ff8f00")
+
+  ;; Default state for read-only buffers (dired, info, etc.)
+  (setq helixel-major-mode-default-states
+        '((dired-mode . motion)
+          (help-mode . motion)))
+
+  ;; Add mode-specific keybindings
+  (helixel-define-key 'normal "SPC f" #'find-file)
+#+end_src
+
+See ~M-x customize-group RET helixel RET~ for all 26 options.
 
 ** Usage
 

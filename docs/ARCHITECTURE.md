@@ -582,3 +582,33 @@ mc-core's minimal-deps invariant), `insert-record.el' → `repeat.el'
    tests that don't enable `helixel-mode` globally (e.g. mc
    keyboard-quit cleanup) must be installed at module load with a
    per-fn gate inside, not inside the `helixel-mode` toggle body.
+
+## Watch List (deferred concerns)
+
+Forward-flags noted during the Round-6/7 PK closeout.  Not bugs;
+not blocking; record here so the next contributor sees them.
+
+1. **`helixel-action--ensure-tx` is the hidden mutator.**  C1
+   (merging `helixel-tx` into `helixel-action`) was rejected;
+   the costs are documented in §Rejected #1 above.  If a future
+   bug surfaces unexpected tx mutation inside a recorded action,
+   start the investigation at `helixel-action--ensure-tx` — it is
+   the one place where a payload-setter on an action can silently
+   allocate a fresh tx and detach it from prior aliases.
+
+2. **Third `eval-after-load` indirection → extract helper.**  The
+   completion-preview integration in `helixel-mc-integrate.el`
+   uses the same `(funcall (intern "eval-after-load") ...)` trick
+   that `helixel-shims--defer-setup` uses for 12 built-in modes.
+   Two copies is fine; a third would warrant promoting the helper
+   to a shared utility (probably in `helixel-core.el' since both
+   files already require it).  See `helixel-shims--defer-setup`
+   for the canonical shape.
+
+3. **`helixel-mc-integrate.el` size watch.**  Currently ~430 LOC
+   with the completion-preview shim.  If it crosses ~500 LOC the
+   split argument from C7 should be reconsidered — the cohesion
+   that justified rejecting C7 weakens once the file mixes more
+   than two independent integration concerns (currently:
+   chain/repeat/insert glue + completion-preview).  Below ~500
+   LOC, leave it alone.

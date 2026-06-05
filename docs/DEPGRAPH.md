@@ -9,14 +9,12 @@ graph TD
   helixel-chain --> helixel-ring
   helixel-chain --> helixel-macros
   helixel-chain --> helixel-repeat
-  helixel-chain --> helixel-replay
   helixel-editing --> helixel-state
   helixel-editing --> helixel-move
   helixel-editing --> helixel-core
   helixel-editing --> helixel-macros
   helixel-editing --> helixel-search
   helixel-insert-record --> helixel-core
-  helixel-insert-record --> helixel-replay
   helixel-keymap --> helixel-state
   helixel-keymap --> helixel-move
   helixel-keymap --> helixel-editing
@@ -30,7 +28,6 @@ graph TD
   helixel-macros --> helixel-core
   helixel-macros --> helixel-ring
   helixel-mc-core --> helixel-core
-  helixel-mc-core --> helixel-replay
   helixel-mc-core --> helixel-ring
   helixel-mc-integrate --> helixel-core
   helixel-mc-integrate --> helixel-mc-core
@@ -43,12 +40,10 @@ graph TD
   helixel-mc-targets --> helixel-mc-core
   helixel-move --> helixel-state
   helixel-move --> helixel-macros
-  helixel-register --> helixel-core
   helixel-repeat --> helixel-core
   helixel-repeat --> helixel-ring
   helixel-repeat --> helixel-insert-record
   helixel-ring --> helixel-core
-  helixel-ring --> helixel-replay
   helixel-search --> helixel-state
   helixel-search --> helixel-core
   helixel-search --> helixel-macros
@@ -59,7 +54,6 @@ graph TD
   helixel-state --> helixel-core
   helixel-state --> helixel-ring
   helixel-state --> helixel-macros
-  helixel-state --> helixel-register
   helixel-state --> helixel-repeat
   helixel-state --> helixel-textobj
   helixel-state --> helixel-surround
@@ -83,10 +77,8 @@ graph TD
   helixel-textobj --> helixel-textobj-block
   helixel-textobj --> helixel-textobj-marks
   helixel --> helixel-core
-  helixel --> helixel-replay
   helixel --> helixel-ring
   helixel --> helixel-macros
-  helixel --> helixel-register
   helixel --> helixel-repeat
   helixel --> helixel-chain
   helixel --> helixel-state

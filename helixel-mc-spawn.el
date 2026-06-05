@@ -960,7 +960,8 @@ into history."
         (let* ((p (nth 0 entry)) (m (nth 1 entry)) (a (nth 2 entry))
                (ov (helixel-mc-create-fake-cursor p (or m p))))
           (when ov
-            (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) (and a (numberp m) (/= p m)))
+            (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs))
+                  (and a (numberp m) (/= p m)))
             (helixel-mc--update-fake-region ov)))))))
 
 ;; Auto-snapshot before `clear-all' destroys cursors.  Done via

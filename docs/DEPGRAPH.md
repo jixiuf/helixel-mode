@@ -29,6 +29,7 @@ graph TD
   helixel-macros --> helixel-ring
   helixel-mc-core --> helixel-core
   helixel-mc-core --> helixel-replay
+  helixel-mc-core --> helixel-ring
   helixel-mc-integrate --> helixel-core
   helixel-mc-integrate --> helixel-mc-core
   helixel-mc-integrate --> helixel-repeat

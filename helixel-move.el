@@ -368,7 +368,8 @@ ORIG is the original point before jumping."
       (error nil))))
 
 (helixel-define-command helixel-jump-to-match
-    (:category movement :subcat match)
+    (:category movement :subcat match
+     :tx-runner (lambda (_tx) (helixel-jump-to-match)))
   "Jump between matching delimiters.
 Uses the textobj delimiter protocol to find the matching end of
 any pair (parens, brackets, braces, quotes, angle-brackets),
@@ -435,7 +436,8 @@ for unmatched bracket characters."
       (message "No matching bracket found"))))
 
 (helixel-define-command helixel-go-beginning-buffer
-    (:category movement :subcat goto)
+    (:category movement :subcat goto
+     :tx-runner (lambda (_tx) (helixel-go-beginning-buffer)))
   (if current-prefix-arg
       (let ((n (prefix-numeric-value current-prefix-arg)))
         (goto-char (point-min))
@@ -443,7 +445,8 @@ for unmatched bracket characters."
     (call-interactively #'beginning-of-buffer)))
 
 (helixel-define-command helixel-goto-line
-    (:category movement :subcat goto :params (&optional arg))
+    (:category movement :subcat goto :params (&optional arg)
+     :tx-runner (lambda (_tx) (helixel-goto-line current-prefix-arg)))
   (interactive "P")
   (let ((n (if arg
                (prefix-numeric-value arg)
@@ -495,7 +498,9 @@ new direction."
 
 (helixel-define-command helixel-select-line
     (:category movement :subcat lineselect
-               :params (&optional count) :clear-highlights nil)
+               :params (&optional count) :clear-highlights nil
+               :tx-runner (lambda (_tx)
+                            (helixel-select-line current-prefix-arg)))
   (interactive "p")
   (let* ((n (or count 1))
          (abs-n (abs n))
@@ -540,7 +545,9 @@ new direction."
 
 (helixel-define-command helixel-select-line-up
     (:category movement :subcat lineselect
-               :params (&optional count) :clear-highlights nil)
+               :params (&optional count) :clear-highlights nil
+               :tx-runner (lambda (_tx)
+                            (helixel-select-line-up current-prefix-arg)))
   (interactive "p")
   (let* ((n (or count 1))
          (abs-n (abs n))
@@ -585,7 +592,9 @@ new direction."
 
 (helixel-define-command helixel-select-rectangle
     (:category movement :subcat rectselect
-               :params (&optional count) :clear-highlights nil)
+               :params (&optional count) :clear-highlights nil
+               :tx-runner (lambda (_tx)
+                            (helixel-select-rectangle current-prefix-arg)))
   (interactive "p")
   (let ((n (or count 1))
         (extending rectangle-mark-mode)

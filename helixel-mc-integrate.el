@@ -105,28 +105,13 @@ the override path — mc dispatches the same edit at each fake."
 
 ;; ── Substitute commands for fake-cursor dispatch ──
 ;;
-;; Some commands prompt for input via `(interactive "c")' etc.
-;; Re-running them at each fake cursor would re-read input.  Instead
-;; we map them to a no-prompt substitute that uses the state the real
-;; cursor's call already established.
-;;
-;; The single source of truth is `helixel-mc-defcmd' below; the
-;; alist is populated from those calls.  No bulk seeding.
-
-(declare-function helixel-find-repeat "helixel-search" ())
-
-;; Find-char dispatch: substitute the prompting variants with the
-;; non-prompting `helixel-find-repeat' at each fake cursor.  Each
-;; `helixel-mc-defcmd' call also auto-marks the substitute as
-;; mc-friendly.
-(helixel-mc-defcmd helixel-find-next-char
-  :substitute #'helixel-find-repeat)
-(helixel-mc-defcmd helixel-find-prev-char
-  :substitute #'helixel-find-repeat)
-(helixel-mc-defcmd helixel-find-till-char
-  :substitute #'helixel-find-repeat)
-(helixel-mc-defcmd helixel-find-prev-till-char
-  :substitute #'helixel-find-repeat)
+;; Phase 4.3 unification: every prompting command (find-char, replace-
+;; char, surround-add, etc.) now produces a `helixel-tx' whose payload
+;; carries the prompted decisions.  The unified mc dispatcher reads
+;; this tx via `helixel-mc--fresh-action-from-real' and replays the
+;; runner at every fake.  No substitute-alist is needed — the previous
+;; `helixel-mc-defcmd' calls for find-next-char / find-prev-char /
+;; find-till-char / find-prev-till-char have been deleted.
 
 ;; The dispatcher (with atomic-undo amalgamation) lives in
 ;; helixel-mc-core.el as `helixel-mc--post-command'.
@@ -138,7 +123,8 @@ the override path — mc dispatches the same edit at each fake."
 Call after building a new chain transaction so subsequent `.' at
 each fake cursor replays the chain (not the pre-chain edit)."
   (dolist (ov (helixel-mc-all-cursors))
-    (setf (helixel-cs-last-action (overlay-get ov 'helixel-cs)) helixel--last-tx)))
+    (setf (helixel-cs-last-action (overlay-get ov 'helixel-cs))
+          helixel--last-tx)))
 
 (defun helixel-mc--apply-chain-once ()
   "Execute `helixel--last-tx' once at every fake cursor.
@@ -176,21 +162,15 @@ any fake replays the same chain."
 ;; ── Insert-state per-cursor pre-positioning ──
 ;;
 ;; The helixel-insert / -after / -beginning-line / -after-end-line /
-;; -newline / -prevline commands are real-cursor-only (they call
-;; `helixel--enter-insert' which we don't want to recurse).  Instead
-;; we pre-position each fake cursor at insert-state entry so the
-;; subsequent self-insert-command dispatches insert at the right place.
+;; -newline / -prevline commands each declare a `:tx-runner' in their
+;; `helixel-define-command' form (see helixel-editing.el).  The runner
+;; calls one of the helpers below; the unified mc dispatcher invokes
+;; it at every fake cursor via the standard fresh-action replay path.
 ;;
-;; Each insert-entry command declares its prepositioner via the
-;; symbol property `helixel-mc-prepos':
-;;
-;;   (put 'my-insert-cmd 'helixel-mc-prepos #'my-prepos-fn)
-;;
-;; The fn runs once at each fake cursor (inside its restored
-;; point/mark environment) and should leave point where the next
-;; insertion should start.  No advice is registered — dispatch is
-;; driven from `helixel-mc--post-command' (via
-;; `helixel-mc--maybe-preposition' below).
+;; The previous `helixel-mc-prepos' symbol-property mechanism (and its
+;; `helixel-mc--maybe-preposition' dispatcher branch) has been deleted
+;; in Phase 4.3 — these helpers stay as named, testable functions but
+;; are wired purely through `:tx-runner'.
 
 (defun helixel-mc--prepos-region-begin ()
   "Move to region-begin if `mark-active', else stay."
@@ -225,17 +205,6 @@ any fake replays the same chain."
     (newline nil t)
     (forward-line -1)
     (indent-according-to-mode)))
-
-;; Register prepositioners on each helixel insert-entry command.
-(pcase-dolist
-    (`(,cmd . ,fn)
-     '((helixel-insert            . helixel-mc--prepos-region-begin)
-       (helixel-insert-after      . helixel-mc--prepos-region-end)
-       (helixel-insert-beginning-line . helixel-mc--prepos-bol)
-       (helixel-insert-after-end-line . helixel-mc--prepos-eol)
-       (helixel-insert-newline    . helixel-mc--prepos-newline-after)
-       (helixel-insert-prevline   . helixel-mc--prepos-newline-before)))
-  (put cmd 'helixel-mc-prepos fn))
 
 ;; ── Lifecycle: ensure mc cleans up with helixel-mode ──
 

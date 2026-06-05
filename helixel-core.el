@@ -701,7 +701,12 @@ Slots:
                  the multi-cursor dispatcher to detect that an
                  edit was produced by the just-completed command
                  and therefore should be replayed at each fake.
-  TX          — `helixel-tx' for edit actions, nil otherwise."
+  TX          — `helixel-tx' for edit actions, nil otherwise.
+  MC-TX       — optional alternate `helixel-tx' used by the mc
+                 dispatcher in preference to TX.  Lets a command
+                 record a different runner for fake-cursor replay
+                 than for `.' / ring-pick replay.  Set by
+                 `helixel-define-command's `:tx-runner' clause."
   category
   subcat
   mark-region
@@ -709,7 +714,8 @@ Slots:
   timestamp
   buffer
   by-command
-  tx)
+  tx
+  mc-tx)
 
 (defsubst helixel-action-op (obj)
   "Return the op of OBJ.  OBJ may be a `helixel-tx' or `helixel-action'.

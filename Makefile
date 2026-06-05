@@ -110,9 +110,9 @@ ctx-lint:
 	for file in $(FILES); do \
 	  case "$$file" in helixel-core.el) continue ;; esac; \
 	  for key in $(CTX_UNIQUE); do \
-	    if grep -qn "plist-get.*$$key" "$$file" 2>/dev/null; then \
+	    if grep -qnE "plist-get.*$$key([^a-zA-Z0-9_-]|$$)" "$$file" 2>/dev/null; then \
 	      echo "$$file: FATAL — raw plist-get with ctx-unique key $$key:"; \
-	      grep -n "plist-get.*$$key" "$$file"; \
+	      grep -nE "plist-get.*$$key([^a-zA-Z0-9_-]|$$)" "$$file"; \
 	      err=1; \
 	    fi; \
 	  done; \

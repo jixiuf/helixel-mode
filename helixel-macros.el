@@ -97,8 +97,8 @@ BODY is the command's business logic."
           (when tx-runner
             `((unless (helixel-replaying-p)
                 (when helixel--live-action
-                  (setf (helixel-action-tx helixel--live-action)
-                        (make-helixel-tx :runner ,tx-runner)))))))) 
+                  (setf (helixel-action-mc-tx helixel--live-action)
+                        (make-helixel-tx :runner ,tx-runner))))))))
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
@@ -112,14 +112,17 @@ BODY is the command's business logic."
              (this-command ',name))
          ;; ── Open tracking event (via unified entry point) ──
          (helixel--tracking-open ',cat ',sub)
+         ;; ── Optional mc-tx attachment (for unified mc replay) ──
+         ;; Attach BEFORE the body so eager record-action commits keep
+         ;; the mc-tx on the committed ring entry.  `live-action-set'
+         ;; only writes the `tx' slot, leaving mc-tx untouched.
+         ,@attach-tx
          ;; ── Highlight clearing ──
          ,@(when clear '((helixel--clear-highlights)))
          ;; ── Body (pure business logic) ──
          ,@rest-body
          ;; ── Visual-mode tracking (for . replay of movements) ──
-         ,@track-visual
-         ;; ── Optional tx-runner attachment (for unified mc replay) ──
-         ,@attach-tx))))
+         ,@track-visual))))
 
 ;; ── Operator definition macro ──
 

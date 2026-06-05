@@ -42,6 +42,7 @@
 (require 'cl-lib)
 (require 'helixel-core)
 (require 'helixel-replay)
+(require 'helixel-ring)            ; helixel-action-commit
 
 (defvar helixel-multi-cursor-mode)        ; forward decl — defined below
 (defvar helixel--current-state)           ; from `helixel-state'
@@ -174,7 +175,7 @@ independent of any later movement of point / mark."
 
 (defun helixel-cs-restore (cs)
   "Restore cursor state CS into the current globals.
-Moves point and the mark-marker to CS's positions, sets
+Moves point and the `mark-marker' to CS's positions, sets
 `mark-active', and copies every helixel per-cursor var."
   (goto-char (marker-position (helixel-cs-point cs)))
   (set-marker (mark-marker) (marker-position (helixel-cs-mark cs)))
@@ -535,31 +536,21 @@ Consults the `multiple-cursors' symbol property; falls back to
   (dolist (c commands)
     (put c 'multiple-cursors nil)))
 
-(cl-defmacro helixel-mc-defcmd (cmd &key (policy 'all) substitute prepos)
+(cl-defmacro helixel-mc-defcmd (cmd &key (policy 'all))
   "Declarative dispatch spec for CMD.
 Keyword options:
   POLICY — `all' or `real' (default `all').  When `real', CMD
      runs only at the real cursor (sets `multiple-cursors'
      property to nil).  Any other value sets the property to t.
-  SUBSTITUTE FN — when CMD runs at a fake cursor, dispatch FN
-     instead.  Adds (CMD . FN) to
-     `helixel-mc--fake-substitute-alist'.
-     FN is also auto-marked with policy `all'.
-  PREPOS FN — set CMD's `helixel-mc-prepos' symbol property to
-     FN so insert-entry commands stage fakes before broadcast.
 
-Replaces three separate calls (`put', `add-to-list', another
-`put') at every dispatch site with one declarative form."
+The legacy `:substitute' and `:prepos' arms (Phase 4.3 cleanup) are
+gone — commands now produce a `helixel-tx' (or write to `mc-tx' via
+`helixel-define-command's `:tx-runner' clause) which the unified
+dispatcher replays at every fake cursor."
   (declare (indent 1))
   (let ((real-only (eq policy 'real)))
     `(progn
        (put ',cmd 'multiple-cursors ,(not real-only))
-       ,@(when substitute
-           `((add-to-list 'helixel-mc--fake-substitute-alist
-                          (cons ',cmd ,substitute))
-             (put ,substitute 'multiple-cursors t)))
-       ,@(when prepos
-           `((put ',cmd 'helixel-mc-prepos ,prepos)))
        ',cmd)))
 
 ;; ── Dispatch loop ──
@@ -683,18 +674,20 @@ without going through the command loop."
 (defun helixel-mc--fresh-action-from-real ()
   "Return the `helixel-tx' committed by `this-command' at real, or nil.
 Looks at the front of `helixel--event-ring' — the most recent committed
-action.  Returns its tx if and only if:
-  - the action carries a tx (i.e., it's a real edit, not pure movement),
-  - the action's `by-command' stamp matches `this-command',
-  - `this-command' has no `helixel-mc-prepos' property (those manage
-    their own per-fake staging and should NOT replay the edit body)."
-  (when (and (symbolp this-command)
-             (not (get this-command 'helixel-mc-prepos)))
-    (let* ((entry (car helixel--event-ring))
-           (tx (and entry (helixel-action-tx entry))))
-      (when (and entry tx
+action.  Returns its `mc-tx' (preferred) or `tx' if and only if:
+  - the action carries either an `mc-tx' or a `tx',
+  - the action's `by-command' stamp matches `this-command'.
+
+The `mc-tx' slot lets a command record a different runner for fake
+cursor replay than for `.' / ring-pick.  Insert-entry commands use
+it to install a per-fake prepositioner (move point + clear mark)
+without overriding the underlying insert-text TX that powers `.'."
+  (when (symbolp this-command)
+    (let ((entry (car helixel--event-ring)))
+      (when (and entry
                  (eq (helixel-action-by-command entry) this-command))
-        tx))))
+        (or (helixel-action-mc-tx entry)
+            (helixel-action-tx entry))))))
 
 ;; ── post-command-hook integration ──
 ;;
@@ -704,54 +697,29 @@ action.  Returns its tx if and only if:
 ;; origin of the unified `helixel-replay' context.
 ;; `helixel-mc-dispatch-in-progress-p' covers both.
 
-;; ── Fake-cursor command substitution (populated by mc-integrate) ──
-
-(defvar helixel-mc--fake-substitute-alist nil
-  "Alist of (REAL-CMD . FAKE-CMD) for fake-cursor dispatch.
-When dispatching at fake cursors, REAL-CMD is replaced by FAKE-CMD
-so the input prompt is not re-issued.  REAL-CMD must have already
-run at the real cursor (so any shared state — e.g.
-`helixel--active-search' — is populated).
-
-Default value is nil; populated by `helixel-mc-integrate'
-at load time.")
-
-(defun helixel-mc--maybe-preposition ()
-  "Run `this-command's prepositioner at each fake, if registered.
-When `this-command' has a `helixel-mc-prepos' symbol property,
-invoke that function once at every fake cursor.  Called from
-the dispatcher so insert-entry commands stage fake cursors
-before the next `self-insert-command' broadcast."
-  (when (and helixel-multi-cursor-mode
-             (not (helixel-mc-dispatch-in-progress-p))
-             (helixel-mc-any-p)
-             (symbolp this-command))
-    (when-let* ((fn (get this-command 'helixel-mc-prepos)))
-      (helixel-with-replay 'mc-batch
-        (helixel-mc-with-each-cursor
-          (condition-case err
-              (funcall fn)
-            (error
-             (message "helixel-mc: prepos %s failed: %s"
-                      this-command
-                      (error-message-string err)))))))))
+;; ── Unified fake-cursor dispatch ──
+;;
+;; Phase 4.3 collapsed four dispatch strategies (fresh-edit replay,
+;; substitute-alist, call-interactively fallback, prepos pre-broadcast)
+;; into one.  Every helixel command produces a `helixel-tx' (either
+;; via `:tx-runner' on the `helixel-define-command' macro, or via the
+;; op-registry `:runner' attached by `helixel--record-action').  The
+;; dispatcher now does ONE thing: replay the freshly-committed tx at
+;; every fake.  No substitute-alist, no prepos symbol property, no
+;; call-interactively fallback.
 
 (defun helixel-mc--post-command ()
-  "Post-command hook — dispatch `this-command' at every fake cursor.
-Single-undo-step amalgamation.  Dispatch strategy:
+  "Post-command hook — replay `this-command's tx at every fake cursor.
+The tx attached to the freshly-committed action (front of
+`helixel--event-ring' with matching `by-command' stamp) is replayed
+at each fake inside one `undo-amalgamate-change-group'.  Insert-entry
+commands install a per-fake prepositioner via the action's `mc-tx'
+slot — see `helixel-mc--fresh-action-from-real' for slot precedence.
 
-  - If the real cursor committed a fresh `helixel-action' this command
-    (detected via `helixel-action-by-command' stamp —
-    see `helixel-mc--fresh-action-from-real'), replay that edit's
-    runner at each fake.  Runner payload carries decisions so no
-    prompt fires at fakes.
-  - Otherwise, re-invoke `this-command' at each fake via the
-    substitute-alist (if any), falling back to `call-interactively'
-    for pure movements.
-
-No-op when the mode is off, dispatch is already in progress,
-we're in a keyboard-macro, or `this-command' is whitelisted off."
-  (helixel-mc--maybe-preposition)
+No-op when the mode is off, dispatch is already in progress, we're in
+a keyboard-macro, the command is whitelisted off, or no fresh tx
+exists (e.g. for real-cursor-only commands like
+`helixel-mc-toggle')."
   (when (and helixel-multi-cursor-mode
              (not (helixel-mc-dispatch-in-progress-p))
              (not executing-kbd-macro)
@@ -759,46 +727,39 @@ we're in a keyboard-macro, or `this-command' is whitelisted off."
              this-command
              (helixel-mc-any-p)
              (helixel-mc--should-run-for-all-p this-command))
-    (helixel-with-replay 'mc-batch
-     (let* ((fresh-edit (helixel-mc--fresh-action-from-real))
-            (real-cmd this-command)
-            (substituted (and (not fresh-edit)
-                              (cdr (assq real-cmd
-                                    helixel-mc--fake-substitute-alist))))
-            (cmd (or substituted real-cmd)))
-      (when (and substituted (not fresh-edit))
-        ;; Substitute path: propagate freshly-set shared search state
-        ;; so the substitute command sees the real cursor's match.
-        (let ((shared (and (boundp 'helixel--active-search)
-                           (symbol-value 'helixel--active-search))))
-              (dolist (ov (helixel-mc-all-cursors))
-                (when (helixel-mc-fake-cursor-p ov)
-                  (setf (helixel-cs-active-search
-                         (overlay-get ov 'helixel-cs))
-                        shared)))))
-      (condition-case err
-          (undo-amalgamate-change-group
-            (let ((dead nil))
-              (helixel-mc-with-each-cursor
-                (condition-case e
-                    (if fresh-edit
-                        ;; Replay the just-committed edit at each
-                        ;; fake via its runner.  Payload carries
-                        ;; the prompted decisions so nothing prompts.
-                        (helixel-with-replay-as 'dot
-                          (helixel-tx-replay fresh-edit))
-                      ;; Pure movement / non-edit: re-call command.
-                      (helixel-mc--call-interactively cmd))
-                  (search-failed (push cursor dead))
-                  (error (message "helixel-mc: %s at fake: %s"
-                                  cmd (error-message-string e))
-                         (push cursor dead))))
-              (dolist (ov dead)
-                (helixel-mc-delete-fake-cursor ov))))
-        (error
-         (message "helixel-mc: %s outer error: %s"
-                  cmd (error-message-string err))))
-      (helixel-mc-dedupe-cursors)))))
+    ;; Ensure the action just produced by `this-command' is on the ring
+    ;; before we look for a fresh tx.  Movement / textobj commands do
+    ;; not eagerly commit (only `record-action' does), so without this
+    ;; the dispatcher would see the PRIOR action's tx.
+    (helixel-action-commit)
+    (let ((fresh-tx (helixel-mc--fresh-action-from-real))
+          (cmd this-command))
+      (helixel-with-replay 'mc-batch
+        (condition-case err
+            (undo-amalgamate-change-group
+              (let ((dead nil))
+                (helixel-mc-with-each-cursor
+                  (condition-case e
+                      (if fresh-tx
+                          ;; Unified path: replay the fresh tx.  Payload
+                          ;; carries prompted decisions so nothing
+                          ;; re-prompts at fakes.
+                          (helixel-with-replay-as 'dot
+                            (helixel-tx-replay fresh-tx))
+                        ;; Fallback: whitelisted Emacs built-ins
+                        ;; (forward-char, next-line, self-insert-command,
+                        ;; ...) have no tx — just re-call interactively.
+                        (helixel-mc--call-interactively cmd))
+                    (search-failed (push cursor dead))
+                    (error (message "helixel-mc: %s at fake: %s"
+                                    cmd (error-message-string e))
+                           (push cursor dead))))
+                (dolist (ov dead)
+                  (helixel-mc-delete-fake-cursor ov))))
+          (error
+           (message "helixel-mc: %s outer error: %s"
+                    cmd (error-message-string err))))
+        (helixel-mc-dedupe-cursors)))))
 
 ;; ── Minor mode ──
 
@@ -868,10 +829,15 @@ deactivated when the last one is removed."
    helixel-normal-escape
    helixel-enter-normal-state helixel-enter-insert-state
    helixel-enter-motion-state
-   helixel-insert helixel-insert-after
-   helixel-insert-beginning-line helixel-insert-after-end-line
-   helixel-insert-newline helixel-insert-prevline
-   helixel-insert-exit))
+   ;; Insert-entry commands themselves remain real-only — except
+   ;; they're now broadcast via the unified dispatcher.  Each
+   ;; insert-entry command declares an `mc-tx' prepos runner via
+   ;; `:tx-runner' on its `helixel-define-command' form; the
+   ;; dispatcher invokes it at every fake.  So they MUST be
+   ;; whitelisted (multiple-cursors property = t).  `insert-exit'
+   ;; stays whitelisted too — fakes need to leave insert state.
+   ;; Nothing here.
+   ))
 
 (provide 'helixel-mc-core)
 ;;; helixel-mc-core.el ends here

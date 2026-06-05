@@ -40,6 +40,17 @@
 (require 'helixel-macros)
 (require 'helixel-search)
 
+;; Multi-cursor prepos helpers (defined in helixel-mc-integrate.el).
+;; Referenced only from `:tx-runner' closures in insert-entry commands
+;; below, which are invoked at dispatch time (well after mc-integrate
+;; loads).  Forward-declare so byte-compile is happy.
+(declare-function helixel-mc--prepos-region-begin "helixel-mc-integrate" ())
+(declare-function helixel-mc--prepos-region-end "helixel-mc-integrate" ())
+(declare-function helixel-mc--prepos-bol "helixel-mc-integrate" ())
+(declare-function helixel-mc--prepos-eol "helixel-mc-integrate" ())
+(declare-function helixel-mc--prepos-newline-after "helixel-mc-integrate" ())
+(declare-function helixel-mc--prepos-newline-before "helixel-mc-integrate" ())
+
 ;; ── Shared kill core ──
 
 (defun helixel--delete-selection ()
@@ -166,7 +177,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   :display  "s")
 
 (helixel-define-command helixel-insert
-    (:category state :subcat insert)
+    (:category state :subcat insert
+     :tx-runner (lambda (_tx) (helixel-mc--prepos-region-begin)))
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -222,7 +234,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 ;; ── Insert variant commands ──
 
 (helixel-define-command helixel-insert-after
-    (:category state :subcat insert)
+    (:category state :subcat insert
+     :tx-runner (lambda (_tx) (helixel-mc--prepos-region-end)))
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -248,7 +261,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-beginning-line
-    (:category state :subcat insert)
+    (:category state :subcat insert
+     :tx-runner (lambda (_tx) (helixel-mc--prepos-bol)))
   (beginning-of-line)
    (helixel--sel-push
         (helixel-sel-create
@@ -257,7 +271,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-after-end-line
-    (:category state :subcat insert)
+    (:category state :subcat insert
+     :tx-runner (lambda (_tx) (helixel-mc--prepos-eol)))
   (end-of-line)
    (helixel--sel-push
         (helixel-sel-create
@@ -266,7 +281,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-newline
-    (:category state :subcat insert)
+    (:category state :subcat insert
+     :tx-runner (lambda (_tx) (helixel-mc--prepos-newline-after)))
   (helixel--record-action 'insert-text)
   (helixel--clear-data)
   (end-of-line)
@@ -274,7 +290,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   (helixel--prepare-insert-entry nil))
 
 (helixel-define-command helixel-insert-prevline
-    (:category state :subcat insert)
+    (:category state :subcat insert
+     :tx-runner (lambda (_tx) (helixel-mc--prepos-newline-before)))
   (helixel--record-action 'insert-text)
   (helixel--clear-data)
   (beginning-of-line)

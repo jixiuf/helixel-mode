@@ -314,9 +314,8 @@ The `helixel-define-command' macro handles this automatically."
         (setq tx new-tx))
       (setq helixel--repeat-permanent-flip nil)
       (helixel--live-action-set tx)
-      ;; Always set last-event so callers that skip tracking-open
+      ;; Always set last-tx so callers that skip `tracking-open'
       ;; (tests, programmatic use) still have a valid edit to replay.
-      ;; `helixel-action-commit' may be a no-op when live-event is nil.
       (setq helixel--last-tx tx)
       (helixel-action-commit))))
 
@@ -451,9 +450,9 @@ Uses `helixel--repeat-line-pass' for proper cursor advance."
 ;; `,' session.  See `helixel-search-advance-*' in `helixel-replay.el'.
 
 (defvar-local helixel--repeat-preview-pos nil
-  "Marker set by `,' (`helixel-repeat-selection') at the preview
-position, consumed by `.' (`helixel-repeat-edit') when point is
-still there.
+  "Marker for the `,' preview position, consumed by `.'.
+Set by `,' (`helixel-repeat-selection') at the preview position;
+consumed by `.' (`helixel-repeat-edit') when point is still there.
 
 Positional handoff replaces the old boolean flag +
 `post-command-hook' stale-clear: a marker auto-invalidates the

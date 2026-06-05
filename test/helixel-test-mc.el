@@ -341,9 +341,7 @@ on guard commands (chain, escape, mc management)."
                  helixel-mc-clear-all
                  helixel-repeat-chain-start
                  helixel-repeat-chain-end
-                 helixel-repeat-chain-cancel
-                 helixel-insert
-                 helixel-insert-exit))
+                 helixel-repeat-chain-cancel))
       (should (plist-member (symbol-plist cmd) 'multiple-cursors))
       (should (null (get cmd 'multiple-cursors)))))
 
@@ -2581,22 +2579,25 @@ region is NOT restored (the new target replaces it correctly)."
       (should (string= "X\nYX\nYX\n" (buffer-string)))
       (helixel-mc-clear-all))))
 
-;; ── post-command-amalgamated: substitute alias table is wired ──
+;; ── post-command-amalgamated: find-char uses unified mc-tx path ──
 
-(ert-deftest helixel-test-mc-find-char-substitute-alist ()
-  "find-next-char has a `helixel-find-repeat' substitute in the alist,
-so fake cursors don't re-prompt for a character."
-  (should (assq 'helixel-find-next-char
-                helixel-mc--fake-substitute-alist))
-  (should (eq 'helixel-find-repeat
-              (cdr (assq 'helixel-find-next-char
-                         helixel-mc--fake-substitute-alist)))))
-
-(ert-deftest helixel-test-mc-substitute-commands-whitelisted ()
-  "Both the original find-char commands and their substitutes are
-marked for multi-cursor execution."
-  (should (helixel-mc--should-run-for-all-p 'helixel-find-next-char))
-  (should (helixel-mc--should-run-for-all-p 'helixel-find-repeat)))
+(ert-deftest helixel-test-mc-find-char-unified-tx ()
+  "After Phase 4.3 the find-char prompting commands record a tx whose
+payload carries (:char :type :dir).  The unified dispatcher replays
+the tx at every fake — no substitute-alist needed."
+  (helixel-test-with-buffer "a-b c-d\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (helixel-find-next-char ?-)
+    (let ((entry (car helixel--event-ring)))
+      (should entry)
+      (should (eq 'helixel-find-next-char
+                  (helixel-action-by-command entry)))
+      (let ((tx (helixel-action-tx entry)))
+        (should tx)
+        (should (eq ?- (helixel-action-payload-get tx :char)))
+        (should (eq 'next (helixel-action-payload-get tx :type)))
+        (should (eq 'forward (helixel-action-payload-get tx :dir)))))))
 
 ;; ── keyboard-quit clears mc ──
 

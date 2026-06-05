@@ -108,17 +108,15 @@ Returns the committed entry or nil."
       (setf (helixel-action-sel helixel--live-action)
             (helixel-sel--copy helixel--pending-sel)))
     (let ((entry (helixel-action--copy helixel--live-action)))
-      ;; Stamp the committing command symbol — used by the multi-
-      ;; cursor dispatcher to detect a fresh edit produced by the
-      ;; current command (so it knows to replay the edit at fakes).
-      ;; Prefer `this-command' (set by the command loop in production);
-      ;; fall back to `helixel--current-command' (set by
-      ;; `helixel-define-command' / `helixel-with-command') so this
-      ;; works in batch tests and programmatic calls too.
-      (let ((cmd (or (and (symbolp this-command) this-command)
-                     helixel--current-command)))
-        (when cmd
-          (setf (helixel-action-by-command entry) cmd)))
+      ;; `by-command' is stamped at `tracking-open' time (eagerly) so
+      ;; deferred commits keep the originating command symbol.  Only
+      ;; fill it in here as a fallback when the live action was
+      ;; constructed without one (rare — mainly tests).
+      (unless (helixel-action-by-command entry)
+        (let ((cmd (or (and (symbolp this-command) this-command)
+                       helixel--current-command)))
+          (when cmd
+            (setf (helixel-action-by-command entry) cmd))))
       (unless (and (car helixel--event-ring)
                    (helixel-action--same-content-p
                     entry (car helixel--event-ring)))
@@ -181,6 +179,14 @@ Does NOT commit the new event — caller is responsible for eventual commit."
           (make-helixel-action
            :category category
            :subcat subcat
+           ;; Stamp `by-command' EAGERLY at action open time, using the
+           ;; current command symbol bound by `helixel-define-command'
+           ;; (or fall back to `this-command' set by the command loop).
+           ;; Doing it here — not at commit time — keeps the stamp
+           ;; correct even when commit is deferred to the next
+           ;; `tracking-open' (which then runs in a NEW command's scope).
+           :by-command (or helixel--current-command
+                           (and (symbolp this-command) this-command))
            :mark-region (let ((pm (point-marker)))
                            (cons pm (copy-marker pm t)))
            :timestamp (float-time)

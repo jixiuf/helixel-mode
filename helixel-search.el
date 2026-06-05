@@ -354,13 +354,30 @@ adjusts point relative to the character match according to TYPE."
     ;; Push find-char sel with tracked n-count.
     (helixel-search--find-char-set-sel
      char type (if forwardp 'forward 'backward))
-    (helixel-action-commit)
-    
-    (let ((dir (if forwardp 'forward 'backward)))
-      (helixel-search--set-dir dir)
+    ;; Attach a tx so the unified mc dispatcher can replay this
+    ;; find-char at every fake cursor without re-prompting.  Payload
+    ;; carries the prompted CHAR + TYPE + DIR; runner installs them
+    ;; into the fake's `helixel--active-search' and re-executes the
+    ;; jump.
+    (let ((sym-dir (if forwardp 'forward 'backward)))
+      (when helixel--live-action
+        (setf (helixel-action-tx helixel--live-action)
+              (make-helixel-tx
+               :payload (list :char char :type type :dir sym-dir)
+               :runner (lambda (tx)
+                         (let ((c (helixel-action-payload-get tx :char))
+                               (ty (helixel-action-payload-get tx :type))
+                               (d (helixel-action-payload-get tx :dir)))
+                           (setq helixel--active-search
+                                 (make-helixel-active-search
+                                  :category 'find-char :type ty
+                                  :char c :dir d))
+                           (helixel-search--find-char-core nil d))))))
+      (helixel-action-commit)
+      (helixel-search--set-dir sym-dir)
       (setq helixel--active-search
             (make-helixel-active-search
-             :category 'find-char :type type :char char :dir dir)))))
+             :category 'find-char :type type :char char :dir sym-dir)))))
 
 (defun helixel-search--find-char-core (&optional _action dir)
   "Execute find-char in direction DIR.
@@ -388,8 +405,13 @@ DOC is the docstring."
   `(defun ,name (char)
      ,doc
      (interactive "c")
-     (helixel--tracking-open 'find-char ',type)
-     (helixel-search--find-char-exec char ',type ,dir)))
+     ;; Bind `helixel--current-command' / `this-command' so the action
+     ;; committed by `helixel-action-commit' carries the correct
+     ;; `by-command' stamp for unified mc dispatch.
+     (let ((helixel--current-command ',name)
+           (this-command ',name))
+       (helixel--tracking-open 'find-char ',type)
+       (helixel-search--find-char-exec char ',type ,dir))))
 
 (helixel--def-find-char helixel-find-next-char next 1
                         "Find next CHAR forward.")

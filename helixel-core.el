@@ -927,8 +927,6 @@ PROPS is a plist with keys:
   :moves-point-p    — boolean.  t when OP moves point itself
                        (suppresses auto-advance), nil otherwise.
                        See the comment block above for full semantics.
-  :strategy-builder — function (event &optional reverse-p)
-                       → helixel-repeat-strategy or nil
 
 Stores all props in the internal hash table."
   (declare (indent 1))
@@ -955,10 +953,6 @@ Non-nil means OP advances point on its own and the repeat engine
 should NOT auto-advance; nil means the kind's :advance fn drives
 stepping between targets."
   (plist-get (gethash op helixel--op-registry) :moves-point-p))
-
-(defun helixel--op-strategy-builder (op)
-  "Return the :strategy-builder for OP, or nil."
-  (plist-get (gethash op helixel--op-registry) :strategy-builder))
 
 (defun helixel-op-set-runner (op runner)
   "Override the :runner for OP in the operator registry to RUNNER.

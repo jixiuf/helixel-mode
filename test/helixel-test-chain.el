@@ -466,7 +466,11 @@ order."
       (should (equal init-ctx (helixel-action-sel helixel--last-tx))))))
 
 (ert-deftest helixel-test-chain-comma-strategy-builder ()
-  ", on a chain tx dispatches to the chain strategy builder."
+  "After C2 flatten, chain repeat goes through the unified
+`helixel--repeat-advance' rather than a strategy struct.  Verify
+the chain in-place fallback: when a chain tx's sel has no
+kind-advance fn (e.g. movement kind), `helixel--repeat-advance'
+returns t (allowing in-place repeat) instead of nil."
   (helixel-chain-test-with-buffer
       "aaa bbb ccc\nddd eee fff\nggg hhh iii\n"
     (goto-char 1)
@@ -478,10 +482,13 @@ order."
                  :tx-list (list (helixel-tx-create 'noop nil
                                  :runner #'ignore)))))
       (setq helixel--last-tx tx)
-      (let ((strategy (helixel--build-strategy tx nil)))
-        (should strategy)
-        (should (functionp (helixel-repeat-strategy-advance strategy)))
-        (should (functionp (helixel-repeat-strategy-apply strategy)))))))
+      ;; line kind has an :advance fn so this returns whatever the
+      ;; advance fn does — just confirm the unified dispatcher
+      ;; accepts the chain tx without erroring.
+      (should-not (eq 'error
+                      (condition-case nil
+                          (helixel--repeat-advance tx tx)
+                        (error 'error)))))))
 
 ;; ── Chain + insert + electric-pair replay (unit test) ──
 

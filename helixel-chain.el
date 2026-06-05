@@ -112,28 +112,13 @@ replay so insert-position semantics match the original recording
 
 (helixel-register-op chain
   :display "chain"
-  :runner #'helixel--repeat-chain-runner
-  :strategy-builder #'helixel--chain-strategy-builder)
+  :runner #'helixel--repeat-chain-runner)
 
-(defun helixel--chain-strategy-builder (edit &optional reverse-p)
-  "Build a repeat strategy for chain EDIT, optionally REVERSE-P.
-Advance: delegate to the kind's advance-fn (sel-driven), then
-apply the chain.  Apply: replay the tx-list.  Reset: goto recorded
-marker."
-  (let* ((sel (helixel-action-sel edit))
-         (kind (and sel (helixel-sel-kind sel)))
-         (advance-fn (helixel--kind-advance kind))
-         (effective-edit (helixel--maybe-flip-dir-action edit reverse-p)))
-    (make-helixel-repeat-strategy
-     :advance (lambda (_edit)
-                (or (null advance-fn)
-                    (funcall advance-fn effective-edit)))
-     :apply (lambda (_edit)
-              (helixel-tx-replay effective-edit))
-     :reset (lambda (_edit)
-              (when-let* ((m (car (helixel-tx-mark-region effective-edit))))
-                (goto-char (marker-position m))))
-     :all-buffer-fn (helixel--kind-all-buffer-fn kind))))
+;; Note: chain previously had a custom `:strategy-builder' that
+;; differed from the default only in allowing in-place repeat when the
+;; sel kind had no `:advance' fn (e.g. chain after J / join-lines).
+;; That special case is now baked into `helixel--repeat-advance' directly
+;; via `(eq op 'chain)' — cleaner than maintaining a separate builder.
 
 
 ;; ── Cleanup helper ──

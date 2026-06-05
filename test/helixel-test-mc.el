@@ -256,11 +256,15 @@ be re-invoked by the advice (recording already broadcast)."
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-tx-create 'chain sel
                  :runner (lambda (_tx) (error "REAPPLIED"))
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore)))))
-      (setq helixel--last-tx tx))
-    ;; The hook impl returns its `message' string — just ensure
-    ;; it does not signal (i.e. the runner is NOT invoked).
-    (helixel-mc--on-chain-recorded helixel--last-tx)
+                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+           (entry (make-helixel-action
+                   :by-command 'helixel-repeat-chain-end
+                   :buffer (current-buffer)
+                   :tx tx)))
+      (setq helixel--last-tx tx)
+      ;; Call the action-commit-hook handler; verify it does not
+      ;; signal (the runner is NOT invoked, only broadcast+msg).
+      (helixel-mc--on-chain-end entry))
     (helixel-mc-clear-all)))
 
 ;; ── Regression: chain recording must NOT broadcast per-command.

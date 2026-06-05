@@ -198,14 +198,12 @@ by the initial selection context snapshotted at chain-start."
                         init-ctx :entry-kind
                         (helixel-sel-search-entry-kind live-ctx))
                      init-ctx))
-         (had-content (and tx-list (consp tx-list)))
-         (chain-tx nil))
+         (had-content (and tx-list (consp tx-list))))
     (when had-content
       (let ((tx (helixel-tx-create 'chain init-ctx
                    :runner #'helixel--repeat-chain-runner
                    :display (format "chain(%d)" (length tx-list))
                    :tx-list tx-list)))
-        (setq chain-tx tx)
         (setq helixel--last-tx (helixel-tx-copy tx))
         (helixel-with-action-tracking
             (:op 'chain :category 'edit :subcat 'chain)
@@ -215,20 +213,13 @@ by the initial selection context snapshotted at chain-start."
       (if had-content
           (message "Chain recorded (%d txs)" n)
         (message "Chain empty \u2014 nothing recorded")))
-    ;; Fire integration hook AFTER teardown so handlers see a
-    ;; fully-consistent state.
-    (when chain-tx
-      (run-hook-with-args 'helixel-chain-recorded-functions chain-tx))))
-
-(defvar helixel-chain-recorded-functions nil
-  "Abnormal hook run after a chain is successfully recorded.
-Each function is called with one argument: the new chain
-`helixel-tx'.  Runs synchronously inside
-`helixel-repeat-chain-end' AFTER `helixel--last-tx' has been
-updated.  Use this hook from integration layers (e.g.
-`helixel-mc-integrate') instead of `advice-add' on
-`helixel-repeat-chain-end' \u2014 helixel-mode modules MUST NOT
-advise each other.")
+    ;; The action-commit-hook will fire when the chain action is
+    ;; committed (via `helixel-with-action-tracking''s deferred
+    ;; commit on the next command).  Integration layers (e.g.
+    ;; `helixel-mc-integrate') filter for
+    ;; by-command=`helixel-repeat-chain-end' on that hook
+    ;; instead of using a separate chain-specific hook.
+  ))
 
 ;;;###autoload
 (defun helixel-repeat-chain-cancel ()

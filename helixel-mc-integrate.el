@@ -138,26 +138,23 @@ Assumes the current `helixel--last-tx' is a chain transaction
             (helixel-with-replay-as 'dot
               (helixel-tx-replay tx))))))))
 
-(defun helixel-mc--on-chain-recorded (chain-tx)
-  "Hook impl: broadcast a newly-recorded CHAIN-TX to all fake cursors.
-Runs from `helixel-chain-recorded-functions' inside
-`helixel-repeat-chain-end' after the new chain has been committed
-to `helixel--last-tx'.  During chain recording, the per-command
-broadcast at `post-command-hook' already applied every keystroke at
-every fake cursor live, so the chain TX is just stored for later
-`.' replay — we do NOT re-run it here (that would double the edit
-at each fake).  We only emit the user-visible confirmation message,
-broadcasting the new CHAIN-TX to fake cursors so a future `.' at
-any fake replays the same chain."
-  (ignore chain-tx)                     ; broadcaster reads `--last-edit'
-  (when helixel-multi-cursor-mode
+(defun helixel-mc--on-chain-end (entry)
+  "If ENTRY is the chain-end commit, broadcast to all fake cursors.
+Runs from `helixel-action-commit-hook' (replaces the former
+`helixel-chain-recorded-functions' dedicated hook).  The chain
+end action has by-command=`helixel-repeat-chain-end'.  We only
+broadcast — during recording the per-command dispatch already
+applied every keystroke at every fake cursor live."
+  (when (and helixel-multi-cursor-mode
+             (eq (helixel-action-by-command entry)
+                 'helixel-repeat-chain-end))
     (helixel-mc--broadcast-last-event)
     (let ((n (length (helixel-mc-all-cursors))))
       (message "helixel-mc: chain recorded for %d fake cursor%s"
                n (if (= n 1) "" "s")))))
 
-(add-hook 'helixel-chain-recorded-functions
-          #'helixel-mc--on-chain-recorded)
+(add-hook 'helixel-action-commit-hook
+          #'helixel-mc--on-chain-end)
 
 ;; ── Insert-state per-cursor pre-positioning ──
 ;;

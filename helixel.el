@@ -34,10 +34,8 @@
 ;;; Code:
 
 (require 'helixel-core)
-(require 'helixel-replay)
 (require 'helixel-ring)
 (require 'helixel-macros)
-(require 'helixel-register)
 (require 'helixel-repeat)
 (require 'helixel-chain)
 (require 'helixel-state)

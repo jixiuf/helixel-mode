@@ -61,7 +61,6 @@
 ;;; Code:
 
 (require 'helixel-core)
-(require 'helixel-replay)
 
 (defvar-local helixel--insert-segments nil
   "List of insert-mode segments captured during the current insert session.

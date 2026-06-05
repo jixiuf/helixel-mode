@@ -41,7 +41,6 @@
 
 (require 'cl-lib)
 (require 'helixel-core)
-(require 'helixel-replay)
 (require 'helixel-ring)            ; helixel-action-commit
 
 (defvar helixel-multi-cursor-mode)        ; forward decl — defined below

@@ -36,7 +36,6 @@
 (require 'helixel-core)
 (require 'helixel-ring)
 (require 'helixel-macros)
-(require 'helixel-register)
 (require 'helixel-repeat)
 (require 'helixel-textobj)
 (require 'helixel-surround)

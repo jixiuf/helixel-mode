@@ -38,7 +38,6 @@
 
 (require 'cl-lib)
 (require 'helixel-core)
-(require 'helixel-replay)
 
 ;; ----------------------------------------------------------------------
 ;; State variables

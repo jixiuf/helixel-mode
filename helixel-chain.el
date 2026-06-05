@@ -42,7 +42,6 @@
 (require 'helixel-ring)         ; helixel-action-commit-hook
 (require 'helixel-macros)       ; helixel-with-action-tracking
 (require 'helixel-repeat)       ; helixel--maybe-flip-dir-action, strategy
-(require 'helixel-replay)
 
 ;; ── Session struct (single buffer-local) ──
 

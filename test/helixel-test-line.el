@@ -284,6 +284,31 @@
     (helixel-yank-before)
     (should (string= (buffer-string) "helloXYZ world"))))
 
+(ert-deftest helixel-test-yank-handler-property-not-leaked ()
+  "Past line-wise text, then copy buffer text with `y'.
+The `yank-handler' property from the line-wise kill must NOT leak
+into the buffer — otherwise a subsequent `y' (copy) on the pasted
+text would capture the stale property and cause the next `p' to
+paste line-wise instead of char-wise."
+  (helixel-test-with-buffer "line one\nline two"
+    ;; 1. Create a line-wise kill and paste it (simulates x y p)
+    (helixel-select-line)
+    (helixel-kill-ring-save)
+    (helixel-yank)
+    ;; 2. Verify buffer text has NO yank-handler property
+    (goto-char (point-min))
+    (forward-line 1)                    ; move to pasted line
+    (should-not (get-text-property (point) 'yank-handler))
+    ;; 3. Select first word of the pasted line and copy
+    (helixel-mark-inner-symbol)
+    (helixel-kill-ring-save)
+    ;; 4. Kill-ring top must be char-wise (no yank-handler)
+    (should-not (helixel--linewise-kill-p))
+    ;; 5. Paste at point — must paste inline, not on next line
+    (goto-char 1)
+    (helixel-yank)
+    (should (string-prefix-p "lineline one" (buffer-string)))))
+
 ;;; helixel-replace (r) line-wise tests
 
 (ert-deftest helixel-test-replace-yanked-linewise-selection-linewise-kill ()

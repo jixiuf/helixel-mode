@@ -449,7 +449,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
         (delete-rectangle beg end)
         (goto-char beg)
         (if (and rectwise-p lines)
-            (insert-rectangle lines)
+            (insert-rectangle (mapcar #'substring-no-properties lines))
           (insert bare)))
       (setq helixel--replace-pop-bounds nil))
      ;; Line-wise selection: expand to full line bounds
@@ -457,7 +457,9 @@ instead of `insert-for-yank' — `helixel-replace' passes
       (when-let* ((bounds (helixel--line-bounds-of-region)))
         (delete-region (car bounds) (cdr bounds))
         (setq pop-start (point))
-        (insert (if linewise-p text (concat bare "\n")))
+        ;; Strip properties to prevent yank-handler leaking into buffer
+        (insert (if linewise-p (substring-no-properties text)
+                  (concat bare "\n")))
         (setq helixel--replace-pop-bounds
               (cons pop-start (point)))))
      ;; Charwise region
@@ -603,7 +605,7 @@ the register."
                         (nth 1 (get-text-property
                                 0 'yank-handler text)))))
           (if lines
-              (insert-rectangle lines)
+              (insert-rectangle (mapcar #'substring-no-properties lines))
             (when text (insert-for-yank text)))))
        ((helixel--linewise-kill-p)
         (let ((text (helixel--current-kill 0 t)))
@@ -794,22 +796,25 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
   "Insert TEXT as a complete line.
 Dispatches on `this-command' (with `helixel--current-command' fallback
 for ERT/batch where `this-command' is nil) to decide insertion position."
-  (let ((cmd (or this-command helixel--current-command)))
+  (let ((cmd (or this-command helixel--current-command))
+        ;; Strip kill-ring properties (yank-handler, helixel-swap-source)
+        ;; so they don't leak into the buffer and infect subsequent copies.
+        (clean-text (substring-no-properties text)))
     (cond
      ((member cmd '(helixel-yank helixel-replace))
       (end-of-line)
       (newline)
-      (insert (string-trim-right text "\n"))
+      (insert (string-trim-right clean-text "\n"))
       (beginning-of-line)
       (back-to-indentation))
      ((eq cmd 'helixel-yank-before)
       (beginning-of-line)
       (save-excursion
-        (insert text)
+        (insert clean-text)
         (unless (bolp) (newline)))
       (back-to-indentation))
      (t
-      (insert text)))))
+      (insert clean-text)))))
 
 (defun helixel--linewise-text (text)
   "Return a copy of TEXT propertized with line-wise yank-handler.
@@ -843,7 +848,7 @@ BEG is at bol of `region-beginning', END includes the trailing newline."
 
 (defun helixel--yank-handler-rect-wise (lines)
   "Insert LINES as a rectangle at point."
-  (insert-rectangle lines))
+  (insert-rectangle (mapcar #'substring-no-properties lines)))
 
 (defun helixel--rect-wise-text (strings)
   "Return a propertized string from STRINGS, a list of rect lines.

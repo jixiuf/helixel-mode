@@ -26,6 +26,7 @@
 | `helixel-mc-core.el` | **Multi-cursor core**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook`, whitelist policy, `helixel-multi-cursor-mode`. |
 | `helixel-mc-targets.el` | **Target computation**: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc-spawn-from-sel/-line/-rect/-find-char`, kind registry hooks. |
 | `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors. |
+| `helixel-mc-shims.el` | Third-party mc shims (currently: completion-preview). Lazy-loaded via `eval-after-load'. Mirrors `helixel-shims.el' pattern. |
 | `helixel-mc-integrate.el` | Glue: dot-repeat / chain / insert per-cursor execution + atomic undo. |
 | `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww). 29 `declare-function` (all third-party). |
 | `helixel.el` | Package entry point. Requires all domain files. |
@@ -51,6 +52,9 @@
 | `test/helixel-test-ring.el` | Event ring + jump log |
 | `test/helixel-test-jump.el` | Jump navigation + all-buffer/all-dir repeat tests |
 | `test/helixel-test-mc.el` | Multi-cursor: create/clear, whitelist, with-each-cursor isolation, dispatch insert, spawn-from-line, edit-lines, add-cursor-here, mark-next-like-this, apply-last-edit, kill-ring isolation |
+| `test/helixel-test-chain-invariant.el` | Chain subsystem invariants (lifecycle flag, chain-control exclusion, runnerless tx exclusion, marker release) |
+| `test/helixel-test-repeat-invariant.el` | Repeat subsystem invariants (replay context, buffer-local last-tx, tx-replay immutability, pre-replay order, cleanup on error) |
+| `test/helixel-test-ring-invariant.el` | Ring + jump-log invariants (dedup, cap, marker release, commit-hook contract, by-command fallback, jump-log lightweight) |
 
 ## Deps (one-way, compile-time — actual `require` graph)
 

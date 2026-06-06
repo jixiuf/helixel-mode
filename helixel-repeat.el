@@ -115,7 +115,7 @@ return EDIT unchanged."
          (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
     (if (and effective-reverse sel flip-fn)
         (let* ((reversed-sel (funcall flip-fn sel))
-               (new-edit (helixel-tx-copy edit)))
+               (new-edit (helixel-action-copy edit)))
           (setf (helixel-action-sel new-edit) reversed-sel)
           new-edit)
       edit)))
@@ -168,7 +168,7 @@ Otherwise reset to recorded start and advance+apply from point-min
     (if-let* ((custom-fn (helixel--kind-all-buffer-fn kind)))
         (funcall custom-fn edit prefix)
       (let ((effective (helixel--maybe-flip-dir-action edit reverse-p)))
-        (when-let* ((m (car (helixel-tx-mark-region effective))))
+        (when-let* ((m (car (helixel-action-mark-region effective))))
           (goto-char (marker-position m)))
         (save-excursion
           (goto-char (if (helixel-repeat-prefix-reverse-p prefix)
@@ -177,7 +177,7 @@ Otherwise reset to recorded start and advance+apply from point-min
           (let ((cnt 0))
             (while (helixel--repeat-advance edit effective)
               (cl-incf cnt)
-              (helixel-tx-replay effective))
+              (helixel-action-replay effective))
             (helixel--repeat-echo cnt)))))))
 
 (defun helixel--repeat-all-dir (edit reverse-p)
@@ -192,7 +192,7 @@ If the kind has a custom `:all-dir-fn', delegate to it."
             (cnt 0))
         (while (helixel--repeat-advance edit effective)
           (cl-incf cnt)
-          (helixel-tx-replay effective))
+          (helixel-action-replay effective))
         (helixel--repeat-echo cnt)))))
 
 (defun helixel--repeat-n (edit n reverse-p)
@@ -201,7 +201,7 @@ If the kind has a custom `:all-dir-fn', delegate to it."
     (dotimes (_ n)
       (unless (helixel--repeat-advance edit effective)
         (user-error "No more targets for dot-repeat"))
-      (helixel-tx-replay effective))
+      (helixel-action-replay effective))
     (helixel--repeat-echo n)))
 
 (defun helixel--repeat-preview (edit mode n reverse-p)
@@ -212,7 +212,7 @@ from `point-max' instead of `point-min'."
   (let ((effective (helixel--maybe-flip-dir-action edit reverse-p)))
     (pcase mode
       (:all-buffer
-       (when-let* ((m (car (helixel-tx-mark-region effective))))
+       (when-let* ((m (car (helixel-action-mark-region effective))))
          (goto-char (marker-position m)))
        (goto-char (if reverse-p (point-max) (point-min)))
        (let ((cnt 0))
@@ -262,9 +262,9 @@ to extract :change-text.")
   "Record edit OPERATOR with current selection context and EXTRA payload.
 Pops `helixel--pending-sel' via `helixel--sel-pop' (consumes the
 pending selection).  Looks up the runner and display from the operator
-registry and stores them in the transaction so `helixel-tx-replay'
+registry and stores them in the transaction so `helixel-action-replay'
 can dispatch without registry lookups.
-Builds a transaction via `helixel-tx-create', pushes it onto
+Builds a transaction via `helixel-action-create', pushes it onto
 the event ring, and stores the most recent edit in `helixel--last-tx'.
 Also notifies the event ring so `;' jumping picks up the new edit.
 
@@ -277,11 +277,11 @@ The `helixel-define-command' macro handles this automatically."
            ;; helixel--live-action-set already preserves the existing
            ;; preposition from a prior `:tx-runner' clause (mc prepos).
            ;; No explicit inheritence needed.
-           (tx (apply #'helixel-tx-create operator
+           (tx (apply #'helixel-action-create operator
                       pop-sel
                       :runner runner
                       extra)))
-      (let ((new-tx (helixel-tx-copy tx)))
+      (let ((new-tx (helixel-action-copy tx)))
         ;; Pre-compute and stash display on the live action (tx-replay
         ;; itself doesn't need display, but the action ring formatter does).
         (when helixel--live-action
@@ -327,7 +327,7 @@ OP-MOVES-POINT chooses the stepping algorithm:
         (deactivate-mark)
         (helixel--recreate-selection sel)
         (unless preview-p
-          (helixel-tx-replay tx))
+          (helixel-action-replay tx))
         ;; Step to next line.  Two algorithms:
         ;;   op-moves-point=nil → simple `forward-line'
         ;;   op-moves-point=t   → skip the step if the op already
@@ -368,7 +368,7 @@ For chain ops, does a single pass from the buffer edge."
          (op (helixel-action-op edit))
          (op-moves-point (helixel--op-moves-point-p op))
          (reverse-p (helixel-repeat-prefix-reverse-p prefix))
-         (marker (car (helixel-tx-mark-region edit)))
+         (marker (car (helixel-action-mark-region edit)))
          (chain-p (eq op 'chain)))
     (if chain-p
         (let* ((dir (if reverse-p -1
@@ -378,7 +378,7 @@ For chain ops, does a single pass from the buffer edge."
           (save-excursion
             (goto-char start)
             (unless (helixel--blank-line-p)
-              (helixel-tx-replay edit)))
+              (helixel-action-replay edit)))
           ;; Chain ops use line-stepping algorithm regardless.
           (setq cnt (helixel--repeat-line-pass
                      edit sel nil
@@ -548,20 +548,20 @@ All iterations are amalgamated into a single undo step."
                     (:all-buffer
                      (if sel
                          (helixel--repeat-all-buffer tx prefix reverse-p)
-                       (helixel-tx-replay tx)))
+                       (helixel-action-replay tx)))
                     (:all-dir
                      (if sel
                          (helixel--repeat-all-dir tx reverse-p)
-                       (helixel-tx-replay tx)))
+                       (helixel-action-replay tx)))
                     (:n-times
                      (if use-preview
                          (dotimes (_ (helixel-repeat-prefix-n prefix))
-                           (helixel-tx-replay tx))
+                           (helixel-action-replay tx))
                        (helixel--repeat-n tx
                                           (helixel-repeat-prefix-n prefix)
                                           reverse-p)))
                     (:preview
-                     (helixel-tx-replay tx)))))
+                     (helixel-action-replay tx)))))
             ((error quit)
              (message "helixel-repeat-edit aborted: %s"
                       (error-message-string err))))
@@ -643,11 +643,11 @@ The chosen event's edit data becomes the new `helixel--last-tx'."
            (event (cdr (assoc choice items))))
       (when event
         ;; Reconstruct tx from event.  Payload keys are spread via apply.
-        ;; helixel-tx-create signature: (op sel-ctx &rest payload-kv)
+        ;; helixel-action-create signature: (op sel-ctx &rest payload-kv)
         ;; so sel-ctx is the second positional arg, then
         ;; remaining payload plist keys are spread via apply.
         (helixel--update-last-event
-         (apply #'helixel-tx-create
+         (apply #'helixel-action-create
                 (helixel-action-op event)
                 (helixel-action-sel event)
                 :display (helixel-action-display-format event)

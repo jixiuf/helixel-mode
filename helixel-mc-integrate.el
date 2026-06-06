@@ -63,7 +63,7 @@
 ;; We override `helixel-repeat-edit' (`.') via
 ;; `helixel-repeat-edit-override-functions' so that whenever fake
 ;; cursors exist, both the real-cursor invocation AND the per-fake
-;; dispatches collapse to a single `helixel-tx-replay' (no advance
+;; dispatches collapse to a single `helixel-action-replay' (no advance
 ;; loop).  All N applications are then amalgamated into one undo
 ;; step by the dispatcher's `undo-amalgamate-change-group' wrapper.
 ;;
@@ -73,7 +73,7 @@
 (defun helixel-mc--repeat-edit-apply-only (raw-prefix)
   "Hook function for `helixel-repeat-edit-override-functions' under mc.
 Return non-nil (handled) when `helixel-multi-cursor-mode' is on AND
-fake cursors exist; run `helixel-tx-replay' once at point
+fake cursors exist; run `helixel-action-replay' once at point
 instead of the full advance + apply loop.  Return nil to fall
 through to the default `.' otherwise.  RAW-PREFIX is ignored in
 the override path — mc dispatches the same edit at each fake."
@@ -82,7 +82,7 @@ the override path — mc dispatches the same edit at each fake."
              (helixel-mc-any-p)
              helixel--last-tx)
     (helixel-with-replay-as 'dot
-      (helixel-tx-replay helixel--last-tx))
+      (helixel-action-replay helixel--last-tx))
     t))
 
 ;; Install via `helixel-multi-cursor-mode' toggle — no top-level
@@ -129,7 +129,7 @@ Assumes the current `helixel--last-tx' is a chain transaction
         (undo-amalgamate-change-group
           (helixel-mc-with-each-cursor
             (helixel-with-replay-as 'dot
-              (helixel-tx-replay tx))))))))
+              (helixel-action-replay tx))))))))
 
 (defun helixel-mc--on-chain-end (entry)
   "If ENTRY is the chain-end commit, broadcast to all fake cursors.

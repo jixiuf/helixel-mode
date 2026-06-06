@@ -59,8 +59,8 @@ This is what prevents `.' from recording itself."
 does not bleed into another."
   (let* ((b1 (generate-new-buffer " *inv-repeat-b1*"))
          (b2 (generate-new-buffer " *inv-repeat-b2*"))
-         (tx-1 (make-helixel-tx :op 'kill))
-         (tx-2 (make-helixel-tx :op 'change)))
+         (tx-1 (make-helixel-action :op 'kill))
+         (tx-2 (make-helixel-action :op 'change)))
     (unwind-protect
         (progn
           (with-current-buffer b1
@@ -77,21 +77,21 @@ does not bleed into another."
 ;; ── INV-REPEAT-3: tx-replay does NOT mutate last-tx ──
 
 (ert-deftest helixel-test-inv-repeat-tx-replay-does-not-mutate ()
-  "INV: replaying a tx via `helixel-tx-replay' must not mutate the tx.
+  "INV: replaying a tx via `helixel-action-replay' must not mutate the tx.
 Otherwise `.' twice in a row would produce different second results."
   (helixel-repeat-inv-with-buffer "abcde\n"
     (let* ((calls 0)
-           (tx (make-helixel-tx
+           (tx (make-helixel-action
                 :op 'change
                 :runner (lambda (_tx) (cl-incf calls)))))
       (setq helixel--last-tx tx)
-      (helixel-tx-replay tx)
-      (helixel-tx-replay tx)
-      (helixel-tx-replay tx)
+      (helixel-action-replay tx)
+      (helixel-action-replay tx)
+      (helixel-action-replay tx)
       (should (eq calls 3))
       ;; tx is the same object, unchanged.
       (should (eq helixel--last-tx tx))
-      (should (eq (helixel-tx-op tx) 'change)))))
+      (should (eq (helixel-action-op tx) 'change)))))
 
 ;; ── INV-REPEAT-4: preposition runs before runner ──
 
@@ -99,11 +99,11 @@ Otherwise `.' twice in a row would produce different second results."
   "INV: when both present, preposition fires strictly before runner."
   (helixel-repeat-inv-with-buffer "abc\n"
     (let* ((seq nil)
-           (tx (make-helixel-tx
+           (tx (make-helixel-action
                 :op 'foo
                 :preposition (lambda (_tx) (push 'pre seq))
                 :runner (lambda (_tx) (push 'run seq)))))
-      (helixel-tx-replay tx)
+      (helixel-action-replay tx)
       ;; pushed in order pre then run; head of seq is 'run.
       (should (equal seq '(run pre))))))
 

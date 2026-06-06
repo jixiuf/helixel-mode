@@ -609,7 +609,7 @@ then simply does not flip."
 ;;
 ;;   1. Replay transaction — carries OP, SEL, PAYLOAD, RUNNER,
 ;;      PRE-REPLAY-FN, MARK-REGION.  Position-agnostic; `.' / `,'
-;;      / chain / mc all replay via `helixel-tx-replay'.
+;;      / chain / mc all replay via `helixel-action-replay'.
 ;;
 ;;   2. History event — carries CATEGORY, SUBCAT, DISPLAY, TIMESTAMP,
 ;;      BUFFER, BY-COMMAND.  Recorded in `helixel--event-ring' and
@@ -617,7 +617,7 @@ then simply does not flip."
 ;;
 ;; Pure movement / search / state events leave OP/SEL/PAYLOAD/RUNNER
 ;; nil; replay events leave CATEGORY/SUBCAT/TIMESTAMP/BUFFER nil when
-;; constructed via `helixel-tx-create' standalone.
+;; constructed via `helixel-action-create' standalone.
 ;;
 ;; History (pre-v5): the codebase had TWO structs — `helixel-tx' (7
 ;; slots) wrapped by `helixel-action' (8 slots, one of which was
@@ -637,7 +637,6 @@ Replay slots (used by `.'/`,'/chain/mc):
   PAYLOAD       — plist of operator-specific data (:text :keys ...).
   RUNNER        — function (EVENT) → nil, executes the edit at
                   replay time.  nil for non-replayable events.
-  PRE-REPLAY-FN — DEPRECATED: use PREPOSITION instead.
   PREPOSITION — optional function (EVENT) → nil, called BEFORE
                   RUNNER at replay time.  Used by `:tx-runner' clauses
                   on insert-entry commands (mc fake positioning).
@@ -668,26 +667,7 @@ History slots (used by ring + jump-log):
   buffer
   by-command)
 
-;; ── Backwards-compatible aliases ──
-;;
-;; Old code (and tests) read/write via `helixel-tx-*' or check via
-;; `helixel-tx-p'.  Post-merge these are pure aliases.  External
-;; packages should migrate to `helixel-action-*' over time; this file
-;; will keep the aliases for the foreseeable future as zero-cost
-;; redirections.
-
-(defalias 'helixel-tx-p             #'helixel-action-p)
-(defalias 'make-helixel-tx          #'make-helixel-action)
-(defalias 'helixel-tx-op            #'helixel-action-op)
-(defalias 'helixel-tx-sel           #'helixel-action-sel)
-(defalias 'helixel-tx-payload       #'helixel-action-payload)
-(defalias 'helixel-tx-runner        #'helixel-action-runner)
-(defalias 'helixel-tx-pre-replay-fn #'helixel-action-preposition)
-(defalias 'helixel-action-pre-replay-fn #'helixel-action-preposition)
-(defalias 'helixel-tx-mark-region   #'helixel-action-mark-region)
-(defalias 'helixel-tx-display       #'helixel-action-display)
-
-(defun helixel-tx-create (op sel-ctx &rest payload-kv)
+(defun helixel-action-create (op sel-ctx &rest payload-kv)
   "Create a `helixel-action' carrying replay data for dot-repeat.
 OP is a registered operator symbol.
 SEL-CTX is a `helixel-sel' descriptor or nil.
@@ -695,9 +675,7 @@ PAYLOAD-KV are keyword/value pairs.  Special keys:
   :runner  FUNCTION       — stored in RUNNER slot.
   :display STRING|FUNCTION — stored in DISPLAY slot.
 All other keys form the :payload plist.
-MARK-REGION is initialised from `point' at call time.
-
-Name retained for compatibility — returns a `helixel-action'."
+MARK-REGION is initialised from `point' at call time."
   (let (runner display-field rest)
     (while payload-kv
       (pcase (car payload-kv)
@@ -720,11 +698,11 @@ Name retained for compatibility — returns a `helixel-action'."
      :mark-region (let ((pm (point-marker)))
                     (cons pm (copy-marker pm t))))))
 
-(defun helixel-tx-copy (event)
+(defun helixel-action-copy (event)
   "Return a shallow copy of EVENT (alias-friendly name)."
   (helixel-action--shallow-copy event))
 
-(defun helixel-tx-with-payload (event key value)
+(defun helixel-action-with-payload (event key value)
   "Return a new event equal to EVENT with :payload KEY set to VALUE.
 Does not mutate EVENT."
   (let* ((payload (copy-sequence (helixel-action-payload event)))
@@ -745,17 +723,17 @@ Does not mutate EVENT."
 ;; find-char (:char :type :dir), replace-char (:char), surround (:char).
 ;; These thin wrappers replace raw `plist-get' call sites.
 
-(defsubst helixel-tx-char (obj)
+(defsubst helixel-action-char (obj)
   "Return the :char payload from OBJ.
 Used by find-char, replace-char, and surround commands."
   (helixel-action-payload-get obj :char)) ; ctx-lint-ok
 
-(defsubst helixel-tx-type (obj)
+(defsubst helixel-action-type (obj)
   "Return the :type payload from OBJ.
 Used by find-char (next | till)."
   (helixel-action-payload-get obj :type)) ; ctx-lint-ok
 
-(defsubst helixel-tx-dir (obj)
+(defsubst helixel-action-dir (obj)
   "Return the :dir payload from OBJ.
 Used by find-char (forward | backward)."
   (helixel-action-payload-get obj :dir)) ; ctx-lint-ok
@@ -967,7 +945,7 @@ dispatches on struct closures."
   (when sel-ctx
     (helixel-sel-call-recreate sel-ctx)))
 
-(defun helixel-tx-replay (event)
+(defun helixel-action-replay (event)
   "Execute replay data in EVENT: preposition (if any) then runner.
 Reads :preposition and :runner from EVENT (a `helixel-action').
 Falls back to the operator registry if :runner is nil but :op is set.
@@ -1031,7 +1009,7 @@ Copies the ctx plist so the copy is independent."
 ;; to the current buffer.
 
 (defvar-local helixel--last-tx nil
-  "Pointer to the most recent committed `helixel-tx' in this buffer.
+  "Pointer to the most recent committed `helixel-action' in this buffer.
 Consumed by `.' and `,' for repeat.  Buffer-local.")
 
 (defvar helixel--current-command nil

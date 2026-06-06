@@ -139,7 +139,7 @@ Returns count of fake cursors created."
 (defun helixel-mc--make-dummy-tx (sel)
   "Build a minimal `helixel-tx' carrying SEL for advance fns."
   (let ((m (point-marker)))
-    (make-helixel-tx
+    (make-helixel-action
      :sel sel :op nil :payload nil
      :mark-region (cons m (copy-marker m t)))))
 

@@ -254,9 +254,9 @@ be re-invoked by the advice (recording already broadcast)."
     (helixel-mc-create-fake-cursor 2)
     ;; Fake a chain entry whose runner would `error' if called.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
-           (entry (helixel-tx-create 'chain sel
+           (entry (helixel-action-create 'chain sel
                     :runner (lambda (_tx) (error "REAPPLIED"))
-                    :tx-list (list (helixel-tx-create 'noop nil
+                    :tx-list (list (helixel-action-create 'noop nil
                                                       :runner #'ignore)))))
       (setf (helixel-action-by-command entry) 'helixel-repeat-chain-end)
       (setf (helixel-action-buffer entry) (current-buffer))
@@ -304,7 +304,7 @@ chain-end / chain-cancel / normal-escape."
           (make-helixel-chain-session
            :active-p t :tx-list nil))
     ;; Build an action stamped with `helixel-normal-escape' as by-cmd.
-    (let ((entry (helixel-tx-create 'noop nil :runner #'ignore)))
+    (let ((entry (helixel-action-create 'noop nil :runner #'ignore)))
       (setf (helixel-action-category entry) 'state
             (helixel-action-subcat entry) 'escape
             (helixel-action-by-command entry) 'helixel-normal-escape)
@@ -492,7 +492,7 @@ the real cursor's event."
     ;; Manufacture distinct events on each cursor by writing
     ;; directly to the overlay snapshots.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'insert-text sel
+           (tx (helixel-action-create 'insert-text sel
                  :runner (lambda (_tx) (insert "X"))
                  :text "X")))
       (setq helixel--last-tx tx)
@@ -500,10 +500,10 @@ the real cursor's event."
         (setf (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)) tx)))
     ;; Now broadcast `.' — dispatcher's around-advice converts it
     ;; to a single execute-edit at each cursor's point.
-    (helixel-tx-replay helixel--last-tx)
+    (helixel-action-replay helixel--last-tx)
     (helixel-mc-with-each-cursor
       (let ((helixel--inhibit-repeat-record t))
-        (helixel-tx-replay helixel--last-tx)))
+        (helixel-action-replay helixel--last-tx)))
     ;; Each cursor inserted an X at its position.
     (should (string-match-p "X" (buffer-string)))
     (should (>= (length (split-string (buffer-string) "X")) 4))
@@ -526,25 +526,25 @@ property must be updated by `leave-cursor' — otherwise a later
         (helixel-mc-with-each-cursor
           (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
             (setq helixel--last-tx
-                  (helixel-tx-create 'noop sel))))
+                  (helixel-action-create 'noop sel))))
         (should (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-dot-bypasses-advance-with-fakes ()
   "`helixel-repeat-edit' under mc must NOT call the full advance+apply
-loop — just `helixel-tx-replay' once.  Verify the around-advice
+loop — just `helixel-action-replay' once.  Verify the around-advice
 fires only when fakes exist."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
     ;; Stub last-event with a counter.
     (let* ((called 0)
            (sel (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'noop sel
+           (tx (helixel-action-create 'noop sel
                  :runner (lambda (_tx) (cl-incf called)))))
       (setq helixel--last-tx tx)
       ;; Direct call to advised `.':
       (helixel-repeat-edit)
-      ;; The around advice runs `helixel-tx-replay' exactly once
+      ;; The around advice runs `helixel-action-replay' exactly once
       ;; at real (no advance loop).  Broadcast to fakes is the
       ;; dispatcher's job (not measured here — we directly assert
       ;; the advice short-circuits the advance loop).
@@ -558,9 +558,9 @@ fake then replays the chain TX (not the pre-chain edit)."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'chain sel
+           (tx (helixel-action-create 'chain sel
                  :runner (lambda (_tx) (ignore))
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore)))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore)))))
       (setq helixel--last-tx tx)
       (helixel-mc--broadcast-last-event)
       ;; Every fake's overlay holds the chain TX as last-event.
@@ -1449,7 +1449,7 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
 (ert-deftest helixel-test-mc-apply-last-edit ()
   (helixel-test-with-buffer "AAA\nAAA\nAAA\n"
     ;; Build a fake helixel--last-tx whose runner inserts "X".
-    (let ((tx (make-helixel-tx
+    (let ((tx (make-helixel-action
                :op 'test-insert
                :runner (lambda (_tx) (insert "X"))
                :sel nil :payload nil
@@ -1556,7 +1556,7 @@ N word targets, not N+1."
   (helixel-test-with-buffer "alpha beta gamma\n"
     (helixel-enter-normal-state)
     (let* ((sentinel-sel (helixel-test-mc--word-sel))
-           (sentinel-tx (make-helixel-tx
+           (sentinel-tx (make-helixel-action
                          :op 'change
                          :sel sentinel-sel
                          :runner #'ignore
@@ -1585,14 +1585,14 @@ N word targets, not N+1."
 ;; word) and the change op then mangles neighbouring text.
 ;;
 ;; The fix is an `:around' advice on `helixel-repeat-edit' that, when
-;; mc is active, short-circuits to `helixel-tx-replay' (apply once
+;; mc is active, short-circuits to `helixel-action-replay' (apply once
 ;; at point, no advance).  These tests exercise that helper directly
 ;; with a synthetic change tx so we don't depend on the full
 ;; insert-state replay machinery.
 
 (defun helixel-test-mc--make-replace-tx (replacement)
   "Synthesise a change tx whose runner replaces the active region with REPLACEMENT."
-  (make-helixel-tx
+  (make-helixel-action
    :op 'change
    :sel (helixel-test-mc--word-sel)
    :runner (lambda (_tx)
@@ -2221,7 +2221,7 @@ before real point."
 (ert-deftest helixel-test-mc-apply-last-edit-error-no-cursors ()
   "`M-s .' with no fake cursors signals `user-error'."
   (helixel-test-with-buffer "abc\n"
-    (let ((helixel--last-tx (make-helixel-tx
+    (let ((helixel--last-tx (make-helixel-action
                               :op 'test :sel nil :payload nil
                               :runner #'ignore)))
       (should-error (helixel-mc-apply-last-action) :type 'user-error))))
@@ -2539,7 +2539,7 @@ region is NOT restored (the new target replaces it correctly)."
 (ert-deftest helixel-test-mc-broadcast-then-replay ()
   "Broadcasting a last-event then replaying at each fake cursor works."
   (helixel-test-with-buffer "X\nX\nX\n"
-    (let ((tx (make-helixel-tx
+    (let ((tx (make-helixel-action
                :op 'test
                :runner (lambda (_tx) (insert "Y"))
                :sel nil :payload nil

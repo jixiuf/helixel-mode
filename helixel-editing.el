@@ -46,7 +46,7 @@
 ;; `-eol' / `-newline' / `-prevline') declares a `:tx-runner' that
 ;; just calls one of these helpers.  The multi-cursor dispatcher
 ;; invokes the runner at every fake cursor through the unified
-;; `helixel-tx-replay' path — each helper runs in the fake's
+;; `helixel-action-replay' path — each helper runs in the fake's
 ;; restored context (point, mark, mark-active per `helixel-cs').
 ;;
 ;; They live here (NOT in `helixel-mc-integrate.el') so the
@@ -252,12 +252,12 @@ Otherwise RECORD-P defaults to t via the wrapper body."
         (let ((tx helixel--last-tx))
           ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
-            (setq tx (helixel-tx-with-payload tx :keys keys)))
+            (setq tx (helixel-action-with-payload tx :keys keys)))
           ;; Store text as replay fallback (tests, programmatic use)
           (when text
-            (setq tx (helixel-tx-with-payload tx :text text))
+            (setq tx (helixel-action-with-payload tx :text text))
             (when (eq (helixel-action-op tx) 'change)
-              (setq tx (helixel-tx-with-payload tx
+              (setq tx (helixel-action-with-payload tx
                                                   :inserted-text text))))
           (helixel--update-last-event tx))))
     (when helixel--change-track-marker
@@ -339,7 +339,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (defun helixel--repeat-change-core (tx)
   "Repeat change TX: delete selection, replay keys or insert text.
-TX is the complete edit transaction (see `helixel-tx-create').
+TX is the complete edit transaction (see `helixel-action-create').
 Keys (primary) capture the full insert-mode keystrokes.
 Text (fallback) is used when keys are unavailable (tests).
 
@@ -386,10 +386,10 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 (helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
-             (let ((c (helixel-tx-char tx)))
+             (let ((c (helixel-action-char tx)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
-            (helixel-replace-char (helixel-tx-char tx))))
+            (helixel-replace-char (helixel-action-char tx))))
 
 (helixel-register-op insert-text :display "i" :moves-point-p nil
   :runner (lambda (tx)
@@ -655,7 +655,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
           (indent-rigidly (region-beginning) (region-end) indent-sign)
           (let* ((mult (or (helixel-action-payload-get tx :multiplier) 1)))
             (helixel--update-last-event
-             (helixel-tx-with-payload tx :multiplier (1+ mult))))
+             (helixel-action-with-payload tx :multiplier (1+ mult))))
           (goto-char (region-beginning))
           (setq consecutive-p t))))
     (unless consecutive-p

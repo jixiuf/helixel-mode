@@ -168,10 +168,10 @@ and clears the live state."
 (defun helixel--live-action-set (tx)
   "Copy TX's replay slots onto `helixel--live-action'.
 TX is a `helixel-action' carrying replay data (op/sel/payload/runner
-/pre-replay-fn/mark-region/display) produced by `helixel-tx-create'
+/preposition/mark-region/display) produced by `helixel-action-create'
 or equivalent.  No-op if no live action or TX isn't an action.
 
-Preserves any existing `pre-replay-fn' on the live action unless TX
+Preserves any existing `preposition' on the live action unless TX
 provides its own (used by insert-entry commands whose `:tx-runner'
 attaches a prepos function before `record-action' runs)."
   (when (and helixel--live-action (helixel-action-p tx))

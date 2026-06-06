@@ -69,7 +69,7 @@ METADATA is a plist:
                    action's tx as a `:preposition' slot.
                    Used to make the command's effect replayable at
                    multi-cursors and other replay sites: FN is called
-                   before the main runner in `helixel-tx-replay'.
+                   before the main runner in `helixel-action-replay'.
                    For insert-entry commands, the prepos FN survives
                    the later `record-action' for \='insert-text that
                    creates the insert-text tx (preserved by
@@ -77,7 +77,7 @@ METADATA is a plist:
                    When omitted, no preposition is attached.
                    Invariant: at most one :tx-runner per command.
                    A second :tx-runner silently overwrites the first
-                   (the payload plist holds a single :pre-replay-fn).
+                   (the payload plist holds a single :preposition).
 
 For :category movement:
   - Auto-injects `helixel--track-visual-move' for \=`.\=` replay.
@@ -115,7 +115,7 @@ BODY is the command's business logic."
          ;; ── Optional :preposition attachment (for unified replay) ──
          ;; Attach BEFORE the body so eager record-action commits keep
          ;; the prepos fn on the committed ring entry.
-         ;; `record-action' preserves :pre-replay-fn across recording.
+         ;; `record-action' preserves :preposition across recording.
          ,@(when attach-tx
              `((unless (helixel-replaying-p)
                  (when helixel--live-action

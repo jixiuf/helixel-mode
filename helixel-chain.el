@@ -21,7 +21,7 @@
 ;; cancels.  After Phase 4.4 chain recording captures the LIST of
 ;; helixel-tx values produced by the commands run during the chain
 ;; (every helixel command produces a tx via Phase 4.3).  Replay
-;; iterates the list and calls `helixel-tx-replay' on each tx in
+;; iterates the list and calls `helixel-action-replay' on each tx in
 ;; chronological order.  No more keystroke / kmacro capture.
 ;;
 ;; Accumulation: chain registers a function on
@@ -38,7 +38,7 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'helixel-core)         ; helixel-tx-create
+(require 'helixel-core)         ; helixel-action-create
 (require 'helixel-ring)         ; helixel-action-commit-hook
 (require 'helixel-macros)       ; helixel-with-action-tracking
 (require 'helixel-repeat)       ; helixel--maybe-flip-dir-action, strategy
@@ -107,7 +107,7 @@ replay so insert-position semantics match the original recording
                    (match-beginning 0))
           (goto-char (match-beginning 0)))
         (dolist (sub-tx tx-list)
-          (helixel-tx-replay sub-tx))))))
+          (helixel-action-replay sub-tx))))))
 
 (helixel-register-op chain
   :display "chain"
@@ -184,11 +184,11 @@ by the initial selection context snapshotted at chain-start."
                      init-ctx))
          (had-content (and tx-list (consp tx-list))))
     (when had-content
-      (let ((tx (helixel-tx-create 'chain init-ctx
+      (let ((tx (helixel-action-create 'chain init-ctx
                    :runner #'helixel--repeat-chain-runner
                    :display (format "chain(%d)" (length tx-list))
                    :tx-list tx-list)))
-        (setq helixel--last-tx (helixel-tx-copy tx))
+        (setq helixel--last-tx (helixel-action-copy tx))
         (helixel-with-action-tracking
             (:op 'chain :category 'edit :subcat 'chain)
           (helixel--live-action-set tx))))

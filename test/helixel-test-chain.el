@@ -102,9 +102,9 @@
     (goto-char 1)
     (helixel-repeat-chain-start)
     ;; Push two fake sub-txs directly onto the session's tx-list.
-    (push (helixel-tx-create 'noop nil :runner #'ignore)
+    (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-tx-list helixel--chain-session))
-    (push (helixel-tx-create 'noop nil :runner #'ignore)
+    (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
@@ -114,14 +114,14 @@
       (should tx-list)
       (should (listp tx-list))
       (should (= 2 (length tx-list)))
-      (should (helixel-tx-p (car tx-list))))))
+      (should (helixel-action-p (car tx-list))))))
 
 (ert-deftest helixel-test-chain-last-event-is-compound ()
   "After chain-end, helixel--last-tx is the chain tx."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (helixel-tx-create 'noop nil :runner #'ignore)
+    (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should (eq (helixel-action-op helixel--last-tx) 'chain))))
@@ -138,7 +138,7 @@
     (setq helixel--pending-sel
           (helixel-sel-update-ctx helixel--pending-sel
                                   :entry-kind 'insert))
-    (push (helixel-tx-create 'noop nil :runner #'ignore)
+    (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--last-tx)
@@ -151,7 +151,7 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
-    (push (helixel-tx-create 'noop nil :runner #'ignore)
+    (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
     (should helixel--event-ring)
@@ -189,10 +189,10 @@
 The chain has one no-op sub-tx so the runner has something to
 iterate — the actual edit semantic is irrelevant to the advance
 tests in this section."
-  (helixel-tx-create 'chain (or sel-ctx nil)
+  (helixel-action-create 'chain (or sel-ctx nil)
     :runner #'helixel--repeat-chain-runner
     :display "chain(test)"
-    :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+    :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
 
 (ert-deftest helixel-test-chain-dot-search-no-more ()
   ". on chain search at edge signals user-error (caught by repeat-edit)."
@@ -283,10 +283,10 @@ tests in this section."
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
@@ -299,10 +299,10 @@ tests in this section."
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
@@ -316,10 +316,10 @@ tests in this section."
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -3)
@@ -331,10 +331,10 @@ tests in this section."
     (goto-char 1)
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
@@ -347,10 +347,10 @@ tests in this section."
     (goto-char 10)
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
@@ -363,10 +363,10 @@ tests in this section."
     (forward-line -1)
     (setq helixel-chain--test-ctr 0)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--count-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -2)
@@ -384,10 +384,10 @@ tests in this section."
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection 0)
@@ -401,10 +401,10 @@ tests in this section."
     (search-backward "foo d")
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection -3)
@@ -418,10 +418,10 @@ tests in this section."
   (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 10)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'chain ctx
+           (tx (helixel-action-create 'chain ctx
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
+                 :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection '(4))
@@ -461,7 +461,7 @@ order."
         (should tx-list)
         (should (listp tx-list))
         (should (> (length tx-list) 0))
-        (should (helixel-tx-p (car tx-list))))
+        (should (helixel-action-p (car tx-list))))
       ;; init-ctx merged into the chain tx's sel.
       (should (equal init-ctx (helixel-action-sel helixel--last-tx))))))
 
@@ -476,10 +476,10 @@ returns t (allowing in-place repeat) instead of nil."
     (goto-char 1)
     (helixel-select-line)
     (let* ((init-ctx helixel--pending-sel)
-           (tx (helixel-tx-create 'chain init-ctx
+           (tx (helixel-action-create 'chain init-ctx
                  :runner #'helixel--repeat-chain-runner
                  :display "chain"
-                 :tx-list (list (helixel-tx-create 'noop nil
+                 :tx-list (list (helixel-action-create 'noop nil
                                  :runner #'ignore)))))
       (setq helixel--last-tx tx)
       ;; line kind has an :advance fn so this returns whatever the
@@ -504,12 +504,12 @@ We build the chain tx by hand rather than driving the full
 those hooks reliably) — the invariant under test is the
 chain-runner → insert-text-runner replay path, not capture."
   (helixel-chain-test-with-buffer "abc\nxyz\n"
-    (let* ((insert-tx (helixel-tx-create 'insert-text nil
+    (let* ((insert-tx (helixel-action-create 'insert-text nil
                         :runner (helixel--op-runner 'insert-text)
                         :keys (list (list :text "()"
                                           :delete-before 0
                                           :offset -1))))
-           (chain-tx  (helixel-tx-create 'chain nil
+           (chain-tx  (helixel-action-create 'chain nil
                         :runner #'helixel--repeat-chain-runner
                         :display "chain"
                         :tx-list (list insert-tx))))

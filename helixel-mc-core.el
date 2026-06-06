@@ -681,8 +681,8 @@ action.  Returns its `tx' if and only if:
   - the action's `by-command' stamp matches `this-command'.
 
 The action may have a nil op (movement commands) or a non-nil
-`:pre-replay-fn' (insert-entry commands' prepos).
-`helixel-tx-replay' handles both uniformly: preposition runs
+`:preposition' (insert-entry commands' prepos).
+`helixel-action-replay' handles both uniformly: preposition runs
 first, then runner if any."
   (when (symbolp this-command)
     (let ((entry (car helixel--event-ring)))
@@ -715,7 +715,7 @@ The tx attached to the freshly-committed action (front of
 `helixel--event-ring' with matching `by-command' stamp) is replayed
 at each fake inside one `undo-amalgamate-change-group'.  Insert-entry
 commands install a per-fake prepositioner as a `:preposition'
-payload on the action's tx — `helixel-tx-replay' calls it before
+payload on the action's tx — `helixel-action-replay' calls it before
 the main runner.
 
 No-op when the mode is off, dispatch is already in progress, we're in
@@ -752,7 +752,7 @@ exists (e.g. for real-cursor-only commands like
                           ;; carries prompted decisions so nothing
                           ;; re-prompts at fakes.
                           (helixel-with-replay-as 'dot
-                            (helixel-tx-replay fresh-runnable))
+                            (helixel-action-replay fresh-runnable))
                         ;; Fallback: whitelisted Emacs built-ins
                         ;; (forward-char, next-line, self-insert-command,
                         ;; ...) have no tx — just re-call interactively.

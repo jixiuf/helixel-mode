@@ -967,22 +967,18 @@ dispatches on struct closures."
   (when sel-ctx
     (helixel-sel-call-recreate sel-ctx)))
 
-(defun helixel-tx-replay (tx)
-  "Execute transaction TX on the current buffer.
-Does NOT record, does NOT switch state.
-
-If TX has a `pre-replay-fn', call it first (used by mc-fake replay
-of insert-entry commands to position point before the main runner
-inserts text).  Then call the :runner stored in TX.  If :runner is
-missing, falls back to the operator registry.  If neither runner nor
-op resolves but a pre-replay-fn ran, TX is treated as a pure
-positioner (used by movement commands at fake cursors)."
-  (when-let* ((pre (helixel-action-preposition tx)))
-    (funcall pre tx))
-  (when-let* ((runner (or (helixel-tx-runner tx)
-                          (and (helixel-tx-op tx)
-                               (helixel--op-runner (helixel-tx-op tx))))))
-    (funcall runner tx)))
+(defun helixel-tx-replay (event)
+  "Execute replay data in EVENT: preposition (if any) then runner.
+Reads :preposition and :runner from EVENT (a `helixel-action').
+Falls back to the operator registry if :runner is nil but :op is set.
+If neither runner nor op resolves but preposition ran, EVENT is
+treated as a pure positioner (movement commands at fake cursors)."
+  (when-let* ((pre (helixel-action-preposition event)))
+    (funcall pre event))
+  (when-let* ((runner (or (helixel-action-runner event)
+                          (and (helixel-action-op event)
+                               (helixel--op-runner (helixel-action-op event))))))
+    (funcall runner event)))
 
 (defsubst helixel--repeat-echo (count)
   "Echo COUNT of repeated iterations."
@@ -1067,7 +1063,7 @@ of the existing `helixel--last-tx' are left untouched.  Used by
 operator commands that need to inject replay metadata (e.g.
 `:keys', `:replacement') into the most recent tx after it was
 already committed."
-  (when (and helixel--last-tx (helixel-tx-p helixel--last-tx))
+  (when (and helixel--last-tx (helixel-action-p helixel--last-tx))
     (setf (helixel-action-payload helixel--last-tx)
           (helixel-action-payload new-tx))))
 

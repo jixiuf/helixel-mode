@@ -546,7 +546,7 @@ Keyword options:
 
 The legacy `:substitute' and `:prepos' arms (Phase 4.3 cleanup) are
 gone — commands now produce a `helixel-tx' (or store a
-`:pre-replay-fn' on it via `helixel-define-command's `:tx-runner'
+`:preposition' slot via `helixel-define-command's `:tx-runner'
 clause) which the unified dispatcher replays at every fake cursor."
   (declare (indent 1))
   (let ((real-only (eq policy 'real)))
@@ -682,7 +682,7 @@ action.  Returns its `tx' if and only if:
 
 The action may have a nil op (movement commands) or a non-nil
 `:pre-replay-fn' (insert-entry commands' prepos).
-`helixel-tx-replay' handles both uniformly: pre-replay-fn runs
+`helixel-tx-replay' handles both uniformly: preposition runs
 first, then runner if any."
   (when (symbolp this-command)
     (let ((entry (car helixel--event-ring)))
@@ -714,7 +714,7 @@ first, then runner if any."
 The tx attached to the freshly-committed action (front of
 `helixel--event-ring' with matching `by-command' stamp) is replayed
 at each fake inside one `undo-amalgamate-change-group'.  Insert-entry
-commands install a per-fake prepositioner as a `:pre-replay-fn'
+commands install a per-fake prepositioner as a `:preposition'
 payload on the action's tx — `helixel-tx-replay' calls it before
 the main runner.
 
@@ -739,7 +739,7 @@ exists (e.g. for real-cursor-only commands like
            ;; runner.  Auto-allocated txs (e.g. textobj sel-only,
            ;; pure jump entries) have a sel but no runner — they fall
            ;; back to the call-interactively path below.
-           (fresh-tx (and fresh (helixel-tx-runner fresh) fresh))
+           (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
            (cmd this-command))
       (helixel-with-replay 'mc-batch
         (condition-case err
@@ -747,12 +747,12 @@ exists (e.g. for real-cursor-only commands like
               (let ((dead nil))
                 (helixel-mc-with-each-cursor
                   (condition-case e
-                      (if fresh-tx
+                      (if fresh-runnable
                           ;; Unified path: replay the fresh tx.  Payload
                           ;; carries prompted decisions so nothing
                           ;; re-prompts at fakes.
                           (helixel-with-replay-as 'dot
-                            (helixel-tx-replay fresh-tx))
+                            (helixel-tx-replay fresh-runnable))
                         ;; Fallback: whitelisted Emacs built-ins
                         ;; (forward-char, next-line, self-insert-command,
                         ;; ...) have no tx — just re-call interactively.
@@ -851,7 +851,7 @@ deactivated when the last one is removed."
    ;; Insert-entry commands themselves remain real-only — except
    ;; they're now broadcast via the unified dispatcher.  Each
    ;; insert-entry command declares a prepos via `:tx-runner' on its
-   ;; `helixel-define-command' form; it lands as a `:pre-replay-fn'
+   ;; `helixel-define-command' form; it lands as a `:preposition'
    ;; payload on the tx and runs at every fake during replay.  So
    ;; they MUST be whitelisted (multiple-cursors property = t).
    ;; `insert-exit' stays whitelisted too — fakes need to leave

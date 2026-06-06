@@ -66,7 +66,7 @@ METADATA is a plist:
   :clear-highlights — default t for :category movement, nil otherwise
   :params   PARAM-LIST — optional function parameter list
   :tx-runner FN — optional unary function (TX) to attach to the live
-                   action's tx as a `:pre-replay-fn' payload entry.
+                   action's tx as a `:preposition' slot.
                    Used to make the command's effect replayable at
                    multi-cursors and other replay sites: FN is called
                    before the main runner in `helixel-tx-replay'.
@@ -74,7 +74,7 @@ METADATA is a plist:
                    the later `record-action' for \='insert-text that
                    creates the insert-text tx (preserved by
                    `helixel--record-action').
-                   When omitted, no pre-replay-fn is attached.
+                   When omitted, no preposition is attached.
                    Invariant: at most one :tx-runner per command.
                    A second :tx-runner silently overwrites the first
                    (the payload plist holds a single :pre-replay-fn).
@@ -112,7 +112,7 @@ BODY is the command's business logic."
              (this-command ',name))
          ;; ── Open tracking event (via unified entry point) ──
          (helixel--tracking-open ',cat ',sub)
-         ;; ── Optional :pre-replay-fn attachment (for unified replay) ──
+         ;; ── Optional :preposition attachment (for unified replay) ──
          ;; Attach BEFORE the body so eager record-action commits keep
          ;; the prepos fn on the committed ring entry.
          ;; `record-action' preserves :pre-replay-fn across recording.

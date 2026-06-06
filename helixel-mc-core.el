@@ -45,7 +45,7 @@
 
 (defvar helixel-multi-cursor-mode)        ; forward decl — defined below
 (defvar helixel--current-state)           ; from `helixel-state'
-;; Per-cursor state variables that `helixel-cs-snapshot' /
+;; Per-cursor state variables that `helixel-pcs-clone' /
 ;; `-restore' / `-update-from-globals' read and write.  Defined
 ;; in helixel-core / helixel-ring / helixel-state — declared here
 ;; so the byte compiler doesn't flag them when this file is built
@@ -117,17 +117,17 @@ Nil disables the check."
 
 ;; ── Per-cursor state ──
 ;;
-;; Each fake cursor owns a `helixel-cursor-state' struct that captures
+;; Each fake cursor owns a `helixel-pc-state' struct that captures
 ;; the full set of variables the dispatcher snapshots/restores around
 ;; the per-fake body.  The struct lives on the overlay under one
-;; property (`helixel-cs') — replacing what used to be 11 separate
+;; property (`helixel-pc-state') — replacing what used to be 11 separate
 ;; `overlay-put' calls per snapshot.
 ;;
-;; Real cursor uses the SAME struct via `helixel-cs-snapshot' /
+;; Real cursor uses the SAME struct via `helixel-pcs-clone' /
 ;; `-restore' in `helixel-mc--save-main-state'.  One type, one place.
 
-(cl-defstruct (helixel-cursor-state
-               (:conc-name helixel-cs-)
+(cl-defstruct (helixel-pc-state
+               (:conc-name helixel-pcs-)
                (:copier nil))
   "Snapshot of one cursor's state — used for both real and fake cursors.
 The mc dispatcher restores this struct into globals at fake-cursor
@@ -156,11 +156,11 @@ so on — broadcasts at one cursor never leak into another."
   live-action            ; `helixel-action'      (helixel--live-action)
   action-pos)            ; integer | nil         (helixel--action-pos)
 
-(defun helixel-cs-snapshot ()
-  "Capture the current cursor state into a fresh `helixel-cursor-state'.
+(defun helixel-pcs-clone ()
+  "Capture the current cursor state into a fresh `helixel-pc-state'.
 Markers are FRESH copies (`copy-marker') so the snapshot is
 independent of any later movement of point / mark."
-  (make-helixel-cursor-state
+  (make-helixel-pc-state
    :point          (copy-marker (point) t)
    :mark           (copy-marker (mark-marker))
    :mark-active    mark-active
@@ -174,65 +174,65 @@ independent of any later movement of point / mark."
    :live-action               helixel--live-action
    :action-pos                helixel--action-pos))
 
-(defun helixel-cs-restore (cs)
+(defun helixel-pcs-swap-in (cs)
   "Restore cursor state CS into the current globals.
 Moves point and the `mark-marker' to CS's positions, sets
 `mark-active', and copies every helixel per-cursor var."
-  (goto-char (marker-position (helixel-cs-point cs)))
-  (set-marker (mark-marker) (marker-position (helixel-cs-mark cs)))
-  (setq mark-active            (helixel-cs-mark-active cs)
-        kill-ring              (helixel-cs-kill-ring cs)
-        kill-ring-yank-pointer (helixel-cs-kill-ring-yank-pointer cs)
-        mark-ring              (helixel-cs-mark-ring cs)
-        helixel--pending-sel   (helixel-cs-pending-sel cs)
-        helixel--last-tx   (helixel-cs-last-action cs)
-        helixel--active-search (helixel-cs-active-search cs)
-        helixel--event-ring    (helixel-cs-event-ring cs)
-        helixel--live-action   (helixel-cs-live-action cs)
-        helixel--action-pos    (helixel-cs-action-pos cs)))
+  (goto-char (marker-position (helixel-pcs-point cs)))
+  (set-marker (mark-marker) (marker-position (helixel-pcs-mark cs)))
+  (setq mark-active            (helixel-pcs-mark-active cs)
+        kill-ring              (helixel-pcs-kill-ring cs)
+        kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer cs)
+        mark-ring              (helixel-pcs-mark-ring cs)
+        helixel--pending-sel   (helixel-pcs-pending-sel cs)
+        helixel--last-tx   (helixel-pcs-last-action cs)
+        helixel--active-search (helixel-pcs-active-search cs)
+        helixel--event-ring    (helixel-pcs-event-ring cs)
+        helixel--live-action   (helixel-pcs-live-action cs)
+        helixel--action-pos    (helixel-pcs-action-pos cs)))
 
-(defun helixel-cs-release (cs)
+(defun helixel-pcs-release (cs)
   "Null the markers held by CS.  Idempotent.
 Called when the cursor a CS belongs to is destroyed, to release
 any buffer text the markers might otherwise pin."
   (when cs
-    (when-let* ((m (helixel-cs-point cs))) (set-marker m nil))
-    (when-let* ((m (helixel-cs-mark cs))) (set-marker m nil))))
+    (when-let* ((m (helixel-pcs-point cs))) (set-marker m nil))
+    (when-let* ((m (helixel-pcs-mark cs))) (set-marker m nil))))
 
-(defun helixel-cs-update-from-globals (cs)
+(defun helixel-pcs-swap-out (cs)
   "Update CS in place with current cursor globals.
 Mutates the existing point/mark markers (preserving identity for
 any rendering code that holds them).  Sets the rest by `setf'."
-  (set-marker (helixel-cs-point cs) (point))
-  (set-marker (helixel-cs-mark cs) (mark t))
-  (setf (helixel-cs-mark-active cs)            mark-active
-        (helixel-cs-kill-ring cs)              kill-ring
-        (helixel-cs-kill-ring-yank-pointer cs) kill-ring-yank-pointer
-        (helixel-cs-mark-ring cs)              mark-ring
-        (helixel-cs-pending-sel cs)            helixel--pending-sel
-        (helixel-cs-last-action cs)            helixel--last-tx
-        (helixel-cs-active-search cs)          helixel--active-search
-        (helixel-cs-event-ring cs)             helixel--event-ring
-        (helixel-cs-live-action cs)            helixel--live-action
-        (helixel-cs-action-pos cs)             helixel--action-pos))
+  (set-marker (helixel-pcs-point cs) (point))
+  (set-marker (helixel-pcs-mark cs) (mark t))
+  (setf (helixel-pcs-mark-active cs)            mark-active
+        (helixel-pcs-kill-ring cs)              kill-ring
+        (helixel-pcs-kill-ring-yank-pointer cs) kill-ring-yank-pointer
+        (helixel-pcs-mark-ring cs)              mark-ring
+        (helixel-pcs-pending-sel cs)            helixel--pending-sel
+        (helixel-pcs-last-action cs)            helixel--last-tx
+        (helixel-pcs-active-search cs)          helixel--active-search
+        (helixel-pcs-event-ring cs)             helixel--event-ring
+        (helixel-pcs-live-action cs)            helixel--live-action
+        (helixel-pcs-action-pos cs)             helixel--action-pos))
 
 ;; ── Cursor accessors (read state via the struct on the overlay) ──
 
 (defsubst helixel-mc-cursor-state (cursor)
-  "Return the `helixel-cursor-state' attached to CURSOR overlay."
-  (overlay-get cursor 'helixel-cs))
+  "Return the `helixel-pc-state' attached to CURSOR overlay."
+  (overlay-get cursor 'helixel-pc-state))
 
 (defsubst helixel-mc-cursor-point (cursor)
   "Return the point marker of fake CURSOR."
-  (helixel-cs-point (overlay-get cursor 'helixel-cs)))
+  (helixel-pcs-point (overlay-get cursor 'helixel-pc-state)))
 
 (defsubst helixel-mc-cursor-mark (cursor)
   "Return the mark marker of fake CURSOR."
-  (helixel-cs-mark (overlay-get cursor 'helixel-cs)))
+  (helixel-pcs-mark (overlay-get cursor 'helixel-pc-state)))
 
 (defsubst helixel-mc-cursor-mark-active (cursor)
   "Return non-nil if fake CURSOR's mark is active."
-  (helixel-cs-mark-active (overlay-get cursor 'helixel-cs)))
+  (helixel-pcs-mark-active (overlay-get cursor 'helixel-pc-state)))
 
 ;; ── Cursors table (per buffer) ──
 
@@ -240,7 +240,7 @@ any rendering code that holds them).  Sets the rest by `setf'."
   "List of fake-cursor overlays in the current buffer.
 Each overlay has properties:
   `helixel-mc-cursor'    t (type tag)
-  `helixel-cs'           `helixel-cursor-state' (per-cursor state)
+  `helixel-pc-state'           `helixel-pc-state' (per-cursor state)
   `helixel-mc-region'    fake-region overlay or nil")
 
 (defsubst helixel-mc-fake-cursor-p (ov)
@@ -257,17 +257,17 @@ When SORT is non-nil, return them sorted by buffer position."
          (cl-remove-if-not
           (lambda (ov)
             (and (overlay-buffer ov)
-                 (let ((cs (overlay-get ov 'helixel-cs)))
-                   (and cs (helixel-cs-point cs)
-                        (marker-position (helixel-cs-point cs))))))
+                 (let ((cs (overlay-get ov 'helixel-pc-state)))
+                   (and cs (helixel-pcs-point cs)
+                        (marker-position (helixel-pcs-point cs))))))
           (copy-sequence helixel-mc--cursors))))
     (if sort
         (sort cursors
               (lambda (a b)
-                (< (marker-position (helixel-cs-point
-                                     (overlay-get a 'helixel-cs)))
-                   (marker-position (helixel-cs-point
-                                     (overlay-get b 'helixel-cs))))))
+                (< (marker-position (helixel-pcs-point
+                                     (overlay-get a 'helixel-pc-state)))
+                   (marker-position (helixel-pcs-point
+                                     (overlay-get b 'helixel-pc-state))))))
       cursors)))
 
 (defun helixel-mc-num-cursors ()
@@ -311,10 +311,10 @@ across the whole window); elsewhere covers the single char at POS."
 
 (defun helixel-mc--update-fake-region (cursor)
   "Update the fake-region overlay associated with CURSOR."
-  (let* ((cs  (overlay-get cursor 'helixel-cs))
-         (pnt (marker-position (helixel-cs-point cs)))
-         (mrk (marker-position (helixel-cs-mark cs)))
-         (active (helixel-cs-mark-active cs))
+  (let* ((cs  (overlay-get cursor 'helixel-pc-state))
+         (pnt (marker-position (helixel-pcs-point cs)))
+         (mrk (marker-position (helixel-pcs-mark cs)))
+         (active (helixel-pcs-mark-active cs))
          (region-ov (overlay-get cursor 'helixel-mc-region)))
     (if (and active mrk (/= pnt mrk))
         (let ((b (min pnt mrk)) (e (max pnt mrk)))
@@ -340,10 +340,10 @@ but different inactive marks dedupe to the same key."
   (if (eq ov-or-real :real)
       (cons (point)
             (if (and mark-active (mark t)) (mark t) (point)))
-    (let* ((cs (overlay-get ov-or-real 'helixel-cs))
-           (p (marker-position (helixel-cs-point cs)))
-           (m (marker-position (helixel-cs-mark cs)))
-           (a (helixel-cs-mark-active cs)))
+    (let* ((cs (overlay-get ov-or-real 'helixel-pc-state))
+           (p (marker-position (helixel-pcs-point cs)))
+           (m (marker-position (helixel-pcs-mark cs)))
+           (a (helixel-pcs-mark-active cs)))
       (cons p (if (and a m) m p)))))
 
 (defun helixel-mc--cursor-region (ov-or-real)
@@ -354,10 +354,10 @@ Returns nil when the cursor has no active region (point-only)."
       (and mark-active (mark t)
            (cons (min (point) (mark t))
                  (max (point) (mark t))))
-    (let* ((cs (overlay-get ov-or-real 'helixel-cs))
-           (p (marker-position (helixel-cs-point cs)))
-           (m (marker-position (helixel-cs-mark cs)))
-           (a (helixel-cs-mark-active cs)))
+    (let* ((cs (overlay-get ov-or-real 'helixel-pc-state))
+           (p (marker-position (helixel-pcs-point cs)))
+           (m (marker-position (helixel-pcs-mark cs)))
+           (a (helixel-pcs-mark-active cs)))
       (and a m (/= p m) (cons (min p m) (max p m))))))
 
 (defun helixel-mc-dedupe-cursors ()
@@ -422,7 +422,7 @@ Return the total number of fake cursors removed."
 Returns the new overlay, or nil if a fake at the same (point, mark)
 already exists.  Signals `user-error' if `helixel-mc-max-cursors'
 would be exceeded.
-Snapshots the cursor state into a `helixel-cursor-state' struct
+Snapshots the cursor state into a `helixel-pc-state' struct
 attached to the overlay (so each cursor has its own `kill-ring',
 event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
   (when (and helixel-mc-max-cursors
@@ -450,13 +450,13 @@ event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
              ;; struct, then override the position fields to match
              ;; the requested POINT/MARK so the new fake reflects
              ;; the spawn site, not the real cursor's location.
-             (cs (helixel-cs-snapshot)))
-        (set-marker (helixel-cs-point cs) point)
-        (set-marker (helixel-cs-mark cs) eff-mark)
-        (setf (helixel-cs-mark-active cs) (and mark (/= mark point)))
+             (cs (helixel-pcs-clone)))
+        (set-marker (helixel-pcs-point cs) point)
+        (set-marker (helixel-pcs-mark cs) eff-mark)
+        (setf (helixel-pcs-mark-active cs) (and mark (/= mark point)))
         (overlay-put ov 'helixel-mc-cursor t)
         (overlay-put ov 'priority 100)
-        (overlay-put ov 'helixel-cs cs)
+        (overlay-put ov 'helixel-pc-state cs)
         (helixel-mc--paint-cursor-overlay ov point)
         (helixel-mc--update-fake-region ov)
         ;; Exit `visual' state on first cursor creation.  Visual's
@@ -474,9 +474,9 @@ event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
 
 (defun helixel-mc-delete-fake-cursor (cursor)
   "Delete fake CURSOR overlay and its associated region overlay.
-Releases the markers held by the cursor's `helixel-cursor-state'."
+Releases the markers held by the cursor's `helixel-pc-state'."
   (when (helixel-mc-fake-cursor-p cursor)
-    (helixel-cs-release (overlay-get cursor 'helixel-cs))
+    (helixel-pcs-release (overlay-get cursor 'helixel-pc-state))
     (when-let* ((r (overlay-get cursor 'helixel-mc-region)))
       (delete-overlay r))
     (delete-overlay cursor)
@@ -569,21 +569,21 @@ that fake-cursor execution needs."
       (call-interactively command))))
 
 (defmacro helixel-mc--save-main-state (&rest body)
-  "Save real cursor state into a `helixel-cursor-state', run BODY, restore.
+  "Save real cursor state into a `helixel-pc-state', run BODY, restore.
 Used by `helixel-mc-with-each-cursor' to keep the real cursor's
 point/mark/helixel vars/kill-ring/event-ring untouched while each
 fake cursor's body runs in turn."
   (declare (indent 0) (debug t))
   (let ((cs (gensym "cs")))
-    `(let ((,cs (helixel-cs-snapshot)))
+    `(let ((,cs (helixel-pcs-clone)))
        (save-excursion
          (unwind-protect (progn ,@body)
-           (helixel-cs-restore ,cs)
-           (helixel-cs-release ,cs))))))
+           (helixel-pcs-swap-in ,cs)
+           (helixel-pcs-release ,cs))))))
 
 (defmacro helixel-mc-with-saved-state (&rest body)
   "Execute BODY, saving and restoring per-cursor state.
-Snapshots the real cursor's state into a `helixel-cursor-state'
+Snapshots the real cursor's state into a `helixel-pc-state'
 before BODY and restores it after — EXCEPT for point and mark,
 which are left as BODY leaves them (the caller is responsible
 for cursor positioning).
@@ -594,21 +594,21 @@ functions don't clobber the real cursor's per-cursor helixel
 state (kill-ring, event-ring, last-action, …)."
   (declare (indent 0) (debug t))
   (let ((cs (gensym "cs")))
-    `(let ((,cs (helixel-cs-snapshot)))
+    `(let ((,cs (helixel-pcs-clone)))
        (unwind-protect (progn ,@body)
          ;; Restore everything except point/mark — callers rely on
          ;; BODY moving point freely.
-         (setq mark-active            (helixel-cs-mark-active ,cs)
-               kill-ring              (helixel-cs-kill-ring ,cs)
-               kill-ring-yank-pointer (helixel-cs-kill-ring-yank-pointer ,cs)
-               mark-ring              (helixel-cs-mark-ring ,cs)
-               helixel--pending-sel   (helixel-cs-pending-sel ,cs)
-               helixel--last-tx   (helixel-cs-last-action ,cs)
-               helixel--active-search (helixel-cs-active-search ,cs)
-               helixel--event-ring    (helixel-cs-event-ring ,cs)
-               helixel--live-action   (helixel-cs-live-action ,cs)
-               helixel--action-pos    (helixel-cs-action-pos ,cs))
-         (helixel-cs-release ,cs)))))
+         (setq mark-active            (helixel-pcs-mark-active ,cs)
+               kill-ring              (helixel-pcs-kill-ring ,cs)
+               kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer ,cs)
+               mark-ring              (helixel-pcs-mark-ring ,cs)
+               helixel--pending-sel   (helixel-pcs-pending-sel ,cs)
+               helixel--last-tx   (helixel-pcs-last-action ,cs)
+               helixel--active-search (helixel-pcs-active-search ,cs)
+               helixel--event-ring    (helixel-pcs-event-ring ,cs)
+               helixel--live-action   (helixel-pcs-live-action ,cs)
+               helixel--action-pos    (helixel-pcs-action-pos ,cs))
+         (helixel-pcs-release ,cs)))))
 
 (defmacro helixel-mc-with-each-cursor (&rest body)
   "Evaluate BODY once at each fake cursor.
@@ -632,24 +632,24 @@ state."
 Does nothing (returns nil) if CURSOR has been detached or its
 state is missing — the caller can detect this via `eq' on the
 overlay or by checking `helixel-mc-fake-cursor-p' afterwards."
-  (let* ((cs (overlay-get cursor 'helixel-cs))
-         (pnt (and cs (helixel-cs-point cs)))
-         (mrk (and cs (helixel-cs-mark cs))))
+  (let* ((cs (overlay-get cursor 'helixel-pc-state))
+         (pnt (and cs (helixel-pcs-point cs)))
+         (mrk (and cs (helixel-pcs-mark cs))))
     (when (and cs pnt mrk (marker-position pnt) (marker-position mrk)
                (overlay-buffer cursor))
-      (helixel-cs-restore cs)
+      (helixel-pcs-swap-in cs)
       t)))
 
 (defun helixel-mc--leave-cursor (cursor)
   "Snapshot current globals back into CURSOR's state struct and repaint.
 After the fake's body ran, the per-cursor variables (including
 `helixel--live-action' and `helixel--event-ring') hold this fake's
-state — push them back into the cursor's `helixel-cursor-state'
+state — push them back into the cursor's `helixel-pc-state'
 struct, re-snap the fake's point/mark, and repaint its overlay."
-  (let ((cs (overlay-get cursor 'helixel-cs)))
-    (helixel-cs-update-from-globals cs)
+  (let ((cs (overlay-get cursor 'helixel-pc-state)))
+    (helixel-pcs-swap-out cs)
     (helixel-mc--paint-cursor-overlay
-     cursor (marker-position (helixel-cs-point cs)))
+     cursor (marker-position (helixel-pcs-point cs)))
     (helixel-mc--update-fake-region cursor)))
 
 (defun helixel-mc-execute-for-all-cursors (command)

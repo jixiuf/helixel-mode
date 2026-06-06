@@ -481,7 +481,7 @@ drop them."
 
 (ert-deftest helixel-test-mc-dot-replays-per-cursor-last-event ()
   "Each fake snapshots its own `helixel--last-tx' via
-`helixel-cursor-state' after the broadcast.  `.' replayed via
+`helixel-pc-state' after the broadcast.  `.' replayed via
 the amalgamated dispatcher must use the per-cursor snapshot, not
 the real cursor's event."
   (helixel-test-with-buffer "foo bar baz\n"
@@ -497,7 +497,7 @@ the real cursor's event."
                  :text "X")))
       (setq helixel--last-tx tx)
       (dolist (ov (helixel-mc-all-cursors))
-        (setf (helixel-cs-last-action (overlay-get ov 'helixel-cs)) tx)))
+        (setf (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)) tx)))
     ;; Now broadcast `.' — dispatcher's around-advice converts it
     ;; to a single execute-edit at each cursor's point.
     (helixel-tx-replay helixel--last-tx)
@@ -522,12 +522,12 @@ property must be updated by `leave-cursor' — otherwise a later
       (helixel-mc-create-fake-cursor 5)
       ;; Initially fakes have no last-event snapshot.
       (let ((ov (car (helixel-mc-all-cursors))))
-        (should-not (helixel-cs-last-action (overlay-get ov 'helixel-cs)))
+        (should-not (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)))
         (helixel-mc-with-each-cursor
           (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
             (setq helixel--last-tx
                   (helixel-tx-create 'noop sel))))
-        (should (helixel-cs-last-action (overlay-get ov 'helixel-cs)))))
+        (should (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-dot-bypasses-advance-with-fakes ()
@@ -565,7 +565,7 @@ fake then replays the chain TX (not the pre-chain edit)."
       (helixel-mc--broadcast-last-event)
       ;; Every fake's overlay holds the chain TX as last-event.
       (dolist (ov (helixel-mc-all-cursors))
-        (should (eq tx (helixel-cs-last-action (overlay-get ov 'helixel-cs))))))
+        (should (eq tx (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state))))))
     (helixel-mc-clear-all)))
 
 ;; ── Phase C: find-char per-cursor + per-fake error tolerance ────
@@ -592,7 +592,7 @@ other fakes' (snapshotted by `helixel-mc--leave-cursor')."
     ;; Each fake's overlay should have a private ring with the
     ;; just-committed motion event.
     (dolist (ov (helixel-mc-all-cursors))
-      (let ((ring (helixel-cs-event-ring (overlay-get ov 'helixel-cs))))
+      (let ((ring (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state))))
         ;; Ring is per-cursor and points at independent events.
         (should (listp ring))))
     ;; Real's ring is NOT contaminated by fake commits (rings are
@@ -627,8 +627,8 @@ events into the fake's OWN ring.  3 motions → 2 ring entries +
     (dotimes (_ 3)
       (helixel-mc-with-each-cursor (helixel-forward-word-start 1)))
     (let* ((ov (car (helixel-mc-all-cursors)))
-           (ring (helixel-cs-event-ring (overlay-get ov 'helixel-cs)))
-           (live (helixel-cs-live-action (overlay-get ov 'helixel-cs))))
+           (ring (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state)))
+           (live (helixel-pcs-live-action (overlay-get ov 'helixel-pc-state))))
       (should (= 2 (length ring)))
       (should live)
       (dolist (e ring)
@@ -638,7 +638,7 @@ events into the fake's OWN ring.  3 motions → 2 ring entries +
 (ert-deftest helixel-test-mc-per-fake-rings-are-independent ()
   "Each fake's ring grows independently — commits from cursor A
 do NOT leak into cursor B's ring.  Achieved because
-`helixel-cursor-state' snapshots `helixel--event-ring' /
+`helixel-pc-state' snapshots `helixel--event-ring' /
 `helixel--live-action' per cursor."
   (helixel-test-with-buffer
       "alpha beta gamma delta epsilon zeta eta theta iota kappa\n"
@@ -657,8 +657,8 @@ do NOT leak into cursor B's ring.  Achieved because
                                (helixel-mc-cursor-point b))))))
            (fakeA (nth 0 sorted))
            (fakeB (nth 1 sorted))
-           (ringA (helixel-cs-event-ring (overlay-get fakeA 'helixel-cs)))
-           (ringB (helixel-cs-event-ring (overlay-get fakeB 'helixel-cs)))
+           (ringA (helixel-pcs-event-ring (overlay-get fakeA 'helixel-pc-state)))
+           (ringB (helixel-pcs-event-ring (overlay-get fakeB 'helixel-pc-state)))
            (begA  (marker-position
                    (car (helixel-action-mark-region (car ringA)))))
            (begB  (marker-position
@@ -680,8 +680,8 @@ must not corrupt the fake's state."
     (goto-char 1)
     (let ((ov (helixel-mc-create-fake-cursor 5)))
       ;; Sanity: fresh fake has nil ring and nil live-event.
-      (should (null (helixel-cs-event-ring (overlay-get ov 'helixel-cs))))
-      (should (null (helixel-cs-live-action (overlay-get ov 'helixel-cs))))
+      (should (null (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state))))
+      (should (null (helixel-pcs-live-action (overlay-get ov 'helixel-pc-state))))
       ;; Broadcast `;' — fake's `helixel-action-cycle' sees no
       ;; ring, no live; prints "No saved actions" and returns.
       (helixel-mc-with-each-cursor (helixel-action-cycle))
@@ -707,8 +707,8 @@ history."
       (should (>= real-ring-len 1))
       ;; Spawn fake AFTER motions.
       (let* ((ov (helixel-mc-create-fake-cursor 13))
-             (fake-ring (helixel-cs-event-ring (overlay-get ov 'helixel-cs)))
-             (fake-live (helixel-cs-live-action (overlay-get ov 'helixel-cs))))
+             (fake-ring (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state)))
+             (fake-live (helixel-pcs-live-action (overlay-get ov 'helixel-pc-state))))
         ;; Fake's snapshot copies real's history.
         (should (= real-ring-len (length fake-ring)))
         (should (eq real-live fake-live))))
@@ -839,7 +839,7 @@ real."
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 3)
     (let ((ov (helixel-mc-create-fake-cursor 11 9)))
-      (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) t))
+      (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (goto-char 5)
     (helixel-mc-with-each-cursor (goto-char 17))
     (helixel-jump-to-match)
@@ -973,7 +973,7 @@ the call doesn't error and the fake's ring still exists."
       (helixel-mc-with-each-cursor (helixel-action-cycle)))
     ;; Sanity: fake still has its private ring.
     (let ((ov (car (helixel-mc-all-cursors))))
-      (should (listp (helixel-cs-event-ring (overlay-get ov 'helixel-cs)))))
+      (should (listp (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state)))))
     (helixel-mc-clear-all)))
 
 ;; ── Performance: large cursor counts ────────────────────────
@@ -1087,7 +1087,7 @@ OWN enclosing pair — no per-cursor advice needed."
       ;; Snapshot pending-sel into each fake's overlay so enter-
       ;; cursor restores it during the broadcast.
       (dolist (ov (helixel-mc-all-cursors))
-        (setf (helixel-cs-pending-sel (overlay-get ov 'helixel-cs)) (funcall mk-sel)))
+        (setf (helixel-pcs-pending-sel (overlay-get ov 'helixel-pc-state)) (funcall mk-sel)))
       ;; Real runs `md'; this commits an edit with by-command=
       ;; helixel-surround-delete.  Then post-command dispatch sees
       ;; the fresh edit and replays the runner at every fake.
@@ -1475,7 +1475,7 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
         (setq kill-ring (cons "fake" kill-ring)))
       (should (equal kill-ring '("real")))
       (let ((ov (car (helixel-mc-all-cursors))))
-        (should (member "fake" (helixel-cs-kill-ring (overlay-get ov 'helixel-cs)))))
+        (should (member "fake" (helixel-pcs-kill-ring (overlay-get ov 'helixel-pc-state)))))
       (helixel-mc-clear-all))))
 
 ;; ── walk-advance: stale-mark / EOB-empty-line bug ──
@@ -2511,7 +2511,7 @@ region is NOT restored (the new target replaces it correctly)."
       ;; Restore original.
       (set-marker (helixel-mc-cursor-point ov) orig-pt)
       (set-marker (helixel-mc-cursor-mark ov) orig-mk)
-      (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) orig-active)
+      (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) orig-active)
       (helixel-mc-clear-all))))
 
 ;; ── call-interactively skips `ignore' ──
@@ -2550,7 +2550,7 @@ region is NOT restored (the new target replaces it correctly)."
       (helixel-mc--broadcast-last-event)
       ;; Every fake now has the tx.
       (dolist (ov (helixel-mc-all-cursors))
-        (should (eq tx (helixel-cs-last-action (overlay-get ov 'helixel-cs)))))
+        (should (eq tx (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)))))
       ;; Apply once at each fake.
       (helixel-mc--apply-chain-once)
       (should (string= "X\nYX\nYX\n" (buffer-string)))
@@ -2626,7 +2626,7 @@ the tx at every fake — no substitute-alist needed."
     (helixel-mc-create-fake-cursor 16 13)          ; fake on "bar"
     (helixel-mc-create-fake-cursor 20 17)          ; fake on "foo"
     (dolist (ov (helixel-mc-all-cursors))
-      (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) t))
+      (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (should (= 4 (length (helixel-mc-all-cursors))))
     (helixel-mc-keep-matching "foo")
     ;; real + 2 foo fakes = 3 cursors total (= 2 fakes left)
@@ -2647,7 +2647,7 @@ the tx at every fake — no substitute-alist needed."
     (helixel-mc-create-fake-cursor 8 5)            ; fake on "bar"
     (helixel-mc-create-fake-cursor 12 9)           ; fake on "foo"
     (dolist (ov (helixel-mc-all-cursors))
-      (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) t))
+      (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (helixel-mc-remove-matching "foo")
     ;; real (foo) gets promoted-replaced by surviving "bar" fake.
     (should (use-region-p))
@@ -2662,8 +2662,8 @@ the tx at every fake — no substitute-alist needed."
     (goto-char 1) (push-mark 1 t t) (goto-char 4)  ; real on "abc"
     (helixel-mc-create-fake-cursor 8 5)            ; fake on "def"
     (helixel-mc-create-fake-cursor 12 9)           ; fake on "ghi"
-    (setf (helixel-cs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-cs)) t)
-    (setf (helixel-cs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-cs)) t)
+    (setf (helixel-pcs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
+    (setf (helixel-pcs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (helixel-mc-rotate-primary-forward 1)
     ;; Real should now be on "def" (positions 5..8).
     (should (= 8 (point)))
@@ -2683,8 +2683,8 @@ the tx at every fake — no substitute-alist needed."
     (goto-char 1) (push-mark 1 t t) (goto-char 4)  ; real on "AAA"
     (let ((ov1 (helixel-mc-create-fake-cursor 8 5))   ; "BBB"
           (ov2 (helixel-mc-create-fake-cursor 12 9))) ; "CCC"
-      (setf (helixel-cs-mark-active (overlay-get ov1 'helixel-cs)) t)
-      (setf (helixel-cs-mark-active (overlay-get ov2 'helixel-cs)) t))
+      (setf (helixel-pcs-mark-active (overlay-get ov1 'helixel-pc-state)) t)
+      (setf (helixel-pcs-mark-active (overlay-get ov2 'helixel-pc-state)) t))
     (helixel-mc-rotate-content-forward 1)
     ;; forward: each region gets text of LEFT neighbor (with wrap).
     ;; old: AAA BBB CCC -> CCC AAA BBB
@@ -2701,8 +2701,8 @@ on both real and fakes, so the second call hit
     (goto-char 1) (push-mark 1 t t) (goto-char 4)
     (let ((ov1 (helixel-mc-create-fake-cursor 8 5))
           (ov2 (helixel-mc-create-fake-cursor 12 9)))
-      (setf (helixel-cs-mark-active (overlay-get ov1 'helixel-cs)) t)
-      (setf (helixel-cs-mark-active (overlay-get ov2 'helixel-cs)) t))
+      (setf (helixel-pcs-mark-active (overlay-get ov1 'helixel-pc-state)) t)
+      (setf (helixel-pcs-mark-active (overlay-get ov2 'helixel-pc-state)) t))
     (helixel-mc-rotate-content-forward 1)
     (should (equal "CCC AAA BBB\n" (buffer-string)))
     (should (use-region-p))
@@ -2722,8 +2722,8 @@ on both real and fakes, so the second call hit
     (goto-char 1) (push-mark 1 t t) (goto-char 4)
     (helixel-mc-create-fake-cursor 8 5)
     (helixel-mc-create-fake-cursor 12 9)
-    (setf (helixel-cs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-cs)) t)
-    (setf (helixel-cs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-cs)) t)
+    (setf (helixel-pcs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
+    (setf (helixel-pcs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (helixel-mc-merge)
     (should (not (helixel-mc-any-p)))
     (should mark-active)
@@ -2739,7 +2739,7 @@ on both real and fakes, so the second call hit
     (goto-char 1) (push-mark 1 t t) (goto-char 9)
     ;; Fake: select "   bar  " (6..14)
     (let ((ov (helixel-mc-create-fake-cursor 14 6)))
-      (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) t))
+      (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (helixel-mc-trim)
     ;; Real shrinks to "foo" (3..6).
     (should (= 3 (mark t)))
@@ -2816,8 +2816,8 @@ region cursor per line (Helix `Alt-s' semantics)."
     (goto-char 1) (push-mark 1 t t) (goto-char 4)
     (helixel-mc-create-fake-cursor 8 5)
     (helixel-mc-create-fake-cursor 12 9)
-    (setf (helixel-cs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-cs)) t)
-    (setf (helixel-cs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-cs)) t)
+    (setf (helixel-pcs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
+    (setf (helixel-pcs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (helixel-mc-clear-all)
     (should (null (helixel-mc-all-cursors)))
     (helixel-mc-restore-cursors)
@@ -2848,10 +2848,10 @@ treat that as a replayable tx — it must fall back to
     (should (= 1 (mark)))
     ;; Fake on line 2 must have selected "foo" there (13..16).
     (let* ((ov (car (helixel-mc-all-cursors)))
-           (cs (overlay-get ov 'helixel-cs)))
-      (should (= 16 (marker-position (helixel-cs-point cs))))
-      (should (= 13 (marker-position (helixel-cs-mark cs))))
-      (should (helixel-cs-mark-active cs)))
+           (cs (overlay-get ov 'helixel-pc-state)))
+      (should (= 16 (marker-position (helixel-pcs-point cs))))
+      (should (= 13 (marker-position (helixel-pcs-mark cs))))
+      (should (helixel-pcs-mark-active cs)))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-self-insert-electric-pair ()

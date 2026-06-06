@@ -564,44 +564,44 @@ After the call, the real cursor sits at OV's old position with
 OV's old per-cursor state (kill-ring, pending-sel, event-ring, …),
 and OV holds what used to be the real cursor's position and state.
 
-Marker identity inside `helixel-cs' on OV is preserved — the
+Marker identity inside `helixel-pc-state' on OV is preserved — the
 fake's existing point/mark markers are mutated in place to the
 real cursor's old positions."
-  (let ((real-cs (helixel-cs-snapshot))
-        (fake-cs (overlay-get ov 'helixel-cs)))
+  (let ((real-cs (helixel-pcs-clone))
+        (fake-cs (overlay-get ov 'helixel-pc-state)))
     ;; Move real cursor onto fake's state.
-    (helixel-cs-restore fake-cs)
+    (helixel-pcs-swap-in fake-cs)
     ;; Copy REAL-CS's slot values onto FAKE-CS (mutate in place
     ;; so the fake's markers retain identity).
-    (set-marker (helixel-cs-point fake-cs)
-                (marker-position (helixel-cs-point real-cs)))
-    (set-marker (helixel-cs-mark fake-cs)
-                (marker-position (helixel-cs-mark real-cs)))
-    (setf (helixel-cs-mark-active fake-cs)
-          (helixel-cs-mark-active real-cs)
-          (helixel-cs-kill-ring fake-cs)
-          (helixel-cs-kill-ring real-cs)
-          (helixel-cs-kill-ring-yank-pointer fake-cs)
-          (helixel-cs-kill-ring-yank-pointer real-cs)
-          (helixel-cs-mark-ring fake-cs)
-          (helixel-cs-mark-ring real-cs)
-          (helixel-cs-pending-sel fake-cs)
-          (helixel-cs-pending-sel real-cs)
-          (helixel-cs-last-action fake-cs)
-          (helixel-cs-last-action real-cs)
-          (helixel-cs-active-search fake-cs)
-          (helixel-cs-active-search real-cs)
-          (helixel-cs-event-ring fake-cs)
-          (helixel-cs-event-ring real-cs)
-          (helixel-cs-live-action fake-cs)
-          (helixel-cs-live-action real-cs)
-          (helixel-cs-action-pos fake-cs)
-          (helixel-cs-action-pos real-cs))
+    (set-marker (helixel-pcs-point fake-cs)
+                (marker-position (helixel-pcs-point real-cs)))
+    (set-marker (helixel-pcs-mark fake-cs)
+                (marker-position (helixel-pcs-mark real-cs)))
+    (setf (helixel-pcs-mark-active fake-cs)
+          (helixel-pcs-mark-active real-cs)
+          (helixel-pcs-kill-ring fake-cs)
+          (helixel-pcs-kill-ring real-cs)
+          (helixel-pcs-kill-ring-yank-pointer fake-cs)
+          (helixel-pcs-kill-ring-yank-pointer real-cs)
+          (helixel-pcs-mark-ring fake-cs)
+          (helixel-pcs-mark-ring real-cs)
+          (helixel-pcs-pending-sel fake-cs)
+          (helixel-pcs-pending-sel real-cs)
+          (helixel-pcs-last-action fake-cs)
+          (helixel-pcs-last-action real-cs)
+          (helixel-pcs-active-search fake-cs)
+          (helixel-pcs-active-search real-cs)
+          (helixel-pcs-event-ring fake-cs)
+          (helixel-pcs-event-ring real-cs)
+          (helixel-pcs-live-action fake-cs)
+          (helixel-pcs-live-action real-cs)
+          (helixel-pcs-action-pos fake-cs)
+          (helixel-pcs-action-pos real-cs))
     ;; Release the temporary snapshot's markers.
-    (helixel-cs-release real-cs)
+    (helixel-pcs-release real-cs)
     (helixel-mc--update-fake-region ov)
     (helixel-mc--paint-cursor-overlay
-     ov (marker-position (helixel-cs-point fake-cs)))))
+     ov (marker-position (helixel-pcs-point fake-cs)))))
 
 ;;;###autoload
 (defun helixel-mc-rotate-content-forward (&optional count)
@@ -710,7 +710,7 @@ can be pressed repeatedly."
                   (if fwd
                       (progn (set-marker pm e) (set-marker mm b))
                     (set-marker pm b) (set-marker mm e))
-                  (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) t)
+                  (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t)
                   (helixel-mc--update-fake-region ov))
               ;; Real cursor.
               (if fwd
@@ -762,7 +762,7 @@ the mc session is fully disabled."
              (p (if fwd e b)) (m (if fwd b e))
              (ov (helixel-mc-create-fake-cursor p m)))
         (when ov
-          (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs)) t)
+          (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t)
           (helixel-mc--update-fake-region ov)))))))
 
 (defmacro helixel-mc-with-regions (regions-var &rest body)
@@ -960,7 +960,7 @@ into history."
         (let* ((p (nth 0 entry)) (m (nth 1 entry)) (a (nth 2 entry))
                (ov (helixel-mc-create-fake-cursor p (or m p))))
           (when ov
-            (setf (helixel-cs-mark-active (overlay-get ov 'helixel-cs))
+            (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state))
                   (and a (numberp m) (/= p m)))
             (helixel-mc--update-fake-region ov)))))))
 

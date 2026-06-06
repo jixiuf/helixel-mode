@@ -422,14 +422,14 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 ;; ── Replace ──
 
-(defvar helixel--replace-pop-bounds nil
-  "Bounds (BEG . END) of text from `helixel-replace' or `helixel-replace-pop'.
+(defvar helixel--yank-pop-bounds nil
+  "Bounds (BEG . END) of text from `helixel-replace' or `helixel-yank-pop'.
 Value is nil after a rectangle replace.
 Used to support cycling through the kill ring after a replace.")
 
 (defun helixel--replace-do (text &optional yank-fallback-fn)
   "Delete current region (or char) and insert TEXT respecting selection type.
-Updates `helixel--replace-pop-bounds' with the inserted range, or
+Updates `helixel--yank-pop-bounds' with the inserted range, or
 nils it for rectangle replaces.  Returns the inserted bounds.
 
 TEXT is the `kill-ring' entry to insert.  YANK-FALLBACK-FN, when
@@ -451,7 +451,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
         (if (and rectwise-p lines)
             (insert-rectangle (mapcar #'substring-no-properties lines))
           (insert bare)))
-      (setq helixel--replace-pop-bounds nil))
+      (setq helixel--yank-pop-bounds nil))
      ;; Line-wise selection: expand to full line bounds
      ((and (use-region-p) (eq (helixel--selection-type) 'line))
       (when-let* ((bounds (helixel--line-bounds-of-region)))
@@ -460,7 +460,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
         ;; Strip properties to prevent yank-handler leaking into buffer
         (insert (if linewise-p (substring-no-properties text)
                   (concat bare "\n")))
-        (setq helixel--replace-pop-bounds
+        (setq helixel--yank-pop-bounds
               (cons pop-start (point)))))
      ;; Charwise region
      ((use-region-p)
@@ -469,7 +469,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
       (insert (if (or linewise-p rectwise-p)
                   bare
                 (substring-no-properties text)))
-      (setq helixel--replace-pop-bounds
+      (setq helixel--yank-pop-bounds
             (cons pop-start (point))))
      ;; No region — replace char at point
      (t
@@ -477,10 +477,25 @@ instead of `insert-for-yank' — `helixel-replace' passes
         (delete-char 1))
       (setq pop-start (point))
       (if yank-fallback-fn
-          (funcall yank-fallback-fn)
-        (insert-for-yank text))
-      (setq helixel--replace-pop-bounds
-            (cons pop-start (point)))))))
+          ;; Use a marker that advances with insertion so bounds
+          ;; survive select-after-paste cursor repositioning.
+          (let ((end-marker (copy-marker (point) t)))
+            (funcall yank-fallback-fn)
+            (setq helixel--yank-pop-bounds
+                  (cons pop-start (marker-position end-marker)))
+            (set-marker end-marker nil))
+        (insert-for-yank text)
+        (setq helixel--yank-pop-bounds
+              (cons pop-start (point))))))))
+
+(defcustom helixel-select-after-paste t
+  "When non-nil, select the pasted text after `helixel-yank',
+`helixel-yank-before', or `helixel-replace'.
+The selection lets you immediately operate on the pasted content
+\(e.g. indent, delete, change).  Point ends up at the start of
+the pasted text."
+  :type 'boolean
+  :group 'helixel)
 
 (helixel-define-operator helixel-replace
     (:op replace :display "r" :moves-point-p nil)
@@ -491,70 +506,91 @@ instead of `insert-for-yank' — `helixel-replace' passes
     (let ((text (or (helixel--current-kill 0) (current-kill 0))))
       (helixel--replace-do
        text
-       (lambda () (helixel-with-replay-as 'dot (helixel-yank))))
+       (lambda () (helixel-with-replay-as 'dot (helixel--yank-body nil))))
       (helixel--register-consume)
-      (helixel--clear-data))))
+      ;; Preserve selection when select-after-paste is active.
+      (if helixel-select-after-paste
+          (progn
+            (setq helixel--action-pos nil)
+            (setq helixel--pending-sel nil)
+            (setq deactivate-mark nil))
+        (helixel--clear-data)))))
 
-;; `helixel-replace-pop' cycles through the `kill-ring' to replace
+;; `helixel-yank-pop' cycles through the `kill-ring' to replace
 ;; the text inserted by the previous `helixel-replace' or
-;; `helixel-replace-pop', similar to `yank-pop'.
+;; `helixel-yank-pop', similar to `yank-pop'.
 ;;
 ;; When called after `yank' or `yank-pop', degrades to `yank-pop'
 ;; to replace the just-yanked text with the next `kill-ring' entry.
 ;;
-;; When called after `helixel-replace' or `helixel-replace-pop',
+;; When called after `helixel-replace' or `helixel-yank-pop',
 ;; ARG advances N kills forward (default 1).
 ;;
 ;; When called directly, prompts to select a `kill-ring' entry and
 ;; replaces the region/char-at-point with it, like `helixel-replace'
 ;; but letting you choose which kill to use.  Subsequent calls
 ;; then cycle through the `kill-ring' as usual.
-(helixel-define-command helixel-replace-pop
-    (:category edit :subcat replace-pop :params (&optional arg))
+(helixel-define-command helixel-yank-pop
+    (:category edit :subcat yank-pop :params (&optional arg))
   (interactive "*p")
   (setq arg (or arg 1))
-  (cond
-   ((memq last-command '(yank yank-pop))
-    ;; ── Degrade to `yank-pop' when previous command was a yank ──
-    (yank-pop arg))
-   ((memq last-command '(helixel-replace helixel-replace-pop))
-    ;; ── Cycle: replace bounds text with next kill-ring entry ──
-    (unless helixel--replace-pop-bounds
-      (user-error "No replace text to cycle"))
-    (setq this-command 'helixel-replace-pop)
-    (let* ((beg (car helixel--replace-pop-bounds))
-           (end (cdr helixel--replace-pop-bounds))
-           (inhibit-read-only t)
-           (text (helixel--current-kill arg))
-           (ends-with-newline (char-equal (char-before end) ?\n)))
-      (delete-region beg end)
-      (goto-char beg)
-      (if (and ends-with-newline
-               (not (string-suffix-p "\n" text)))
-          (insert (concat text "\n"))
-        (insert-for-yank text))
-      (setq helixel--replace-pop-bounds
-            (cons beg (point)))))
-   (t
-    ;; ── Direct call: browse kill-ring and replace ──
-    (let* ((candidates
-              (mapcar #'substring-no-properties kill-ring))
-             (collection
-              (lambda (s p a)
-                (if (eq a 'metadata)
-                    '(metadata (category . helixel-replace-pop)
-                               (cycle-sort-function . identity)
-                               (display-sort-function . identity))
-                  (complete-with-action a candidates s p))))
-             (selected
-              (completing-read "Replace with: " collection nil t))
-             (idx (cl-position selected candidates :test #'string=))
-             (text (nth idx kill-ring)))
-        (unless text
-          (user-error "No kill-ring entry selected"))
-        (setq kill-ring-yank-pointer (nthcdr idx kill-ring))
-        (setq this-command 'helixel-replace-pop)
-        (helixel--replace-do text)))))
+  (let ((bounds
+         (cond
+          ((and helixel--yank-pop-bounds
+                (memq last-command '(helixel-replace helixel-yank-pop)))
+           helixel--yank-pop-bounds)
+          ;; After yank or replace: use region or mark bounds.
+          ((and (memq last-command '(helixel-yank helixel-yank-before
+                                     helixel-replace yank yank-pop))
+                (mark t))
+           ;; Normalize: mark may be before or after point.
+           (let ((m (mark t)) (p (point)))
+             (cons (min m p) (max m p)))))))
+    (if bounds
+        ;; ── Cycle: replace bounds text with next kill-ring entry ──
+        (let* ((b (car bounds))
+               (e (cdr bounds))
+               ;; Normalize: beg <= end
+               (beg (min b e))
+               (end (max b e))
+               (inhibit-read-only t)
+               (text (helixel--current-kill arg))
+               (ends-with-newline (and (> end (point-min))
+                                    (char-equal (char-before end) ?\n))))
+          (setq this-command 'helixel-yank-pop)
+          (delete-region beg end)
+          (goto-char beg)
+          (if (and ends-with-newline
+                   (not (string-suffix-p "\n" text)))
+              (insert (concat text "\n"))
+            (insert-for-yank text))
+          (setq helixel--yank-pop-bounds (cons beg (point)))
+          (when helixel-select-after-paste
+            ;; Select pasted text, cursor at end (Emacs yank-pop convention).
+            (push-mark beg t t)
+            (setq deactivate-mark nil)))
+      ;; No bounds available — fall back or browse.
+      (if (memq last-command '(helixel-yank helixel-yank-before
+                               helixel-replace yank yank-pop
+                               helixel-yank-pop))
+          ;; After a yank/replace with no region, delegate to yank-pop.
+          (yank-pop arg)
+        ;; ── Direct call: browse kill-ring and replace ──
+        (let* ((candidates (mapcar #'substring-no-properties kill-ring))
+               (collection
+                (lambda (s p a)
+                  (if (eq a 'metadata)
+                      '(metadata (category . helixel-yank-pop)
+                                 (cycle-sort-function . identity)
+                                 (display-sort-function . identity))
+                    (complete-with-action a candidates s p))))
+               (selected (completing-read "Replace with: " collection nil t))
+               (idx (cl-position selected candidates :test #'string=))
+               (text (nth idx kill-ring)))
+          (unless text (user-error "No kill-ring entry selected"))
+          (setq kill-ring-yank-pointer (nthcdr idx kill-ring))
+          (setq this-command 'helixel-yank-pop)
+          (helixel--replace-do text))))))
 
 ;; ── Copy ──
 
@@ -593,40 +629,133 @@ instead of `insert-for-yank' — `helixel-replace' passes
 
 ;; ── Yank ──
 
-(defun helixel--yank-body (arg)
+(defun helixel--yank-body (arg &optional paste-after-p)
   "Shared body for `helixel-yank' / `helixel-yank-before'.
 Dispatches rect, linewise, or plain yank with ARG, then consumes
-the register."
-  (prog1
-      (cond
-       ((helixel--rect-wise-kill-p)
-        (let* ((text (helixel--current-kill 0 t))
-               (lines (when text
-                        (nth 1 (get-text-property
-                                0 'yank-handler text)))))
-          (if lines
-              (insert-rectangle (mapcar #'substring-no-properties lines))
-            (when text (insert-for-yank text)))))
-       ((helixel--linewise-kill-p)
-        (let ((text (helixel--current-kill 0 t)))
-          (when text (insert-for-yank text))))
-       (t
-        (helixel--yank arg)))
-    (helixel--register-consume)))
+the register.
+When PASTE-AFTER-P is non-nil (direct `p' without selection or
+replay), moves past the current character first (Vim-like p),
+unless at eol.
+ARG is the raw prefix argument; when > 1, the yank repeats
+that many times (Vim-like 2p, 3P)."
+  ;; For direct p without selection, move past current char.
+  ;; Applies to all kill types: line handler overrides position
+  ;; (end-of-line), rect shifts one column right as Vim does.
+  (when (and paste-after-p
+             (not (helixel-replaying-p))
+             (not (use-region-p))
+             (not (helixel--end-of-line-p)))
+    (forward-char))
+  ;; Marker set before paste stays before inserted text.
+  ;; After pasting we jump back so cursor lands at the
+  ;; start of the pasted content (Helix convention).
+  ;; Line-wise handler positions cursor itself.
+  (let ((count (prefix-numeric-value arg))
+        (start (point-marker)))
+    (prog1
+        (cond
+         ((helixel--rect-wise-kill-p)
+          (let* ((text (helixel--current-kill 0 t))
+                 (lines (when text
+                          (nth 1 (get-text-property
+                                  0 'yank-handler text))))
+                 ;; Save position so repeated rect pastes don't drift.
+                 (col (current-column))
+                 (ln (line-number-at-pos)))
+            (dotimes (_ count)
+              (goto-char (point-min))
+              (forward-line (1- ln))
+              (move-to-column col t)
+              (if lines
+                  (insert-rectangle (mapcar #'substring-no-properties lines))
+                (when text (insert-for-yank text))))))
+         ((helixel--linewise-kill-p)
+          (dotimes (_ count)
+            (let ((text (helixel--current-kill 0 t)))
+              (when text (insert-for-yank text)))))
+         (t
+          ;; For charwise with named register, insert the register
+          ;; text count times without consuming the register each time.
+          (if (helixel--register-active-p)
+              (let ((text (helixel-register-get helixel--current-register)))
+                (dotimes (_ count)
+                  (if text
+                      (insert-for-yank text)
+                    (message "Register \"%c is empty"
+                             helixel--current-register))))
+            (dotimes (_ count)
+              (yank 1)))))
+      (helixel--register-consume)
+      (helixel--register-consume)
+      ;; Position cursor at start, optionally select pasted text.
+      (when helixel-select-after-paste
+        (cond
+         ;; Line-wise: handler already positioned cursor.
+         ((helixel--linewise-kill-p)
+          (if (or paste-after-p
+                  ;; Replace handler positions point at bol of the
+                  ;; inserted text (same as p), so select the
+                  ;; current line instead of going up one line.
+                  (eq (or this-command helixel--current-command)
+                      'helixel-replace))
+              ;; p / replace: pasted at-or-below current line,
+              ;; select that line.
+              (progn (goto-char (pos-bol))
+                     (push-mark (pos-eol) t t)
+                     (setq deactivate-mark nil))
+            ;; P: pasted above, select previous line
+            (save-excursion
+              (forward-line -1)
+              (goto-char (pos-bol))
+              (push-mark (pos-eol) t t))
+            (setq deactivate-mark nil)))
+         ;; Charwise / rect: use start marker.
+         (start
+          (let ((end (point-marker)))
+            (when (marker-position start) (goto-char start))
+            (if (helixel--rect-wise-kill-p)
+                (progn (push-mark end t t)
+                       (rectangle-mark-mode 1)
+                       (setq helixel--raw-selection-type 'rect))
+              (push-mark end t t))
+            (set-marker end nil)
+            (setq deactivate-mark nil)))))
+      ;; Restore cursor to start for char/rect (line handler does its own).
+      (when start
+        (unless (helixel--linewise-kill-p)
+          (when (marker-position start) (goto-char start)))
+        (set-marker start nil)))))
 
 (helixel-define-operator helixel-yank
     (:op paste-after :display "p" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
   (helixel--record-action 'paste-after)
-  (helixel--yank-body arg))
+  ;; Paste after: if selection active, go to end of selection.
+  ;; For rect selection, stay on same row — only move column
+  ;; to region-end, so insert-rectangle starts on the correct line.
+  (when (use-region-p)
+    (if (and rectangle-mark-mode
+             (eq helixel--raw-selection-type 'rect))
+        (move-to-column (save-excursion
+                          (goto-char (region-end))
+                          (current-column)) t)
+      (goto-char (region-end))))
+  ;; Clear stale pop bounds from previous replace.
+  (setq helixel--yank-pop-bounds nil)
+  (helixel--yank-body arg t))
 
 (helixel-define-operator helixel-yank-before
     (:op paste-before :display "P" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
   (helixel--record-action 'paste-before)
-  (helixel--yank-body arg))
+  ;; Paste before: if selection active, go to beg of selection.
+  (when (use-region-p)
+    (goto-char (region-beginning)))
+  ;; Clear stale pop bounds from previous replace.
+  (setq helixel--yank-pop-bounds nil)
+  (helixel--yank-body arg nil))
 
 ;; ── Indent ──
 ;; helixel--replay-multiplier is bound by the op runner during `.`

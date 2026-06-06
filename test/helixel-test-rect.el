@@ -186,20 +186,31 @@
 ;;; helixel-yank (p) rect tests
 
 (ert-deftest helixel-test-yank-rect ()
-  "Test pasting a rect kill at point."
+  "`p' pastes a rect kill after cursor (Vim-like).
+At bol, moves past first char so rect starts at column 1."
   (helixel-test-with-buffer "line1\nline2\nline3"
     (kill-new (helixel--rect-wise-text '("<<<" ">>>")))
-    (goto-char 1)
+    (goto-char 1)                    ; on 'l', moves to col 1
     (helixel-yank)
-    (should (string= (buffer-string) "<<<line1\n>>>line2\nline3"))))
+    (should (string= (buffer-string) "l<<<ine1\nl>>>ine2\nline3"))))
 
-(ert-deftest helixel-test-yank-rect-after ()
-  "Test pasting a rect kill after point."
+(ert-deftest helixel-test-yank-rect-after-cursor ()
+  "`p' pastes rect after current char at mid-line cursor."
   (helixel-test-with-buffer "AAline1\nBBline2\nCCline3"
     (kill-new (helixel--rect-wise-text '("--" "++")))
-    (goto-char 3) ;; after "AA"
+    (goto-char 2)                    ; on second 'A' (col1)
     (helixel-yank)
+    ;; forward-char to pos3(col2,'l'), rect at col2
     (should (string= (buffer-string) "AA--line1\nBB++line2\nCCline3"))))
+
+(ert-deftest helixel-test-yank-rect-after ()
+  "`p' pastes rect after cursor (was at pos 3 on 'l')."
+  (helixel-test-with-buffer "AAline1\nBBline2\nCCline3"
+    (kill-new (helixel--rect-wise-text '("--" "++")))
+    (goto-char 3) ;; on 'l' (col2)
+    (helixel-yank)
+    ;; forward-char to pos4(col3,'i'), rect at col3 pushes 'i' right
+    (should (string= (buffer-string) "AAl--ine1\nBBl++ine2\nCCline3"))))
 
 ;;; helixel-yank-before (P) rect tests
 
@@ -210,6 +221,42 @@
     (goto-char 1)
     (helixel-yank-before)
     (should (string= (buffer-string) "<<<line1\n>>>line2\nline3"))))
+
+(ert-deftest helixel-test-yank-rect-count ()
+  "`2p' pastes rect twice at the same column."
+  (helixel-test-with-buffer "AAline1\nBBline2\nCCline3"
+    (kill-new (helixel--rect-wise-text '("--" "++")))
+    (goto-char 1)                    ; on first 'A' (col0)
+    (helixel-yank 2)
+    ;; forward-char to pos2(col1), then rect twice at col1
+    (should (string= (buffer-string) "A----Aline1\nB++++Bline2\nCCline3"))))
+
+(ert-deftest helixel-test-yank-rect-select-pasted ()
+  "After rect p, the selection is a rectangle (rectangle-mark-mode)."
+  (helixel-test-with-buffer "AAline1\nBBline2\nCCline3"
+    (kill-new (helixel--rect-wise-text '("--" "++")))
+    (goto-char 1)
+    (helixel-yank)
+    (should rectangle-mark-mode)
+    (should (eq helixel--raw-selection-type 'rect))
+    (should (region-active-p))
+    ;; Selection should cover the pasted rectangle
+    (should (= (region-beginning) 2))  ; after 'A' at col1
+    (should (= (region-end) 14))))      ; end of "++" on line 2
+
+(ert-deftest helixel-test-rect-p-stays-on-row ()
+  "Rect selection + p: point stays on same row, only column moves."
+  (helixel-test-with-buffer "AAAA\nBBBB\nCCCC"
+    (kill-new (helixel--rect-wise-text '("X")))
+    ;; Create a rect selection: 3 lines, 1 column at col1
+    (goto-char 2)                        ; col1 on line1
+    (helixel-select-rectangle)           ; line1 col1
+    (helixel-select-rectangle)           ; +line2
+    (helixel-select-rectangle)           ; +line3: point on line3
+    (let ((row-before (line-number-at-pos)))
+      (helixel-yank)
+      ;; Same row: pasted on line3, not jumped to line1
+      (should (= (line-number-at-pos) row-before)))))
 
 ;;; helixel-begin-selection exits rect
 
@@ -247,9 +294,9 @@
       (setq helixel--raw-selection-type 'rect)
       (helixel-kill-thing-at-point)
       (should (string= (buffer-string) " line1\n line2\nCCC line3"))
-      ;; Now yank at beginning
+      ;; Now yank at beginning (P to paste before first char)
       (goto-char 1)
-      (helixel-yank)
+      (helixel-yank-before)
       (should (string= (buffer-string) "AAA line1\nBBB line2\nCCC line3")))))
 
 ;;; Movement preserves rectangle selection

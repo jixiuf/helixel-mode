@@ -325,7 +325,7 @@ e.g. \"helixel-next-%s-end\"."
 (define-key helixel-normal-map "S" #'helixel-swap)
 (define-key helixel-normal-map "r" #'helixel-replace)
 (define-key helixel-normal-map "R" #'helixel-replace-char)
-(define-key helixel-normal-map "\M-r" #'helixel-replace-pop)
+(define-key helixel-normal-map [remap yank-pop] #'helixel-yank-pop)
 (define-key helixel-normal-map "p" #'helixel-yank)
 (define-key helixel-normal-map "P" #'helixel-yank-before)
 (define-key helixel-normal-map "\"" #'helixel-select-register)

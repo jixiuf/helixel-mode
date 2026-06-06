@@ -248,11 +248,12 @@
     (should (string= (buffer-string) "only line\nnew line"))))
 
 (ert-deftest helixel-test-yank-charwise ()
-  "Test `helixel-yank' pastes charwise content at point."
+  "Test `helixel-yank' pastes charwise content after cursor (Vim-like p)."
   (helixel-test-with-buffer "hello world"
     (kill-new "XYZ")
-    (goto-char 6)
+    (goto-char 5)                    ; on 'o' of "hello"
     (helixel-yank)
+    ;; p pastes after cursor: 'o' -> ' ' -> paste
     (should (string= (buffer-string) "helloXYZ world"))))
 
 ;;; helixel-yank-before (P) line-wise tests
@@ -284,6 +285,127 @@
     (helixel-yank-before)
     (should (string= (buffer-string) "helloXYZ world"))))
 
+(ert-deftest helixel-test-yank-after-selection ()
+  "`p' with an active char selection pastes after it."
+  (helixel-test-with-buffer "abcdef"
+    (kill-new "XYZ")
+    (goto-char 2)
+    (push-mark (point) t t)
+    (goto-char 5)                    ; select "bcd"
+    (setq helixel--raw-selection-type nil)
+    (helixel-yank)
+    (should (string= (buffer-string) "abcdXYZef"))))
+
+(ert-deftest helixel-test-yank-before-selection ()
+  "`P' with an active char selection pastes before it."
+  (helixel-test-with-buffer "abcdef"
+    (kill-new "XYZ")
+    (goto-char 2)
+    (push-mark (point) t t)
+    (goto-char 5)                    ; select "bcd"
+    (setq helixel--raw-selection-type nil)
+    (helixel-yank-before)
+    (should (string= (buffer-string) "aXYZbcdef"))))
+
+;;; Count (prefix arg) tests
+
+(ert-deftest helixel-test-yank-count-charwise ()
+  "`2p' pastes charwise text twice."
+  (helixel-test-with-buffer "abcdef"
+    (kill-new "XY")
+    (goto-char 3)                    ; on 'c'
+    (helixel-yank 2)
+    ;; p moves past 'c' to 'd', then pastes "XY" twice
+    (should (string= (buffer-string) "abcXYXYdef"))))
+
+(ert-deftest helixel-test-yank-count-linewise ()
+  "`3p' pastes line-wise text three times."
+  (helixel-test-with-buffer "line1\nline2"
+    (kill-new (helixel--linewise-text "NEW\n"))
+    (goto-char 3)
+    (let ((this-command 'helixel-yank))
+      (helixel-yank 3))
+    (should (string= (buffer-string) "line1\nNEW\nNEW\nNEW\nline2"))))
+
+(ert-deftest helixel-test-yank-before-count-charwise ()
+  "`2P' pastes charwise text twice before cursor."
+  (helixel-test-with-buffer "abcdef"
+    (kill-new "XY")
+    (goto-char 3)                    ; on 'c'
+    (helixel-yank-before 2)
+    ;; P pastes at point (before 'c'), twice
+    (should (string= (buffer-string) "abXYXYcdef"))))
+
+(ert-deftest helixel-test-yank-count-with-selection ()
+  "`2p' with selection pastes after selection twice."
+  (helixel-test-with-buffer "abcdef"
+    (kill-new "XY")
+    (goto-char 2)
+    (push-mark (point) t t)
+    (goto-char 5)                    ; select "bcd"
+    (setq helixel--raw-selection-type nil)
+    (helixel-yank 2)
+    ;; pastes after selection (region-end), twice
+    (should (string= (buffer-string) "abcdXYXYef"))))
+
+(ert-deftest helixel-test-yank-select-pasted ()
+  "When `helixel-select-after-paste' is t, pasted text is selected."
+  (helixel-test-with-buffer "abcdef"
+    (let ((helixel-select-after-paste t))
+      (kill-new "XY")
+      (goto-char 3)
+      (helixel-yank)
+      ;; pasted "XY" should be selected, cursor at start
+      (should (region-active-p))
+      (should (= (region-beginning) 4))
+      (should (= (region-end) 6))
+      (should (= (point) 4))
+      (should (string= (buffer-string) "abcXYdef")))))
+
+(ert-deftest helixel-test-yank-select-pasted-off ()
+  "When `helixel-select-after-paste' is nil (default), no selection."
+  (helixel-test-with-buffer "abcdef"
+    (let ((helixel-select-after-paste nil))
+      (kill-new "XY")
+      (goto-char 3)
+      (helixel-yank)
+      ;; cursor at start but no active region
+      (should-not (region-active-p))
+      (should (string= (buffer-string) "abcXYdef")))))
+
+(ert-deftest helixel-test-yank-select-pasted-linewise ()
+  "`helixel-select-after-paste' selects pasted line for line-wise p."
+  (helixel-test-with-buffer "line1\nline2"
+    (let ((helixel-select-after-paste t))
+      (kill-new (helixel--linewise-text "NEW\n"))
+      (goto-char 3)
+      (let ((this-command 'helixel-yank))
+        (helixel-yank))
+      (should (region-active-p))
+      ;; pasted line "NEW" should be selected
+      (should (string= (buffer-substring (region-beginning) (region-end))
+                       "NEW")))))
+
+(ert-deftest helixel-test-yank-after-linewise-selection ()
+  "`p' with line selection pastes line-wise text after the line."
+  (helixel-test-with-buffer "line1\nline2\nline3"
+    (kill-new (helixel--linewise-text "PASTED\n"))
+    (goto-char 7)
+    (helixel-select-line)             ; select "line2"
+    (let ((this-command 'helixel-yank))
+      (helixel-yank))
+    (should (string= (buffer-string) "line1\nline2\nPASTED\nline3"))))
+
+(ert-deftest helixel-test-yank-before-linewise-selection ()
+  "`P' with line selection pastes line-wise text before the line."
+  (helixel-test-with-buffer "line1\nline2\nline3"
+    (kill-new (helixel--linewise-text "PASTED\n"))
+    (goto-char 7)
+    (helixel-select-line)             ; select "line2"
+    (let ((this-command 'helixel-yank-before))
+      (helixel-yank-before))
+    (should (string= (buffer-string) "line1\nPASTED\nline2\nline3"))))
+
 (ert-deftest helixel-test-yank-handler-property-not-leaked ()
   "Past line-wise text, then copy buffer text with `y'.
 The `yank-handler' property from the line-wise kill must NOT leak
@@ -291,6 +413,7 @@ into the buffer — otherwise a subsequent `y' (copy) on the pasted
 text would capture the stale property and cause the next `p' to
 paste line-wise instead of char-wise."
   (helixel-test-with-buffer "line one\nline two"
+    (let ((helixel-select-after-paste nil))
     ;; 1. Create a line-wise kill and paste it (simulates x y p)
     (helixel-select-line)
     (helixel-kill-ring-save)
@@ -306,8 +429,8 @@ paste line-wise instead of char-wise."
     (should-not (helixel--linewise-kill-p))
     ;; 5. Paste at point — must paste inline, not on next line
     (goto-char 1)
-    (helixel-yank)
-    (should (string-prefix-p "lineline one" (buffer-string)))))
+    (helixel-yank-before)
+    (should (string-prefix-p "lineline one" (buffer-string))))))
 
 ;;; helixel-replace (r) line-wise tests
 
@@ -358,6 +481,50 @@ paste line-wise instead of char-wise."
       (helixel-replace)
       (should (string= (buffer-string) "Xhello")))))
 
+(ert-deftest helixel-test-replace-select-after-paste ()
+  "`helixel-replace' selects replaced text when select-after-paste is t."
+  (helixel-test-with-buffer "hello"
+    (let ((helixel-replace-delete-char-p t)
+          (helixel-select-after-paste t)
+          (helixel--raw-selection-type nil))
+      (deactivate-mark)
+      (kill-new "XY")
+      (helixel-replace)
+      ;; 'h' deleted, "XY" inserted → "XYello"
+      (should (string= (buffer-string) "XYello"))
+      (should (region-active-p))
+      (should (= (region-beginning) 1))
+      (should (= (region-end) 3)))))
+
+(ert-deftest helixel-test-replace-select-after-paste-off ()
+  "`helixel-replace' with select-after-paste nil does NOT select."
+  (helixel-test-with-buffer "hello"
+    (let ((helixel-replace-delete-char-p t)
+          (helixel-select-after-paste nil)
+          (helixel--raw-selection-type nil))
+      (deactivate-mark)
+      (kill-new "XY")
+      (helixel-replace)
+      (should (string= (buffer-string) "XYello"))
+      (should-not (region-active-p)))))
+
+(ert-deftest helixel-test-yank-pop-select-after-paste-off ()
+  "`helixel-yank-pop' with select-after-paste nil does NOT select."
+  (helixel-test-with-buffer "hello"
+    (let* ((kill-ring (list "X" "Y"))
+           (kill-ring-yank-pointer kill-ring)
+           (helixel-replace-delete-char-p t)
+           (helixel-select-after-paste nil))
+      (setq last-command nil)
+      (helixel-replace)  ; replaces 'h' with 'X'
+      (should (string= (buffer-string) "Xello"))
+      (should-not (region-active-p))  ; select-after-paste is nil
+      ;; M-y should not select either
+      (setq last-command 'helixel-replace)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "Yello"))
+      (should-not (region-active-p)))))
+
 (ert-deftest helixel-test-replace-yanked-empty-kill-ring ()
   "Test replace with empty kill ring shows message."
   (helixel-test-with-buffer "hello"
@@ -366,10 +533,10 @@ paste line-wise instead of char-wise."
       ;; Buffer unchanged
       (should (string= (buffer-string) "hello")))))
 
-;;; helixel-replace-pop tests
+;;; helixel-yank-pop tests
 
-(ert-deftest helixel-test-replace-pop-no-region ()
-  "Test replace-pop cycles kill ring after no-region replace."
+(ert-deftest helixel-test-yank-pop-no-region ()
+  "Test yank-pop cycles kill ring after no-region replace."
   (helixel-test-with-buffer "hello world"
     (let* ((kill-ring (list "BBB" "AAA"))
            (kill-ring-yank-pointer kill-ring)
@@ -378,13 +545,13 @@ paste line-wise instead of char-wise."
       (helixel-replace)
       (should (string= (buffer-string) "BBBello world"))
       (setq last-command 'helixel-replace)
-      (helixel-replace-pop)
+      (helixel-yank-pop)
       (should (string= (buffer-string) "AAAello world"))
-      (helixel-replace-pop)
+      (helixel-yank-pop)
       (should (string= (buffer-string) "BBBello world")))))
 
-(ert-deftest helixel-test-replace-pop-no-delete-char ()
-  "Test replace-pop with `helixel-replace-delete-char-p' nil."
+(ert-deftest helixel-test-yank-pop-no-delete-char ()
+  "Test yank-pop with `helixel-replace-delete-char-p' nil."
   (helixel-test-with-buffer "hello"
     (let* ((kill-ring (list "BBB" "AAA"))
            (kill-ring-yank-pointer kill-ring)
@@ -393,11 +560,11 @@ paste line-wise instead of char-wise."
       (helixel-replace)
       (should (string= (buffer-string) "BBBhello"))
       (setq last-command 'helixel-replace)
-      (helixel-replace-pop)
+      (helixel-yank-pop)
       (should (string= (buffer-string) "AAAhello")))))
 
-(ert-deftest helixel-test-replace-pop-charwise-region ()
-  "Test replace-pop after charwise region replace."
+(ert-deftest helixel-test-yank-pop-charwise-region ()
+  "Test yank-pop after charwise region replace."
   (helixel-test-with-buffer "hello brave world"
     (let* ((kill-ring (list "cruel" "nice"))
            (kill-ring-yank-pointer kill-ring))
@@ -409,11 +576,11 @@ paste line-wise instead of char-wise."
       (helixel-replace)
       (should (string= (buffer-string) "hello cruel world"))
       (setq last-command 'helixel-replace)
-      (helixel-replace-pop)
+      (helixel-yank-pop)
       (should (string= (buffer-string) "hello nice world")))))
 
-(ert-deftest helixel-test-replace-pop-linewise-selection ()
-  "Test replace-pop after line-wise selection replace."
+(ert-deftest helixel-test-yank-pop-linewise-selection ()
+  "Test yank-pop after line-wise selection replace."
   (helixel-test-with-buffer
       "first line\nsecond line\nthird line"
     (let* ((kill-ring (list "AAA" "BBB"))
@@ -424,11 +591,11 @@ paste line-wise instead of char-wise."
       (helixel-replace)
       (should (string= (buffer-string) "first line\nAAA\nthird line"))
       (setq last-command 'helixel-replace)
-      (helixel-replace-pop)
+      (helixel-yank-pop)
       (should (string= (buffer-string) "first line\nBBB\nthird line")))))
 
-(ert-deftest helixel-test-replace-pop-wrong-last-command ()
-  "Test replace-pop browses kill-ring when previous command was not a replace."
+(ert-deftest helixel-test-yank-pop-wrong-last-command ()
+  "Test yank-pop browses kill-ring when previous command was not a replace."
   (helixel-test-with-buffer "hello"
     (let* ((kill-ring (list "BBB" "AAA"))
            (kill-ring-yank-pointer kill-ring)
@@ -437,27 +604,27 @@ paste line-wise instead of char-wise."
       (cl-letf (((symbol-function 'completing-read)
                  (lambda (_prompt collection &rest _)
                    (car (all-completions "" collection)))))
-        (helixel-replace-pop)
+        (helixel-yank-pop)
         (should (string= (buffer-string) "BBBello"))
         ;; Subsequent calls should cycle
-        (setq last-command 'helixel-replace-pop)
+        (setq last-command 'helixel-yank-pop)
         (cl-letf (((symbol-function 'completing-read)
                    (lambda (_prompt _collection &rest _)
                      (error "should not be called"))))
-          (helixel-replace-pop)
+          (helixel-yank-pop)
           (should (string= (buffer-string) "AAAello")))))))
 
-(ert-deftest helixel-test-replace-pop-no-bounds ()
-  "Test replace-pop errors with no replace-pop-bounds (rect case)."
+(ert-deftest helixel-test-yank-pop-no-bounds ()
+  "Test yank-pop errors with no yank-pop-bounds (rect case)."
   (helixel-test-with-buffer "hello"
     (let* ((kill-ring (list "AAA"))
            (kill-ring-yank-pointer kill-ring)
-           (helixel--replace-pop-bounds nil))
+           (helixel--yank-pop-bounds nil))
       (setq last-command 'helixel-replace)
-      (should-error (helixel-replace-pop)))))
+      (should-error (helixel-yank-pop)))))
 
-(ert-deftest helixel-test-replace-pop-with-arg ()
-  "Test replace-pop with numeric argument skips kills."
+(ert-deftest helixel-test-yank-pop-with-arg ()
+  "Test yank-pop with numeric argument skips kills."
   (helixel-test-with-buffer "hello"
     (let* ((kill-ring (list "CCC" "BBB" "AAA"))
            (kill-ring-yank-pointer kill-ring)
@@ -467,8 +634,87 @@ paste line-wise instead of char-wise."
       (should (string= (buffer-string) "CCCello"))
       (setq last-command 'helixel-replace)
       ;; Pop with arg 1 advances one kill forward (CCC→BBB)
-      (helixel-replace-pop 1)
+      (helixel-yank-pop 1)
       (should (string= (buffer-string) "BBBello")))))
+
+;;; yank-pop cycling: C-y / p / r followed by M-y M-y
+
+(ert-deftest helixel-test-yank-pop-after-cy-mark ()
+  "After C-y, M-y cycles using mark bounds (region may be inactive)."
+  (helixel-test-with-buffer "hello"
+    (let* ((kill-ring (list "X" "Y" "Z"))
+           (kill-ring-yank-pointer kill-ring))
+      ;; C-y: Emacs yank pastes "X"
+      (setq last-command 'yank)
+      (push-mark (point) t t)  ; simulate C-y mark activation
+      (insert "X")
+      ;; M-y → "Y"
+      (setq last-command 'yank)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "Yhello"))
+      ;; M-y → "Z"
+      (setq last-command 'helixel-yank-pop)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "Zhello")))))
+
+(ert-deftest helixel-test-yank-pop-after-p ()
+  "After p, M-y M-y cycles through kill ring."
+  (helixel-test-with-buffer "abcdef"
+    (let* ((kill-ring (list "X" "Y" "Z"))
+           (kill-ring-yank-pointer kill-ring)
+           (helixel-select-after-paste t))
+      ;; p pastes "X"
+      (goto-char 3)
+      (setq last-command 'helixel-yank)
+      (helixel-yank)
+      (should (string= (buffer-string) "abcXdef"))
+      (should (region-active-p))         ; select-after-paste
+      ;; M-y → "Y"
+      (setq last-command 'helixel-yank)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "abcYdef"))
+      ;; M-y → "Z"
+      (setq last-command 'helixel-yank-pop)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "abcZdef")))))
+
+(ert-deftest helixel-test-yank-pop-after-r ()
+  "After r, M-y M-y cycles through kill ring."
+  (helixel-test-with-buffer "hello"
+    (let* ((kill-ring (list "X" "Y" "Z"))
+           (kill-ring-yank-pointer kill-ring)
+           (helixel-replace-delete-char-p t))
+      ;; r replaces 'h' with "X"
+      (setq last-command nil)
+      (helixel-replace)
+      (should (string= (buffer-string) "Xello"))
+      ;; M-y → "Y"
+      (setq last-command 'helixel-replace)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "Yello"))
+      ;; M-y → "Z"
+      (setq last-command 'helixel-yank-pop)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "Zello")))))
+
+(ert-deftest helixel-test-yank-pop-no-stale-bounds ()
+  "M-y after p uses p's position, not stale bounds from previous r."
+  (helixel-test-with-buffer "hello world"
+    (deactivate-mark)
+    (let* ((kill-ring (list "R" "S" "T"))
+           (kill-ring-yank-pointer kill-ring)
+           (helixel-replace-delete-char-p t))
+      ;; r replaces 'h' with "R", sets yank-pop-bounds
+      (setq last-command nil)
+      (helixel-replace)
+      (should helixel--yank-pop-bounds)
+      (should (eq (car helixel--yank-pop-bounds) 1))
+      ;; p at position 7 should clear stale bounds and paste at new spot
+      (goto-char 7)
+      (setq last-command 'helixel-yank)
+      (helixel-yank)
+      ;; After p, stale bounds from r must be gone
+      (should-not helixel--yank-pop-bounds))))
 
 ;;; Integration: select-line -> kill -> yank round-trip
 
@@ -511,7 +757,7 @@ paste line-wise instead of char-wise."
       (should (string= (car kill-ring) "hello"))
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (goto-char 1)
-      (helixel-yank)
+      (helixel-yank-before)
       (should (string= (buffer-string) "hello world")))))
 
 ;;; helixel-begin-selection clears line type

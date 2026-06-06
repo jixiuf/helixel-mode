@@ -435,36 +435,24 @@ These alternatives were proposed during architectural review and
 explicitly rejected.  Documented so future contributors do not
 re-litigate them without new evidence.
 
-### 1. Merge `helixel-tx` into `helixel-action` — REJECTED
+### 1. Merge `helixel-tx` into `helixel-action` — **EXECUTED in v5**
 
-Proposal: collapse the two structs into one 11-slot struct, eliminating
-~56 LOC of polymorphic accessors.
+Originally REJECTED (see below for historical context).  Re-evaluated
+and executed in v5 (PR 1 of the v5 refactor series).  The unified
+struct `helixel-action` (12 slots) serves both replay and history.
+`helixel-tx-*` accessors are zero-cost `defalias` backward-compat
+wrappers.  Net result: ~100 LOC deleted, `--ensure-tx` eliminated.
 
-Why rejected:
-- The split encodes two genuine domains: **history** (ring, `;`,
-  C-o/C-i, consumed by `helixel-ring` + jump-log) and **replay**
-  (`.`, `,`, chain, mc, consumed by `helixel-repeat` + `helixel-chain`
-  + `helixel-mc-*`).  Most callsites operate in ONE domain.
-- Polymorphic accessors are a BRIDGE at the ~67 sites where the two
-  domains genuinely overlap, not a tax at every call site.  The other
-  ~150 callsites use `helixel-tx-*` directly with no polymorphism.
-- A merged 11-slot struct would surface 4 always-nil slots on every
-  movement entry to every reader; the current nested-tx structure
-  visually groups the replay fields.
-- The `mc-tx` deletion (which removed the strongest practical argument
-  for keeping the split) demonstrated that the split is a CONTAINER
-  that absorbs architectural changes, not a CONSTRAINT that obstructs
-  them.
+**Original rejection rationale (archived):**
 
-Costs accepted with this decision (documented explicitly so future
-readers understand the trade-off):
-1. `helixel-action--ensure-tx' silently allocates a fresh tx inside an
-   action on first `setf' of any tx-field — mutation on an
-   otherwise-immutable struct.
-2. Ring commit triggers a 3-level deep copy (action → tx → sel → ctx
-   plist).
-3. Polymorphic accessors dispatch invisibly — reading
-   `(helixel-action-op x)' does not reveal `x's type at the call site.
+> The split encodes two genuine domains: history and replay.  Most
+> callsites operate in ONE domain.  Polymorphic accessors are a BRIDGE
+> at ~67 sites, not a tax at every call site.  The re-evaluation in v5
+> found the bridge tax > the conceptual clarity benefit, especially
+> with `--ensure-tx` as a hidden mutator (Watch List #1).
+
+Deleted: 4 polymorphic accessors, 4 gv-setters, `--ensure-tx`,
+`helixel-tx` type.  ~150 callsites renamed.
 
 ### 2. Context-aware runners `(lambda (tx &optional context) ...)` — REJECTED
 
@@ -515,14 +503,21 @@ remain in the codebase.  Any future hook handler can safely read
 `this-command' inside `action-commit-hook' and find it matches the
 action's `by-command' (modulo the ERT/batch nil case).
 
-### 4. Generalize `:pre-replay-fn' to a list of hooks — REJECTED
+### 4. Generalize `:pre-replay-fn' to a list of hooks — **EXECUTED differently in v5**
 
-Proposal: change the payload entry from a single function to a list.
+Originally REJECTED because no command attached more than one.
+Re-evaluated in v5: the pre-replay-fn was promoted to a first-class
+`preposition` slot on `helixel-action` (v5 PR 1.5).  The single-write
+invariant is enforced by `cl-assert` rather than generalized to a
+list.  `helixel--live-action-set` preserves the existing preposition
+unless the tx provides its own, eliminating the `--inherit-preposition`
+special path in `record-action`.  
 
-Why rejected: no command currently attaches more than one
-`:tx-runner'.  Generalizing is a 5-line change when actually needed,
-so pre-solving has negative value.  The single-write invariant is
-documented in `helixel-define-command's docstring.
+**Original rejection rationale (archived):**
+
+> no command currently attaches more than one `:tx-runner'.
+> Generalizing is a 5-line change when actually needed, so
+> pre-solving has negative value.
 
 ### 5. Marker → integer for `helixel-repeat-preview-pos' — REJECTED
 
@@ -585,30 +580,13 @@ mc-core's minimal-deps invariant), `insert-record.el' → `repeat.el'
 
 ## Watch List (deferred concerns)
 
-Forward-flags noted during the Round-6/7 PK closeout.  Not bugs;
-not blocking; record here so the next contributor sees them.
+Resolved items from previous Watch List:
 
-1. **`helixel-action--ensure-tx` is the hidden mutator.**  C1
-   (merging `helixel-tx` into `helixel-action`) was rejected;
-   the costs are documented in §Rejected #1 above.  If a future
-   bug surfaces unexpected tx mutation inside a recorded action,
-   start the investigation at `helixel-action--ensure-tx` — it is
-   the one place where a payload-setter on an action can silently
-   allocate a fresh tx and detach it from prior aliases.
+1. ~~`helixel-action--ensure-tx`~~ — RESOLVED in v5 (merged tx/action).
+2. ~~Third `eval-after-load`~~ — RESOLVED in v5 (PR 2: moved to `helixel-mc-shims.el`).
+3. ~~`helixel-mc-integrate.el` size~~ — RESOLVED in v5 (PR 2: completion-preview extracted, now ~350 LOC).
 
-2. **Third `eval-after-load` indirection → extract helper.**  The
-   completion-preview integration in `helixel-mc-integrate.el`
-   uses the same `(funcall (intern "eval-after-load") ...)` trick
-   that `helixel-shims--defer-setup` uses for 12 built-in modes.
-   Two copies is fine; a third would warrant promoting the helper
-   to a shared utility (probably in `helixel-core.el' since both
-   files already require it).  See `helixel-shims--defer-setup`
-   for the canonical shape.
+Current (post-v5) watch items:
 
-3. **`helixel-mc-integrate.el` size watch.**  Currently ~430 LOC
-   with the completion-preview shim.  If it crosses ~500 LOC the
-   split argument from C7 should be reconsidered — the cohesion
-   that justified rejecting C7 weakens once the file mixes more
-   than two independent integration concerns (currently:
-   chain/repeat/insert glue + completion-preview).  Below ~500
-   LOC, leave it alone.
+**None.** All previous Watch List items were addressed by the v5
+refactor series.  If new deferred concerns arise, add them here.

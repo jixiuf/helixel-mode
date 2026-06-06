@@ -139,32 +139,22 @@ Notes:
 ;;   insert-selection-*  :cursor-offset
 ;;   insert-search-offset :offset
 
-### helixel-tx (replay transaction)
+### helixel-action / helixel-tx (unified replay + history event, v5 merge)
+
 ```elisp
-(cl-defstruct helixel-tx op sel payload runner mark-region display)
+(cl-defstruct helixel-action op sel payload runner pre-replay-fn mark-region
+               display category subcat timestamp buffer by-command)
 ```
-Immutable, position-agnostic.  Carries everything needed to re-execute
-an edit at a different position.  Stored in `helixel--last-tx' for `.'
-and `,' replay.
+A SINGLE struct serving both replay (`.`, `,`, chain, mc) and history
+(`;`, C-o/C-i).  Previously TWO structs (helixel-tx + helixel-action)
+merged in v5.  Slots op/sel/payload/runner/preposition are nil for
+pure movement/search/state events (~40B per entry negligible).
 
-### helixel-action (history/ring event)
-```elisp
-(cl-defstruct helixel-action category subcat mark-region display
-              timestamp buffer by-command tx)
-```
-Lightweight event recorded in `helixel--event-ring' and the global
-jump log.  The `tx' slot carries a `helixel-tx'.  Pure movement /
-search / state actions have `tx' with nil `op' and nil `runner'.
-
-The tx `:payload' may hold a `:pre-replay-fn' — a unary function
-called by `helixel-tx-replay' before the main runner.  Insert-entry
-commands use this for per-fake prepositioning via the `:tx-runner'
-clause on `helixel-define-command'.
-
-Polymorphic helpers `helixel-action-op'/-sel/-payload/-runner accept
-either struct — on a `helixel-tx' they read directly; on a
-`helixel-action' they delegate to its embedded tx.  Setters auto-allocate
-a tx on actions if none exists.
+- `helixel-tx-*' and `helixel-tx-create' are zero-cost `defalias'
+  backward-compat aliases.
+- `helixel-tx-create' constructs an `helixel-action' directly.
+- `helixel-action--copy' performs deep copies for ring storage.
+- `:(pre-replay-fn' is DEPRECATED; use `:preposition' instead.)
 
 ### helixel-repeat-strategy (dot-repeat strategy, lives in `helixel-repeat.el`)
 ```elisp
@@ -193,17 +183,19 @@ a tx on actions if none exists.
 (helixel--sel-pop)                  → sel|nil  ; edit cmds pop
 
 ;; ── Transaction ──
-(helixel-tx-create op sel &rest kv) → struct
+(helixel-tx-create op sel &rest kv) → struct  ;; returns helixel-action
   ;; Special kv: :runner fn, :display str|fn — rest becomes :payload
-  ;; Common payload keys: :keys, :text, :char, :pre-replay-fn
+  ;; Common payload keys: :keys, :text, :char, :pre-replay-fn (DEPRECATED)
+  ;; DEPRECATED: use :preposition for preposition functions.
 (helixel-action-op tx)
 (helixel-action-sel tx)
 (helixel-action-payload tx)
 (helixel-action-runner tx)
 (helixel-action-mark-region tx)
 (helixel-action-display tx)
-(helixel-tx-with-payload tx k v)  → new tx with payload entry added
-(helixel-action-copy tx)              → shallow copy
+(helixel-action-preposition tx) ;; was pre-replay-fn, renamed in v5
+(helixel-action-with-payload tx k v) → new action with payload entry added
+(helixel-action--copy action)              → deep copy
 
 ;; ── Event ──
 (helixel-action-op event)
@@ -231,7 +223,7 @@ a tx on actions if none exists.
 
 ;; ── Repeat ──
 (helixel--record-action op &rest extra)  ; stores tx + commits event
-(helixel-tx-replay tx)             ; calls :pre-replay-fn (if any), then :runner on tx
+(helixel-tx-replay tx)             ; calls :preposition (if any), then :runner on tx
 (helixel-repeat-edit &optional prefix) ; bound to .
 (helixel-repeat-selection &optional prefix) ; bound to ,
 (helixel--build-strategy edit &optional reverse-p) → strategy struct
@@ -307,14 +299,14 @@ When `transient-mark-mode` is on, `helixel-select-line-up`/`helixel-select-line`
 
 ### Multi-cursor (mc) — fake cursor model
 `helixel-mc-core.el` provides REAL fake cursors with per-cursor state
-held in a single `helixel-cursor-state' (`helixel-cs-') struct
-attached to each fake-cursor overlay under the `helixel-cs' property.
+held in a single `helixel-pc-state' (`helixel-pcs-') struct
+attached to each fake-cursor overlay under the `helixel-pc-state' property.
 Slots: point, mark, mark-active, kill-ring, kill-ring-yank-pointer,
 mark-ring, pending-sel, last-action, active-search, event-ring,
 live-action, action-pos.  The dispatcher swaps the struct in/out
 around each fake's body via `helixel-mc--enter-cursor' /
-`--leave-cursor', which call `helixel-cs-restore' /
-`helixel-cs-update-from-globals'.  Real cursor uses the SAME struct
+`--leave-cursor', which call `helixel-pcs-swap-in' /
+`helixel-pcs-swap-out'.  Real cursor uses the SAME struct
 through `helixel-mc--save-main-state' — one type, one snapshot/restore
 path, no per-var registry.  `post-command-hook` dispatches `this-command`
 at each fake cursor when the command's `multiple-cursors` symbol property
@@ -326,7 +318,7 @@ restoring CS sets globals' `mark-active' to the cursor's stored value.
 
 ### `;' multi-cursor: per-fake event ring
 Each fake owns its own `helixel--event-ring' / `--live-action' /
-`--action-pos' (slots of its `helixel-cursor-state').  When `;'
+`--action-pos' (slots of its `helixel-pc-state').  When `;'
 broadcasts, each
 fake runs `helixel-action--cycle-show' against its OWN ring —
 first-press span selection, prev/next cycling, and group-start logic all
@@ -376,6 +368,15 @@ preferred way to read ctx fields.
   See `helixel-tx-char`, `helixel-tx-type`, `helixel-tx-dir` for
   shared-payload-key convenience accessors (find-char, replace-char,
   surround).
+
+### `preposition` slot (v5, was `:pre-replay-fn`)
+
+`helixel-action-preposition` is a first-class slot set by
+`helixel-define-command's `:tx-runner` clause.  It is called BEFORE
+the main runner in `helixel-tx-replay`.  Single-write invariant
+enforced by `cl-assert`.  No inheriting logic between events —
+`helixel--live-action-set` preserves the existing preposition
+unless the tx provides its own.
 
 ### `helixel-action-commit-hook`
 

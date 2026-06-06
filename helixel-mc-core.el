@@ -57,6 +57,8 @@
 (defvar helixel--live-action)             ; from `helixel-ring'
 (defvar helixel--action-pos)              ; from `helixel-ring'
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
+(declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
+                  (raw-prefix))
 
 ;; ── Faces ──
 
@@ -675,16 +677,18 @@ without going through the command loop."
 Looks at the front of `helixel--event-ring' — the most recent committed
 action.  Returns its `tx' if and only if:
   - the action carries a `tx',
+  - the action carries a runner (replayable),
   - the action's `by-command' stamp matches `this-command'.
 
-The tx may have a nil op (movement commands) or a `:pre-replay-fn'
-payload entry (insert-entry commands' prepos).  `helixel-tx-replay'
-handles both uniformly: pre-replay-fn runs first, then runner if any."
+The action may have a nil op (movement commands) or a non-nil
+`:pre-replay-fn' (insert-entry commands' prepos).
+`helixel-tx-replay' handles both uniformly: pre-replay-fn runs
+first, then runner if any."
   (when (symbolp this-command)
     (let ((entry (car helixel--event-ring)))
       (when (and entry
                  (eq (helixel-action-by-command entry) this-command))
-        (helixel-action-tx entry)))))
+        entry))))
 
 ;; ── post-command-hook integration ──
 ;;
@@ -787,8 +791,13 @@ deactivated when the last one is removed."
                           (helixel-mc-num-cursors)))
   :keymap helixel-multi-cursor-mode-map
   (if helixel-multi-cursor-mode
-      (add-hook 'post-command-hook #'helixel-mc--post-command 90 t)
+      (progn
+        (add-hook 'post-command-hook #'helixel-mc--post-command 90 t)
+        (add-hook 'helixel-repeat-edit-override-functions
+                  #'helixel-mc--repeat-edit-apply-only))
     (remove-hook 'post-command-hook #'helixel-mc--post-command t)
+    (remove-hook 'helixel-repeat-edit-override-functions
+                 #'helixel-mc--repeat-edit-apply-only)
     (helixel-mc-clear-all)))
 
 ;; ── Convenience: default whitelist for safe Emacs primitives ──

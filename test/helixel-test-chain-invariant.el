@@ -72,24 +72,22 @@ after BODY to keep ert clean."
   (helixel-chain-inv-with-buffer "abc\n"
     (helixel-repeat-chain-start)
     ;; Synthesise an action that LOOKS like chain-end committing.
-    (let* ((tx (make-helixel-tx :op 'kill :runner #'identity))
-           (entry (make-helixel-action
+    (let* ((entry (make-helixel-action
                    :category 'edit
                    :subcat 'kill
+                   :op 'kill :runner #'identity
                    :by-command 'helixel-repeat-chain-end
-                   :tx tx
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
       (helixel--chain-on-commit entry)
       (should (null (helixel-chain-session-tx-list
                      helixel--chain-session))))
     ;; Now a real edit action should be appended.
-    (let* ((tx (make-helixel-tx :op 'kill :runner #'identity))
-           (entry (make-helixel-action
+    (let* ((entry (make-helixel-action
                    :category 'edit
                    :subcat 'kill
+                   :op 'kill :runner #'identity
                    :by-command 'helixel-kill-thing
-                   :tx tx
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
       (helixel--chain-on-commit entry)
@@ -106,12 +104,11 @@ Movement / textobj selections produce txs with op=nil + runner=nil
 that participate in mc dispatch but must not be replayed via chain."
   (helixel-chain-inv-with-buffer "abc\n"
     (helixel-repeat-chain-start)
-    (let* ((tx (make-helixel-tx :op nil :runner nil))
-           (entry (make-helixel-action
+    (let* ((entry (make-helixel-action
                    :category 'movement
                    :subcat 'word
+                   :op nil :runner nil
                    :by-command 'helixel-forward-word
-                   :tx tx
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
       (helixel--chain-on-commit entry)

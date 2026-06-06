@@ -252,16 +252,15 @@ has been nulled (zombie state)."
 be re-invoked by the advice (recording already broadcast)."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc-create-fake-cursor 2)
-    ;; Fake a chain TX whose runner would `error' if called.
+    ;; Fake a chain entry whose runner would `error' if called.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-tx-create 'chain sel
-                 :runner (lambda (_tx) (error "REAPPLIED"))
-                 :tx-list (list (helixel-tx-create 'noop nil :runner #'ignore))))
-           (entry (make-helixel-action
-                   :by-command 'helixel-repeat-chain-end
-                   :buffer (current-buffer)
-                   :tx tx)))
-      (setq helixel--last-tx tx)
+           (entry (helixel-tx-create 'chain sel
+                    :runner (lambda (_tx) (error "REAPPLIED"))
+                    :tx-list (list (helixel-tx-create 'noop nil
+                                                      :runner #'ignore)))))
+      (setf (helixel-action-by-command entry) 'helixel-repeat-chain-end)
+      (setf (helixel-action-buffer entry) (current-buffer))
+      (setq helixel--last-tx entry)
       ;; Call the action-commit-hook handler; verify it does not
       ;; signal (the runner is NOT invoked, only broadcast+msg).
       (helixel-mc--on-chain-end entry))
@@ -305,10 +304,10 @@ chain-end / chain-cancel / normal-escape."
           (make-helixel-chain-session
            :active-p t :tx-list nil))
     ;; Build an action stamped with `helixel-normal-escape' as by-cmd.
-    (let ((entry (make-helixel-action
-                  :category 'state :subcat 'escape
-                  :by-command 'helixel-normal-escape
-                  :tx (helixel-tx-create 'noop nil :runner #'ignore))))
+    (let ((entry (helixel-tx-create 'noop nil :runner #'ignore)))
+      (setf (helixel-action-category entry) 'state
+            (helixel-action-subcat entry) 'escape
+            (helixel-action-by-command entry) 'helixel-normal-escape)
       (helixel--chain-on-commit entry))
     (should (null (helixel-chain-session-tx-list helixel--chain-session)))
     (setq helixel--chain-session nil)))
@@ -2571,7 +2570,7 @@ the tx at every fake — no substitute-alist needed."
       (should entry)
       (should (eq 'helixel-find-next-char
                   (helixel-action-by-command entry)))
-      (let ((tx (helixel-action-tx entry)))
+      (let ((tx entry))
         (should tx)
         (should (eq ?- (helixel-action-payload-get tx :char)))
         (should (eq 'next (helixel-action-payload-get tx :type)))

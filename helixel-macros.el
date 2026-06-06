@@ -100,40 +100,35 @@ BODY is the command's business logic."
          (track-visual
           (when (eq cat 'movement)
             `((helixel--track-visual-move ',name))))
-         (attach-tx
-          (when tx-runner
-            `((unless (helixel-replaying-p)
-                (when helixel--live-action
-                  ;; Ensure the live action has a tx, then set the
-                  ;; pre-replay-fn slot on it.  For movement commands
-                  ;; this tx is the whole story (op nil, runner nil,
-                  ;; only pre-replay-fn).  For insert-entry commands
-                  ;; `record-action' later replaces the tx but
-                  ;; preserves the pre-replay-fn slot.
-                  (unless (helixel-action-tx helixel--live-action)
-                    (setf (helixel-action-tx helixel--live-action)
-                          (make-helixel-tx)))
-                  (setf (helixel-tx-pre-replay-fn
-                         (helixel-action-tx helixel--live-action))
-                        ,tx-runner)))))))
+         (attach-tx tx-runner))
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
        ;; ── Tag this command so `helixel-action-commit' can stamp
-       ;; `by-command' on committed edits (used by mc dispatcher).
-       ;; Always OVERRIDE `this-command' to this function symbol so
-       ;; the stamp is correct even when the outer scope has a stale
-       ;; value (e.g. in batch tests where the command loop does not
-       ;; set it, or when called as a sub-step of another command).
+       ;; `by-command' on committed edits.  `helixel--current-command'
+       ;; is the single source of truth; `this-command' is a fallback
+       ;; in `helixel-action-commit' for batch/ERT paths.
        (let ((helixel--current-command ',name)
              (this-command ',name))
          ;; ── Open tracking event (via unified entry point) ──
          (helixel--tracking-open ',cat ',sub)
          ;; ── Optional :pre-replay-fn attachment (for unified replay) ──
          ;; Attach BEFORE the body so eager record-action commits keep
-         ;; the prepos fn on the committed ring entry's tx payload.
-         ;; `record-action' transfers :pre-replay-fn into the new tx.
-         ,@attach-tx
+         ;; the prepos fn on the committed ring entry.
+         ;; `record-action' preserves :pre-replay-fn across recording.
+         ,@(when attach-tx
+             `((unless (helixel-replaying-p)
+                 (when helixel--live-action
+                   ;; Single-write invariant: cl-assert no sibling
+                   ;; :tx-runner has set this slot already.
+                   (cl-assert
+                    (null (helixel-action-pre-replay-fn
+                           helixel--live-action))
+                    nil
+                    "helixel: pre-replay-fn already set (multiple :tx-runner?)")
+                   (setf (helixel-action-pre-replay-fn
+                          helixel--live-action)
+                         ,tx-runner)))))
          ;; ── Highlight clearing ──
          ,@(when clear '((helixel--clear-highlights)))
          ;; ── Body (pure business logic) ──

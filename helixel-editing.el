@@ -792,22 +792,24 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 
 (defun helixel--yank-handler-line-wise (text)
   "Insert TEXT as a complete line.
-Dispatches on `this-command' to decide insertion position."
-  (cond
-   ((member this-command '(helixel-yank helixel-replace))
-    (end-of-line)
-    (newline)
-    (insert (string-trim-right text "\n"))
-    (beginning-of-line)
-    (back-to-indentation))
-   ((eq this-command 'helixel-yank-before)
-    (beginning-of-line)
-    (save-excursion
-      (insert text)
-      (unless (bolp) (newline)))
-    (back-to-indentation))
-   (t
-    (insert text))))
+Dispatches on `this-command' (with `helixel--current-command' fallback
+for ERT/batch where `this-command' is nil) to decide insertion position."
+  (let ((cmd (or this-command helixel--current-command)))
+    (cond
+     ((member cmd '(helixel-yank helixel-replace))
+      (end-of-line)
+      (newline)
+      (insert (string-trim-right text "\n"))
+      (beginning-of-line)
+      (back-to-indentation))
+     ((eq cmd 'helixel-yank-before)
+      (beginning-of-line)
+      (save-excursion
+        (insert text)
+        (unless (bolp) (newline)))
+      (back-to-indentation))
+     (t
+      (insert text)))))
 
 (defun helixel--linewise-text (text)
   "Return a copy of TEXT propertized with line-wise yank-handler.

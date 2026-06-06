@@ -84,12 +84,11 @@ chain-end / chain-cancel are not themselves replayed)."
                       helixel-repeat-chain-cancel
                       helixel-normal-escape))
         ;; Only edit txs (those with a runner) contribute to the chain.
-        ;; Movement-only txs (op nil, pre-replay-fn only) are not
+        ;; Movement-only events (op nil, pre-replay-fn only) are not
         ;; replayed as part of chain dot-repeat.
-        (let ((tx (helixel-action-tx entry)))
-          (when (and tx (helixel-tx-runner tx))
-            (push tx (helixel-chain-session-tx-list
-                      helixel--chain-session))))))))
+        (when (helixel-action-runner entry)
+          (push entry (helixel-chain-session-tx-list
+                       helixel--chain-session)))))))
 
 (add-hook 'helixel-action-commit-hook #'helixel--chain-on-commit)
 

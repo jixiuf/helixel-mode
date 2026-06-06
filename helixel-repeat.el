@@ -274,20 +274,19 @@ The `helixel-define-command' macro handles this automatically."
               defining-kbd-macro)
     (let* ((pop-sel (helixel--sel-pop))
            (runner (helixel--op-runner operator))
-           ;; Preserve any pre-replay-fn attached to the live action's
-           ;; tx by an earlier `:tx-runner' clause (e.g. insert-entry
+           ;; Preserve any pre-replay-fn attached to the live action
+           ;; by an earlier `:tx-runner' clause (e.g. insert-entry
            ;; commands' prepos).  Without this, `record-action 'insert-text'
            ;; would clobber the prepos and mc fakes would not position.
            (prev-pre (and helixel--live-action
-                          (helixel-action-tx helixel--live-action)
-                          (helixel-tx-pre-replay-fn
-                           (helixel-action-tx helixel--live-action))))
+                          (helixel-action-pre-replay-fn
+                           helixel--live-action)))
            (tx (apply #'helixel-tx-create operator
                       pop-sel
                       :runner runner
                       extra)))
       (when prev-pre
-        (setf (helixel-tx-pre-replay-fn tx) prev-pre))
+        (setf (helixel-action-pre-replay-fn tx) prev-pre))
       (let ((new-tx (helixel-tx-copy tx)))
         ;; Pre-compute and stash display on the live action (tx-replay
         ;; itself doesn't need display, but the action ring formatter does).
@@ -494,16 +493,18 @@ Signals `user-error' when no edit is available."
 
 ;; ── Interactive entry points ──
 
-(defvar helixel-repeat-edit-function nil
-  "Override hook for `helixel-repeat-edit'.
-When non-nil, called with RAW-PREFIX before the default implementation.
-A non-nil return value means the override handled the call and the
-default implementation is skipped; a nil return value means fall through
-to the default.
+(defvar helixel-repeat-edit-override-functions nil
+  "Abnormal hook run before `helixel-repeat-edit''s default logic.
+Each function receives RAW-PREFIX and should return non-nil if it
+handled the dot-repeat; nil delegates to the default implementation.
+Uses `run-hook-with-args-until-success'.
 
-Used by `helixel-mc-integrate' to collapse `.' to apply-once-at-point
-under multi-cursor mode without `advice-add'.  See
-`helixel-mc-integrate.el' for details.")
+Set by mc-integrate to override `.' when fake cursors exist, so `.'
+applies the last edit once at each cursor's current position without
+advancing.")
+(make-obsolete-variable 'helixel-repeat-edit-function
+                        'helixel-repeat-edit-override-functions
+                        "helixel 5.0")
 
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
@@ -512,8 +513,8 @@ RAW-PREFIX is the raw prefix argument.  Delegates to
 `helixel-repeat-edit-function' first; falls back to
 `helixel--repeat-edit-default' if that hook is unset or returns nil."
   (interactive "P")
-  (unless (and helixel-repeat-edit-function
-               (funcall helixel-repeat-edit-function raw-prefix))
+  (unless (run-hook-with-args-until-success
+           'helixel-repeat-edit-override-functions raw-prefix)
     (helixel--repeat-edit-default raw-prefix)))
 
 (defun helixel--repeat-edit-default (&optional raw-prefix)

@@ -57,7 +57,7 @@
     (should (null helixel--last-tx))))
 
 (ert-deftest helixel-test-ring-commit-sets-last-event ()
-  "After committing an EDIT (with tx), `helixel--last-tx' points to its tx.
+  "After committing an EDIT (with op), `helixel--last-tx' points to that event.
 Movement commits leave `helixel--last-tx' unchanged."
   (let ((helixel--event-ring nil)
         (helixel--live-action nil)
@@ -65,13 +65,13 @@ Movement commits leave `helixel--last-tx' unchanged."
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'edit 'kill 'kill)
       (let* ((e1 (helixel-action-commit))
-             (tx1 (helixel-action-tx e1)))
+             (tx1 e1))
         (should e1)
         (should tx1)
         (should (eq helixel--last-tx tx1))
         (helixel--tracking-open 'edit 'change 'change)
         (let* ((e2 (helixel-action-commit))
-               (tx2 (helixel-action-tx e2)))
+               (tx2 e2))
           (should e2)
           (should (eq helixel--last-tx tx2))
           (should (not (eq tx1 tx2)))

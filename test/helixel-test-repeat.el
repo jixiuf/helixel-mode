@@ -713,7 +713,7 @@ Verifies that event ring head carries the inserted text in its payload."
     ;; Replay from event ring (simulating pick)
     (goto-char 4)
     (let ((front-event (car helixel--event-ring)))
-      (setq helixel--last-tx (helixel-action-tx front-event)))
+      (setq helixel--last-tx front-event))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "X X foo"))))
 
@@ -738,7 +738,7 @@ Verifies that event ring head carries the inserted text in its payload."
         ;; Replay from event ring (simulating pick)
         (goto-char 4)
         (let ((front-event (car helixel--event-ring)))
-          (setq helixel--last-tx (helixel-action-tx front-event)))
+          (setq helixel--last-tx front-event))
         (helixel-repeat-edit)
         (should (string= (buffer-string) "aZbZc")))))
 

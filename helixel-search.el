@@ -354,18 +354,18 @@ adjusts point relative to the character match according to TYPE."
     ;; jump.
     (let ((sym-dir (if forwardp 'forward 'backward)))
       (when helixel--live-action
-        (setf (helixel-action-tx helixel--live-action)
-              (make-helixel-tx
-               :payload (list :char char :type type :dir sym-dir)
-               :runner (lambda (tx)
-                         (let ((c (helixel-tx-char tx))
-                               (ty (helixel-tx-type tx))
-                               (d (helixel-tx-dir tx)))
-                           (setq helixel--active-search
-                                 (make-helixel-active-search
-                                  :category 'find-char :type ty
-                                  :char c :dir d))
-                           (helixel-search--find-char-core d))))))
+        (setf (helixel-action-payload helixel--live-action)
+              (list :char char :type type :dir sym-dir))
+        (setf (helixel-action-runner helixel--live-action)
+              (lambda (tx)
+                (let ((c (helixel-tx-char tx))
+                      (ty (helixel-tx-type tx))
+                      (d (helixel-tx-dir tx)))
+                  (setq helixel--active-search
+                        (make-helixel-active-search
+                         :category 'find-char :type ty
+                         :char c :dir d))
+                  (helixel-search--find-char-core d)))))
       (helixel-action-commit)
       (helixel-search--set-dir sym-dir)
       (setq helixel--active-search

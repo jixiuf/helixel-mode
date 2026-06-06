@@ -60,17 +60,18 @@
 ;; last edit once at each cursor's current position" — i.e. the same
 ;; thing `helixel-mc-apply-last-action' does.
 ;;
-;; We override `helixel-repeat-edit' (`.') via the
-;; `helixel-repeat-edit-function' hook (set up in
-;; `helixel-multi-cursor-mode' enable below) so that whenever fake
+;; We override `helixel-repeat-edit' (`.') via
+;; `helixel-repeat-edit-override-functions' so that whenever fake
 ;; cursors exist, both the real-cursor invocation AND the per-fake
-;; dispatches collapse to a single `helixel-tx-replay' (no
-;; advance loop).  All N applications are then amalgamated into
-;; one undo step by the dispatcher's `undo-amalgamate-change-group'
-;; wrapper.
+;; dispatches collapse to a single `helixel-tx-replay' (no advance
+;; loop).  All N applications are then amalgamated into one undo
+;; step by the dispatcher's `undo-amalgamate-change-group' wrapper.
+;;
+;; The override is installed/removed on `helixel-multi-cursor-mode'
+;; toggle so it doesn't persist when mc is off.
 
 (defun helixel-mc--repeat-edit-apply-only (raw-prefix)
-  "Hook-impl for `helixel-repeat-edit-function' under mc.
+  "Hook function for `helixel-repeat-edit-override-functions' under mc.
 Return non-nil (handled) when `helixel-multi-cursor-mode' is on AND
 fake cursors exist; run `helixel-tx-replay' once at point
 instead of the full advance + apply loop.  Return nil to fall
@@ -84,16 +85,8 @@ the override path — mc dispatches the same edit at each fake."
       (helixel-tx-replay helixel--last-tx))
     t))
 
-;; Install / uninstall the override on mc-mode toggle.
-(defun helixel-mc--repeat-edit-hook-install ()
-  "Set `helixel-repeat-edit-function' to the mc override impl."
-  (setq helixel-repeat-edit-function
-        #'helixel-mc--repeat-edit-apply-only))
-
-;; Install immediately so existing buffers with mc already on pick
-;; up the override.  helixel-multi-cursor-mode hooks below keep it
-;; in sync.
-(helixel-mc--repeat-edit-hook-install)
+;; Install via `helixel-multi-cursor-mode' toggle — no top-level
+;; add-hook needed.
 
 ;; ── Whitelist tweaks ──
 

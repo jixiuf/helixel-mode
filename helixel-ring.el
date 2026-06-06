@@ -140,9 +140,8 @@ Returns the committed entry or nil."
       ;; edit and break dot-repeat semantics.  The op-presence check
       ;; distinguishes real edits (kill, change, insert-text, …) from
       ;; mc-replay movement shims.
-      (when-let* ((tx (helixel-action-tx entry))
-                  ((helixel-tx-op tx)))
-        (setq helixel--last-tx tx))
+      (when-let* (((helixel-action-op entry)))
+        (setq helixel--last-tx entry))
       (helixel--global-jump-log-push entry)
       (setq helixel--live-action nil)
       (run-hook-with-args 'helixel-action-commit-hook entry)
@@ -167,11 +166,37 @@ and clears the live state."
   (helixel-action-commit))
 
 (defun helixel--live-action-set (tx)
-  "Attach TX to `helixel--live-action' and lift its display, if any.
-TX is a `helixel-tx' produced by `helixel-tx-create' (or equivalent).
-No-op if no live action or TX isn't a tx."
-  (when (and helixel--live-action (helixel-tx-p tx))
-    (setf (helixel-action-tx helixel--live-action) tx)))
+  "Copy TX's replay slots onto `helixel--live-action'.
+TX is a `helixel-action' carrying replay data (op/sel/payload/runner
+/pre-replay-fn/mark-region/display) produced by `helixel-tx-create'
+or equivalent.  No-op if no live action or TX isn't an action.
+
+Preserves any existing `pre-replay-fn' on the live action unless TX
+provides its own (used by insert-entry commands whose `:tx-runner'
+attaches a prepos function before `record-action' runs)."
+  (when (and helixel--live-action (helixel-action-p tx))
+    (let ((existing-pre (helixel-action-pre-replay-fn helixel--live-action))
+          (old-mr (helixel-action-mark-region helixel--live-action)))
+      (setf (helixel-action-op           helixel--live-action)
+            (helixel-action-op tx))
+      (setf (helixel-action-sel          helixel--live-action)
+            (helixel-action-sel tx))
+      (setf (helixel-action-payload      helixel--live-action)
+            (helixel-action-payload tx))
+      (setf (helixel-action-runner       helixel--live-action)
+            (helixel-action-runner tx))
+      (setf (helixel-action-pre-replay-fn helixel--live-action)
+            (or (helixel-action-pre-replay-fn tx) existing-pre))
+      (when-let* ((tx-mr (helixel-action-mark-region tx))
+                  ((consp tx-mr)))
+        ;; Release old markers, replace with tx's (which were created
+        ;; at the more precise record-time position).
+        (when (consp old-mr)
+          (when (markerp (car old-mr)) (set-marker (car old-mr) nil))
+          (when (markerp (cdr old-mr)) (set-marker (cdr old-mr) nil)))
+        (setf (helixel-action-mark-region helixel--live-action) tx-mr))
+      (when-let* ((d (helixel-action-display tx)))
+        (setf (helixel-action-display helixel--live-action) d)))))
 
 ;; ── Unified entry point: open event (commit prev, create new) ──
 
@@ -204,7 +229,7 @@ Does NOT commit the new event — caller is responsible for eventual commit."
                            (cons pm (copy-marker pm t)))
            :timestamp (float-time)
            :buffer (current-buffer)
-           :tx (when op (make-helixel-tx :op op)))
+           :op op)
           helixel--action-pos nil)))
 
 ;; ----------------------------------------------------------------------

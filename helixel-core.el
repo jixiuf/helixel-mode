@@ -602,49 +602,100 @@ then simply does not flip."
 
 
 ;; ----------------------------------------------------------------------
-;; Part 4 — helixel-tx: Replay Transaction
+;; Part 4 — helixel-action: unified replay + history event struct
 ;; ----------------------------------------------------------------------
 ;;
-;; Immutable, position-agnostic record of an editing operation.
-;; The `.' (dot-repeat) and `,' (selection-repeat) machinery
-;; consumes a tx and re-executes it at any position via its RUNNER.
+;; ONE struct serves two roles:
 ;;
-;; A tx carries ONLY the data needed for replay — no display string,
-;; no timestamp, no category.  Those live on `helixel-action' (Part 5).
+;;   1. Replay transaction — carries OP, SEL, PAYLOAD, RUNNER,
+;;      PRE-REPLAY-FN, MARK-REGION.  Position-agnostic; `.' / `,'
+;;      / chain / mc all replay via `helixel-tx-replay'.
+;;
+;;   2. History event — carries CATEGORY, SUBCAT, DISPLAY, TIMESTAMP,
+;;      BUFFER, BY-COMMAND.  Recorded in `helixel--event-ring' and
+;;      `helixel--global-jump-log'.
+;;
+;; Pure movement / search / state events leave OP/SEL/PAYLOAD/RUNNER
+;; nil; replay events leave CATEGORY/SUBCAT/TIMESTAMP/BUFFER nil when
+;; constructed via `helixel-tx-create' standalone.
+;;
+;; History (pre-v5): the codebase had TWO structs — `helixel-tx' (7
+;; slots) wrapped by `helixel-action' (8 slots, one of which was
+;; `:tx').  The split required 4 polymorphic accessors and a hidden
+;; `helixel-action--ensure-tx' mutator.  Merging removes ~100 LOC of
+;; bridge code; the 5 nil slots on pure-movement events cost ~40B per
+;; entry × ring cap = ~2KB / buffer (negligible).  See plan-v5.md.
 
-(cl-defstruct (helixel-tx (:conc-name helixel-tx-)
-                          (:copier helixel-tx--shallow-copy))
-  "Replayable editing transaction.  Carries everything needed to
-re-execute an edit at a different position with no I/O.  Immutable.
-Slots:
+(cl-defstruct (helixel-action (:conc-name helixel-action-)
+                              (:copier helixel-action--shallow-copy))
+  "Unified replay/history event.  See module commentary above.
+
+Replay slots (used by `.'/`,'/chain/mc):
   OP            — symbol: registered operator name (kill, change, ...)
-  SEL           — `helixel-sel' struct or nil
-  PAYLOAD       — plist of operator-specific data (:text :keys ...)
-  RUNNER        — function (TX) → nil, executes the edit at replay time
+                  or nil for pure movement/search/state events.
+  SEL           — `helixel-sel' struct or nil.
+  PAYLOAD       — plist of operator-specific data (:text :keys ...).
+  RUNNER        — function (EVENT) → nil, executes the edit at
+                  replay time.  nil for non-replayable events.
+  PRE-REPLAY-FN — optional function (EVENT) → nil, called BEFORE
+                  RUNNER at replay time.  Used by `:tx-runner' clauses
+                  on insert-entry commands (mc fake prepositioning).
+                  Single-write invariant: at most one per command.
   MARK-REGION   — cons (START . END) of two markers; the position
-                  where the tx was originally recorded.  Replay may
-                  or may not use this depending on the runner.
-  PRE-REPLAY-FN — optional function (TX) → nil, called BEFORE RUNNER
-                  at replay time.  Used by `:tx-runner' clauses on
-                  insert-entry commands (mc fake prepositioning).
-                  Single-write invariant: at most one per command."
+                  where the event was originally recorded.  Used
+                  for `;' jump targets AND by some runners.
+  DISPLAY       — string or function (EVENT) → string for history.
+
+History slots (used by ring + jump-log):
+  CATEGORY    — symbol: classification (edit search movement ...)
+  SUBCAT      — symbol: sub-classification (kill search word ...)
+  TIMESTAMP   — float from `float-time'.
+  BUFFER      — buffer object where the event occurred.
+  BY-COMMAND  — symbol of the command that produced this event."
+  ;; Replay slots
   op
   sel
   payload
   runner
+  pre-replay-fn
   mark-region
   display
-  pre-replay-fn)
+  ;; History slots
+  category
+  subcat
+  timestamp
+  buffer
+  by-command)
+
+;; ── Backwards-compatible aliases ──
+;;
+;; Old code (and tests) read/write via `helixel-tx-*' or check via
+;; `helixel-tx-p'.  Post-merge these are pure aliases.  External
+;; packages should migrate to `helixel-action-*' over time; this file
+;; will keep the aliases for the foreseeable future as zero-cost
+;; redirections.
+
+(defalias 'helixel-tx-p             #'helixel-action-p)
+(defalias 'make-helixel-tx          #'make-helixel-action)
+(defalias 'helixel-tx-op            #'helixel-action-op)
+(defalias 'helixel-tx-sel           #'helixel-action-sel)
+(defalias 'helixel-tx-payload       #'helixel-action-payload)
+(defalias 'helixel-tx-runner        #'helixel-action-runner)
+(defalias 'helixel-tx-pre-replay-fn #'helixel-action-pre-replay-fn)
+(defalias 'helixel-tx-mark-region   #'helixel-action-mark-region)
+(defalias 'helixel-tx-display       #'helixel-action-display)
 
 (defun helixel-tx-create (op sel-ctx &rest payload-kv)
-  "Create a `helixel-tx' for dot-repeat.
+  "Create a `helixel-action' carrying replay data for dot-repeat.
 OP is a registered operator symbol.
 SEL-CTX is a `helixel-sel' descriptor or nil.
 PAYLOAD-KV are keyword/value pairs.  Special keys:
-  :runner  FUNCTION       — stored in RUNNER slot (replay entry point)
-  :display STRING|FUNCTION — stored in DISPLAY slot (used by `;'/history)
+  :runner  FUNCTION       — stored in RUNNER slot.
+  :display STRING|FUNCTION — stored in DISPLAY slot.
 All other keys form the :payload plist.
-MARK-REGION is initialised from `point' at call time."
+MARK-REGION is initialised from `point' at call time.
+
+Name retained for compatibility — returns a `helixel-action'."
   (let (runner display-field rest)
     (while payload-kv
       (pcase (car payload-kv)
@@ -658,7 +709,7 @@ MARK-REGION is initialised from `point' at call time."
          (push (car payload-kv) rest)
          (push (cadr payload-kv) rest)
          (setq payload-kv (cddr payload-kv)))))
-    (make-helixel-tx
+    (make-helixel-action
      :op op
      :sel sel-ctx
      :payload (nreverse rest)
@@ -667,170 +718,50 @@ MARK-REGION is initialised from `point' at call time."
      :mark-region (let ((pm (point-marker)))
                     (cons pm (copy-marker pm t))))))
 
-(defun helixel-tx-copy (tx)
-  "Return a shallow copy of `helixel-tx' TX."
-  (helixel-tx--shallow-copy tx))
+(defun helixel-tx-copy (event)
+  "Return a shallow copy of EVENT (alias-friendly name)."
+  (helixel-action--shallow-copy event))
 
-(defun helixel-tx--deep-copy (tx)
-  "Deep-copy `helixel-tx' TX (markers + sel)."
-  (when (helixel-tx-p tx)
-    (let ((copy (helixel-tx--shallow-copy tx)))
-      (when-let* ((mr (helixel-tx-mark-region tx))
-                  ((consp mr)))
-        (setf (helixel-tx-mark-region copy)
-              (cons (copy-marker (car mr))
-                    (copy-marker (cdr mr) t))))
-      (when-let* ((s (helixel-tx-sel tx)))
-        (setf (helixel-tx-sel copy) (helixel-sel--copy s)))
-      copy)))
-
-(defun helixel-tx-with-payload (tx key value)
-  "Return a new `helixel-tx' equal to TX with :payload KEY set to VALUE.
-Does not mutate TX."
-  (let* ((payload (copy-sequence (helixel-tx-payload tx)))
+(defun helixel-tx-with-payload (event key value)
+  "Return a new event equal to EVENT with :payload KEY set to VALUE.
+Does not mutate EVENT."
+  (let* ((payload (copy-sequence (helixel-action-payload event)))
          (new-payload (plist-put payload key value))
-         (new-tx (helixel-tx-copy tx)))
-    (setf (helixel-tx-payload new-tx) new-payload)
-    new-tx))
+         (copy (helixel-action--shallow-copy event)))
+    (setf (helixel-action-payload copy) new-payload)
+    copy))
 
-
-;; ----------------------------------------------------------------------
-;; Part 5 — helixel-action: History/Ring Event Struct
-;; ----------------------------------------------------------------------
-;;
-;; Lightweight event recorded in the event ring (`;' cycling, history
-;; selection) and jump log (C-o / C-i).  Carries display metadata,
-;; classification, and an OPTIONAL `helixel-tx' for edit actions.
-;; Pure movement / search / state actions have :tx = nil.
-
-(cl-defstruct (helixel-action (:conc-name helixel-action-)
-                              (:copier helixel-action--shallow-copy))
-  "Immutable history event — serves `;' jumping, ring browsing, and
-the global jump log.  For edits, carries the replay TX; for pure
-movement/search/state events, TX is nil.
-Slots:
-  CATEGORY    — symbol: classification (edit search movement ...)
-  SUBCAT      — symbol: sub-classification (kill search word ...)
-  MARK-REGION — cons (START . END) of two markers; START is the
-                 `;' jump target; degenerate (= point . point) when
-                 no explicit region is set by the command
-  DISPLAY     — string or function (action) → string for history
-  TIMESTAMP   — float from `float-time'
-  BUFFER      — buffer object where the event occurred
-  BY-COMMAND  — symbol of `this-command' at commit time.  Used by
-                 the multi-cursor dispatcher to detect that an
-                 edit was produced by the just-completed command
-                 and therefore should be replayed at each fake.
-  TX          — `helixel-tx' for edit actions, nil otherwise.
-                 May carry a `:pre-replay-fn' payload entry for
-                 commands that need to position point before the
-                 main runner runs (e.g. mc fake replay of
-                 insert-entry commands).  See
-                 `helixel-define-command's `:tx-runner' clause."
-  category
-  subcat
-  mark-region
-  display
-  timestamp
-  buffer
-  by-command
-  tx)
-
-(defsubst helixel-action-op (obj)
-  "Return the op of OBJ.  OBJ may be a `helixel-tx' or `helixel-action'.
-For an action, returns the op of its embedded tx (or nil)."
-  (cond ((helixel-tx-p obj) (helixel-tx-op obj))
-        ((and (helixel-action-p obj) (helixel-action-tx obj))
-         (helixel-tx-op (helixel-action-tx obj)))))
-
-(defsubst helixel-action-sel (obj)
-  "Return the sel of OBJ.  Polymorphic on `helixel-tx'/`helixel-action'."
-  (cond ((helixel-tx-p obj) (helixel-tx-sel obj))
-        ((and (helixel-action-p obj) (helixel-action-tx obj))
-         (helixel-tx-sel (helixel-action-tx obj)))))
-
-(defsubst helixel-action-payload (obj)
-  "Return the payload of OBJ.  Polymorphic on `helixel-tx'/`helixel-action'."
-  (cond ((helixel-tx-p obj) (helixel-tx-payload obj))
-        ((and (helixel-action-p obj) (helixel-action-tx obj))
-         (helixel-tx-payload (helixel-action-tx obj)))))
-
-(defsubst helixel-action-runner (obj)
-  "Return the runner of OBJ.  Polymorphic on `helixel-tx'/`helixel-action'."
-  (cond ((helixel-tx-p obj) (helixel-tx-runner obj))
-        ((and (helixel-action-p obj) (helixel-action-tx obj))
-         (helixel-tx-runner (helixel-action-tx obj)))))
-
-(defun helixel-action--ensure-tx (action)
-  "Ensure ACTION has an embedded `helixel-tx'; return it."
-  (or (helixel-action-tx action)
-      (setf (helixel-action-tx action) (make-helixel-tx))))
-
-(gv-define-setter helixel-action-op (value obj)
-  `(let ((--o-- ,obj))
-     (cond ((helixel-tx-p --o--) (setf (helixel-tx-op --o--) ,value))
-           (t (setf (helixel-tx-op (helixel-action--ensure-tx --o--))
-                    ,value)))))
-(gv-define-setter helixel-action-sel (value obj)
-  `(let ((--o-- ,obj))
-     (cond ((helixel-tx-p --o--) (setf (helixel-tx-sel --o--) ,value))
-           (t (setf (helixel-tx-sel (helixel-action--ensure-tx --o--))
-                    ,value)))))
-(gv-define-setter helixel-action-payload (value obj)
-  `(let ((--o-- ,obj))
-     (cond ((helixel-tx-p --o--) (setf (helixel-tx-payload --o--) ,value))
-           (t (setf (helixel-tx-payload (helixel-action--ensure-tx --o--))
-                    ,value)))))
-(gv-define-setter helixel-action-runner (value obj)
-  `(let ((--o-- ,obj))
-     (cond ((helixel-tx-p --o--) (setf (helixel-tx-runner --o--) ,value))
-           (t (setf (helixel-tx-runner (helixel-action--ensure-tx --o--))
-                    ,value)))))
-
-;; Transparent payload helpers (operate on tx OR action).
+;; Transparent payload helpers.
 
 (defsubst helixel-action-payload-get (obj key)
-  "Return KEY from OBJ's payload plist (polymorphic), or nil."
+  "Return KEY from OBJ's payload plist, or nil."
   (plist-get (helixel-action-payload obj) key))
 
 ;; ── Convenience accessors for common payload keys ──
 ;;
-;; A handful of payload keys are shared across many prompted
-;; commands: find-char (:char :type :dir), replace-char (:char),
-;; surround (:char).  These thin wrappers replace raw
-;; `helixel-action-payload-get' / `plist-get' call sites for
-;; consistency with the `helixel-sel-{kind}-{key}' accessor family
-;; in part 4 of this file.
-;;
-;; Each accepts EITHER a `helixel-tx' or a `helixel-action' (via
-;; polymorphic `helixel-action-payload-get').
+;; A handful of payload keys are shared across many prompted commands:
+;; find-char (:char :type :dir), replace-char (:char), surround (:char).
+;; These thin wrappers replace raw `plist-get' call sites.
 
 (defsubst helixel-tx-char (obj)
-  "Return the :char payload from OBJ (tx or action).
-Used by find-char, replace-char, and surround commands whose
-prompted character lives in the tx payload."
+  "Return the :char payload from OBJ.
+Used by find-char, replace-char, and surround commands."
   (helixel-action-payload-get obj :char)) ; ctx-lint-ok
 
 (defsubst helixel-tx-type (obj)
-  "Return the :type payload from OBJ (tx or action).
+  "Return the :type payload from OBJ.
 Used by find-char (next | till)."
   (helixel-action-payload-get obj :type)) ; ctx-lint-ok
 
 (defsubst helixel-tx-dir (obj)
-  "Return the :dir payload from OBJ (tx or action).
+  "Return the :dir payload from OBJ.
 Used by find-char (forward | backward)."
   (helixel-action-payload-get obj :dir)) ; ctx-lint-ok
 
-;; ── Mark-region: also polymorphic ──
-;; helixel-action-mark-region is the struct slot accessor on actions.
-;; For txs, callers should use helixel-tx-mark-region directly; we
-;; do NOT shadow the struct accessor here (gv conflicts).
-
 
 (defun helixel-action--copy (event)
-  "Deep-copy `helixel-action' struct EVENT.
-Copies marker (via `copy-marker'), and any attached TX (via
-`helixel-tx--deep-copy') so the copy is fully independent."
+  "Deep-copy EVENT — copies markers and the sel ctx.
+The result is fully independent of EVENT for ring storage."
   (when (helixel-action-p event)
     (let ((copy (helixel-action--shallow-copy event)))
       (when-let* ((mr (helixel-action-mark-region event))
@@ -838,45 +769,46 @@ Copies marker (via `copy-marker'), and any attached TX (via
         (setf (helixel-action-mark-region copy)
               (cons (copy-marker (car mr))
                     (copy-marker (cdr mr) t))))
-      (when-let* ((tx (helixel-action-tx event)))
-        (setf (helixel-action-tx copy) (helixel-tx--deep-copy tx)))
+      (when-let* ((s (helixel-action-sel event)))
+        (setf (helixel-action-sel copy) (helixel-sel--copy s)))
       copy)))
 
 (defun helixel-action--same-content-p (e1 e2)
   "Return non-nil if E1 and E2 have identical key content.
-Compares category, subcat, marker position, and — if both carry
-TXs — the TX's op/sel/payload.
-Two events at different positions are never the same."
+Compares category, subcat, marker position, and — if both carry an
+op — op/sel/payload.  Two events at different positions are never
+the same."
   (if (or (null e1) (null e2))
       (eq e1 e2)
-    (let ((tx1 (helixel-action-tx e1))
-          (tx2 (helixel-action-tx e2)))
+    (let ((op1 (helixel-action-op e1))
+          (op2 (helixel-action-op e2)))
       (and (eq (helixel-action-category e1) (helixel-action-category e2))
            (eq (helixel-action-subcat e1) (helixel-action-subcat e2))
            (= (marker-position (car (helixel-action-mark-region e1)))
               (marker-position (car (helixel-action-mark-region e2))))
-           ;; If exactly one side has a tx, they differ.
-           (eq (and tx1 t) (and tx2 t))
-           ;; If both have txs, compare op/sel/payload.
-           (or (not tx1)
-               (and (eq (helixel-tx-op tx1) (helixel-tx-op tx2))
-                    (helixel-sel-equal-p (helixel-tx-sel tx1)
-                                         (helixel-tx-sel tx2))
-                    (equal (helixel-tx-payload tx1)
-                           (helixel-tx-payload tx2))))))))
+           ;; If exactly one side has an op, they differ.
+           (eq (and op1 t) (and op2 t))
+           ;; If both have no replay data (no op, no payload, no sel),
+           ;; they're same.  But if one has payload and the other
+           ;; doesn't, they differ — the payload distinguishes them.
+           (or (and (not op1) (not (helixel-action-payload e1))
+                    (not (helixel-action-sel e1))
+                    (not (helixel-action-payload e2))
+                    (not (helixel-action-sel e2)))
+               (and (eq op1 op2)
+                    (helixel-sel-equal-p (helixel-action-sel e1)
+                                         (helixel-action-sel e2))
+                    (equal (helixel-action-payload e1)
+                           (helixel-action-payload e2))))))))
 
 (defun helixel-action-format (event)
-  "Return display string for EVENT (a `helixel-action' or `helixel-tx').
-Format: OP[.SEL][xCOUNT].  Action's DISPLAY takes precedence;
-falls through to TX's DISPLAY, then to `helixel--op-display'."
-  (let* ((tx (cond ((helixel-tx-p event) event)
-                   (t (helixel-action-tx event))))
-         (op (and tx (helixel-tx-op tx)))
-         (sel (and tx (helixel-tx-sel tx)))
-         (op-str (or (and (helixel-action-p event)
-                          (helixel-action-display event))
-                     (and tx (helixel-tx-display tx))
-                     (and op (helixel--op-display op tx))))
+  "Return display string for EVENT.
+Format: OP[.SEL][xCOUNT].  EVENT's :display takes precedence;
+falls through to `helixel--op-display'."
+  (let* ((op (helixel-action-op event))
+         (sel (helixel-action-sel event))
+         (op-str (or (helixel-action-display event)
+                     (and op (helixel--op-display op event))))
          (sel-str (when sel (helixel-sel-call-display sel)))
          (count (and sel (helixel-sel-count sel))))
     (concat op-str
@@ -1134,8 +1066,8 @@ operator commands that need to inject replay metadata (e.g.
 `:keys', `:replacement') into the most recent tx after it was
 already committed."
   (when (and helixel--last-tx (helixel-tx-p helixel--last-tx))
-    (setf (helixel-tx-payload helixel--last-tx)
-          (helixel-tx-payload new-tx))))
+    (setf (helixel-action-payload helixel--last-tx)
+          (helixel-action-payload new-tx))))
 
 
 ;; ----------------------------------------------------------------------

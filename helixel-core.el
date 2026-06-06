@@ -637,9 +637,10 @@ Replay slots (used by `.'/`,'/chain/mc):
   PAYLOAD       — plist of operator-specific data (:text :keys ...).
   RUNNER        — function (EVENT) → nil, executes the edit at
                   replay time.  nil for non-replayable events.
-  PRE-REPLAY-FN — optional function (EVENT) → nil, called BEFORE
+  PRE-REPLAY-FN — DEPRECATED: use PREPOSITION instead.
+  PREPOSITION — optional function (EVENT) → nil, called BEFORE
                   RUNNER at replay time.  Used by `:tx-runner' clauses
-                  on insert-entry commands (mc fake prepositioning).
+                  on insert-entry commands (mc fake positioning).
                   Single-write invariant: at most one per command.
   MARK-REGION   — cons (START . END) of two markers; the position
                   where the event was originally recorded.  Used
@@ -657,7 +658,7 @@ History slots (used by ring + jump-log):
   sel
   payload
   runner
-  pre-replay-fn
+  preposition
   mark-region
   display
   ;; History slots
@@ -681,7 +682,8 @@ History slots (used by ring + jump-log):
 (defalias 'helixel-tx-sel           #'helixel-action-sel)
 (defalias 'helixel-tx-payload       #'helixel-action-payload)
 (defalias 'helixel-tx-runner        #'helixel-action-runner)
-(defalias 'helixel-tx-pre-replay-fn #'helixel-action-pre-replay-fn)
+(defalias 'helixel-tx-pre-replay-fn #'helixel-action-preposition)
+(defalias 'helixel-action-pre-replay-fn #'helixel-action-preposition)
 (defalias 'helixel-tx-mark-region   #'helixel-action-mark-region)
 (defalias 'helixel-tx-display       #'helixel-action-display)
 
@@ -975,7 +977,7 @@ inserts text).  Then call the :runner stored in TX.  If :runner is
 missing, falls back to the operator registry.  If neither runner nor
 op resolves but a pre-replay-fn ran, TX is treated as a pure
 positioner (used by movement commands at fake cursors)."
-  (when-let* ((pre (helixel-tx-pre-replay-fn tx)))
+  (when-let* ((pre (helixel-action-preposition tx)))
     (funcall pre tx))
   (when-let* ((runner (or (helixel-tx-runner tx)
                           (and (helixel-tx-op tx)

@@ -122,11 +122,11 @@ BODY is the command's business logic."
                    ;; Single-write invariant: cl-assert no sibling
                    ;; :tx-runner has set this slot already.
                    (cl-assert
-                    (null (helixel-action-pre-replay-fn
+                    (null (helixel-action-preposition
                            helixel--live-action))
                     nil
-                    "helixel: pre-replay-fn already set (multiple :tx-runner?)")
-                   (setf (helixel-action-pre-replay-fn
+                    "helixel: preposition already set (multiple :tx-runner?)")
+                   (setf (helixel-action-preposition
                           helixel--live-action)
                          ,tx-runner)))))
          ;; ── Highlight clearing ──

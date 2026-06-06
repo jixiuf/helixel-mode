@@ -93,15 +93,15 @@ Otherwise `.' twice in a row would produce different second results."
       (should (eq helixel--last-tx tx))
       (should (eq (helixel-tx-op tx) 'change)))))
 
-;; ── INV-REPEAT-4: pre-replay-fn runs before runner ──
+;; ── INV-REPEAT-4: preposition runs before runner ──
 
 (ert-deftest helixel-test-inv-repeat-pre-replay-before-runner ()
-  "INV: when both present, pre-replay-fn fires strictly before runner."
+  "INV: when both present, preposition fires strictly before runner."
   (helixel-repeat-inv-with-buffer "abc\n"
     (let* ((seq nil)
            (tx (make-helixel-tx
                 :op 'foo
-                :pre-replay-fn (lambda (_tx) (push 'pre seq))
+                :preposition (lambda (_tx) (push 'pre seq))
                 :runner (lambda (_tx) (push 'run seq)))))
       (helixel-tx-replay tx)
       ;; pushed in order pre then run; head of seq is 'run.

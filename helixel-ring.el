@@ -175,7 +175,7 @@ Preserves any existing `pre-replay-fn' on the live action unless TX
 provides its own (used by insert-entry commands whose `:tx-runner'
 attaches a prepos function before `record-action' runs)."
   (when (and helixel--live-action (helixel-action-p tx))
-    (let ((existing-pre (helixel-action-pre-replay-fn helixel--live-action))
+    (let ((existing-pre (helixel-action-preposition helixel--live-action))
           (old-mr (helixel-action-mark-region helixel--live-action)))
       (setf (helixel-action-op           helixel--live-action)
             (helixel-action-op tx))
@@ -185,8 +185,8 @@ attaches a prepos function before `record-action' runs)."
             (helixel-action-payload tx))
       (setf (helixel-action-runner       helixel--live-action)
             (helixel-action-runner tx))
-      (setf (helixel-action-pre-replay-fn helixel--live-action)
-            (or (helixel-action-pre-replay-fn tx) existing-pre))
+      (setf (helixel-action-preposition helixel--live-action)
+            (or (helixel-action-preposition tx) existing-pre))
       (when-let* ((tx-mr (helixel-action-mark-region tx))
                   ((consp tx-mr)))
         ;; Release old markers, replace with tx's (which were created

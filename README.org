@@ -285,7 +285,9 @@ Structure sub-keys (also on ~[~ / ~]~):
   | search    | search     | / ? n N                  |
   | find-char | next       | f F                      |
   |           | till       | t T                      |
-  | edit      | change     | c d                      |
+  | edit      | change     | c                        |
+  |           | kill       | d                        |
+  |           | copy       | y                        |
   |           | case       | ~                        |
   |           | comment    |                          |
   |           | swap       |                          |
@@ -300,6 +302,9 @@ stored in the event's =:mark-region=.  The first ~;~ after a paste or
 replace jumps back to the edit spot and marks the full span of the
 pasted/replaced text, just like after a word or pair movement.
 Subsequent ~;~ presses cycle through older session starts as usual.
+Note: the default =helixel-action-cycle-categories= includes only the
+paste/replace/yank-pop edit subcats; kill, change and others are
+excluded by default (add = (edit . kill)= etc. to include them).
 
 - ~%~ — jump to matching bracket/paren/quote/tag/block.
 

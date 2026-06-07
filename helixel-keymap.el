@@ -331,7 +331,7 @@ e.g. \"helixel-next-%s-end\"."
 (define-key helixel-normal-map "\"" #'helixel-select-register)
 (define-key helixel-normal-map "x" #'helixel-select-line)
 (define-key helixel-normal-map "X" #'helixel-select-line-up)
-(define-key helixel-normal-map "v" #'helixel-backward-word-end)
+(define-key helixel-normal-map "v" #'helixel-begin-selection)
 (define-key helixel-normal-map "\C-v" #'helixel-select-rectangle)
 (define-key helixel-normal-map "u" #'undo)
 (define-key helixel-normal-map "U" #'undo-redo)

@@ -173,4 +173,88 @@
     (helixel-join-lines)
     (should (string= (buffer-string) "hello\nworld"))))
 
+(ert-deftest helixel-test-join-lines-region-full-lines ()
+  "J on a region joining 3 full lines."
+  (helixel-test-with-buffer "one\ntwo\nthree"
+    (set-mark 14)              ;; end of last line
+    (helixel-join-lines)
+    (should (string= (buffer-string) "one two three"))))
+
+(ert-deftest helixel-test-join-lines-region-partial ()
+  "J on a region that partially spans lines."
+  (helixel-test-with-buffer "aa\nbb\ncc\ndd"
+    (goto-char 2)              ;; mid first line
+    (set-mark 8)               ;; mid third line (pos 8 is second 'c')
+    (helixel-join-lines)
+    (should (string= (buffer-string) "aa bb cc\ndd"))))
+
+(ert-deftest helixel-test-join-lines-region-end-bolp ()
+  "J on a region where end is at bol of the following line."
+  (helixel-test-with-buffer "one\ntwo\nthree\nfour"
+    (set-mark 14)              ;; bol of "four"
+    (helixel-join-lines)
+    (should (string= (buffer-string) "one two three\nfour"))))
+
+(ert-deftest helixel-test-join-lines-region-dot-repeat ()
+  "J on a region stores line count for dot-repeat."
+  (helixel-test-with-buffer "a\nb\nc\nd\ne"
+    (set-mark 6)               ;; select a,b,c (3 lines)
+    (helixel-join-lines)
+    (should (string= (buffer-string) "a b c\nd\ne"))
+    (helixel-repeat-edit)      ;; joins next 3 lines (d,e + trailing)
+    (should (string= (buffer-string) "a b c d e"))))
+
+(ert-deftest helixel-test-join-lines-select-line-dot-repeat ()
+  "xxxxJ j . joins from the new cursor position using stored count.
+Regression: pending line selection from `x' (select-line) leaked
+into the join-lines tx, causing dot-repeat to recreate a line
+selection before joining, which interfered with the runner."
+  (helixel-test-with-buffer
+   "hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello"
+    (helixel-select-line)      ;; x
+    (helixel-select-line)      ;; x
+    (helixel-select-line)      ;; x
+    (helixel-select-line)      ;; x — select 4 lines
+    (helixel-join-lines)       ;; J
+    (should (string= (buffer-string)
+                     "hello hello hello hello\nhello\nhello\nhello\nhello\nhello"))
+    (helixel-next-line)        ;; j — move one line down
+    (helixel-repeat-edit)      ;; . — join 4 lines from new position
+    (should (string= (buffer-string)
+                     "hello hello hello hello\nhello hello hello hello\nhello"))))
+
+(ert-deftest helixel-test-join-lines-c-u-region-no-space ()
+  "C-u J on a region joins lines without adding spaces."
+  (helixel-test-with-buffer "one\ntwo\nthree"
+    (set-mark 14)              ;; end of last line
+    (let ((current-prefix-arg '(4)))
+      (call-interactively #'helixel-join-lines))
+    (should (string= (buffer-string) "onetwothree"))))
+
+(ert-deftest helixel-test-join-lines-c-u-region-whitespace ()
+  "C-u J on a region strips leading whitespace but adds no space."
+  (helixel-test-with-buffer "hello\n  world\n  !"
+    (set-mark 17)              ;; end of last line
+    (let ((current-prefix-arg '(4)))
+      (call-interactively #'helixel-join-lines))
+    (should (string= (buffer-string) "helloworld!"))))
+
+(ert-deftest helixel-test-join-lines-c-u-region-dot-repeat ()
+  "C-u J on a region, then . repeats without space."
+  (helixel-test-with-buffer "a\nb\nc\nd\ne"
+    (set-mark 6)               ;; select a,b,c (3 lines)
+    (let ((current-prefix-arg '(4)))
+      (call-interactively #'helixel-join-lines))
+    (should (string= (buffer-string) "abc\nd\ne"))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "abcde"))))
+
 ;;; helixel-test-operator.el ends here

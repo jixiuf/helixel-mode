@@ -775,19 +775,49 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 
 ;; ── Join lines ──
 
+(defun helixel--join-line-no-space ()
+  "Join current line with the next, stripping whitespace but adding NO space.
+Like `join-line' but replaces `fixup-whitespace' with
+`delete-horizontal-space' so no space is inserted at the join point."
+  (end-of-line)
+  (unless (eobp)
+    (delete-char 1)            ;; delete the newline
+    (delete-horizontal-space))) ;; delete spaces/tabs, don't add space
+
 (helixel-register-op join-lines :display "J" :moves-point-p t
   :runner (lambda (tx)
-            (let ((n (or (helixel-action-payload-get tx :count) 2)))
+            (let ((n (or (helixel-action-payload-get tx :count) 2))
+                  (no-space (helixel-action-payload-get tx :no-space)))
               (dotimes (_ (1- n))
-                (join-line 1)))))
+                (if no-space
+                    (helixel--join-line-no-space)
+                  (join-line 1))))))
 
 (helixel-define-command helixel-join-lines
     (:category edit :subcat join-lines :params (&optional count))
   (interactive "p")
-  (let ((n (max (or count 1) 2)))
-    (helixel--record-action 'join-lines :count n)
+  ;; Discard any pending selection — join-lines only needs the :count,
+  ;; not the selection recreation.  Keeping the selection would cause
+  ;; dot-repeat to recreate a line selection from the current position
+  ;; before joining, which interferes with the runner's own join logic.
+  (helixel--sel-pop)
+  (let* ((no-space (and (use-region-p) (consp current-prefix-arg)))
+         (n (if (use-region-p)
+                ;; Region active: join all lines spanned by selection.
+                (save-excursion
+                  (let ((beg (region-beginning))
+                        (end (region-end)))
+                    (goto-char end)
+                    (1+ (- (line-number-at-pos (if (bolp) (1- end) end))
+                           (line-number-at-pos beg)))))
+              (max (or count 1) 2))))
+    (helixel--record-action 'join-lines :count n :no-space no-space)
+    (when (use-region-p)
+      (goto-char (region-beginning)))
     (dotimes (_ (1- n))
-      (join-line 1))
+      (if no-space
+          (helixel--join-line-no-space)
+        (join-line 1)))
     (helixel--clear-data)))
 
 ;;; Line-wise helpers

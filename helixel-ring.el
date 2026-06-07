@@ -49,7 +49,7 @@
 
 (defcustom helixel-action-cycle-categories
   '(movement textobj search find-char
-    (edit . paste-after) (edit . paste-before)
+    (edit . copy) (edit . paste-after) (edit . paste-before)
     (edit . replace) (edit . yank-pop))
   "Event categories that `;' (`helixel-action-cycle') navigates.
 Each element is either a category symbol (matches all subcats)

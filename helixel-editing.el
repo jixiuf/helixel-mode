@@ -581,7 +581,6 @@ instead of `insert-for-yank' — `helixel-replace' passes
 
 (helixel-define-operator helixel-kill-ring-save
     (:op copy :display "y" :moves-point-p nil)
-  (helixel--record-action 'copy)
   (when (use-region-p)
     (let ((swap-source
            (list :beg (copy-marker (region-beginning))
@@ -608,8 +607,11 @@ instead of `insert-for-yank' — `helixel-replace' passes
          (propertize
           (filter-buffer-substring (region-beginning) (region-end))
           'helixel-swap-source swap-source)
-         :copy)))))
+         :copy))))
+    ;; Store the copied region as mark-region for ; re-select.
+    (helixel--set-mark-region (cons (region-beginning) (region-end))))
   (helixel--register-consume)
+  (helixel--record-action 'copy)
   (helixel--clear-data))
 
 ;; ── Yank ──

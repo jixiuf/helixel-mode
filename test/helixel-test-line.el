@@ -625,7 +625,14 @@ paste line-wise instead of char-wise."
            (kill-ring-yank-pointer kill-ring)
            (helixel--yank-pop-bounds nil))
       (setq last-command 'helixel-replace)
-      (should-error (helixel-yank-pop)))))
+      ;; `yank-pop' behavior differs across Emacs versions:
+      ;; Emacs <30 signals user-error when last-command is not
+      ;; `yank'; Emacs 30+ prompts via `yank-from-kill-ring'.
+      ;; Mock it so the test is version-independent.
+      (cl-letf (((symbol-function 'yank-pop)
+                 (lambda (&optional _)
+                   (user-error "Previous command was not a yank"))))
+        (should-error (helixel-yank-pop))))))
 
 (ert-deftest helixel-test-yank-pop-with-arg ()
   "Test yank-pop with numeric argument skips kills."

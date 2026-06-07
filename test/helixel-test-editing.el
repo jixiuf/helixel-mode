@@ -463,9 +463,9 @@ deduplication is against the ring front by content."
           this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
     ;; Edit should be accessible via event ring
-    (should helixel--event-ring)
+    (should helixel--action-ring)
     (should helixel--last-tx)
-    (should (helixel-action-p (car helixel--event-ring)))))
+    (should (helixel-action-p (car helixel--action-ring)))))
 
 (ert-deftest helixel-test-edit-display ()
   "`helixel-action-format' formats op + sel + payload hints."
@@ -531,9 +531,9 @@ deduplication is against the ring front by content."
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill-thing-at-point)
     (helixel-kill-thing-at-point)
-    (let ((ring-len (length helixel--event-ring)))
+    (let ((ring-len (length helixel--action-ring)))
       (helixel-repeat-edit)
-      (should (= (length helixel--event-ring) ring-len)))))
+      (should (= (length helixel--action-ring) ring-len)))))
 
 (ert-deftest helixel-test-repeat-invariant-insert-after-records ()
   "Test helixel-insert-after (a) records insert-text."

@@ -525,7 +525,7 @@ Second paragraph.")
 (ert-deftest helixel-test-textobj-session-start ()
   "Test text-object command starts a live event."
   (helixel-test-with-buffer "hello world"
-    (setq helixel--event-ring nil helixel--live-action nil helixel--action-pos nil
+    (setq helixel--action-ring nil helixel--live-action nil helixel--action-pos nil
           last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (should helixel--live-action)
@@ -535,7 +535,7 @@ Second paragraph.")
 (ert-deftest helixel-test-textobj-session-same-family-continues ()
   "Test same-category text-object commands continue action."
   (helixel-test-with-buffer "(hello) (world)"
-    (setq helixel--event-ring nil helixel--live-action nil helixel--action-pos nil
+    (setq helixel--action-ring nil helixel--live-action nil helixel--action-pos nil
           last-command nil this-command 'helixel-mark-inner-paren)
     (goto-char 2)
     (helixel-mark-inner-paren)
@@ -549,17 +549,17 @@ Second paragraph.")
 (ert-deftest helixel-test-textobj-session-different-family-breaks ()
   "Test different-family textobj commits old event to ring."
   (helixel-test-with-buffer "hello (world)"
-    (setq helixel--event-ring nil helixel--live-action nil helixel--action-pos nil
+    (setq helixel--action-ring nil helixel--live-action nil helixel--action-pos nil
           last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word this-command 'helixel-mark-inner-paren)
     (helixel-mark-inner-paren)
-    (should (= (length helixel--event-ring) 1))
+    (should (= (length helixel--action-ring) 1))
     (should (eq (helixel-action-subcat helixel--live-action) 'pair))))
 
 (ert-deftest helixel-test-textobj-session-type-property ()
   "Test textobj actions have correct category and subcat."
-  (let (helixel--event-ring helixel--live-action helixel--action-pos)
+  (let (helixel--action-ring helixel--live-action helixel--action-pos)
     (helixel-test-with-buffer "hello world"
       (setq last-command nil this-command 'helixel-mark-inner-word)
       (helixel-mark-inner-word)

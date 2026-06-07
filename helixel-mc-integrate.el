@@ -330,7 +330,7 @@ of commands from modules `mc-integrate' itself depends on."
 ;; ── Action cycle (`;') and jump nav (C-o / C-i)
 ;;
 ;; These commands navigate GLOBAL state:
-;;   `helixel--action-pos' + `helixel--event-ring' for `;'
+;;   `helixel--action-pos' + `helixel--action-ring' for `;'
 ;;   `helixel--jump-pos'   + `helixel--global-jump-log' for C-o/C-i
 ;; They are not per-cursor: broadcasting them N times advances the
 ;; same global ring N times, with no useful effect on fakes.
@@ -348,7 +348,7 @@ of commands from modules `mc-integrate' itself depends on."
 
 ;; ── `;' action-cycle at fakes is handled by the per-fake event
 ;; ring (see `helixel-mc--cursor-vars' registration of
-;; `helixel--event-ring' / `--live-edit' / `--action-pos').
+;; `helixel--action-ring' / `--live-edit' / `--action-pos').
 ;; When `;' broadcasts, each fake runs the SAME `helixel-action--
 ;; cycle-show' code path against its OWN ring — the first `;'
 ;; press selects the traversed span, subsequent presses cycle

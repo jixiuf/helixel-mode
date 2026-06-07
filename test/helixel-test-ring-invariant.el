@@ -32,7 +32,7 @@
      (transient-mark-mode 1)
      (insert ,content)
      (goto-char (point-min))
-     (setq helixel--event-ring nil)
+     (setq helixel--action-ring nil)
      (setq helixel--live-action nil)
      (setq helixel--action-pos nil)
      ,@body))
@@ -58,11 +58,11 @@
     (setq helixel--live-action
           (helixel-ring-inv--make-event 'movement 'word 1))
     (helixel-action-commit)
-    (let ((after-first (length helixel--event-ring)))
+    (let ((after-first (length helixel--action-ring)))
       (setq helixel--live-action
             (helixel-ring-inv--make-event 'movement 'word 1))
       (helixel-action-commit)
-      (should (= (length helixel--event-ring) after-first)))))
+      (should (= (length helixel--action-ring) after-first)))))
 
 ;; ── INV-RING-2: cap respected ──
 
@@ -74,7 +74,7 @@
         (setq helixel--live-action
               (helixel-ring-inv--make-event 'movement 'word (1+ i)))
         (helixel-action-commit))
-      (should (<= (length helixel--event-ring) 10)))))
+      (should (<= (length helixel--action-ring) 10)))))
 
 ;; ── INV-RING-3: cap releases markers of evicted entries ──
 
@@ -88,14 +88,14 @@
       (helixel-action-commit)
       ;; Capture pointer to the marker of the entry that WILL be evicted.
       (setq oldest-marker
-            (car (helixel-action-mark-region (car helixel--event-ring))))
+            (car (helixel-action-mark-region (car helixel--action-ring))))
       (should (marker-position oldest-marker))
       ;; Push enough to force eviction.
       (dotimes (i 8)
         (setq helixel--live-action
               (helixel-ring-inv--make-event 'movement 'word (+ 2 i)))
         (helixel-action-commit))
-      (should (= (length helixel--event-ring) 3))
+      (should (= (length helixel--action-ring) 3))
       ;; Original marker has been nulled (released).
       (should-not (marker-position oldest-marker)))))
 
@@ -112,7 +112,7 @@
         (helixel-action-commit)
         (should received)
         ;; Received entry is the same as the one now on the ring front.
-        (should (eq received (car helixel--event-ring)))))))
+        (should (eq received (car helixel--action-ring)))))))
 
 ;; ── INV-RING-5: by-command auto-stamped from this-command if not set ──
 
@@ -125,7 +125,7 @@
       ;; ensure by-command is nil so the fallback path runs
       (setf (helixel-action-by-command helixel--live-action) nil)
       (helixel-action-commit)
-      (should (eq (helixel-action-by-command (car helixel--event-ring))
+      (should (eq (helixel-action-by-command (car helixel--action-ring))
                   'some-test-command)))))
 
 ;; ── INV-RING-6: jump-log entry is lightweight (no embedded tx) ──

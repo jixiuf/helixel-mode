@@ -5,7 +5,7 @@
 | File | Role |
 |------|------|
 | `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
-| `helixel-ring.el` | **Event storage + history navigation**: `helixel--event-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
+| `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
 | `helixel-insert-record.el` | Insert-mode recording.  Phase 4.4: segment-based capture (after-change-functions per command) — each insert-mode command becomes either `(:keys VEC)` (no buffer change — motion, etc.) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replays text segments verbatim without re-running `post-self-insert-hook' so `electric-pair-mode' / completion-preview / snippet expansion don't double-insert.  Replay helper `helixel--execute-keys' accepts both segment lists and legacy raw key vectors. |
 
@@ -317,7 +317,7 @@ single `undo-amalgamate-change-group`.  `with-each-cursor` also binds
 restoring CS sets globals' `mark-active' to the cursor's stored value.
 
 ### `;' multi-cursor: per-fake event ring
-Each fake owns its own `helixel--event-ring' / `--live-action' /
+Each fake owns its own `helixel--action-ring' / `--live-action' /
 `--action-pos' (slots of its `helixel-pc-state').  When `;'
 broadcasts, each
 fake runs `helixel-action--cycle-show' against its OWN ring —

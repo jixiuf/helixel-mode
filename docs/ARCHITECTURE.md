@@ -65,7 +65,7 @@ Access: `(helixel--op-runner 'kill)`, `(helixel--op-moves-point-p 'insert-text)`
 
 | Ring | Scope | Purpose | Key |
 |------|-------|---------|-----|
-| `helixel--event-ring` | buffer-local | `;` cycling, dot-repeat picker | C-g |
+| `helixel--action-ring` | buffer-local | `;` cycling, dot-repeat picker | C-g |
 | `helixel--jump-list` | global | C-o/C-i jump navigation | C-o |
 
 Both store `helixel-action` structs. The jump-list stores a subset of ring events (filtered by `helixel-jump-categories`).
@@ -77,7 +77,7 @@ Editing command
   → helixel--record-action (creates an event tx, stores as helixel--last-tx)
   → helixel-action-commit
     → stamp :by-command
-    → push to helixel--event-ring (dedup, cap)
+    → push to helixel--action-ring (dedup, cap)
     → push to helixel--jump-list (filtered)
     → run helixel-action-commit-hook (entry)   ; chain accumulator
 ```
@@ -251,7 +251,7 @@ the same `helixel-tx-replay` path as `.`-repeat on a single fake.
 
 ### `;` Cycling
 
-Uses `helixel--event-ring`. Group-skipping: consecutive entries with same (category, subcat) form a group; `;` jumps to the oldest entry of each group.
+Uses `helixel--action-ring`. Group-skipping: consecutive entries with same (category, subcat) form a group; `;` jumps to the oldest entry of each group.
 
 ### C-o/C-i Jump Navigation
 

@@ -53,7 +53,7 @@
 (defvar helixel--pending-sel)             ; from `helixel-core'
 (defvar helixel--last-tx)             ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
-(defvar helixel--event-ring)              ; from `helixel-ring'
+(defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
 (defvar helixel--action-pos)              ; from `helixel-ring'
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
@@ -152,7 +152,7 @@ so on — broadcasts at one cursor never leak into another."
   pending-sel            ; `helixel-sel' or nil  (helixel--pending-sel)
   last-action            ; `helixel-action'      (helixel--last-tx)
   active-search          ; `helixel-active-search' (helixel--active-search)
-  event-ring             ; list of `helixel-action' (helixel--event-ring)
+  event-ring             ; list of `helixel-action' (helixel--action-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
   action-pos)            ; integer | nil         (helixel--action-pos)
 
@@ -170,7 +170,7 @@ independent of any later movement of point / mark."
    :pending-sel               helixel--pending-sel
    :last-action               helixel--last-tx
    :active-search             helixel--active-search
-   :event-ring                helixel--event-ring
+   :event-ring                helixel--action-ring
    :live-action               helixel--live-action
    :action-pos                helixel--action-pos))
 
@@ -187,7 +187,7 @@ Moves point and the `mark-marker' to CS's positions, sets
         helixel--pending-sel   (helixel-pcs-pending-sel cs)
         helixel--last-tx   (helixel-pcs-last-action cs)
         helixel--active-search (helixel-pcs-active-search cs)
-        helixel--event-ring    (helixel-pcs-event-ring cs)
+        helixel--action-ring    (helixel-pcs-event-ring cs)
         helixel--live-action   (helixel-pcs-live-action cs)
         helixel--action-pos    (helixel-pcs-action-pos cs)))
 
@@ -212,7 +212,7 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-pending-sel cs)            helixel--pending-sel
         (helixel-pcs-last-action cs)            helixel--last-tx
         (helixel-pcs-active-search cs)          helixel--active-search
-        (helixel-pcs-event-ring cs)             helixel--event-ring
+        (helixel-pcs-event-ring cs)             helixel--action-ring
         (helixel-pcs-live-action cs)            helixel--live-action
         (helixel-pcs-action-pos cs)             helixel--action-pos))
 
@@ -605,7 +605,7 @@ state (kill-ring, event-ring, last-action, …)."
                helixel--pending-sel   (helixel-pcs-pending-sel ,cs)
                helixel--last-tx   (helixel-pcs-last-action ,cs)
                helixel--active-search (helixel-pcs-active-search ,cs)
-               helixel--event-ring    (helixel-pcs-event-ring ,cs)
+               helixel--action-ring    (helixel-pcs-event-ring ,cs)
                helixel--live-action   (helixel-pcs-live-action ,cs)
                helixel--action-pos    (helixel-pcs-action-pos ,cs))
          (helixel-pcs-release ,cs)))))
@@ -643,7 +643,7 @@ overlay or by checking `helixel-mc-fake-cursor-p' afterwards."
 (defun helixel-mc--leave-cursor (cursor)
   "Snapshot current globals back into CURSOR's state struct and repaint.
 After the fake's body ran, the per-cursor variables (including
-`helixel--live-action' and `helixel--event-ring') hold this fake's
+`helixel--live-action' and `helixel--action-ring') hold this fake's
 state — push them back into the cursor's `helixel-pc-state'
 struct, re-snap the fake's point/mark, and repaint its overlay."
   (let ((cs (overlay-get cursor 'helixel-pc-state)))
@@ -674,7 +674,7 @@ without going through the command loop."
 
 (defun helixel-mc--fresh-action-from-real ()
   "Return the `helixel-tx' committed by `this-command' at real, or nil.
-Looks at the front of `helixel--event-ring' — the most recent committed
+Looks at the front of `helixel--action-ring' — the most recent committed
 action.  Returns its `tx' if and only if:
   - the action carries a `tx',
   - the action carries a runner (replayable),
@@ -685,7 +685,7 @@ The action may have a nil op (movement commands) or a non-nil
 `helixel-action-replay' handles both uniformly: preposition runs
 first, then runner if any."
   (when (symbolp this-command)
-    (let ((entry (car helixel--event-ring)))
+    (let ((entry (car helixel--action-ring)))
       (when (and entry
                  (eq (helixel-action-by-command entry) this-command))
         entry))))
@@ -712,7 +712,7 @@ first, then runner if any."
 (defun helixel-mc--post-command ()
   "Post-command hook — replay `this-command's tx at every fake cursor.
 The tx attached to the freshly-committed action (front of
-`helixel--event-ring' with matching `by-command' stamp) is replayed
+`helixel--action-ring' with matching `by-command' stamp) is replayed
 at each fake inside one `undo-amalgamate-change-group'.  Insert-entry
 commands install a per-fake prepositioner as a `:preposition'
 payload on the action's tx — `helixel-action-replay' calls it before

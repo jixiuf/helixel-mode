@@ -319,7 +319,7 @@ Subsequent ~;~ presses cycle through older session starts as usual.
 
 ~N~ flips the search direction; subsequent ~n~ continues in the new direction.
 
-The history ring (=helixel--event-ring=) merges search regexps (~/ ? * #~)
+The history ring (=helixel--action-ring=) merges search regexps (~/ ? * #~)
 and find-char entries (~f F t T~) into one list.  Entries appear as =/pattern/=
 for searches, or =f→X= / =F→X= / =t→X= / =T→X= for find-char (case indicates
 original direction: lowercase = forward, uppercase = backward).
@@ -853,7 +853,7 @@ Chain on N cursors (~q~)(maybe mc don't need q):
 
 **~;~ (action cycle) with multi-cursor**
 
-Each fake cursor owns its own =helixel--event-ring=, =--live-event=,
+Each fake cursor owns its own =helixel--action-ring=, =--live-event=,
 and =--action-pos=.  When ~;~ broadcasts, every cursor
 cycles its OWN history through the standard cycle-show code path.
 

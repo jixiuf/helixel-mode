@@ -53,7 +53,7 @@
 (defvar helixel--last-tx)
 (defvar helixel--live-action)
 (defvar helixel--active-search)
-(defvar helixel--event-ring)
+(defvar helixel--action-ring)
 (defvar helixel--action-pos)
 (defvar helixel--raw-selection-type)
 

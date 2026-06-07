@@ -23,7 +23,7 @@
 ;; Event storage layer + history navigation for helixel-mode.
 ;;
 ;; Two storage containers:
-;;   1. buffer-local `helixel--event-ring' — serves `;` cycling,
+;;   1. buffer-local `helixel--action-ring' — serves `;` cycling,
 ;;      `.`/`,` repeat, and history selection.
 ;;   2. global `helixel--global-jump-log' — serves C-o/C-i jump
 ;;      navigation across buffers.
@@ -70,7 +70,7 @@ Set to nil to disable entirely."
   :group 'helixel)
 
 (defcustom helixel-action-ring-max 50
-  "Maximum number of events stored in `helixel--event-ring'."
+  "Maximum number of events stored in `helixel--action-ring'."
   :type 'integer
   :group 'helixel)
 
@@ -107,7 +107,7 @@ nil = live event.  0 = newest ring entry.  N = older.")
 ;; ----------------------------------------------------------------------
 
 
-(defvar-local helixel--event-ring nil
+(defvar-local helixel--action-ring nil
   "Event ring, most recent first.  Capped at `helixel-action-ring-max'.
 Each entry is a `helixel-action' struct.
 Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
@@ -126,24 +126,24 @@ into the committed event's :sel slot when the event's own :sel
 is nil.  Categories not listed here never carry a pending-sel.")
 
 (defun helixel-action--ring-cap ()
-  "Truncate `helixel--event-ring' to `helixel-action-ring-max' entries.
+  "Truncate `helixel--action-ring' to `helixel-action-ring-max' entries.
 Releases markers of evicted entries to prevent leaks."
-  (when (> (length helixel--event-ring) helixel-action-ring-max)
-    (let ((tail (nthcdr helixel-action-ring-max helixel--event-ring)))
+  (when (> (length helixel--action-ring) helixel-action-ring-max)
+    (let ((tail (nthcdr helixel-action-ring-max helixel--action-ring)))
       (dolist (e tail)
         (when-let* ((mr (helixel-action-mark-region e))
                     ((consp mr)))
           (set-marker (car mr) nil)
           (set-marker (cdr mr) nil))))
     (setcdr (nthcdr (1- helixel-action-ring-max)
-                    helixel--event-ring)
+                    helixel--action-ring)
             nil)))
 
 (defvar helixel-action-commit-hook nil
   "Abnormal hook run by `helixel-action-commit' after pushing to the ring.
 Each function receives one argument: the just-committed
 `helixel-action' (the deep-copied entry now sitting at the front
-of `helixel--event-ring').
+of `helixel--action-ring').
 
 Used by chain recording (`helixel-chain.el') to accumulate the
 list of txs run during the chain; the chain transaction simply
@@ -153,7 +153,7 @@ Keep handlers fast — this fires on every command that commits an
 action.")
 
 (defun helixel-action-commit ()
-  "Commit `helixel--live-action' to `helixel--event-ring'.
+  "Commit `helixel--live-action' to `helixel--action-ring'.
 Deep-copies the event (marker + sel) so ring entries are independent.
 Deduplicates against the ring front — same (op sel payload) skips push.
 Also mirrors to `helixel--global-jump-log'.
@@ -180,10 +180,10 @@ Returns the committed entry or nil."
                        helixel--current-command)))
           (when cmd
             (setf (helixel-action-by-command entry) cmd))))
-      (unless (and (car helixel--event-ring)
+      (unless (and (car helixel--action-ring)
                    (helixel-action--same-content-p
-                    entry (car helixel--event-ring)))
-        (push entry helixel--event-ring)
+                    entry (car helixel--action-ring)))
+        (push entry helixel--action-ring)
         (helixel-action--ring-cap))
       ;; `helixel--last-tx' tracks the most recent EDIT for `.' replay.
       ;; Movement txs (op = nil, runner-only) participate in mc dispatch
@@ -378,7 +378,7 @@ Used by state machine, surround, and jump navigation."
 ;; Action cycle (`;') and global jump list (C-o / C-i)
 ;; ----------------------------------------------------------------------
 ;;
-;; Thin consumers of `helixel--event-ring' and `helixel--global-jump-log'.
+;; Thin consumers of `helixel--action-ring' and `helixel--global-jump-log'.
 ;; `helixel-action-cycle' (`;') navigates session start positions within
 ;; the current buffer; `helixel-jump-backward' / `helixel-jump-forward'
 ;; (C-o / C-i) navigate across buffers.  Both use the generic
@@ -587,7 +587,7 @@ forward to the next older event to avoid cycling through dead spots."
     (helixel--action-cycle)))
 
 (defun helixel-action-cycle (&optional arg)
-  "Cycle through `helixel--event-ring' entries with `;'.
+  "Cycle through `helixel--action-ring' entries with `;'.
 If a pair-movement was the last command, the first `;' jumps to
 the event and marks the full span (first-`;'-after-motion style).
 Second `;' does the normal action cycle.
@@ -609,14 +609,14 @@ Optional prefix ARG is passed to the underlying commands."
       (cond
        ((and helixel--action-pos (> helixel--action-pos 0))
         (let* ((newest (helixel-gr-group-newest
-                        helixel--event-ring helixel--action-pos
+                        helixel--action-ring helixel--action-pos
                         #'helixel-action--same-group-p))
                (prev (when (> newest 0)
                        (helixel-gr-visible-index
-                        helixel--event-ring (1- newest)
+                        helixel--action-ring (1- newest)
                         #'helixel-action--cycle-visible-p))))
           (if prev
-              (helixel-action--cycle-show prev helixel--event-ring)
+              (helixel-action--cycle-show prev helixel--action-ring)
             (message "At newest"))))
        ((eq helixel--action-pos 0)
         (if helixel--live-action
@@ -632,36 +632,36 @@ Optional prefix ARG is passed to the underlying commands."
     (cond
      (helixel--action-pos
       (let ((pos (helixel-gr-find
-                  helixel--event-ring helixel--action-pos 1
+                  helixel--action-ring helixel--action-pos 1
                   #'helixel-action--cycle-visible-p)))
         (if pos
-            (helixel-action--cycle-show pos helixel--event-ring)
+            (helixel-action--cycle-show pos helixel--action-ring)
           ;; No older group: jump to current group-start marker
           ;; to expand the visible region (first-`;' span wrap).
           (let ((gpos (helixel-gr-group-start
-                       helixel--event-ring helixel--action-pos
+                       helixel--action-ring helixel--action-pos
                        #'helixel-action--same-group-p)))
             (push-mark (car (helixel-action-mark-region
-                                (nth gpos helixel--event-ring))) t t)
+                                (nth gpos helixel--action-ring))) t t)
             (message "%s"
                      (helixel-action--cycle-display
-                      (nth gpos helixel--event-ring)
-                      gpos helixel--event-ring))))))
+                      (nth gpos helixel--action-ring)
+                      gpos helixel--action-ring))))))
      (helixel--live-action
       ;; Commit live event first, then show ring[0]
       (helixel-action-commit)
       (let ((pos (helixel-gr-visible-index
-                  helixel--event-ring 0
+                  helixel--action-ring 0
                   #'helixel-action--cycle-visible-p)))
         (if pos
-            (helixel-action--cycle-show pos helixel--event-ring)
+            (helixel-action--cycle-show pos helixel--action-ring)
           (message "No saved actions"))))
-     (helixel--event-ring
+     (helixel--action-ring
       (let ((pos (helixel-gr-visible-index
-                  helixel--event-ring 0
+                  helixel--action-ring 0
                   #'helixel-action--cycle-visible-p)))
         (if pos
-            (helixel-action--cycle-show pos helixel--event-ring)
+            (helixel-action--cycle-show pos helixel--action-ring)
           (message "No saved actions"))))
      (t (message "No saved actions")))))
 

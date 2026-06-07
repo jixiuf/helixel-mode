@@ -612,7 +612,7 @@ then simply does not flip."
 ;;      / chain / mc all replay via `helixel-action-replay'.
 ;;
 ;;   2. History event — carries CATEGORY, SUBCAT, DISPLAY, TIMESTAMP,
-;;      BUFFER, BY-COMMAND.  Recorded in `helixel--event-ring' and
+;;      BUFFER, BY-COMMAND.  Recorded in `helixel--action-ring' and
 ;;      `helixel--global-jump-log'.
 ;;
 ;; Pure movement / search / state events leave OP/SEL/PAYLOAD/RUNNER

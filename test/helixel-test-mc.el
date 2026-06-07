@@ -574,13 +574,13 @@ fake then replays the chain TX (not the pre-chain edit)."
 
 (ert-deftest helixel-test-mc-action-cycle-broadcasts ()
   "`;' is whitelisted for multi-cursor dispatch: each fake
-cycles its OWN per-cursor `helixel--event-ring' built from
+cycles its OWN per-cursor `helixel--action-ring' built from
 commands dispatched after the fake was spawned."
   (should (eq t (get 'helixel-action-cycle 'multiple-cursors))))
 
 (ert-deftest helixel-test-mc-per-fake-event-ring-isolated ()
   "After broadcasting `w' to fakes, each fake's overlay carries
-its OWN `helixel--event-ring' independent of real's and of
+its OWN `helixel--action-ring' independent of real's and of
 other fakes' (snapshotted by `helixel-mc--leave-cursor')."
   (helixel-test-with-buffer "alpha beta gamma delta epsilon\n"
     (helixel-enter-normal-state)
@@ -638,7 +638,7 @@ events into the fake's OWN ring.  3 motions → 2 ring entries +
 (ert-deftest helixel-test-mc-per-fake-rings-are-independent ()
   "Each fake's ring grows independently — commits from cursor A
 do NOT leak into cursor B's ring.  Achieved because
-`helixel-pc-state' snapshots `helixel--event-ring' /
+`helixel-pc-state' snapshots `helixel--action-ring' /
 `helixel--live-action' per cursor."
   (helixel-test-with-buffer
       "alpha beta gamma delta epsilon zeta eta theta iota kappa\n"
@@ -692,7 +692,7 @@ must not corrupt the fake's state."
 
 (ert-deftest helixel-test-mc-spawn-after-motion-inherits-real-ring ()
   "Spawning a fake AFTER real built a ring: the fake inherits
-real's `helixel--event-ring' / `--live-edit' via the snapshot
+real's `helixel--action-ring' / `--live-edit' via the snapshot
 taken by `helixel-mc-create-fake-cursor'.  This means
 `w w w s s ;' DOES work — fake's `;' cycles the inherited
 history."
@@ -702,7 +702,7 @@ history."
     ;; Real builds ring with 2 word motions.
     (helixel-forward-word-start 1)
     (helixel-forward-word-start 1)
-    (let ((real-ring-len (length helixel--event-ring))
+    (let ((real-ring-len (length helixel--action-ring))
           (real-live helixel--live-action))
       (should (>= real-ring-len 1))
       ;; Spawn fake AFTER motions.
@@ -955,7 +955,7 @@ so that a subsequent `d' deletes the whole `{...}' block."
 
 (ert-deftest helixel-test-mc-semicolon-second-press-cycles-fake-ring ()
   "Second `;' (consecutive press) at fakes also broadcasts now:
-because each fake owns a `helixel--event-ring' and `helixel--
+because each fake owns a `helixel--action-ring' and `helixel--
 action-pos', repeated `;' cycles each fake's OWN history.  Verify
 the call doesn't error and the fake's ring still exists."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
@@ -2566,7 +2566,7 @@ the tx at every fake — no substitute-alist needed."
     (helixel-enter-normal-state)
     (goto-char 1)
     (helixel-find-next-char ?-)
-    (let ((entry (car helixel--event-ring)))
+    (let ((entry (car helixel--action-ring)))
       (should entry)
       (should (eq 'helixel-find-next-char
                   (helixel-action-by-command entry)))

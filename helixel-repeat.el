@@ -242,7 +242,7 @@ from `point-max' instead of `point-min'."
 ;; commands pop.
 
 ;; Edit transactions are stored in the unified event ring
-;; (`helixel--event-ring') as `:edit' entries.  No separate edit ring.
+;; (`helixel--action-ring') as `:edit' entries.  No separate edit ring.
 ;; `helixel-repeat-edit-pick' filters the event ring for entries
 ;; that carry `:edit' data.
 
@@ -469,7 +469,7 @@ Signals `user-error' when no edit is available."
     ;; Fall back to most recent edit in ring if last-event is
     ;; not an edit (e.g. movement event from event-commit).
     (unless (helixel-action-op tx)
-      (setq tx (cl-loop for e in helixel--event-ring
+      (setq tx (cl-loop for e in helixel--action-ring
                         when (helixel-action-op e)
                         return e))
       (unless tx
@@ -616,11 +616,11 @@ automatically invalidates the preview."
 ;; ── Interactive entry points ──
 (defun helixel-repeat-edit-pick ()
   "Choose a past edit from the event ring and replay it.
-Scans `helixel--event-ring' for entries with an :op.
+Scans `helixel--action-ring' for entries with an :op.
 The chosen event's edit data becomes the new `helixel--last-tx'."
   (interactive)
   (let* ((edit-entries
-          (cl-loop for event in helixel--event-ring
+          (cl-loop for event in helixel--action-ring
                    when (helixel-action-op event)
                    collect event)))
     (unless edit-entries
@@ -659,7 +659,7 @@ The chosen event's edit data becomes the new `helixel--last-tx'."
   "Pretty-print `helixel--last-tx' and edit events in the event ring."
   (interactive)
   (require 'pp)
-  (let* ((events (cl-loop for e in helixel--event-ring
+  (let* ((events (cl-loop for e in helixel--action-ring
                           when (helixel-action-op e)
                           collect e))
          (buf (get-buffer-create "*helixel-repeat-debug*")))

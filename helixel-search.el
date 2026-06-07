@@ -32,7 +32,7 @@
 ;;; Code:
 
 ;; ── Forward declarations for variables in later-loaded modules ──
-(defvar helixel--event-ring)
+(defvar helixel--action-ring)
 (defvar helixel--live-action)
 
 (require 'helixel-state)
@@ -587,7 +587,7 @@ With prefix ARG (\\[universal-argument]), pick from history."
                     (and (helixel-action-p e)
                          (memq (helixel-action-category e)
                                helixel-search-repeat-categories)))
-                  helixel--event-ring)))
+                  helixel--action-ring)))
     (unless entries
       (user-error "No search history"))
     (mapcar (lambda (e) (cons (helixel-action-display-format e) e)) entries)))
@@ -647,7 +647,7 @@ Returns the chosen action plist or nil."
           (helixel-search--set-sel-ctx))))))
 
 (defun helixel-search--from-history (forwardp)
-  "Select and execute a search/find-char from `helixel--event-ring'.
+  "Select and execute a search/find-char from `helixel--action-ring'.
 FORWARDP: t = use stored direction, nil = toggle it."
   (let* ((alist (helixel-search--history-collect))
          (event (helixel-search--history-select

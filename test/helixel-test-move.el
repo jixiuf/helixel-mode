@@ -1098,7 +1098,7 @@ On a single-char symbol at eob, w selects it."
      ,(format "Test ; after %s selects the thing." name)
      (with-temp-buffer
        (transient-mark-mode 1)
-       (setq helixel--event-ring nil helixel--live-action nil
+       (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil)
        (insert ,buffer-content)
        (deactivate-mark)
@@ -1135,7 +1135,7 @@ On a single-char symbol at eob, w selects it."
   "Test second ; after mark-thing does action cycle."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-action nil
+    (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "hello world")
     (deactivate-mark)
@@ -1155,7 +1155,7 @@ On a single-char symbol at eob, w selects it."
   (let ((helixel-semicolon-mark-thing nil))
     (with-temp-buffer
       (transient-mark-mode 1)
-      (setq helixel--event-ring nil helixel--live-action nil
+      (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil)
       (insert "hello world")
       (deactivate-mark)
@@ -1172,7 +1172,7 @@ On a single-char symbol at eob, w selects it."
   "Test [t; after pair movement marks the enclosing tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-action nil
+    (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<p>\n<div>\nhe\n</div>\n</p>")
     (deactivate-mark)
@@ -1192,7 +1192,7 @@ On a single-char symbol at eob, w selects it."
   "Test [t from between inner close and outer close finds the outer tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-action nil
+    (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<p>\n<div>\nhe\n</div>\n</p>")
     (deactivate-mark)
@@ -1212,7 +1212,7 @@ On a single-char symbol at eob, w selects it."
   "Test {t; marks the inner content of the enclosing tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-action nil
+    (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<p>\ninner\n</p>")
     (deactivate-mark)
@@ -1231,7 +1231,7 @@ On a single-char symbol at eob, w selects it."
   "Test ]t; marks the current enclosing tag."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-action nil
+    (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil)
     (insert "<a>x</a> <b>y</b>")
     (deactivate-mark)

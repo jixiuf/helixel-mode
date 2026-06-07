@@ -240,8 +240,8 @@ At bol, moves past first char so rect starts at column 1."
     ;; No active region after p
     (should-not (region-active-p))
     ;; But mark-region is stored on the event (first in ring)
-    (should helixel--event-ring)
-    (let ((mr (helixel-action-mark-region (car helixel--event-ring))))
+    (should helixel--action-ring)
+    (let ((mr (helixel-action-mark-region (car helixel--action-ring))))
       (should mr)
       (should (consp mr))
       (should (marker-position (car mr)))

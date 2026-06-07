@@ -154,8 +154,8 @@
     (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
-    (should helixel--event-ring)
-    (should (eq (helixel-action-op (car helixel--event-ring))
+    (should helixel--action-ring)
+    (should (eq (helixel-action-op (car helixel--action-ring))
                 'chain))))
 
 (ert-deftest helixel-test-chain-op-registered ()

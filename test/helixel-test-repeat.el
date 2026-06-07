@@ -703,7 +703,7 @@ Verifies that event ring head carries the inserted text in its payload."
     (insert "X")
     (helixel-insert-exit)
     ;; Verify event ring head has the inserted-text payload
-    (let ((front-event (car helixel--event-ring)))
+    (let ((front-event (car helixel--action-ring)))
       (should front-event)
       (should (plist-get (helixel-action-payload front-event)
                          :inserted-text))
@@ -712,7 +712,7 @@ Verifies that event ring head carries the inserted text in its payload."
                        "X")))
     ;; Replay from event ring (simulating pick)
     (goto-char 4)
-    (let ((front-event (car helixel--event-ring)))
+    (let ((front-event (car helixel--action-ring)))
       (setq helixel--last-tx front-event))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "X X foo"))))
@@ -729,7 +729,7 @@ Verifies that event ring head carries the inserted text in its payload."
         (insert "Z")
         (helixel-insert-exit)
         ;; Verify event ring head has :text payload
-        (let ((front-event (car helixel--event-ring)))
+        (let ((front-event (car helixel--action-ring)))
           (should front-event)
           (should (plist-get (helixel-action-payload front-event) :text))
           (should (string= (plist-get (helixel-action-payload front-event)
@@ -737,7 +737,7 @@ Verifies that event ring head carries the inserted text in its payload."
                            "Z")))
         ;; Replay from event ring (simulating pick)
         (goto-char 4)
-        (let ((front-event (car helixel--event-ring)))
+        (let ((front-event (car helixel--action-ring)))
           (setq helixel--last-tx front-event))
         (helixel-repeat-edit)
         (should (string= (buffer-string) "aZbZc")))))
@@ -2133,7 +2133,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--current-state 'normal
-          helixel--event-ring nil
+          helixel--action-ring nil
           helixel--live-action nil
           helixel--pending-sel nil
           helixel--action-pos nil
@@ -2170,7 +2170,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
   "/hello RET n ; d . deletes from match1 to match2, then repeat."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil
+    (setq helixel--action-ring nil
           helixel--live-action nil
           helixel--pending-sel nil
           helixel--action-pos nil
@@ -2224,7 +2224,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
   "f x n n ; d . deletes from first x to third x, then repeat."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-action nil
+    (setq helixel--action-ring nil helixel--live-action nil
           helixel--pending-sel nil helixel--action-pos nil
           helixel--inhibit-repeat-record nil
           helixel--inhibit-action-track nil
@@ -2261,7 +2261,7 @@ kill naturally moved point — use a single xd prefix for bulk kill."
   "miw miw miw ; d . deletes from 1st to 3rd word, then repeat."
   (with-temp-buffer
     (transient-mark-mode 1)
-    (setq helixel--event-ring nil helixel--live-action nil
+    (setq helixel--action-ring nil helixel--live-action nil
           helixel--pending-sel nil helixel--action-pos nil
           helixel--inhibit-repeat-record nil
           helixel--inhibit-action-track nil
@@ -2392,7 +2392,7 @@ the selection on each word."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--current-state 'normal
-          helixel--event-ring nil
+          helixel--action-ring nil
           helixel--live-action nil
           helixel--pending-sel nil
           helixel--action-pos nil

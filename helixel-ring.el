@@ -40,6 +40,61 @@
 (require 'helixel-core)
 
 ;; ----------------------------------------------------------------------
+;; Custom groups
+;; ----------------------------------------------------------------------
+
+(defgroup helixel nil
+  "Custom group for Helixel."
+  :group 'helixel)
+
+(defcustom helixel-action-cycle-categories
+  '(movement textobj search find-char edit)
+  "Event :category symbols that `;' (`helixel-action-cycle') navigates.
+Categories not listed here are invisible during cycling."
+  :type '(repeat symbol)
+  :group 'helixel)
+
+(defcustom helixel-semicolon-mark-thing
+  '(movement textobj search find-char edit)
+  "List controlling when the first `;' marks the full thing.
+Each element is either a category symbol (matches all subcats)
+or a cons (CATEGORY . SUBCAT) for precise matching.
+The first `;' selects the full thing (word, pair, etc.) instead of
+starting the action cycle.  The next `;' does the normal cycle.
+
+Examples:
+  \='(movement textobj)              -> all movement + textobj subcats
+  \='((movement . pair) textobj)     -> only pair movements + all textobj
+Set to nil to disable entirely."
+  :type '(repeat (choice symbol (cons symbol symbol)))
+  :group 'helixel)
+
+(defcustom helixel-action-ring-max 50
+  "Maximum number of events stored in `helixel--event-ring'."
+  :type 'integer
+  :group 'helixel)
+
+(defcustom helixel-jump-log-max 100
+  "Maximum number of entries in `helixel--global-jump-log'."
+  :type 'integer
+  :group 'helixel)
+
+(defcustom helixel-jump-categories
+  '(movement textobj search find-char edit goto user jump)
+  "Event :category symbols recorded into `helixel--global-jump-log'.
+Categories not listed here do not generate jump entries."
+  :type '(repeat symbol)
+  :group 'helixel)
+
+(defcustom helixel-jump-cycle-categories
+  '(movement textobj search find-char edit goto user jump)
+  "Event :category symbols visible during jump cycling.
+Only categories listed here are shown when pressing
+`helixel-jump-backward' or `helixel-jump-forward'."
+  :type '(repeat symbol)
+  :group 'helixel)
+
+;; ----------------------------------------------------------------------
 ;; State variables
 ;; ----------------------------------------------------------------------
 
@@ -51,10 +106,6 @@ nil = live event.  0 = newest ring entry.  N = older.")
 ;; Buffer-local event ring
 ;; ----------------------------------------------------------------------
 
-(defcustom helixel-action-ring-max 50
-  "Maximum number of events stored in `helixel--event-ring'."
-  :type 'integer
-  :group 'helixel)
 
 (defvar-local helixel--event-ring nil
   "Event ring, most recent first.  Capped at `helixel-action-ring-max'.
@@ -242,26 +293,6 @@ Does NOT commit the new event — caller is responsible for eventual commit."
 ;; Global jump log (C-o / C-i)
 ;; ----------------------------------------------------------------------
 
-(defcustom helixel-jump-log-max 100
-  "Maximum number of entries in `helixel--global-jump-log'."
-  :type 'integer
-  :group 'helixel)
-
-(defcustom helixel-jump-categories
-  '(movement textobj search find-char edit goto user jump)
-  "Event :category symbols recorded into `helixel--global-jump-log'.
-Categories not listed here do not generate jump entries."
-  :type '(repeat symbol)
-  :group 'helixel)
-
-(defcustom helixel-jump-cycle-categories
-  '(movement textobj search find-char edit goto user jump)
-  "Event :category symbols visible during jump cycling.
-Only categories listed here are shown when pressing
-`helixel-jump-backward' or `helixel-jump-forward'."
-  :type '(repeat symbol)
-  :group 'helixel)
-
 (defvar helixel--global-jump-log nil
   "Global jump entries, most recent first.
 Each entry: (:mark-region (START . END) :buffer BUF :category CAT
@@ -404,36 +435,6 @@ Old markers are freed before replacement to prevent leaks."
               (end-marker (copy-marker (cdr bounds) t)))
           (setf (helixel-action-mark-region helixel--live-action)
                 (cons beg-marker end-marker)))))))
-
-;; ----------------------------------------------------------------------
-;; Custom groups
-;; ----------------------------------------------------------------------
-
-(defgroup helixel nil
-  "Custom group for Helixel."
-  :group 'helixel)
-
-(defcustom helixel-action-cycle-categories
-  '(movement textobj search find-char edit)
-  "Event :category symbols that `;' (`helixel-action-cycle') navigates.
-Categories not listed here are invisible during cycling."
-  :type '(repeat symbol)
-  :group 'helixel)
-
-(defcustom helixel-semicolon-mark-thing
-  '(movement textobj search find-char edit)
-  "List controlling when the first `;' marks the full thing.
-Each element is either a category symbol (matches all subcats)
-or a cons (CATEGORY . SUBCAT) for precise matching.
-The first `;' selects the full thing (word, pair, etc.) instead of
-starting the action cycle.  The next `;' does the normal cycle.
-
-Examples:
-  \='(movement textobj)              -> all movement + textobj subcats
-  \='((movement . pair) textobj)     -> only pair movements + all textobj
-Set to nil to disable entirely."
-  :type '(repeat (choice symbol (cons symbol symbol)))
-  :group 'helixel)
 
 (defun helixel--semicolon-mark-thing-p (event)
   "Return non-nil if mark-thing should fire for EVENT.

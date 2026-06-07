@@ -668,6 +668,29 @@ paste line-wise instead of char-wise."
       (helixel-yank-pop)
       (should (string= (buffer-string) "Zhello")))))
 
+(ert-deftest helixel-test-yank-pop-after-real-yank ()
+  "After real Emacs `yank' (C-y), M-y M-y cycles through kill ring.
+Emacs 32 no longer activates mark in yank, so the test covers the
+mark-position-based bounds detection (not use-region-p)."
+  (helixel-test-with-buffer "hello world"
+    (let* ((kill-ring (list "AAA" "BBB" "CCC"))
+           (kill-ring-yank-pointer kill-ring))
+      (goto-char 6)                    ; before "world"
+      ;; Real Emacs C-y
+      (setq last-command nil)
+      (yank)
+      (should (string= (buffer-string) "helloAAA world"))
+      ;; M-y → "BBB"
+      (setq last-command 'yank)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "helloBBB world"))
+      ;; M-y → "CCC"
+      (setq last-command 'helixel-yank-pop)
+      (helixel-yank-pop)
+      (should (string= (buffer-string) "helloCCC world"))
+      ;; pop-bounds should be set for further cycling
+      (should helixel--yank-pop-bounds))))
+
 (ert-deftest helixel-test-yank-pop-after-p ()
   "After p, M-y M-y cycles through kill ring."
   (helixel-test-with-buffer "abcdef"

@@ -477,8 +477,6 @@ instead of `insert-for-yank' — `helixel-replace' passes
         (delete-char 1))
       (setq pop-start (point))
       (if yank-fallback-fn
-          ;; Use a marker that advances with insertion so bounds
-          ;; survive select-after-paste cursor repositioning.
           (let ((end-marker (copy-marker (point) t)))
             (funcall yank-fallback-fn)
             (setq helixel--yank-pop-bounds
@@ -488,18 +486,8 @@ instead of `insert-for-yank' — `helixel-replace' passes
         (setq helixel--yank-pop-bounds
               (cons pop-start (point))))))))
 
-(defcustom helixel-select-after-paste t
-  "When non-nil, select the pasted text after `helixel-yank',
-`helixel-yank-before', or `helixel-replace'.
-The selection lets you immediately operate on the pasted content
-\(e.g. indent, delete, change).  Point ends up at the start of
-the pasted text."
-  :type 'boolean
-  :group 'helixel)
-
 (helixel-define-operator helixel-replace
     (:op replace :display "r" :moves-point-p nil)
-  (helixel--record-action 'replace)
   (if (and (not (helixel--register-active-p))
            (= 0 (length kill-ring)))
       (message "nothing to yank")
@@ -508,13 +496,11 @@ the pasted text."
        text
        (lambda () (helixel-with-replay-as 'dot (helixel--yank-body nil))))
       (helixel--register-consume)
-      ;; Preserve selection when select-after-paste is active.
-      (if helixel-select-after-paste
-          (progn
-            (setq helixel--action-pos nil)
-            (setq helixel--pending-sel nil)
-            (setq deactivate-mark nil))
-        (helixel--clear-data)))))
+      ;; Store paste bounds as mark-region for `;' re-select.
+      (when helixel--yank-pop-bounds
+        (helixel--set-mark-region helixel--yank-pop-bounds))
+      (helixel--record-action 'replace)
+      (helixel--clear-data))))
 
 ;; `helixel-yank-pop' cycles through the `kill-ring' to replace
 ;; the text inserted by the previous `helixel-replace' or
@@ -537,13 +523,14 @@ the pasted text."
   (let ((bounds
          (cond
           ((and helixel--yank-pop-bounds
-                (memq last-command '(helixel-replace helixel-yank-pop)))
+                (memq last-command '(helixel-replace helixel-yank-pop
+                                     helixel-yank helixel-yank-before)))
            helixel--yank-pop-bounds)
-          ;; After yank or replace: use region or mark bounds.
+          ;; Fallback: after yank or replace with an active region
+          ;; (from a prior selection, not from paste itself).
           ((and (memq last-command '(helixel-yank helixel-yank-before
                                      helixel-replace yank yank-pop))
-                (mark t))
-           ;; Normalize: mark may be before or after point.
+                (use-region-p))
            (let ((m (mark t)) (p (point)))
              (cons (min m p) (max m p)))))))
     (if bounds
@@ -565,10 +552,8 @@ the pasted text."
               (insert (concat text "\n"))
             (insert-for-yank text))
           (setq helixel--yank-pop-bounds (cons beg (point)))
-          (when helixel-select-after-paste
-            ;; Select pasted text, cursor at end (Emacs yank-pop convention).
-            (push-mark beg t t)
-            (setq deactivate-mark nil)))
+          ;; Store bounds as mark-region for `;' re-select.
+          (helixel--set-mark-region (cons beg (point))))
       ;; No bounds available — fall back or browse.
       (if (memq last-command '(helixel-yank helixel-yank-before
                                helixel-replace yank yank-pop
@@ -687,39 +672,33 @@ that many times (Vim-like 2p, 3P)."
               (yank 1)))))
       (helixel--register-consume)
       (helixel--register-consume)
-      ;; Position cursor at start, optionally select pasted text.
-      (when helixel-select-after-paste
+      ;; Store pasted bounds as mark-region for `;' re-select,
+      ;; and as yank-pop-bounds for M-y cycling.
+      (let ((bounds nil))
         (cond
          ;; Line-wise: handler already positioned cursor.
          ((helixel--linewise-kill-p)
           (if (or paste-after-p
                   ;; Replace handler positions point at bol of the
-                  ;; inserted text (same as p), so select the
-                  ;; current line instead of going up one line.
+                  ;; inserted text (same as p), so use current line.
                   (eq (or this-command helixel--current-command)
                       'helixel-replace))
-              ;; p / replace: pasted at-or-below current line,
-              ;; select that line.
-              (progn (goto-char (pos-bol))
-                     (push-mark (pos-eol) t t)
-                     (setq deactivate-mark nil))
-            ;; P: pasted above, select previous line
+              ;; p / replace: pasted at-or-below current line.
+              (setq bounds (cons (pos-bol) (pos-eol)))
+            ;; P: pasted above, select previous line.
             (save-excursion
               (forward-line -1)
-              (goto-char (pos-bol))
-              (push-mark (pos-eol) t t))
-            (setq deactivate-mark nil)))
+              (setq bounds (cons (pos-bol) (pos-eol))))))
          ;; Charwise / rect: use start marker.
          (start
           (let ((end (point-marker)))
-            (when (marker-position start) (goto-char start))
-            (if (helixel--rect-wise-kill-p)
-                (progn (push-mark end t t)
-                       (rectangle-mark-mode 1)
-                       (setq helixel--raw-selection-type 'rect))
-              (push-mark end t t))
-            (set-marker end nil)
-            (setq deactivate-mark nil)))))
+            (setq bounds (cons (marker-position start)
+                               (marker-position end)))
+            (set-marker end nil))))
+        (when bounds
+          (helixel--set-mark-region bounds)
+          ;; Also set pop-bounds so M-y can find the pasted text.
+          (setq helixel--yank-pop-bounds bounds)))
       ;; Restore cursor to start for char/rect (line handler does its own).
       (when start
         (unless (helixel--linewise-kill-p)
@@ -730,7 +709,6 @@ that many times (Vim-like 2p, 3P)."
     (:op paste-after :display "p" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
-  (helixel--record-action 'paste-after)
   ;; Paste after: if selection active, go to end of selection.
   ;; For rect selection, stay on same row — only move column
   ;; to region-end, so insert-rectangle starts on the correct line.
@@ -743,19 +721,20 @@ that many times (Vim-like 2p, 3P)."
       (goto-char (region-end))))
   ;; Clear stale pop bounds from previous replace.
   (setq helixel--yank-pop-bounds nil)
-  (helixel--yank-body arg t))
+  (helixel--yank-body arg t)
+  (helixel--record-action 'paste-after))
 
 (helixel-define-operator helixel-yank-before
     (:op paste-before :display "P" :moves-point-p nil
      :params (&optional arg))
   (interactive "*P")
-  (helixel--record-action 'paste-before)
   ;; Paste before: if selection active, go to beg of selection.
   (when (use-region-p)
     (goto-char (region-beginning)))
   ;; Clear stale pop bounds from previous replace.
   (setq helixel--yank-pop-bounds nil)
-  (helixel--yank-body arg nil))
+  (helixel--yank-body arg nil)
+  (helixel--record-action 'paste-before))
 
 ;; ── Indent ──
 ;; helixel--replay-multiplier is bound by the op runner during `.`

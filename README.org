@@ -70,7 +70,7 @@ See ~M-x customize-group RET helixel RET~ for all 26 options.
 | ~v~                    | Enter visual mode                                                |
 | ~d~ ~c~ ~y~ ~r~ ~R~   | Edit: delete, change, copy, replace, replace-char              |
 | ~S~                    | Swap regions (see [[Swap]])                                      |
-| ~p~ ~P~               | Paste after / before                                             |
+| ~p~ ~P~               | Paste after / before; pasted text tracked for ~;~ re-select     |
 | ~<~ ~>~               | Indent left / right                                              |
 | ~u~ ~U~               | Undo / redo                                                      |
 | ~x~                    | Select current line                                              |
@@ -291,6 +291,15 @@ Structure sub-keys (also on ~[~ / ~]~):
   |           | swap       |                          |
   |           | fill       | g q                      |
   |           | join-lines | J                        |
+  |           | paste      | p P                      |
+  |           | replace    | r                        |
+  |           | yank-pop   | M-y                      |
+
+After ~p~ / ~P~ / ~r~ / ~M-y~, the pasted or replaced text bounds are
+stored in the event's =:mark-region=.  The first ~;~ after a paste or
+replace jumps back to the edit spot and marks the full span of the
+pasted/replaced text, just like after a word or pair movement.
+Subsequent ~;~ presses cycle through older session starts as usual.
 
 - ~%~ — jump to matching bracket/paren/quote/tag/block.
 
@@ -664,6 +673,8 @@ share a session; different types start new ones.
 | textobj-tag       | =textobj-tag=         | ~mit~ ~mat~                                     |
 | search            | =search=              | ~/~ ~?~ ~*~ ~#~ then ~n~/~N~                    |
 | find-char         | =find-char=           | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~M-.~              |
+| edit-paste        | =edit-paste-after=    | ~p~ ~P~ — ~;~ re-selects pasted text             |
+| edit-replace      | =edit-replace=        | ~r~ — ~;~ re-selects replaced text               |
 
 ~C-g~ cancels the current session — the next command starts a fresh session
 even if the type matches. The cancelled session is preserved in the ring for

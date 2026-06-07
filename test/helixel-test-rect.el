@@ -231,18 +231,24 @@ At bol, moves past first char so rect starts at column 1."
     ;; forward-char to pos2(col1), then rect twice at col1
     (should (string= (buffer-string) "A----Aline1\nB++++Bline2\nCCline3"))))
 
-(ert-deftest helixel-test-yank-rect-select-pasted ()
-  "After rect p, the selection is a rectangle (rectangle-mark-mode)."
+(ert-deftest helixel-test-yank-rect-sets-mark-region ()
+  "After rect p, the event mark-region covers the pasted rectangle."
   (helixel-test-with-buffer "AAline1\nBBline2\nCCline3"
     (kill-new (helixel--rect-wise-text '("--" "++")))
     (goto-char 1)
     (helixel-yank)
-    (should rectangle-mark-mode)
-    (should (eq helixel--raw-selection-type 'rect))
-    (should (region-active-p))
-    ;; Selection should cover the pasted rectangle
-    (should (= (region-beginning) 2))  ; after 'A' at col1
-    (should (= (region-end) 14))))      ; end of "++" on line 2
+    ;; No active region after p
+    (should-not (region-active-p))
+    ;; But mark-region is stored on the event (first in ring)
+    (should helixel--event-ring)
+    (let ((mr (helixel-action-mark-region (car helixel--event-ring))))
+      (should mr)
+      (should (consp mr))
+      (should (marker-position (car mr)))
+      (should (marker-position (cdr mr)))
+      ;; Markers point to the pasted rect bounds
+      (should (= (marker-position (car mr)) 2))   ; after 'A' at col1
+      (should (= (marker-position (cdr mr)) 14))))) ; end of "++" on line 2
 
 (ert-deftest helixel-test-rect-p-stays-on-row ()
   "Rect selection + p: point stays on same row, only column moves."

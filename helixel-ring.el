@@ -187,10 +187,16 @@ attaches a prepos function before `record-action' runs)."
             (helixel-action-runner tx))
       (setf (helixel-action-preposition helixel--live-action)
             (or (helixel-action-preposition tx) existing-pre))
+      ;; Only overwrite mark-region with tx's if the existing one is
+      ;; degenerate (default from tracking-open).  If a command has
+      ;; deliberately set a meaningful mark-region (e.g., paste
+      ;; bounds via `helixel--set-mark-region'), preserve it.
       (when-let* ((tx-mr (helixel-action-mark-region tx))
-                  ((consp tx-mr)))
-        ;; Release old markers, replace with tx's (which were created
-        ;; at the more precise record-time position).
+                  ((consp tx-mr))
+                  ((or (null old-mr) (not (consp old-mr))
+                       (and (markerp (car old-mr)) (markerp (cdr old-mr))
+                            (= (marker-position (car old-mr))
+                               (marker-position (cdr old-mr)))))))
         (when (consp old-mr)
           (when (markerp (car old-mr)) (set-marker (car old-mr) nil))
           (when (markerp (cdr old-mr)) (set-marker (cdr old-mr) nil)))

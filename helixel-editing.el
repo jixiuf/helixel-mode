@@ -526,13 +526,16 @@ instead of `insert-for-yank' — `helixel-replace' passes
                 (memq last-command '(helixel-replace helixel-yank-pop
                                      helixel-yank helixel-yank-before)))
            helixel--yank-pop-bounds)
-          ;; Fallback: after yank or replace with an active region
-          ;; (from a prior selection, not from paste itself).
+          ;; After yank or replace: use mark position to find
+          ;; the yanked/replaced text even when mark is inactive
+          ;; (Emacs 32 yank no longer activates mark).
           ((and (memq last-command '(helixel-yank helixel-yank-before
                                      helixel-replace yank yank-pop))
-                (use-region-p))
+                (mark t))
            (let ((m (mark t)) (p (point)))
-             (cons (min m p) (max m p)))))))
+             (if (/= m p)
+                 (cons (min m p) (max m p))
+               nil))))))
     (if bounds
         ;; ── Cycle: replace bounds text with next kill-ring entry ──
         (let* ((b (car bounds))
@@ -559,7 +562,15 @@ instead of `insert-for-yank' — `helixel-replace' passes
                                helixel-replace yank yank-pop
                                helixel-yank-pop))
           ;; After a yank/replace with no region, delegate to yank-pop.
-          (yank-pop arg)
+          ;; Capture bounds afterward so subsequent M-y cycles via the
+          ;; helixel--yank-pop-bounds path (yank-pop may not set them).
+          (progn
+            (yank-pop arg)
+            (when-let* ((m (mark t))
+                        ((/= m (point))))
+              (setq helixel--yank-pop-bounds
+                    (cons (min m (point)) (max m (point)))))
+            (setq this-command 'helixel-yank-pop))
         ;; ── Direct call: browse kill-ring and replace ──
         (let* ((candidates (mapcar #'substring-no-properties kill-ring))
                (collection

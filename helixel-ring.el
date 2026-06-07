@@ -48,7 +48,9 @@
   :group 'helixel)
 
 (defcustom helixel-action-cycle-categories
-  '(movement textobj search find-char edit)
+  '(movement textobj search find-char
+    (edit . paste-after) (edit . paste-before)
+    (edit . replace) (edit . yank-pop))
   "Event categories that `;' (`helixel-action-cycle') navigates.
 Each element is either a category symbol (matches all subcats)
 or a cons (CATEGORY . SUBCAT) for precise matching.
@@ -56,9 +58,10 @@ Categories not listed here are invisible during cycling.
 
 Examples:
   \='(movement textobj)              -> all movement + textobj
-  \='(movement textobj (edit . paste-after) (edit . replace))
+  \='(movement textobj (edit . paste-after) (edit . replace)
+     (edit . kill))
                                      -> movement, textobj, and only
-                                        paste/replace edits (no kill)
+                                        paste/replace/kill edits
 Set to nil to disable entirely."
   :type '(repeat (choice symbol (cons symbol symbol)))
   :group 'helixel)

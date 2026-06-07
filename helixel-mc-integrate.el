@@ -230,7 +230,15 @@ state transitions are ignored — in particular entering `insert'
 from `normal' with an active region (the `/foo<RET>ss i' path)
 must NOT wipe each fake's mark, because `helixel-mc--prepos-
 region-begin' relies on `mark-active' to know where the fake's
-selection started."
+selection started.
+
+When leaving visual, deactivation is only triggered for direct
+toggles (`helixel-begin-selection', `helixel-visual-exit').
+For edit commands (kill, change, etc.) that exit visual as a
+side-effect via `helixel--clear-data', the mc post-command
+dispatch loop replays the edit at each fake and handles mark
+deactivation there — deactivating here would destroy the region
+before dispatch can use it."
   (let ((prev helixel-mc--prev-state)
         (curr helixel--current-state))
     (setq helixel-mc--prev-state curr)
@@ -242,11 +250,16 @@ selection started."
           (helixel-mc-with-each-cursor
             (set-marker (mark-marker) (point))
             (setq mark-active t))))
-       ;; Leaving visual: deactivate each fake's mark.
+       ;; Leaving visual: only sync deactivation for direct
+       ;; toggles.  Edit commands (kill, change, ...) exit visual
+       ;; as a side-effect — their per-fake replay in the
+       ;; post-command dispatch loop handles deactivation.
        ((and (eq prev 'visual) (not (eq curr 'visual)))
-        (helixel-with-replay-as 'mc-batch
-          (helixel-mc-with-each-cursor
-            (setq mark-active nil))))))))
+        (when (memq this-command
+                    '(helixel-begin-selection helixel-visual-exit))
+          (helixel-with-replay-as 'mc-batch
+            (helixel-mc-with-each-cursor
+              (setq mark-active nil)))))))))
 
 (add-hook 'helixel-state-change-hook #'helixel-mc--sync-visual-state)
 

@@ -710,7 +710,9 @@ can be pressed repeatedly."
                   (if fwd
                       (progn (set-marker pm e) (set-marker mm b))
                     (set-marker pm b) (set-marker mm e))
-                  (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t)
+                  (setf (helixel-pcs-mark-active
+                         (helixel-mc-cursor-state ov))
+                        t)
                   (helixel-mc--update-fake-region ov))
               ;; Real cursor.
               (if fwd

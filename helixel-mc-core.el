@@ -52,6 +52,7 @@
 ;; before those modules are loaded.
 (defvar helixel--pending-sel)             ; from `helixel-core'
 (defvar helixel--last-tx)             ; from `helixel-core'
+(defvar helixel--raw-selection-type)      ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
 (defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
@@ -151,6 +152,7 @@ so on — broadcasts at one cursor never leak into another."
   mark-ring              ; list of markers
   pending-sel            ; `helixel-sel' or nil  (helixel--pending-sel)
   last-action            ; `helixel-action'      (helixel--last-tx)
+  raw-selection-type     ; symbol | nil          (helixel--raw-selection-type)
   active-search          ; `helixel-active-search' (helixel--active-search)
   event-ring             ; list of `helixel-action' (helixel--action-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
@@ -169,6 +171,7 @@ independent of any later movement of point / mark."
    :mark-ring                 mark-ring
    :pending-sel               helixel--pending-sel
    :last-action               helixel--last-tx
+   :raw-selection-type        helixel--raw-selection-type
    :active-search             helixel--active-search
    :event-ring                helixel--action-ring
    :live-action               helixel--live-action
@@ -186,6 +189,7 @@ Moves point and the `mark-marker' to CS's positions, sets
         mark-ring              (helixel-pcs-mark-ring cs)
         helixel--pending-sel   (helixel-pcs-pending-sel cs)
         helixel--last-tx   (helixel-pcs-last-action cs)
+        helixel--raw-selection-type (helixel-pcs-raw-selection-type cs)
         helixel--active-search (helixel-pcs-active-search cs)
         helixel--action-ring    (helixel-pcs-event-ring cs)
         helixel--live-action   (helixel-pcs-live-action cs)
@@ -211,6 +215,7 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-mark-ring cs)              mark-ring
         (helixel-pcs-pending-sel cs)            helixel--pending-sel
         (helixel-pcs-last-action cs)            helixel--last-tx
+        (helixel-pcs-raw-selection-type cs)     helixel--raw-selection-type
         (helixel-pcs-active-search cs)          helixel--active-search
         (helixel-pcs-event-ring cs)             helixel--action-ring
         (helixel-pcs-live-action cs)            helixel--live-action
@@ -604,6 +609,7 @@ state (kill-ring, event-ring, last-action, …)."
                mark-ring              (helixel-pcs-mark-ring ,cs)
                helixel--pending-sel   (helixel-pcs-pending-sel ,cs)
                helixel--last-tx   (helixel-pcs-last-action ,cs)
+               helixel--raw-selection-type (helixel-pcs-raw-selection-type ,cs)
                helixel--active-search (helixel-pcs-active-search ,cs)
                helixel--action-ring    (helixel-pcs-event-ring ,cs)
                helixel--live-action   (helixel-pcs-live-action ,cs)

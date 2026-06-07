@@ -1207,11 +1207,14 @@ mark on every fake cursor."
     (helixel-enter-normal-state)
     (goto-char 1)
     (helixel-mc-create-fake-cursor 5)
-    (helixel-begin-selection)
+    ;; Simulate interactive `v' to enter visual.
+    (let ((this-command 'helixel-begin-selection))
+      (helixel-begin-selection))
     (dolist (ov (helixel-mc-all-cursors))
       (should (helixel-mc-cursor-mark-active ov)))
-    ;; Now exit visual.
-    (helixel-visual-exit)
+    ;; Simulate interactive ESC / `v' to exit visual.
+    (let ((this-command 'helixel-visual-exit))
+      (helixel-visual-exit))
     (dolist (ov (helixel-mc-all-cursors))
       (should-not (helixel-mc-cursor-mark-active ov)))
     (helixel-mc-clear-all)))

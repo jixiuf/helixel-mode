@@ -953,10 +953,11 @@ If neither runner nor op resolves but preposition ran, EVENT is
 treated as a pure positioner (movement commands at fake cursors)."
   (when-let* ((pre (helixel-action-preposition event)))
     (funcall pre event))
-  (when-let* ((runner (or (helixel-action-runner event)
-                          (and (helixel-action-op event)
-                               (helixel--op-runner (helixel-action-op event))))))
-    (funcall runner event)))
+  (let* ((op (helixel-action-op event))
+         (runner (or (helixel-action-runner event)
+                     (and op (helixel--op-runner op)))))
+    (when runner
+      (funcall runner event))))
 
 (defsubst helixel--repeat-echo (count)
   "Echo COUNT of repeated iterations."

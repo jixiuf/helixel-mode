@@ -751,8 +751,14 @@ exists (e.g. for real-cursor-only commands like
                           ;; Unified path: replay the fresh tx.  Payload
                           ;; carries prompted decisions so nothing
                           ;; re-prompts at fakes.
-                          (helixel-with-replay-as 'dot
-                            (helixel-action-replay fresh-runnable))
+                          (progn
+                            (helixel-with-replay-as 'dot
+                              (helixel-action-replay fresh-runnable))
+                            ;; Runners like `helixel--repeat-change-core'
+                            ;; may reactivate the mark (for undo-in-region
+                            ;; during dot-repeat).  Clear it so fake
+                            ;; cursor regions don't leak as visual artifacts.
+                            (deactivate-mark))
                         ;; Fallback: whitelisted Emacs built-ins
                         ;; (forward-char, next-line, self-insert-command,
                         ;; ...) have no tx — just re-call interactively.

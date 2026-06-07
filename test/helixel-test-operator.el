@@ -257,4 +257,51 @@ hello"
     (helixel-repeat-edit)
     (should (string= (buffer-string) "abcde"))))
 
+(ert-deftest helixel-test-join-lines-select-line-mc-spawn-J ()
+  "xxx ss J joins at least 2 lines per cursor after mc spawn.
+After `xxx' (select-line 3 times) and `ss' (mc-toggle), each cursor
+gets a 1-line region.  The real cursor (nearest to point = last line)
+joins its line with the next (n=2)."
+  (helixel-test-with-buffer "hello\nhello\nhello\nhello"
+    ;; xxx = select 3 lines
+    (helixel-select-line)
+    (helixel-select-line)
+    (helixel-select-line)
+    ;; ss = mc-toggle (spawn fake cursors on each line)
+    (condition-case nil (helixel-mc-toggle) (error nil))
+    ;; J — real cursor is on line 3 (closest to original point)
+    ;; and joins lines 3+4.
+    (helixel-join-lines)
+    (helixel-mc-clear-all)
+    (should (string= (buffer-string)
+                     "hello\nhello\nhello hello"))))
+
+(ert-deftest helixel-test-join-lines-single-line-region-joins-2 ()
+  "J with a single-line region joins 2 lines (selected + next).
+A region confined to one line (e.g. after mc spawn) should still
+join at least the current line with the next, rather than doing
+nothing (region-n=1)."
+  (helixel-test-with-buffer "one\ntwo\nthree"
+    ;; Create a single-line region (like after mc spawn)
+    (goto-char 1)
+    (push-mark (line-end-position) t t)
+    (helixel-join-lines)
+    (should (string= (buffer-string) "one two\nthree"))))
+
+(ert-deftest helixel-test-join-lines-tx-sel-cleared ()
+  "Join-lines tx has nil sel so dot-repeat advance doesn't recreate it.
+Regression: pending line selection from `x' leaked into the tx's sel,
+causing dot-repeat advance to recreate a line selection before the
+runner, moving cursor to wrong position."
+  (helixel-test-with-buffer "hello\nhello\nhello\nhello"
+    (helixel-select-line)
+    (helixel-select-line)
+    (helixel-select-line)
+    (helixel-select-line)
+    (helixel-join-lines)
+    ;; The tx must NOT carry a selection — dot-repeat relies on
+    ;; :count alone, advance is a no-op for ops that move point.
+    (should-not (helixel-action-sel helixel--last-tx))
+    (should (eql 4 (helixel-action-payload-get helixel--last-tx :count)))))
+
 ;;; helixel-test-operator.el ends here

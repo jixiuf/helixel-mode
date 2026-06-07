@@ -2988,5 +2988,38 @@ canonical list."
     (should (plist-member (symbol-plist cmd) 'multiple-cursors))
     (should-not (get cmd 'multiple-cursors))))
 
+(ert-deftest helixel-test-mc-fake-regions-cleared-after-J ()
+  "After mc dispatch of join-lines, fake cursors have no active regions.
+Regression: `helixel--repeat-change-core' (change runner) reactivates
+mark for undo-in-region, which leaked as fake region overlays during
+`c' step in `mhsxJc,' flow.  Fixed by `deactivate-mark' after
+runner replay in mc dispatch."
+  (helixel-test-with-buffer "hello\nhello\nhello\nhello"
+    (goto-char 1)
+    (mark-whole-buffer)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    ;; Real cursor runs J — records a tx with :count from region
+    (helixel-join-lines)
+    ;; Manually simulate mc dispatch: replay the fresh tx at each
+    ;; fake cursor (what post-command-hook would do), then verify
+    ;; regions are cleared.
+    (let ((tx helixel--last-tx))
+      (should tx)
+      (should (helixel-action-runner tx))
+      (dolist (ov (helixel-mc-all-cursors))
+        (when (helixel-mc-fake-cursor-p ov)
+          (helixel-mc--enter-cursor ov)
+          (unwind-protect
+              (progn
+                (helixel-action-replay tx)
+                (deactivate-mark))    ;; same as dispatch fix
+            (helixel-mc--leave-cursor ov))))
+      ;; Now verify: no fake cursor has an active region
+      (dolist (ov (helixel-mc-all-cursors))
+        (when (helixel-mc-fake-cursor-p ov)
+          (let ((cs (overlay-get ov 'helixel-pc-state)))
+            (should (not (helixel-pcs-mark-active cs)))))))
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

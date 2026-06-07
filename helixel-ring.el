@@ -49,9 +49,18 @@
 
 (defcustom helixel-action-cycle-categories
   '(movement textobj search find-char edit)
-  "Event :category symbols that `;' (`helixel-action-cycle') navigates.
-Categories not listed here are invisible during cycling."
-  :type '(repeat symbol)
+  "Event categories that `;' (`helixel-action-cycle') navigates.
+Each element is either a category symbol (matches all subcats)
+or a cons (CATEGORY . SUBCAT) for precise matching.
+Categories not listed here are invisible during cycling.
+
+Examples:
+  \='(movement textobj)              -> all movement + textobj
+  \='(movement textobj (edit . paste-after) (edit . replace))
+                                     -> movement, textobj, and only
+                                        paste/replace edits (no kill)
+Set to nil to disable entirely."
+  :type '(repeat (choice symbol (cons symbol symbol)))
   :group 'helixel)
 
 (defcustom helixel-semicolon-mark-thing
@@ -481,8 +490,16 @@ category and subcat."
 ;; ----------------------------------------------------------------------
 
 (defun helixel-action--cycle-visible-p (event)
-  "Return non-nil if EVENT should be visible during `;' cycling."
-  (memq (helixel-action-category event) helixel-action-cycle-categories))
+  "Return non-nil if EVENT should be visible during `;' cycling.
+Consults `helixel-action-cycle-categories', which supports both
+category symbols (match all subcats) and (CATEGORY . SUBCAT) pairs."
+  (cl-some
+   (lambda (entry)
+     (if (consp entry)
+         (and (eq (helixel-action-category event) (car entry))
+              (eq (helixel-action-subcat event) (cdr entry)))
+       (eq (helixel-action-category event) entry)))
+   helixel-action-cycle-categories))
 
 (defun helixel-action--cycle-display (event pos ring)
   "Format cycling message for EVENT at POS in RING."

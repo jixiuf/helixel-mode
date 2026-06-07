@@ -801,38 +801,32 @@ Like `join-line' but replaces `fixup-whitespace' with
 (helixel-define-command helixel-join-lines
     (:category edit :subcat join-lines :params (&optional count))
   (interactive "p")
-  (let* ((no-space (and (use-region-p) (consp current-prefix-arg)))
-         ;; Snapshot pending line-selection count before
-         ;; `helixel--record-action' consumes the pending-sel.
-         ;; This handles `xxx ss J' where mc-toggle deactivates the
-         ;; region but the pending-sel still holds the original count.
-         (pending-count (and helixel--pending-sel
-                             (eq (helixel-sel-kind helixel--pending-sel)
-                                 'line)
-                             (helixel-sel-line-count
-                              helixel--pending-sel)))
+  ;; Pop pending selection early — join-lines only needs the count,
+  ;; never the selection recreation.  Pre-popping ensures
+  ;; `helixel--record-action' gets nil so the tx carries no sel, and
+  ;; dot-repeat advance doesn't recreate a spurious line selection.
+  (let* ((popped (helixel--sel-pop))
+         (pending-count (and popped
+                             (eq (helixel-sel-kind popped) 'line)
+                             (helixel-sel-line-count popped)))
+         (no-space (and (use-region-p) (consp current-prefix-arg)))
          (n (if (use-region-p)
                 ;; Region active: join all lines spanned by selection.
-                (let ((region-n
-                       (save-excursion
-                         (let ((beg (region-beginning))
-                               (end (region-end)))
-                           (goto-char end)
-                           (1+ (- (line-number-at-pos
-                                   (if (bolp) (1- end) end))
-                                  (line-number-at-pos beg)))))))
-                  ;; A single-line region (region-n=1) is degenerate:
-                  ;; join at least the current line with the next.
-                  ;; This matters after mc spawn (`ss' / `sx') where
-                  ;; each cursor gets a 1-line region.
-                  (max region-n 2))
+                ;; A single-line region (region-n=1) is degenerate —
+                ;; join at least the current line with the next.
+                ;; Matters after mc spawn where each cursor gets a
+                ;; 1-line region.
+                (max (save-excursion
+                       (let ((beg (region-beginning))
+                             (end (region-end)))
+                         (goto-char end)
+                         (1+ (- (line-number-at-pos
+                                 (if (bolp) (1- end) end))
+                                (line-number-at-pos beg)))))
+                     2)
               (or pending-count
                   (max (or count 1) 2)))))
     (helixel--record-action 'join-lines :count n :no-space no-space)
-    ;; Clear the tx's sel so dot-repeat advance doesn't recreate a
-    ;; line selection from the popped pending-sel (which would move
-    ;; the cursor before the runner, breaking `xxxx J j .`).
-    (setf (helixel-action-sel helixel--last-tx) nil)
     (when (use-region-p)
       (goto-char (region-beginning)))
     (dotimes (_ (1- n))

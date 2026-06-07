@@ -397,15 +397,29 @@ Creates independent marker copy; the jump-log entry is lightweight."
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
 
-(defun helixel--clear-data ()
-  "Clear any intermediate data, e.g. selections/mark.
-Used by state machine, surround, and jump navigation."
+(defvar helixel-clear-data-hook nil
+  "Hook run at the start of `helixel--clear-data'.
+Modules can add functions here to perform cleanup before
+selection data is cleared.  For example, `helixel-state.el'
+adds a function to exit visual state.")
+
+(defun helixel--clear-data-internal ()
+  "Clear selection data without running `helixel-clear-data-hook'.
+Called directly by `helixel--switch-state' to avoid triggering
+hook functions (like visual exit) that would re-enter state switching.
+All other callers should use `helixel--clear-data'."
   (setq helixel--raw-selection-type nil)
   (setq helixel--action-pos nil)
   (setq helixel--pending-sel nil)
   (when rectangle-mark-mode
     (rectangle-mark-mode -1))
   (deactivate-mark))
+
+(defun helixel--clear-data ()
+  "Clear any intermediate data, e.g. selections/mark.
+Used by state machine, surround, and jump navigation."
+  (run-hooks 'helixel-clear-data-hook)
+  (helixel--clear-data-internal))
 
 
 ;; ----------------------------------------------------------------------

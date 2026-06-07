@@ -200,7 +200,7 @@ Consumed alongside `helixel--pending-sel'.")
   (unless (eq state helixel--current-state)
     (when-let* ((mode (alist-get helixel--current-state helixel-state-alist)))
       (funcall mode -1))
-    (helixel--clear-data)
+    (helixel--clear-data-internal)
     (setq-local helixel--current-state state)
     (let ((mode (alist-get state helixel-state-alist)))
       (funcall mode 1))
@@ -220,6 +220,20 @@ Also preserve highlights when `rectangle-mark-mode' is active."
   "Exit visual state and return to normal state."
   (interactive)
   (helixel--switch-state (helixel--default-state-for-buffer)))
+
+(defun helixel--clear-data-exit-visual ()
+  "Exit visual state during `helixel--clear-data', if active.
+Registered on `helixel-clear-data-hook' so that every
+`helixel--clear-data' call (from edit commands, jump navigation,
+etc.) automatically returns to normal state after an edit.
+
+`helixel--switch-state' calls `helixel--clear-data-internal'
+\(which does not run this hook), so state switching never
+re-enters visual exit."
+  (when (eq helixel--current-state 'visual)
+    (helixel-visual-exit)))
+
+(add-hook 'helixel-clear-data-hook #'helixel--clear-data-exit-visual)
 
 (defun helixel-begin-selection ()
   "Begin visual selection or exit visual state."

@@ -1677,4 +1677,58 @@ insertions."
       (should (equal :text (caar segs)))
       (should (equal :keys (caar (cdr segs)))))))
 
+;; ── Visual exit on edit ──
+
+(ert-deftest helixel-test-clear-data-exits-visual ()
+  "`helixel--clear-data' exits visual state."
+  (helixel-test-with-buffer "aaa bbb ccc\n"
+    (helixel-enter-normal-state)
+    (helixel-begin-selection)
+    (should (eq helixel--current-state 'visual))
+    (helixel--clear-data)
+    (should (eq helixel--current-state 'normal))
+    (should (not (use-region-p)))))
+
+(ert-deftest helixel-test-kill-exits-visual ()
+  "`helixel-kill-thing-at-point' (d) exits visual state."
+  (helixel-test-with-buffer "aaa bbb ccc\n"
+    (helixel-enter-normal-state)
+    (helixel-begin-selection)
+    (helixel-forward-word-start)
+    (should (eq helixel--current-state 'visual))
+    (should (use-region-p))
+    (helixel-kill-thing-at-point)
+    (should (eq helixel--current-state 'normal))
+    (should (not (use-region-p)))))
+
+(ert-deftest helixel-test-kill-ring-save-exits-visual ()
+  "`helixel-kill-ring-save' (y) exits visual state."
+  (helixel-test-with-buffer "aaa bbb ccc\n"
+    (helixel-enter-normal-state)
+    (helixel-begin-selection)
+    (helixel-forward-word-start)
+    (should (eq helixel--current-state 'visual))
+    (helixel-kill-ring-save)
+    (should (eq helixel--current-state 'normal))
+    (should (not (use-region-p)))))
+
+(ert-deftest helixel-test-replace-exits-visual ()
+  "`helixel-replace' (r) exits visual state."
+  (helixel-test-with-buffer "aaa bbb ccc\n"
+    (helixel-enter-normal-state)
+    (helixel-begin-selection)
+    (helixel-forward-word-start)
+    (should (eq helixel--current-state 'visual))
+    (helixel-replace)
+    (should (eq helixel--current-state 'normal))))
+
+(ert-deftest helixel-test-line-kill-exits-visual ()
+  "`d' exits visual even with a line-wise selection (x)."
+  (helixel-test-with-buffer "line1\nline2\nline3\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line)
+    (should (eq helixel--current-state 'visual))
+    (helixel-kill-thing-at-point)
+    (should (eq helixel--current-state 'normal))))
+
 ;;; helixel-test-edit.el ends here

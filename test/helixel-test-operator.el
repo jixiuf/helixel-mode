@@ -304,4 +304,78 @@ runner, moving cursor to wrong position."
     (should-not (helixel-action-sel helixel--last-tx))
     (should (eql 4 (helixel-action-payload-get helixel--last-tx :count)))))
 
+(ert-deftest helixel-test-toggle-case-bword-dot-repeat ()
+  "b~ at eob, then . repeatedly — must advance backward each time.
+
+Regression: `helixel-toggle-case' on a region used `delete-region'
++ `insert', which left point at region-end.  This broke the `.`
+advance because `b' (backward-word-start) from region-end
+re-selected the same word instead of the previous one."
+  (helixel-test-with-buffer "hello\nworld\nFOO\nBAR"
+    (goto-char (point-max))              ; eob
+    ;; b → backward word
+    (call-interactively #'helixel-backward-word-start)
+    ;; ~ → toggle case on region (should stay at region-beginning)
+    (call-interactively #'helixel-toggle-case)
+    (should (= (point) 17))              ; stayed at region-beginning
+    (should (string= (buffer-string) "hello\nworld\nFOO\nbar"))
+    ;; . → advance backward one word, toggle region
+    (call-interactively #'helixel-repeat-edit)
+    (should (= (point) 13))              ; moved to previous word
+    (should (string= (buffer-string) "hello\nworld\nfoo\nbar"))
+    ;; . → advance backward again
+    (call-interactively #'helixel-repeat-edit)
+    (should (= (point) 7))               ; moved to second word
+    (should (string-match-p "WORLD" (buffer-string)))
+    ;; . → advance backward once more
+    (call-interactively #'helixel-repeat-edit)
+    (should (= (point) 1))
+    (should (string-match-p "HELLO" (buffer-string)))))
+
+(ert-deftest helixel-test-toggle-case-fword-dot-repeat ()
+  "w~ then . repeatedly — must advance forward each time.
+
+Same root cause as `helixel-test-toggle-case-bword-dot-repeat',
+but for forward motion: after `w~' point must stay at region-end
+so `.` advance continues forward."
+  (helixel-test-with-buffer "hello world foo bar"
+    (goto-char 1)
+    ;; w → forward word
+    (call-interactively #'helixel-forward-word-start)
+    ;; ~ → toggle case on region (should stay at region-end)
+    (call-interactively #'helixel-toggle-case)
+    (should (= (point) 7))               ; stayed at region-end
+    (should (string= (buffer-string) "HELLO world foo bar"))
+    ;; . → advance forward one word, toggle region
+    (call-interactively #'helixel-repeat-edit)
+    (should (= (point) 13))              ; moved to next word
+    (should (string= (buffer-string) "HELLO WORLD foo bar"))
+    ;; . → advance forward again
+    (call-interactively #'helixel-repeat-edit)
+    (should (= (point) 17))              ; moved to third word
+    (should (string= (buffer-string) "HELLO WORLD FOO bar"))
+    ;; . → advance forward once more
+    (call-interactively #'helixel-repeat-edit)
+    (should (= (point) 20))              ; moved to last word (eob)
+    (should (string= (buffer-string) "HELLO WORLD FOO BAR"))))
+
+(ert-deftest helixel-test-toggle-case-dot-repeat-point-preserved ()
+  "~ at eob followed by . errors cleanly but action is still recorded.
+
+After the error, `helixel--last-tx' should still be valid for
+replay at a non-eob position."
+  (helixel-test-with-buffer "hello\nworld"
+    (goto-char (point-max))              ; eob
+    (condition-case nil
+        (call-interactively #'helixel-toggle-case)
+      (error nil))
+    ;; Even though ~ errored, a tx was recorded (record-action runs
+    ;; before the following-char check).  Move off eob and replay.
+    (should helixel--last-tx)
+    (goto-char 1)
+    ;; Replay the toggle-case tx at position 1
+    (let ((tx helixel--last-tx))
+      (funcall (helixel--op-runner (helixel-action-op tx)) tx))
+    (should (string= (buffer-string) "Hello\nworld"))))
+
 ;;; helixel-test-operator.el ends here

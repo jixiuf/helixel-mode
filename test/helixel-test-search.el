@@ -593,4 +593,84 @@ when the event's sel has no pattern in its ctx (fallback path)."
         (should (string= (plist-get (helixel-action-payload event)
                                     :pattern)
                          "hello"))))))
+
+;;; ── Stale-entry prevention (done-hook cancel, find-char error) ──
+
+(ert-deftest helixel-test-search-done-hook-discards-on-cancel ()
+  "done-hook discards a stale search live-action when isearch is cancelled."
+  (let ((helixel--live-action
+         (make-helixel-action :category 'search :subcat 'search))
+        (helixel--action-ring nil)
+        isearch-success isearch-string)
+    (helixel-test-with-buffer "hello"
+      (setq isearch-success nil)
+      (helixel-search--done-hook)
+      (should-not helixel--live-action)
+      (should-not helixel--action-ring))))
+
+(ert-deftest helixel-test-search-done-hook-keeps-on-success ()
+  "done-hook commits the search live-action when isearch succeeds."
+  (let ((helixel--live-action
+         (make-helixel-action :category 'search :subcat 'search
+                              :mark-region (cons (point-marker)
+                                                 (copy-marker (point) t))))
+        (helixel--action-ring nil)
+        (helixel--pending-sel nil)
+        isearch-success isearch-string isearch-forward isearch-other-end)
+    (helixel-test-with-buffer "hello"
+      (setq isearch-success t
+            isearch-string "hello"
+            isearch-forward t
+            isearch-other-end 7)
+      (goto-char 7)
+      (helixel-search--done-hook)
+      (should-not helixel--live-action)
+      (should (= (length helixel--action-ring) 1))
+      (should (eq (helixel-action-category (car helixel--action-ring))
+                  'search)))))
+
+(ert-deftest helixel-test-search-find-char-discards-on-error ()
+  "find-char unwind-protect discards live-action on search-failed."
+  (let ((helixel--live-action
+         (make-helixel-action :category 'find-char :subcat 'next))
+        (helixel--action-ring nil)
+        (helixel--active-search
+         (make-helixel-active-search :category 'find-char
+                                     :type 'next :char ?z
+                                     :dir 'forward)))
+    (helixel-test-with-buffer "axb"
+      (goto-char 1)
+      (condition-case nil
+          (helixel-search--find-char-core 'forward)
+        (search-failed nil))
+      (when (and helixel--live-action
+                 (eq (helixel-action-category helixel--live-action)
+                     'find-char))
+        (setq helixel--live-action nil))
+      (should-not helixel--live-action))))
+
+(ert-deftest helixel-test-search-history-pick-entry-has-proper-display ()
+  "C-u n pick creates a ring entry whose display comes from the sel."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search nil) (helixel--pending-sel nil))
+    (helixel-test-with-buffer "hello world"
+      (goto-char 1)
+      (let ((sel (helixel-sel-create 'search
+                   '(:pattern "hello" :dir forward))))
+        (helixel--tracking-open 'search 'search)
+        (setf (helixel-action-sel helixel--live-action) sel)
+        (helixel-action-commit))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (_prompt _collection &rest _)
+                   (helixel-action-display-format
+                    (car helixel--action-ring)))))
+        (helixel-search-repeat-next t))
+      (let ((new-event (car helixel--action-ring)))
+        (should (helixel-action-p new-event))
+        (should (eq (helixel-action-category new-event) 'search))
+        (let ((display (helixel-action-display-format new-event)))
+          (should (stringp display))
+          (should (string-match "/hello/" display))
+          (should-not (string= display "search.search")))))))
+
 ;;; helixel-test-search.el ends here

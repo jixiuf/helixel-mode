@@ -216,24 +216,28 @@ matches to match the original n count."
        'search `(:pattern ,pat :dir ,dir :n-count ,n-count)))))
 
 (defun helixel-search--done-hook ()
-  "Hook called at the end of isearch to mark the match."
+  "Hook called at the end of isearch to mark the match.
+On cancel (\[keyboard-quit]) discards the stale live-action so it
+is not committed by the next command."
   (remove-hook 'isearch-mode-end-hook #'helixel-search--done-hook t)
-  (when (and isearch-success isearch-string
-             (not (string-empty-p isearch-string)))
-    (let ((dir (if isearch-forward 'forward 'backward)))
-      ;; Update live-event's mark-region to the match so ; jumps
-      ;; to the match position, not the pre-search point.
-      (when (and isearch-other-end helixel--live-action)
-        (helixel--set-mark-region
-         (cons (min isearch-other-end (point))
-               (max isearch-other-end (point)))))
-      ;; Set up search state and sel BEFORE commit so the event
-      ;; carries its sel for ; / . repeat.
-      (setq helixel--active-search
-            (make-helixel-active-search
-             :category 'search :pattern isearch-string :dir dir))
-      (helixel-search--set-sel-ctx)
-      (helixel-action-commit)))
+  (if (and isearch-success isearch-string
+           (not (string-empty-p isearch-string)))
+      ;; Successful search — commit with proper sel.
+      (let ((dir (if isearch-forward 'forward 'backward)))
+        (when (and isearch-other-end helixel--live-action)
+          (helixel--set-mark-region
+           (cons (min isearch-other-end (point))
+                 (max isearch-other-end (point)))))
+        (setq helixel--active-search
+              (make-helixel-active-search
+               :category 'search :pattern isearch-string :dir dir))
+        (helixel-search--set-sel-ctx)
+        (helixel-action-commit))
+    ;; Cancelled — discard the tracking-open shell so the next
+    ;; command's tracking-open does not commit a stale entry.
+    (when (and helixel--live-action
+               (eq (helixel-action-category helixel--live-action) 'search))
+      (setq helixel--live-action nil)))
   (helixel-search--handle-done helixel-search--had-region))
 
 (defun helixel-search--handle-done (_had-region)
@@ -444,7 +448,14 @@ DOC is the docstring."
      (let ((helixel--current-command ',name)
            (this-command ',name))
        (helixel--tracking-open 'find-char ',type)
-       (helixel-search--find-char-exec char ',type ,dir))))
+       ;; unwind-protect: on error (e.g. char not found), discard the
+       ;; stale live-action so the next command does not commit a shell.
+       (unwind-protect
+           (helixel-search--find-char-exec char ',type ,dir)
+         (when (and helixel--live-action
+                    (eq (helixel-action-category helixel--live-action)
+                        'find-char))
+           (setq helixel--live-action nil))))))
 
 (helixel--def-find-char helixel-find-next-char next 1
                         "Find next CHAR forward.")
@@ -648,7 +659,10 @@ Returns the chosen action plist or nil."
     (cdr (assoc choice alist))))
 
 (defun helixel-search--history-execute (event use-dir)
-  "Execute EVENT (a `helixel-action' struct) in direction USE-DIR."
+  "Execute EVENT (a `helixel-action' struct) in direction USE-DIR.
+Sets `helixel--active-search' and pushes the pending sel BEFORE
+committing, so the new ring entry carries its selection descriptor
+and appears correctly in `C-u n' history and \=`;\=' cycling."
   (let ((cat (helixel-action-category event)))
     (helixel-search--set-dir use-dir)
     (pcase cat
@@ -657,12 +671,29 @@ Returns the chosen action plist or nil."
               (ctx (and sel (helixel-sel-ctx sel)))
               (type (helixel-sel-find-char-type ctx))
               (char (helixel-sel-find-char-char ctx)))
-         (helixel--tracking-open cat (helixel-action-subcat event))
-         (helixel-action-commit)
-         
+         ;; Set up search state and sel BEFORE commit so the
+         ;; committed entry carries its descriptor.
          (setq helixel--active-search
                (make-helixel-active-search
                 :category 'find-char :type type :char char :dir use-dir))
+         (helixel-search--find-char-set-sel char type use-dir)
+         (helixel--tracking-open cat (helixel-action-subcat event))
+         ;; Attach payload + runner (mirrors helixel-search--find-char-exec)
+         ;; so mc dispatch and . replay can use this entry.
+         (when helixel--live-action
+           (setf (helixel-action-payload helixel--live-action)
+                 (list :char char :type type :dir use-dir))
+           (setf (helixel-action-runner helixel--live-action)
+                 (lambda (tx)
+                   (let ((c (helixel-action-char tx))
+                         (ty (helixel-action-type tx))
+                         (d (helixel-action-dir tx)))
+                     (setq helixel--active-search
+                           (make-helixel-active-search
+                            :category 'find-char :type ty
+                            :char c :dir d))
+                     (helixel-search--find-char-core d)))))
+         (helixel-action-commit)
          (helixel-search--find-char-core use-dir)))
        ('search
         (let* ((sel (helixel-action-sel event))
@@ -672,20 +703,21 @@ Returns the chosen action plist or nil."
                (isearch-other-end nil))
           (unless pattern
             (setq pattern (helixel-action-payload-get event :pattern)))
-          (helixel--tracking-open cat (helixel-action-subcat event))
-          (helixel-action-commit)
-          
+          ;; Set up search state and sel BEFORE commit.
           (setq helixel--active-search
                 (make-helixel-active-search
                  :category 'search :pattern pattern :dir use-dir))
+          (helixel-search--set-sel-ctx)
+          (helixel--tracking-open cat (helixel-action-subcat event))
+          (helixel-action-commit)
+          ;; Now execute the actual search.
           (condition-case nil
               (helixel-search--search pattern use-dir)
             (search-failed (message "Search failed: %s" pattern)))
           (setq isearch-success (and (match-beginning 0) t))
           (when isearch-success
             (setq isearch-other-end (match-beginning 0)))
-          (helixel-search--handle-done had-region)
-          (helixel-search--set-sel-ctx))))))
+          (helixel-search--handle-done had-region))))))
 
 (defun helixel-search--from-history (forwardp)
   "Select and execute a search/find-char from `helixel--action-ring'.
@@ -885,8 +917,13 @@ using advance+apply without recursion."
   :recreate #'helixel--recreate-find-char
   :advance  #'helixel--repeat-advance-movement
   :display  (lambda (ctx)
-              (let ((c (helixel-sel-find-char-char ctx)))
-                (if c (format "f%c" c) "f"))))
+              (let* ((c (helixel-sel-find-char-char ctx))
+                     (ty (helixel-sel-find-char-type ctx))
+                     (dir (helixel-sel-find-char-dir ctx))
+                     (prefix (if (eq ty 'till)
+                                 (if (eq dir 'forward) ?t ?T)
+                               (if (eq dir 'forward) ?f ?F))))
+                (if c (format "%c→%c" prefix c) (string prefix)))))
 
 ;; ── Hook registrations ──
 

@@ -539,9 +539,13 @@ Typically `helixel--clear-data'.")
 
 (defun helixel-action-display-format (event)
   "Format `helixel-action' EVENT for display in cycling messages.
-Uses `helixel-action-display' if set, otherwise builds from
+Uses `helixel-action-display' if set, otherwise tries the
+selection descriptor's display, and finally falls back to
 category and subcat."
   (or (helixel-action-display event)
+      (when-let* ((sel (helixel-action-sel event))
+                  (d (helixel-sel-call-display sel)))
+        d)
       (let ((cat (helixel-action-category event))
             (sub (helixel-action-subcat event)))
         (cond

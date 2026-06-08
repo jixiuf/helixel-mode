@@ -96,6 +96,56 @@
     (should (= (region-beginning) 4))
     (should (= (region-end) 8))))
 
+(ert-deftest helixel-test-textobj-eob-symbol ()
+  "Test inner symbol at end of buffer selects last symbol."
+  (with-temp-buffer
+    (insert "hello world")
+    (goto-char (point-max)) ; EOB after "world"
+    (call-interactively #'helixel-mark-inner-symbol)
+    (should (= (region-beginning) 7))  ; start of "world"
+    (should (= (region-end) 12))))     ; end of "world"
+
+(ert-deftest helixel-test-textobj-eob-word ()
+  "Test inner word at end of buffer selects last word."
+  (with-temp-buffer
+    (insert "hello world")
+    (goto-char (point-max))
+    (call-interactively #'helixel-mark-inner-word)
+    (should (= (region-beginning) 7))
+    (should (= (region-end) 12))))
+
+(ert-deftest helixel-test-textobj-eob-a-symbol ()
+  "Test a-symbol at end of buffer selects last symbol with leading ws."
+  (with-temp-buffer
+    (insert "hello world")
+    (goto-char (point-max))
+    (call-interactively #'helixel-mark-a-symbol)
+    ;; a-variant includes leading whitespace when no trailing ws
+    (should (= (region-beginning) 6))
+    (should (= (region-end) 12))))
+
+(ert-deftest helixel-test-textobj-eob-trailing-ws ()
+  "Test inner symbol at EOB with trailing whitespace skips ws."
+  (with-temp-buffer
+    (insert "hello world   \n\n")
+    (goto-char (point-max))
+    (call-interactively #'helixel-mark-inner-symbol)
+    (should (= (region-beginning) 7))
+    (should (= (region-end) 12))))
+
+(ert-deftest helixel-test-textobj-eob-multiline ()
+  "Test inner symbol at EOB in multiline buffer selects last symbol."
+  (with-temp-buffer
+    (insert "worldworld\nhello hello\nhello\nhello\nhello world")
+    (goto-char (point-max)) ; EOB after 'd' in last "world"
+    (call-interactively #'helixel-mark-inner-symbol)
+    (let ((last-line-start (save-excursion
+                             (goto-char (point-min))
+                             (forward-line 4)
+                             (point))))
+      (should (= (region-beginning) (+ last-line-start 6)))
+      (should (= (region-end) (point-max))))))
+
 ;;; Sentence text object tests
 
 (ert-deftest helixel-test-textobj-sentence-basic ()

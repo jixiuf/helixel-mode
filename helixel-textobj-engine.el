@@ -669,8 +669,9 @@ the count so `.' repeats the full chain of textobj selections."
 (defun helixel--ensure-point-in-thing ()
   "Adjust point so `bounds-of-thing-at-point' finds the current thing.
 If region is active with content and point is at or past `region-end',
-move point into the region content.  Otherwise if point is on
-whitespace, skip whitespace backward then backward one char."
+move point into the region content.  Otherwise if point is at
+end-of-buffer or on whitespace, skip whitespace backward then
+backward one char."
   (cond
    ((and (region-active-p) (>= (point) (region-end))
          (helixel--region-has-content-p))
@@ -678,7 +679,7 @@ whitespace, skip whitespace backward then backward one char."
     (skip-chars-backward " \t\n\r\f")
     (when (and (not (bobp)) (> (point) (region-beginning)))
       (backward-char)))
-   ((looking-at "[ \t\n\r\f]")
+   ((or (eobp) (looking-at "[ \t\n\r\f]"))
     (skip-chars-backward " \t\n\r\f")
     (unless (bobp)
       (backward-char)))))

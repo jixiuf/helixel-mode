@@ -1361,9 +1361,14 @@ is non-nil and not equal to `helixel-default-register'."
        (not (eq helixel--current-register helixel-default-register))))
 
 (defun helixel--register-consume ()
-  "Return and clear `helixel--current-register'."
+  "Return and clear `helixel--current-register'.
+When multi-cursor mode is active the real cursor runs first and
+would consume the register before fake cursors can replay.  We
+suppress the clear here; `helixel-mc--post-command' clears it
+after all cursors have run."
   (prog1 helixel--current-register
-    (setq helixel--current-register nil)))
+    (unless (bound-and-true-p helixel-multi-cursor-mode)
+      (setq helixel--current-register nil))))
 
 (defun helixel-register-rotate-delete (text)
   "Rotate numbered delete registers and store TEXT in the first slot.

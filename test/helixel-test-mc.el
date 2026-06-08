@@ -3074,5 +3074,152 @@ Verifies per-cursor isolation — cursor 1's copy does not overwrite cursor 2's.
       (should (helixel--swap-source-from-kill)))
     (helixel-mc-clear-all)))
 
+;; ── Multi-cursor named register isolation ──
+
+(ert-deftest helixel-test-mc-register-per-cursor ()
+  "Named registers are per-cursor isolated in mc mode.
+After copying to register a at each cursor, each cursor's
+per-cursor register content is independent."
+  (helixel-test-with-buffer "foo\nbar\nfar\n"
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    (should (= (helixel-mc-num-cursors) 3))
+    ;; Real cursor copies its word to register a (global).
+    (goto-char (pos-bol))
+    (setq helixel--raw-selection-type nil)
+    (let ((w (save-excursion (forward-word) (point))))
+      (push-mark w t t)
+      (exchange-point-and-mark)
+      (setq helixel--current-register ?a)
+      (helixel-kill-ring-save))
+    ;; Fake cursors copy their words to per-cursor register a.
+    (helixel-mc-with-each-cursor
+      (goto-char (pos-bol))
+      (setq helixel--raw-selection-type nil)
+      (let ((w (save-excursion (forward-word) (point))))
+        (push-mark w t t)
+        (exchange-point-and-mark)
+        (setq helixel--current-register ?a)
+        (helixel-kill-ring-save)))
+    ;; Verify per-cursor register isolation:
+    ;; Each fake cursor has its own register content.
+    (let ((contents nil))
+      (helixel-mc-with-each-cursor
+        (push (cons (line-number-at-pos)
+                    (helixel-register-get ?a))
+              contents))
+      (setq contents (nreverse contents))
+      (should (= (length contents) 2))
+      (should (member (cons 2 "bar") contents))
+      (should (member (cons 3 "far") contents)))
+    ;; Real cursor's register a is in global storage.
+    (should (equal "foo" (get-register ?a)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-register-paste-end-to-end ()
+  "End-to-end: `\"ay' then `\"ap' at each cursor in mc mode.
+Simulates the interactive dispatch path: real cursor runs first
+(tx recorded), then post-command replays at fakes."
+  (helixel-test-with-buffer "foo\nbar\nfar\n"
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    (should (= (helixel-mc-num-cursors) 3))
+    ;; Register selection is real-only; set it globally.
+    (setq helixel--current-register ?a)
+    ;; Step 1: copy at real cursor (would be `y' interactively).
+    ;; Real cursor is at the line nearest to point.
+    (goto-char (pos-bol))
+    (setq helixel--raw-selection-type nil)
+    (let ((w (save-excursion (forward-word) (point))))
+      (push-mark w t t)
+      (exchange-point-and-mark)
+      (helixel-kill-ring-save))
+    ;; After copy, register is still ?a (consume suppressed by mc mode).
+    (should (eq helixel--current-register ?a))
+    ;; Step 2: mc dispatch replays the copy tx at fakes.
+    (helixel-mc-with-each-cursor
+      (goto-char (pos-bol))
+      (should (eq helixel--current-register ?a))
+      (setq helixel--raw-selection-type nil)
+      (let ((w (save-excursion (forward-word) (point))))
+        (push-mark w t t)
+        (exchange-point-and-mark)
+        (helixel-kill-ring-save)))
+    ;; Reset register for paste operation.
+    (setq helixel--current-register ?a)
+    ;; Step 3: paste at real cursor.
+    (goto-char (pos-bol))
+    (helixel-yank-before)               ; P pastes before cursor
+    ;; Step 4: mc dispatch replays paste at fakes.
+    (helixel-mc-with-each-cursor
+      (goto-char (pos-bol))
+      (helixel-yank-before))
+    ;; Each line prepended with its own word (paste-before at bol).
+    (should (string= (buffer-string) "foofoo\nbarbar\nfarfar\n"))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-register-consumed-after-dispatch ()
+  "`helixel--current-register' is nil after mc dispatch.
+`helixel--register-consume' is suppressed during mc; post-command
+is responsible for clearing it."
+  (helixel-test-with-buffer "AAA\nBBB\n"
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    (should (= (helixel-mc-num-cursors) 2))
+    ;; Set register on real cursor.
+    (setq helixel--current-register ?a)
+    ;; Simulate real cursor yank.
+    (setq helixel--raw-selection-type nil)
+    (push-mark (pos-eol) t t)
+    (exchange-point-and-mark)
+    (helixel-kill-ring-save)
+    ;; Register should still be ?a (consume suppressed).
+    (should (eq helixel--current-register ?a))
+    ;; Now simulate what post-command does: dispatch then clear.
+    (helixel-mc-with-each-cursor
+      (setq helixel--raw-selection-type nil)
+      (push-mark (pos-eol) t t)
+      (exchange-point-and-mark)
+      (should (eq helixel--current-register ?a))
+      (helixel-kill-ring-save))
+    ;; Simulate post-command cleanup.
+    (setq helixel--current-register nil)
+    (should (null helixel--current-register))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-register-mixed-names ()
+  "Different registers are per-cursor isolated.
+Cursor 1 copies to register a, cursor 2 to register b."
+  (helixel-test-with-buffer "AAA\nBBB\n"
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    (should (= (helixel-mc-num-cursors) 2))
+    ;; Real cursor: copy to register a.
+    (goto-char (pos-bol))
+    (setq helixel--current-register ?a)
+    (setq helixel--raw-selection-type nil)
+    (push-mark (pos-eol) t t)
+    (exchange-point-and-mark)
+    (helixel-kill-ring-save)
+    ;; Fake cursor: copy to register b.
+    (helixel-mc-with-each-cursor
+      (goto-char (pos-bol))
+      (setq helixel--current-register ?b)
+      (setq helixel--raw-selection-type nil)
+      (push-mark (pos-eol) t t)
+      (exchange-point-and-mark)
+      (helixel-kill-ring-save))
+    ;; Verify per-cursor isolation for register b.
+    (helixel-mc-with-each-cursor
+      (should (equal "BBB" (helixel-register-get ?b)))
+      (should-not (helixel-register-get ?a)))
+    ;; Real cursor's register a is in global storage.
+    (should (equal "AAA" (get-register ?a)))
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

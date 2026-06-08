@@ -54,6 +54,7 @@
 (defvar helixel--last-tx)             ; from `helixel-core'
 (defvar helixel--raw-selection-type)      ; from `helixel-core'
 (defvar helixel--yank-register-source)    ; from `helixel-core' (mc per-cursor)
+(defvar helixel--current-register)        ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
 (defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
@@ -154,6 +155,7 @@ so on — broadcasts at one cursor never leak into another."
   pending-sel            ; `helixel-sel' or nil  (helixel--pending-sel)
   last-action            ; `helixel-action'      (helixel--last-tx)
   yank-register-source   ; swap-source plist     (helixel--yank-register-source)
+  registers-alist        ; list (copy of register-alist)
   raw-selection-type     ; symbol | nil          (helixel--raw-selection-type)
   active-search          ; `helixel-active-search' (helixel--active-search)
   event-ring             ; list of `helixel-action' (helixel--action-ring)
@@ -174,6 +176,7 @@ independent of any later movement of point / mark."
    :pending-sel               helixel--pending-sel
    :last-action               helixel--last-tx
    :yank-register-source      helixel--yank-register-source
+   :registers-alist            (copy-tree register-alist)
    :raw-selection-type        helixel--raw-selection-type
    :active-search             helixel--active-search
    :event-ring                helixel--action-ring
@@ -194,6 +197,11 @@ Moves point and the `mark-marker' to CS's positions, sets
         helixel--last-tx   (helixel-pcs-last-action cs)
         helixel--yank-register-source (helixel-pcs-yank-register-source cs)
         helixel--raw-selection-type (helixel-pcs-raw-selection-type cs)
+        ;; Swap register-alist for per-cursor register isolation.
+        ;; The real cursor's alist is preserved by the outer
+        ;; `helixel-mc--save-main-state' — we just replace the
+        ;; global with the fake's saved copy here.
+        register-alist (helixel-pcs-registers-alist cs)
         helixel--active-search (helixel-pcs-active-search cs)
         helixel--action-ring    (helixel-pcs-event-ring cs)
         helixel--live-action   (helixel-pcs-live-action cs)
@@ -220,6 +228,7 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-pending-sel cs)            helixel--pending-sel
         (helixel-pcs-last-action cs)            helixel--last-tx
         (helixel-pcs-yank-register-source cs)   helixel--yank-register-source
+        (helixel-pcs-registers-alist cs)         (copy-tree register-alist)
         (helixel-pcs-raw-selection-type cs)     helixel--raw-selection-type
         (helixel-pcs-active-search cs)          helixel--active-search
         (helixel-pcs-event-ring cs)             helixel--action-ring
@@ -464,6 +473,8 @@ event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
         (set-marker (helixel-pcs-point cs) point)
         (set-marker (helixel-pcs-mark cs) eff-mark)
         (setf (helixel-pcs-mark-active cs) (and mark (/= mark point)))
+        ;; Fresh fake cursor starts with empty register storage.
+        (setf (helixel-pcs-registers-alist cs) nil)
         (overlay-put ov 'helixel-mc-cursor t)
         (overlay-put ov 'priority 100)
         (overlay-put ov 'helixel-pc-state cs)
@@ -616,6 +627,8 @@ state (kill-ring, event-ring, last-action, …)."
                helixel--last-tx   (helixel-pcs-last-action ,cs)
                helixel--yank-register-source
                  (helixel-pcs-yank-register-source ,cs)
+               register-alist
+                 (helixel-pcs-registers-alist ,cs)
                helixel--raw-selection-type (helixel-pcs-raw-selection-type ,cs)
                helixel--active-search (helixel-pcs-active-search ,cs)
                helixel--action-ring    (helixel-pcs-event-ring ,cs)
@@ -739,60 +752,46 @@ exists (e.g. for real-cursor-only commands like
              (not (helixel-mc-dispatch-in-progress-p))
              (not executing-kbd-macro)
              (not defining-kbd-macro)
-             this-command
-             (helixel-mc-any-p)
-             (helixel-mc--should-run-for-all-p this-command))
-    ;; Ensure the action just produced by `this-command' is on the ring
-    ;; before we look for a fresh tx.  Movement / textobj commands do
-    ;; not eagerly commit (only `record-action' does), so without this
-    ;; the dispatcher would see the PRIOR action's tx.
-    (helixel-action-commit)
-    (let* ((fresh (helixel-mc--fresh-action-from-real))
-           ;; A fresh tx is only useful for replay when it carries a
-           ;; runner.  Auto-allocated txs (e.g. textobj sel-only,
-           ;; pure jump entries) have a sel but no runner — they fall
-           ;; back to the call-interactively path below.
-           (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
-           (cmd this-command))
-      (helixel-with-replay 'mc-batch
-        (condition-case err
-            (undo-amalgamate-change-group
-              (let ((dead nil))
-                (helixel-mc-with-each-cursor
-                  (condition-case e
-                      (if fresh-runnable
-                          ;; Unified path: replay the fresh tx.  Payload
-                          ;; carries prompted decisions so nothing
-                          ;; re-prompts at fakes.
-                          (progn
-                            (helixel-with-replay-as 'dot
-                              (helixel-action-replay fresh-runnable))
-                            ;; Runners like `helixel--repeat-change-core'
-                            ;; may reactivate the mark (for undo-in-region
-                            ;; during dot-repeat).  Clear it so fake
-                            ;; cursor regions don't leak as visual artifacts.
-                            (deactivate-mark))
-                        ;; Fallback: whitelisted Emacs built-ins
-                        ;; (forward-char, next-line, self-insert-command,
-                        ;; ...) have no tx — just re-call interactively.
-                        (helixel-mc--call-interactively cmd))
-                    (search-failed (push cursor dead))
-                    (user-error
-                     ;; Recoverable: command isn't applicable at this
-                     ;; fake (e.g. `completion-preview-insert' with no
-                     ;; preview active at the fake's position, or a
-                     ;; movement command at bobp).  Keep the cursor
-                     ;; alive — only operational failures kill cursors.
-                     (ignore e))
-                    (error (message "helixel-mc: %s at fake: %s"
-                                    cmd (error-message-string e))
-                           (push cursor dead))))
-                (dolist (ov dead)
-                  (helixel-mc-delete-fake-cursor ov))))
-          (error
-           (message "helixel-mc: %s outer error: %s"
-                    cmd (error-message-string err))))
-        (helixel-mc-dedupe-cursors)))))
+             this-command)
+    ;; `helixel--register-consume' is suppressed while mc is active
+    ;; so fake cursors see the same register value during replay.
+    ;; Clear it here after every command except register-select
+    ;; (which just SET the register — keep it for the next command).
+    (unless (eq this-command 'helixel-select-register)
+      (setq helixel--current-register nil))
+    (when (and (helixel-mc-any-p)
+               (helixel-mc--should-run-for-all-p this-command))
+      ;; Ensure the action just produced by `this-command' is on the ring
+      ;; before we look for a fresh tx.  Movement / textobj commands do
+      ;; not eagerly commit (only `record-action' does), so without this
+      ;; the dispatcher would see the PRIOR action's tx.
+      (helixel-action-commit)
+      (let* ((fresh (helixel-mc--fresh-action-from-real))
+             (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
+             (cmd this-command))
+        (helixel-with-replay 'mc-batch
+          (condition-case err
+              (undo-amalgamate-change-group
+                (let ((dead nil))
+                  (helixel-mc-with-each-cursor
+                    (condition-case e
+                        (if fresh-runnable
+                            (progn
+                              (helixel-with-replay-as 'dot
+                                (helixel-action-replay fresh-runnable))
+                              (deactivate-mark))
+                          (helixel-mc--call-interactively cmd))
+                      (search-failed (push cursor dead))
+                      (user-error (ignore e))
+                      (error (message "helixel-mc: %s at fake: %s"
+                                      cmd (error-message-string e))
+                             (push cursor dead))))
+                  (dolist (ov dead)
+                    (helixel-mc-delete-fake-cursor ov))))
+            (error
+             (message "helixel-mc: %s outer error: %s"
+                      cmd (error-message-string err))))
+          (helixel-mc-dedupe-cursors))))))
 
 ;; ── Minor mode ──
 
@@ -857,6 +856,7 @@ deactivated when the last one is removed."
    mouse-set-point mouse-drag-region
    scroll-up-command scroll-down-command
    ;; helixel-specific
+   helixel-select-register
    helixel-mc-toggle helixel-mc-clear-all
    helixel-mc-create-fake-cursor
    helixel-cursor-toggle helixel-cursor-hide

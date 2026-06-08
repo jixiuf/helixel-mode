@@ -592,35 +592,38 @@ instead of `insert-for-yank' — `helixel-replace' passes
 
 (helixel-define-operator helixel-kill-ring-save
     (:op copy :display "y" :moves-point-p nil)
-  (when (use-region-p)
+  (when (and transient-mark-mode mark-active (mark))
     (let ((swap-source
            (list :beg (copy-marker (region-beginning))
                  :end (copy-marker (region-end))
                  :buffer (current-buffer)
                  :type (helixel--swap-source-type))))
-      (cond
-       ((eq (helixel--selection-type) 'rect)
-        (let ((lines (extract-rectangle (region-beginning) (region-end))))
+      ;; Store swap-source.  In mc mode each fake cursor stores to
+      ;; its own per-cursor variable; the real cursor stores to the
+      ;; global register (for non-mc fallback and cross-buffer use).
+      (if (helixel-replay-in-fake-p)
+          (setq helixel--yank-register-source swap-source)
+        (set-register helixel--yank-register swap-source))
+      (when (use-region-p) ;; non-zero-width: store text on kill-ring
+        (cond
+         ((eq (helixel--selection-type) 'rect)
+          (let ((lines (extract-rectangle (region-beginning) (region-end))))
+            (helixel--kill-new
+             (helixel--rect-wise-text lines)
+             :copy)))
+         ((eq (helixel--selection-type) 'line)
+          (when-let* ((bounds (helixel--line-bounds-of-region))
+                      (text (filter-buffer-substring
+                             (car bounds) (cdr bounds))))
+            (helixel--kill-new
+             (helixel--linewise-text text)
+             :copy)))
+         (t
           (helixel--kill-new
-           (propertize (helixel--rect-wise-text lines)
-                       'helixel-swap-source swap-source)
-           :copy)))
-       ((eq (helixel--selection-type) 'line)
-        (when-let* ((bounds (helixel--line-bounds-of-region))
-                    (text (filter-buffer-substring
-                           (car bounds) (cdr bounds))))
-          (helixel--kill-new
-           (propertize (helixel--linewise-text text)
-                       'helixel-swap-source swap-source)
-           :copy)))
-       (t
-        (helixel--kill-new
-         (propertize
-          (filter-buffer-substring (region-beginning) (region-end))
-          'helixel-swap-source swap-source)
-         :copy))))
-    ;; Store the copied region as mark-region for ; re-select.
-    (helixel--set-mark-region (cons (region-beginning) (region-end))))
+           (filter-buffer-substring (region-beginning) (region-end))
+           :copy))))
+      ;; Store the copied region as mark-region for ; re-select.
+      (helixel--set-mark-region (cons (region-beginning) (region-end)))))
   (helixel--register-consume)
   (helixel--record-action 'copy)
   (helixel--clear-data))
@@ -965,7 +968,7 @@ Like `join-line' but replaces `fixup-whitespace' with
 Dispatches on `this-command' (with `helixel--current-command' fallback
 for ERT/batch where `this-command' is nil) to decide insertion position."
   (let ((cmd (or this-command helixel--current-command))
-        ;; Strip kill-ring properties (yank-handler, helixel-swap-source)
+        ;; Strip kill-ring properties (yank-handler)
         ;; so they don't leak into the buffer and infect subsequent copies.
         (clean-text (substring-no-properties text)))
     (cond

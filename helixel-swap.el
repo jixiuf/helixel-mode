@@ -348,21 +348,30 @@ Returns the new source end position for updating the swap-source."
 ;; ── Swap source helpers ──
 
 (defun helixel--swap-source-from-kill ()
-  "Extract swap-source plist from the current kill/register top.
-Returns the plist if markers are live in their native buffer,
-regardless of whether that buffer is the current one.
-Returns nil if no valid swap-source property is found."
-  (when-let* ((text (helixel--current-kill 0 t))
-              (src (get-text-property 0 'helixel-swap-source text)))
-    (let ((beg (plist-get src :beg))
-          (end (plist-get src :end))
-          (buf (plist-get src :buffer))
-          (type (plist-get src :type)))
-      (when (and (markerp beg) (markerp end)
-                 (eq (marker-buffer beg) buf)
-                 (marker-position beg)
-                 (marker-position end))
-        (list :beg beg :end end :buffer buf :type type)))))
+  "Return the swap-source plist.
+In multi-cursor mode reads from the per-cursor variable
+`helixel--yank-register-source'; otherwise reads from the
+global `helixel--yank-register'.
+Returns nil if no valid swap-source is found."
+  (helixel--swap-source--validate
+   (if (and (bound-and-true-p helixel-multi-cursor-mode)
+            helixel--yank-register-source)
+       helixel--yank-register-source
+     (get-register helixel--yank-register))))
+
+(defun helixel--swap-source--validate (src)
+  "Validate swap-source plist SRC.
+Returns (:beg BEG :end END :buffer BUF :type TYPE) if markers are
+live in their native buffer, or nil otherwise."
+  (let ((beg (plist-get src :beg))
+        (end (plist-get src :end))
+        (buf (plist-get src :buffer))
+        (type (plist-get src :type)))
+    (when (and (markerp beg) (markerp end)
+               (eq (marker-buffer beg) buf)
+               (marker-position beg)
+               (marker-position end))
+      (list :beg beg :end end :buffer buf :type type))))
 
 ;; ── Region swap command ──
 
@@ -372,11 +381,7 @@ Returns nil if no valid swap-source property is found."
   (let* ((truncate arg)
          (source (helixel--swap-source-from-kill)))
     (unless source
-      (user-error
-       (if (helixel--register-active-p)
-           "Register \"%c has no swap source"
-         "No swap source — use `y' to copy first")
-       (or helixel--current-register helixel-default-register)))
+      (user-error "No swap source — use `y' to copy first"))
     (let* ((beg (plist-get source :beg))
            (end (plist-get source :end))
            (source-buf (plist-get source :buffer))
@@ -433,15 +438,13 @@ Returns nil if no valid swap-source property is found."
           (let* ((new-end (+ target-beg (length source-text)))
                  (stored-text (if (string-empty-p target-text)
                                   source-text
-                                target-text)))
-            (helixel--kill-new
-             (propertize stored-text
-                         'helixel-swap-source
-                         (list :beg (copy-marker target-beg)
-                               :end (copy-marker new-end)
-                               :buffer (current-buffer)
-                               :type nil))
-             :replace)
+                                target-text))
+                 (new-source (list :beg (copy-marker target-beg)
+                                   :end (copy-marker new-end)
+                                   :buffer (current-buffer)
+                                   :type nil)))
+            (set-register helixel--yank-register new-source)
+            (helixel--kill-new stored-text :replace)
             (if has-region
                 (progn
                   (set-marker (mark-marker) target-beg)

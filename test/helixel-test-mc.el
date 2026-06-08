@@ -3024,5 +3024,55 @@ runner replay in mc dispatch."
             (should (not (helixel-pcs-mark-active cs)))))))
     (helixel-mc-clear-all)))
 
+;; ── Multi-cursor swap (y → S) ──
+
+(ert-deftest helixel-test-mc-swap-source-per-cursor ()
+  "Each fake cursor stores its own swap-source via `helixel--yank-register-source'.
+Verifies per-cursor isolation — cursor 1's copy does not overwrite cursor 2's."
+  (helixel-test-with-buffer "AAA\nBBB\n"
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    (should (= (helixel-mc-num-cursors) 2))
+    ;; Each cursor copies its line content (AAA / BBB) as swap source.
+    (helixel-mc-with-each-cursor
+      (setq helixel--raw-selection-type nil)
+      (push-mark (pos-eol) t t)
+      (goto-char (pos-bol))
+      (helixel-kill-ring-save))
+    ;; Now each cursor should have its own swap-source.
+    (helixel-mc-with-each-cursor
+      (let ((src (helixel--swap-source-from-kill)))
+        (should src)
+        (should (marker-position (plist-get src :beg)))
+        (should (marker-position (plist-get src :end)))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-swap-after-delete ()
+  "mc swap after intermediate delete — swap-source is per-cursor."
+  (helixel-test-with-buffer "AAA BBB\nCCC DDD\nEEE FFF\n"
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    (should (= (helixel-mc-num-cursors) 3))
+    ;; Each cursor copies first word
+    (helixel-mc-with-each-cursor
+      (setq helixel--raw-selection-type nil)
+      (let ((w (save-excursion (forward-word) (point))))
+        (push-mark w t t)
+        (exchange-point-and-mark)
+        (helixel-kill-ring-save)))
+    ;; Delete first word on each line
+    (helixel-mc-with-each-cursor
+      (setq helixel--raw-selection-type nil)
+      (let ((w (save-excursion (forward-word) (point))))
+        (push-mark w t t)
+        (exchange-point-and-mark)
+        (helixel-kill-thing-at-point)))
+    ;; Each cursor still has its own swap-source.
+    (helixel-mc-with-each-cursor
+      (should (helixel--swap-source-from-kill)))
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

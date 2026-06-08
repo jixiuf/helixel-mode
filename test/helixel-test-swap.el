@@ -36,24 +36,17 @@
 ;;; helixel-swap tests
 
 (defun helixel-test--set-swap-source (buffer beg end &optional type)
-  "Push text from BUFFER at BEG..END to `kill-ring' with swap-source.
+  "Store swap-source plist in `helixel--yank-register'.
 TYPE is the selection type: nil (char), `line', or `rect'."
-  (let ((text (with-current-buffer buffer
-                (buffer-substring-no-properties beg end))))
-    (kill-new
-     (propertize text
-       'helixel-swap-source
-       (list :beg (set-marker (make-marker) beg buffer)
-             :end (set-marker (make-marker) end buffer)
-             :buffer buffer
-             :type type)))))
+  (set-register helixel--yank-register
+                (list :beg (set-marker (make-marker) beg buffer)
+                      :end (set-marker (make-marker) end buffer)
+                      :buffer buffer
+                      :type type)))
 
 (defun helixel-test--get-swap-source ()
-  "Return the swap-source plist from `kill-ring' top, or nil."
-  (when kill-ring
-    (let ((src (get-text-property 0 'helixel-swap-source
-                                  (car kill-ring))))
-      (and (plist-get src :beg) src))))
+  "Return the swap-source plist from `helixel--yank-register', or nil."
+  (get-register helixel--yank-register))
 
 (ert-deftest helixel-test-swap-contiguous ()
   "Swap primary region with swap source from kill-ring."
@@ -90,8 +83,29 @@ TYPE is the selection type: nil (char), `line', or `rect'."
     (let ((kill-ring nil))
       (should-error (helixel-swap)))))
 
+(ert-deftest helixel-test-swap-after-intermediate-kill ()
+  "Swap still works after a delete operation.
+`y' stores swap-source in the dedicated yank register, which is
+independent of the kill-ring — so `d' does not invalidate it."
+  (helixel-test-with-buffer "AAA BBB CCC"
+    (let ((kill-ring nil))
+      ;; Step 1: copy "AAA" with `y' (stores swap-source in register ?Y)
+      (setq helixel--raw-selection-type nil)
+      (push-mark 4 t t)
+      (goto-char 1)
+      (helixel-kill-ring-save)
+      (should (helixel-test--get-swap-source)) ; swap source exists
+      ;; Step 2: delete "BBB" with `d' (does NOT touch register ?Y)
+      (push-mark 8 t t)
+      (goto-char 5)
+      (setq helixel--raw-selection-type nil)
+      (helixel-kill-thing-at-point)
+      ;; Swap source still intact — register is independent.
+      (should (helixel-test--get-swap-source))
+      (should (helixel--swap-source-from-kill)))))
+
 (ert-deftest helixel-test-y-sets-swap-source ()
-  "`y' stores swap-source property on kill-ring text."
+  "`y' stores swap-source in `helixel--yank-register'."
   (helixel-test-with-buffer "hello world"
     (let ((kill-ring nil))
       (push-mark 1 t t)
@@ -104,7 +118,7 @@ TYPE is the selection type: nil (char), `line', or `rect'."
         (should (= (marker-position (plist-get src :end)) 6))))))
 
 (ert-deftest helixel-test-y-sets-swap-source-line ()
-  "`y' stores line-wise swap-source."
+  "`y' stores line-wise swap-source in `helixel--yank-register'."
   (helixel-test-with-buffer "first line\nsecond line"
     (let ((kill-ring nil))
       (push-mark 1 t t)
@@ -327,5 +341,116 @@ TYPE is the selection type: nil (char), `line', or `rect'."
          (plist-get src :beg) (plist-get src :end) t))
       (should (string= (buffer-string)
                        "AAA111\n222BBB\n333CCC\n")))))
+
+;;; Zero-width swap tests
+
+(ert-deftest helixel-test-swap-zero-width ()
+  "Zero-width copy then swap with implied region."
+  (helixel-test-with-buffer "AAA BBB CCC"
+    (let ((kill-ring nil))
+      ;; Zero-width copy at position 1 (beg = end = 1)
+      (helixel-test--set-swap-source (current-buffer) 1 1)
+      (goto-char 5)
+      (let ((helixel-swap-imply-region t))
+        (helixel-swap))
+      ;; Zero-width source + zero-width implied region = no-op.
+      (should (string= (buffer-string) "AAA BBB CCC")))))
+
+(ert-deftest helixel-test-swap-zero-width-with-region ()
+  "Zero-width copy then swap with active region (move text to insertion point)."
+  (helixel-test-with-buffer "AAA BBB CCC"
+    (let ((kill-ring nil))
+      ;; Zero-width copy at position 5 (between AAA and BBB)
+      (helixel-test--set-swap-source (current-buffer) 5 5)
+      ;; Select "CCC" (positions 9-12)
+      (push-mark 12 t t)
+      (goto-char 9)
+      (helixel-swap)
+      ;; "CCC" should move to position 5 (the zero-width insertion point)
+      (should (string= (buffer-string) "AAA CCCBBB ")))))
+
+(ert-deftest helixel-test-swap-end-to-end-copy-swap ()
+  "End-to-end: `y' copy then `S' swap."
+  (helixel-test-with-buffer "AAA BBB CCC"
+    (let ((kill-ring nil))
+      (setq helixel--raw-selection-type nil)
+      (push-mark 4 t t)
+      (goto-char 1)
+      (helixel-kill-ring-save)          ; y: copy "AAA"
+      (push-mark 12 t t)
+      (goto-char 9)
+      (helixel-swap)                     ; S: swap "AAA" with "CCC"
+      (should (string= (buffer-string) "CCC BBB AAA")))))
+
+(ert-deftest helixel-test-swap-after-change ()
+  "Swap still works after a change (`c') — change does not touch register ?Y."
+  (helixel-test-with-buffer "AAA BBB CCC"
+    (let ((kill-ring nil))
+      ;; Copy "AAA"
+      (setq helixel--raw-selection-type nil)
+      (push-mark 4 t t)
+      (goto-char 1)
+      (helixel-kill-ring-save)
+      ;; Change "BBB" (c replaces selection, pushes to kill-ring)
+      (push-mark 8 t t)
+      (goto-char 5)
+      (setq helixel--raw-selection-type nil)
+      (helixel-change-thing-at-point)
+      (insert "XXX")
+      (helixel--record-action 'change)
+      (helixel--clear-data)
+      ;; Now buffer is "AAA XXX CCC", swap "AAA" with "CCC"
+      (push-mark 12 t t)
+      (goto-char 9)
+      (helixel-swap)
+      (should (string= (buffer-string) "CCC XXX AAA")))))
+
+(ert-deftest helixel-test-swap-after-multiple-deletes ()
+  "Swap still works after multiple deletes."
+  (helixel-test-with-buffer "AAA BBB CCC DDD"
+    (let ((kill-ring nil))
+      ;; Copy "AAA"
+      (setq helixel--raw-selection-type nil)
+      (push-mark 4 t t)
+      (goto-char 1)
+      (helixel-kill-ring-save)
+      ;; Delete "BBB"
+      (push-mark 8 t t)
+      (goto-char 5)
+      (setq helixel--raw-selection-type nil)
+      (helixel-kill-thing-at-point)
+      ;; Delete "DDD"
+      (push-mark 14 t t)
+      (goto-char 11)
+      (setq helixel--raw-selection-type nil)
+      (helixel-kill-thing-at-point)
+      ;; Buffer: "AAA  CCC ", swap with implied region at point 5
+      (goto-char 5)
+      (let ((helixel-swap-imply-region t))
+        (helixel-swap))
+      ;; Swap source ("AAA") should still be valid.
+      (should (helixel--swap-source-from-kill)))))
+
+(ert-deftest helixel-test-swap-named-register ()
+  "Named register `\"ay' stores swap-source to register ?Y."
+  (helixel-test-with-buffer "AAA BBB"
+    (let ((kill-ring nil))
+      ;; Copy to register a (swap-source goes to ?Y)
+      (setq helixel--current-register ?a)
+      (setq helixel--raw-selection-type nil)
+      (push-mark 4 t t)
+      (goto-char 1)
+      (helixel-kill-ring-save)
+      (helixel--register-consume)
+      ;; Verify swap-source is in register ?Y
+      (let ((src (helixel-test--get-swap-source)))
+        (should src)
+        (should (= (marker-position (plist-get src :beg)) 1))
+        (should (= (marker-position (plist-get src :end)) 4)))
+      ;; Swap with "BBB"
+      (push-mark 8 t t)
+      (goto-char 5)
+      (helixel-swap)
+      (should (string= (buffer-string) "BBB AAA")))))
 
 ;;; helixel-test-swap.el ends here

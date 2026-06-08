@@ -916,6 +916,20 @@ Set by selection commands (line, rect, textobj, char).
 nil means charwise, `line' means linewise, `rect' means rectangle.
 Use `helixel--selection-type' for the validated version.")
 
+(defconst helixel--yank-register ?Y
+  "Dedicated register for swap-source from yank/copy.
+Set only by copy (`y') at the real cursor.  In multi-cursor mode
+fake cursors write to `helixel--yank-register-source' instead.
+Read by swap (`S') — falls back to this register when the
+per-cursor variable is nil (real cursor, non-mc mode).
+Contains (:beg MARKER :end MARKER :buffer BUFFER :type TYPE).")
+
+(defvar-local helixel--yank-register-source nil
+  "Per-cursor swap-source plist for multi-cursor mode.
+Set by copy (`y') only when running inside a fake cursor body.
+Saved/restored by `helixel-pc-state' along with other per-cursor vars.
+Format: (:beg MARKER :end MARKER :buffer BUFFER :type TYPE).")
+
 (defun helixel--swap-source-type ()
   "Return the swap-source type for the current selection.
 Returns nil (char), \=`line', or \=`rect'.
@@ -1129,9 +1143,7 @@ if no further visible entry exists in that direction."
              return i)))
 
 
-;; ──────────────────────────────────────────────────────────────────────
-;;  Replay context (formerly helixel-replay.el)
-;; ──────────────────────────────────────────────────────────────────────
+;; ── Replay context (formerly helixel-replay.el) ──
 
 (cl-defstruct (helixel-replay (:conc-name helixel-replay--))
   "Replay-time context.  Bound dynamically via `helixel-with-replay'.
@@ -1224,9 +1236,7 @@ form to evaluate."
        (progn ,@body)
      (helixel-with-replay ,origin ,@body)))
 
-;; ──────────────────────────────────────────────────────────────────────
-;;  Named registers (formerly helixel-register.el)
-;; ──────────────────────────────────────────────────────────────────────
+;; ── Named registers (formerly helixel-register.el) ──
 
 (defcustom helixel-register-backends
   '((?\" . kill-ring)
@@ -1299,6 +1309,8 @@ Users can customize these via `helixel-register-backends'.
 Press \\[keyboard-quit] to cancel."
   (interactive)
   (let ((char (read-char "Register: ")))
+    (when (= char helixel--yank-register)
+      (user-error "Register %c is reserved" helixel--yank-register))
     (if (= char ?\e)
         (progn
           (setq helixel--current-register nil)

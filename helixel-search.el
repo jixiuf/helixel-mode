@@ -61,6 +61,50 @@ Supported values: `search' and `find-char'."
                               (format "Unsupported repeat category: %s" cat))))
          (set-default sym val))
   :group 'helixel-search)
+
+;; ---------------------------------------------------------------------------
+;; PCRE support (soft dependency on pcre2el)
+
+(defcustom helixel-search-pcre nil
+  "When non-nil, convert PCRE regexp syntax to Emacs regexp during search.
+
+When t and the pcre2el package is available, patterns like \\d,
+\\w, \\s etc. are translated to Emacs-compatible equivalents
+\(e.g. [[:digit:]]) before searching.  Affects both interactive
+isearch (\=/, \=?) and n/N repeat.
+
+Requires pcre2el (<https://github.com/joddie/pcre2el>)."
+  :type 'boolean
+  :group 'helixel-search)
+
+(defun helixel-search--pcre-to-elisp (pattern)
+  "Convert PATTERN from PCRE to elisp regexp if pcre2el is available.
+Returns PATTERN unchanged on failure or when pcre2el is absent."
+  (if (fboundp 'rxt-pcre-to-elisp)
+      (condition-case nil
+          (rxt-pcre-to-elisp pattern)
+        (error pattern))
+    pattern))
+
+(defun helixel-search--pcre-isearch-search-fun-function ()
+  "Value for `isearch-search-fun-function' that converts PCRE→elisp.
+When `helixel-search-pcre' is nil or pcre2el is unavailable,
+returns the default search function unchanged."
+  (if (and helixel-search-pcre (fboundp 'rxt-pcre-to-elisp))
+      (lambda (string bound noerror)
+        (funcall (isearch-search-fun-default)
+                 (if isearch-regexp
+                     (helixel-search--pcre-to-elisp string)
+                   string)
+                 bound noerror))
+    (isearch-search-fun-default)))
+
+(defun helixel-search--buffer-setup-pcre ()
+  "Set up buffer-local isearch for PCRE conversion.
+Called from `helixel-state-change-hook'."
+  (set (make-local-variable 'isearch-search-fun-function)
+       #'helixel-search--pcre-isearch-search-fun-function))
+
 ;; ---------------------------------------------------------------------------
 ;; Active Search — single mutable search state
 ;;
@@ -126,10 +170,7 @@ Defaults to `forward' when the search state has no direction set."
 
 
 ;; ---------------------------------------------------------------------------
-;; Direction sync on ring entries
-
-;; ---------------------------------------------------------------------------
-;; Isearch helpers
+;; Direction sync on ring entries (see above for PCRE isearch setup)
 
 (defvar helixel-search--had-region nil
   "Non-nil if a region was active before the search started.
@@ -691,17 +732,20 @@ FORWARDP: t = use stored direction, nil = toggle it."
                  (propertize count 'face 'font-lock-function-name-face))))))
 
 (defun helixel-search-setup ()
-  "Enable lazy-count, custom isearch prompt, and highlight cleanup.
+  "Enable lazy-count, custom isearch prompt, highlight cleanup, and PCRE.
 Called by `helixel-mode' activation, NOT at load time."
   (setq isearch-lazy-count t)
   (add-hook 'helixel-keyboard-quit-functions #'helixel-search--unhighlight)
-  (add-hook 'lazy-count-update-hook #'helixel-search--count-hook))
+  (add-hook 'lazy-count-update-hook #'helixel-search--count-hook)
+  ;; PCRE support: set isearch-search-fun-function per-buffer
+  (add-hook 'helixel-state-change-hook #'helixel-search--buffer-setup-pcre))
 (defun helixel-search-teardown ()
   "Disable search-related global settings.
 Called by `helixel-mode' deactivation."
   (remove-hook 'helixel-keyboard-quit-functions
                #'helixel-search--unhighlight)
-  (remove-hook 'lazy-count-update-hook #'helixel-search--count-hook))
+  (remove-hook 'lazy-count-update-hook #'helixel-search--count-hook)
+  (remove-hook 'helixel-state-change-hook #'helixel-search--buffer-setup-pcre))
 
 ;; ---------------------------------------------------------------------------
 

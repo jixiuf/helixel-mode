@@ -37,10 +37,8 @@ The three settings most users change:
   ;; Cursor: bar in insert, box in normal (default)
   (setq helixel-mode-cursor-color "#ff8f00")
 
-  ;; Default state for read-only buffers (dired, info, etc.)
-  (setq helixel-major-mode-default-states
-        '((dired-mode . motion)
-          (help-mode . motion)))
+  ;; Enable PCRE-style regexp in search (/ and ?) via pcre2el
+  (setq helixel-search-pcre t)
 
   ;; Add mode-specific keybindings
   (helixel-define-key 'normal "SPC f" #'find-file)
@@ -352,6 +350,42 @@ Examples:
 
   C-u n       pick a past search/find-char from history
 #+end_example
+
+**** PCRE Support (pcre2el)
+
+When =helixel-search-pcre= is non-nil and the
+[[https://github.com/joddie/pcre2el][pcre2el]] package is
+available, PCRE-style regexp patterns (=\d=, =\w=, =\s=, etc.) are
+translated to Emacs-compatible equivalents before searching.  This
+works for both interactive isearch (~/ / ~?~) and ~n~/~N~ repeat.
+
+If pcre2el is not installed, patterns are passed through unchanged
+and interpreted as standard Emacs regexp — no error is raised.
+
+#+begin_example
+  /\d{3}-\d{4}<RET>   search for 3 digits, hyphen, 4 digits
+  n                    next match forward
+#+end_example
+
+Supported PCRE shorthand classes:
+
+| PCRE   | Emacs equivalent | Matches                       |
+|--------+------------------+-------------------------------|
+| =\d=   | =[[:digit:]]=    | Digits 0-9                    |
+| =\D=   | =[^[:digit:]]=   | Non-digits                    |
+| =\w=   | =[[:word:]]=     | Word characters               |
+| =\W=   | =[^[:word:]]=    | Non-word characters           |
+| =\s=   | =[[:space:]]=    | Whitespace                    |
+| =\S=   | =[^[:space:]]=   | Non-whitespace                |
+| =\b=   | =\b= / =\B=     | Word boundaries (both forms)  |
+
+Enable it globally:
+
+#+begin_src elisp
+  ;; Require pcre2el first, then enable PCRE in helixel search
+  (require 'pcre2el)
+  (setq helixel-search-pcre t)
+#+end_src
 
 *** Swap
 

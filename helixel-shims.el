@@ -213,6 +213,8 @@ FUNC is a function symbol (called with no arguments)."
 (defun helixel-shims--register-deferred ()
   "Register deferred shim setups.
 Called at top-level when this file is loaded."
+  ;; Modes where invisible = filtered-out content.
+  (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil)
   ;; State-transition shims
   (helixel-shims--defer-setup 'wdired 'helixel-shims--setup-wdired)
   (helixel-shims--defer-setup 'grep 'helixel-shims--setup-grep-edit)

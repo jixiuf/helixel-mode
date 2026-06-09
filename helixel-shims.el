@@ -74,6 +74,12 @@
 (declare-function eww-forward-url "eww")
 (declare-function eww-reload "eww")
 
+(defun helixel-shims--set-invisible-nil ()
+  "Set `helixel-invisible' to nil for the current buffer.
+Intended for mode hooks where invisible text means filtered-out
+content (e.g. grep results with consult-focus-line, dired-omit)."
+  (setq-local helixel-invisible nil))
+
 ;; ── wdired ──
 
 (defun helixel-shims--setup-wdired ()
@@ -83,7 +89,9 @@ Entering wdired → normal.  Exiting (save/abort) → motion."
   (advice-add 'wdired-finish-edit   :after #'helixel-enter-motion-state)
   (advice-add 'wdired-abort-changes :after #'helixel-enter-motion-state)
   (when (fboundp 'wdired-exit)
-    (advice-add 'wdired-exit :after #'helixel-enter-motion-state)))
+    (advice-add 'wdired-exit :after #'helixel-enter-motion-state))
+  ;; dired-omit-mode hides files via invisible text.
+  (add-hook 'dired-mode-hook #'helixel-shims--set-invisible-nil))
 
 ;; ── grep-edit (Emacs 29+ built-in) ──
 
@@ -95,8 +103,7 @@ Entering grep-edit → normal.  Saving → motion."
     (advice-add 'grep-edit-save-changes
                 :after #'helixel-enter-motion-state))
   ;; grep/occur results use invisible for filtering (consult-focus-line).
-  (add-hook 'grep-mode-hook
-            (lambda () (setq-local helixel-invisible nil))))
+  (add-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil))
 
 ;; ── occur-edit (Emacs 29+ built-in) ──
 
@@ -106,8 +113,7 @@ Entering occur-edit → normal.  Ceasing edit → motion."
   (when (fboundp 'occur-edit-mode)
     (add-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
     (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state))
-  (add-hook 'occur-mode-hook
-            (lambda () (setq-local helixel-invisible nil))))
+  (add-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil))
 
 ;; ── wgrep (third-party) ──
 

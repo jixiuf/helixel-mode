@@ -928,6 +928,15 @@ Toggle with \[helixel-toggle-invisible].")
 
 ;; ── Search filter loop ──
 
+(defsubst helixel--search-advance-one (forwardp)
+  "Advance one char past a zero-width match, or throw done.
+FORWARDP is t for forward, nil for backward."
+  (if forwardp
+      (if (eobp) (throw 'search-filter-done nil)
+        (forward-char 1))
+    (if (bobp) (throw 'search-filter-done nil)
+      (forward-char -1))))
+
 (defsubst helixel--search-filter-loop (search-fn forwardp)
   "Call SEARCH-FN (zero-arg) repeatedly, skipping invisible matches.
 SEARCH-FN must move point and set `match-data' on success; it should
@@ -948,15 +957,8 @@ The caller should bind `search-invisible' appropriately."
               (throw 'search-filter-done (match-beginning 0))
             ;; Invisible — advance past match and retry.
             (if (= (match-beginning 0) (match-end 0))
-                ;; Zero-width: advance one char.
-                (if forwardp
-                    (if (eobp) (throw 'search-filter-done nil)
-                      (forward-char 1))
-                  (if (bobp) (throw 'search-filter-done nil)
-                    (forward-char -1)))
-              ;; Non-empty: skip past the entire match.
+                (helixel--search-advance-one forwardp)
               (goto-char (match-end 0))))
-        ;; No more matches.
         (throw 'search-filter-done nil)))))
 
 (defconst helixel--yank-register ?Y

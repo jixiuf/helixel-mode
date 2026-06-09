@@ -775,19 +775,19 @@ INDENT-SIGN is +1 (right) or -1 (left)."
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last event.
       (when-let* ((tx helixel--last-tx)
-                  (sel (helixel-action-sel tx)))
-        (when (eq (helixel-action-op tx) op)
-          (when-let* ((m (car (helixel-action-mark-region tx)))
-                      (pos (marker-position m)))
-            (goto-char pos))
-          (helixel-with-replay-as 'dot
-            (helixel--recreate-selection sel))
-          (indent-rigidly (region-beginning) (region-end) indent-sign)
-          (let* ((mult (or (helixel-action-payload-get tx :multiplier) 1)))
-            (helixel--update-last-event
-             (helixel-action-with-payload tx :multiplier (1+ mult))))
-          (goto-char (region-beginning))
-          (setq consecutive-p t))))
+                  (sel (helixel-action-sel tx))
+                  ((eq (helixel-action-op tx) op)))
+        (when-let* ((m (car (helixel-action-mark-region tx)))
+                    (pos (marker-position m)))
+          (goto-char pos))
+        (helixel-with-replay-as 'dot
+          (helixel--recreate-selection sel))
+        (indent-rigidly (region-beginning) (region-end) indent-sign)
+        (let ((mult (or (helixel-action-payload-get tx :multiplier) 1)))
+          (helixel--update-last-event
+           (helixel-action-with-payload tx :multiplier (1+ mult))))
+        (goto-char (region-beginning))
+        (setq consecutive-p t)))
     (unless consecutive-p
       (let ((delta (* n indent-sign)))
         (if (use-region-p)
@@ -975,21 +975,21 @@ for ERT/batch where `this-command' is nil) to decide insertion position."
         ;; Strip kill-ring properties (yank-handler)
         ;; so they don't leak into the buffer and infect subsequent copies.
         (clean-text (substring-no-properties text)))
-    (cond
-     ((member cmd '(helixel-yank helixel-replace))
-      (helixel--line-end-or-invisible)
-      (newline)
-      (insert (string-trim-right clean-text "\n"))
-      (beginning-of-line)
-      (back-to-indentation))
-     ((eq cmd 'helixel-yank-before)
-      (beginning-of-line)
-      (save-excursion
-        (insert clean-text)
-        (unless (bolp) (newline)))
-      (back-to-indentation))
-     (t
-      (insert clean-text)))))
+    (pcase cmd
+      ((or 'helixel-yank 'helixel-replace)
+       (helixel--line-end-or-invisible)
+       (newline)
+       (insert (string-trim-right clean-text "\n"))
+       (beginning-of-line)
+       (back-to-indentation))
+      ('helixel-yank-before
+       (beginning-of-line)
+       (save-excursion
+         (insert clean-text)
+         (unless (bolp) (newline)))
+       (back-to-indentation))
+      (_
+       (insert clean-text)))))
 
 (defun helixel--linewise-text (text)
   "Return a copy of TEXT propertized with line-wise yank-handler.

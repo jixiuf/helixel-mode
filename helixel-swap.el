@@ -131,43 +131,56 @@ Returns (BEG-B . END-B) for the implied region."
           (forward-line (1- nlines))
           (cons beg-b (pos-eol))))
     (let* ((beg-a-eol (save-excursion (goto-char beg-a) (pos-eol)))
-           (beg-b (point))
-           end-b)
-      (if (<= end-a beg-a-eol)
-          (let ((col-count-a (helixel--columns-from-point beg-a end-a)))
-            (save-excursion
-              (move-to-column (+ (current-column) col-count-a))
-              (setq end-b (point))))
-        (save-excursion
-          (goto-char end-a)
-          (if (bolp)
-              (progn
-                (cl-decf end-a)
-                (unless (<= beg-a end-a)
-                  (error "Assertion failed"))
-                (goto-char beg-b)
-                (beginning-of-line)
-                (let ((range-a-lines (1- (count-lines beg-a end-a))))
-                  (unless (zerop (forward-line range-a-lines))
-                    (user-error
-                     (concat "Region swap failed,"
-                             " expected %d line(s) after the point")
-                     range-a-lines)))
-                (setq end-b (pos-eol)))
-            (let ((col-end-a (progn (goto-char end-a) (current-column))))
-              (goto-char beg-b)
-              (beginning-of-line)
-              (let ((range-a-lines (1- (count-lines beg-a end-a))))
-                (unless (zerop (forward-line range-a-lines))
-                  (user-error
-                   (concat "Region swap failed,"
-                           " expected %d line(s) after the point")
-                   range-a-lines)))
-              (move-to-column col-end-a)
-              (setq end-b (point))))))
-      (unless end-b
-        (error "Assertion failed"))
-      (cons beg-b end-b))))
+           (beg-b (point)))
+      (cons beg-b
+            (if (<= end-a beg-a-eol)
+                (helixel--swap-single-line-end beg-a end-a)
+              (helixel--swap-multi-line-end beg-a end-a beg-b))))))
+
+(defun helixel--swap-single-line-end (beg-a end-a)
+  "Return end-b for implied char-wise region on a single line.
+BEG-A and END-A bound the source single-line region."
+  (save-excursion
+    (move-to-column (+ (current-column)
+                       (helixel--columns-from-point beg-a end-a)))
+    (point)))
+
+(defun helixel--swap-multi-line-end (beg-a end-a beg-b)
+  "Return end-b for implied char-wise region spanning multiple lines.
+BEG-A and END-A bound the source region; BEG-B is point."
+  (save-excursion
+    (goto-char end-a)
+    (if (bolp)
+        (helixel--swap-multi-line-bolp beg-a end-a beg-b)
+      (helixel--swap-multi-line-nonbolp beg-a end-a beg-b))))
+
+(defun helixel--swap-multi-line-bolp (beg-a end-a beg-b)
+  "Return end-b when END-A is at bol for multi-line implied range.
+BEG-A bounds the start of the region; END-A is at bol.
+BEG-B is the original point."
+  (cl-decf end-a)
+  (unless (<= beg-a end-a)
+    (error "Assertion failed"))
+  (goto-char beg-b)
+  (beginning-of-line)
+  (let ((range-a-lines (1- (count-lines beg-a end-a))))
+    (unless (zerop (forward-line range-a-lines))
+      (user-error "Region swap failed, expected %d line(s) after the point"
+                  range-a-lines)))
+  (pos-eol))
+
+(defun helixel--swap-multi-line-nonbolp (beg-a end-a beg-b)
+  "Return end-b when END-A is NOT at bol for multi-line implied range.
+BEG-A and END-A bound the source region; BEG-B is point."
+  (let ((col-end-a (current-column)))
+    (goto-char beg-b)
+    (beginning-of-line)
+    (let ((range-a-lines (1- (count-lines beg-a end-a))))
+      (unless (zerop (forward-line range-a-lines))
+        (user-error "Region swap failed, expected %d line(s) after the point"
+                    range-a-lines)))
+    (move-to-column col-end-a)
+    (point)))
 
 (defun helixel--swap-rect-imply-region (source-beg source-end len-b)
   "Compute implied rectangle region from source bounds.

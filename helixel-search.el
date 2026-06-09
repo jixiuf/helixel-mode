@@ -840,40 +840,7 @@ otherwise cause infinite loops at buffer edges."
     (condition-case nil
         (progn
           (helixel-search--search pat dir)
-          ;; Guard against zero-width matches that don't advance:
-          ;; if the same match position was already processed,
-          ;; we're stuck in a loop (e.g. `$' at EOB, `^' at BOB).
-          (let ((m-beg (match-beginning 0))
-                (m-end (match-end 0)))
-            ;; Guard against zero-width patterns at buffer edges
-            ;; that re-match after insertions (e.g. `$' at growing
-            ;; EOB).  Allow the first edge match; bail on subsequent.
-            (when (and (= m-beg m-end)
-                       (or (= m-beg (point-min))
-                           (= m-beg (point-max))))
-              (if (helixel-search-advance-edge-seen-p)
-                  (signal 'search-failed nil)
-                (helixel-search-advance-edge-seen-set t)))
-            ;; Guard against repeated matches at same position.
-            ;; Zero-width patterns (e.g. `^$') cause re-search-forward
-            ;; to re-match at the same position because it does not
-            ;; auto-advance between calls.  In that case advance past
-            ;; the match and retry rather than bailing so callers like
-            ;; mc-spawn-from-sel can collect every occurrence.
-            (when (equal m-beg (helixel-search-advance-last-pos))
-              (if (= m-beg m-end)
-                  ;; Zero-width: step over it and re-search.
-                  (progn
-                    (if (eq dir 'forward)
-                        (if (eobp) (signal 'search-failed nil)
-                          (forward-char 1))
-                      (if (bobp) (signal 'search-failed nil)
-                        (forward-char -1)))
-                    (helixel-search--search pat dir)
-                    (setq m-beg (match-beginning 0)
-                          m-end (match-end 0)))
-                ;; Non-zero-width repeated match — true deadlock.
-                (signal 'search-failed nil))))
+          (helixel-search--guard-repeat-advance pat dir)
           (helixel-search-advance-done-set t)
           (helixel-search-advance-last-pos-set (match-beginning 0))
           (helixel-search--advance-n-count
@@ -883,6 +850,36 @@ otherwise cause infinite loops at buffer edges."
             (helixel--recreate-selection sel))
           t)
       (search-failed nil))))
+
+(defsubst helixel-search--advance-past-zero-width (dir)
+  "Step one char past a zero-width match in DIR.
+Signals `search-failed' at buffer edge."
+  (if (eq dir 'forward)
+      (if (eobp) (signal 'search-failed nil) (forward-char 1))
+    (if (bobp) (signal 'search-failed nil) (forward-char -1))))
+
+(defun helixel-search--guard-repeat-advance (pat dir)
+  "Guard against zero-width / repeated-match infinite loops.
+Signals `search-failed' on deadlock; advances past zero-width repeats.
+PAT and DIR are the current search pattern and direction."
+  (let ((m-beg (match-beginning 0))
+        (m-end (match-end 0)))
+    ;; Zero-width pattern at buffer edge: allow first match only.
+    (when (and (= m-beg m-end)
+               (or (= m-beg (point-min))
+                   (= m-beg (point-max))))
+      (if (helixel-search-advance-edge-seen-p)
+          (signal 'search-failed nil)
+        (helixel-search-advance-edge-seen-set t)))
+    ;; Repeated match at same position.
+    (when (equal m-beg (helixel-search-advance-last-pos))
+      (if (= m-beg m-end)
+          ;; Zero-width: step over and re-search.
+          (progn
+            (helixel-search--advance-past-zero-width dir)
+            (helixel-search--search pat dir))
+        ;; Non-zero-width repeated match — true deadlock.
+        (signal 'search-failed nil)))))
 
 (defun helixel--allbuffer-search-insert (tx sel start-pos dir)
   "Insert TX payload text at every SEL match from START-POS in DIR.

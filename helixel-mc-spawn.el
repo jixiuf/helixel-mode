@@ -688,66 +688,91 @@ can be pressed repeatedly."
     (user-error "No fake cursors"))
   (unless (use-region-p)
     (user-error "Real cursor must have a region"))
+  (helixel-mc--validate-all-cursor-regions)
+  (let ((deactivate-mark nil))
+    (dotimes (_ count)
+      (helixel-mc--rotate-content-once dir))))
+
+(defun helixel-mc--validate-all-cursor-regions ()
+  "Signal `user-error' if any cursor lacks a non-degenerate region."
   (dolist (ov (helixel-mc-all-cursors))
     (unless (and (helixel-mc-cursor-mark-active ov)
                  (/= (marker-position (helixel-mc-cursor-point ov))
                      (marker-position (helixel-mc-cursor-mark ov))))
-      (user-error "Every cursor must have a non-degenerate region")))
-  (let ((deactivate-mark nil))
-    (dotimes (_ count)
-      (let* ((entries (helixel-mc--collect-all-cursors-sorted))
-             (n (length entries))
-             (texts (mapcar (lambda (e)
-                              (buffer-substring-no-properties
-                               (marker-position (plist-get e :beg))
-                               (marker-position (plist-get e :end))))
-                            entries))
-             (new-texts (mapcar
-                         (lambda (i)
-                           (let ((src (if (eq dir 'forward)
-                                          (mod (1- i) n)
-                                        (mod (1+ i) n))))
-                             (nth src texts)))
-                         (number-sequence 0 (1- n))))
-             (pairs (cl-mapcar #'cons entries new-texts)))
-        ;; Replace right-to-left so earlier markers stay valid.
-        (dolist (cell (reverse pairs))
-          (let* ((entry (car cell))
-                 (txt (cdr cell))
-                 (b (marker-position (plist-get entry :beg)))
-                 (e (marker-position (plist-get entry :end))))
-            (save-excursion
-              (goto-char b)
-              (delete-region b e)
-              (insert txt))))
-        ;; Re-anchor each cursor onto its rotated region and
-        ;; reaffirm mark-active.  BEG / END markers above were
-        ;; created with the right insertion-types so they now
-        ;; bracket the freshly inserted text.
-        (dolist (entry entries)
-          (let* ((ov (plist-get entry :cursor))
-                 (b (marker-position (plist-get entry :beg)))
-                 (e (marker-position (plist-get entry :end)))
-                 (fwd (plist-get entry :forward)))
-            (if ov
-                (let ((pm (helixel-mc-cursor-point ov))
-                      (mm (helixel-mc-cursor-mark ov)))
-                  (if fwd
-                      (progn (set-marker pm e) (set-marker mm b))
-                    (set-marker pm b) (set-marker mm e))
-                  (setf (helixel-pcs-mark-active
-                         (helixel-mc-cursor-state ov))
-                        t)
-                  (helixel-mc--update-fake-region ov))
-              ;; Real cursor.
-              (if fwd
-                  (progn (goto-char e) (set-marker (mark-marker) b))
-                (goto-char b) (set-marker (mark-marker) e))
-              (setq mark-active t))))
-        ;; Free temp markers.
-        (dolist (entry entries)
-          (set-marker (plist-get entry :beg) nil)
-          (set-marker (plist-get entry :end) nil))))))
+      (user-error "Every cursor must have a non-degenerate region"))))
+
+(defun helixel-mc--rotate-content-once (dir)
+  "Perform one rotation step in DIR.
+Collects entries, replaces text right-to-left, re-anchors
+cursors, and frees temp markers."
+  (let* ((entries (helixel-mc--collect-all-cursors-sorted))
+         (n (length entries))
+         (texts (mapcar (lambda (e)
+                          (buffer-substring-no-properties
+                           (marker-position (plist-get e :beg))
+                           (marker-position (plist-get e :end))))
+                        entries))
+         (new-texts (helixel-mc--rotate-texts texts n dir))
+         (pairs (cl-mapcar #'cons entries new-texts)))
+    (helixel-mc--rotate-replace pairs)
+    (helixel-mc--rotate-reanchor entries)
+    (helixel-mc--rotate-free-markers entries)))
+
+(defun helixel-mc--rotate-texts (texts n dir)
+  "Return TEXTS rotated by one step in DIR.
+N is the length of TEXTS.
+DIR is `forward' or `backward'."
+  (mapcar (lambda (i)
+            (nth (if (eq dir 'forward) (mod (1- i) n) (mod (1+ i) n))
+                 texts))
+          (number-sequence 0 (1- n))))
+
+(defun helixel-mc--rotate-replace (pairs)
+  "Replace each region entry in PAIRS with its paired text, right-to-left.
+PAIRS is a list of (ENTRY . TEXT) cons cells."
+  (dolist (cell (reverse pairs))
+    (let ((b (marker-position (plist-get (car cell) :beg)))
+          (e (marker-position (plist-get (car cell) :end)))
+          (txt (cdr cell)))
+      (save-excursion
+        (goto-char b)
+        (delete-region b e)
+        (insert txt)))))
+
+(defun helixel-mc--rotate-reanchor (entries)
+  "Re-anchor each cursor onto its rotated region from ENTRIES.
+Preserves `mark-active' state."
+  (dolist (entry entries)
+    (let* ((ov (plist-get entry :cursor))
+           (b (marker-position (plist-get entry :beg)))
+           (e (marker-position (plist-get entry :end)))
+           (fwd (plist-get entry :forward)))
+      (if ov
+          (helixel-mc--rotate-reanchor-fake ov b e fwd)
+        (helixel-mc--rotate-reanchor-real b e fwd)))))
+
+(defun helixel-mc--rotate-reanchor-fake (ov b e fwd)
+  "Re-anchor fake cursor OV onto bounds B..E with FWD direction."
+  (let ((pm (helixel-mc-cursor-point ov))
+        (mm (helixel-mc-cursor-mark ov)))
+    (if fwd
+        (progn (set-marker pm e) (set-marker mm b))
+      (set-marker pm b) (set-marker mm e))
+    (setf (helixel-pcs-mark-active (helixel-mc-cursor-state ov)) t)
+    (helixel-mc--update-fake-region ov)))
+
+(defun helixel-mc--rotate-reanchor-real (b e fwd)
+  "Re-anchor real cursor onto bounds B..E with FWD direction."
+  (if fwd
+      (progn (goto-char e) (set-marker (mark-marker) b))
+    (goto-char b) (set-marker (mark-marker) e))
+  (setq mark-active t))
+
+(defun helixel-mc--rotate-free-markers (entries)
+  "Free temp markers in ENTRIES."
+  (dolist (entry entries)
+    (set-marker (plist-get entry :beg) nil)
+    (set-marker (plist-get entry :end) nil)))
 
 ;; ── Region-set helpers (shared by trim, merge, split, etc.) ──
 

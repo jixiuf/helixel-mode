@@ -3280,5 +3280,49 @@ Tests the actual dispatch path that caused the 'oohello' bug."
 
 
 
+;; ── find-char: fake cursors get region highlight after dispatch ──
+
+(ert-deftest helixel-test-mc-find-char-fake-region-active ()
+  "After `fx' is broadcast to fake cursors, each fake must have
+mark-active=t and a visible region overlay — the dispatch must NOT
+deactivate the region that find-char's runner intentionally creates.
+
+Regression: the mc dispatcher's stray (deactivate-mark) after runner
+replay killed the region before helixel-mc--leave-cursor snapshotted
+it, leaving fake cursors with no visible selection."
+  (helixel-test-with-buffer "a-x b-x c-x d-x\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    ;; Fake cursors at positions 4 (before space after 'a-') and 8
+    ;; (before space after 'b-').  Each fake starts with an active
+    ;; region (point=bol, mark=orig) to simulate the `gh fx' sequence
+    ;; where gh extends to bol and fx extends to the char.
+    (let ((f1 (helixel-mc-create-fake-cursor 4))  ; before space after 'a-'
+          (f2 (helixel-mc-create-fake-cursor 8))) ; before space after 'b-'
+      ;; Activate regions on both fakes simulating gh: point at bol,
+      ;; mark at current position.
+      (dolist (ov (list f1 f2))
+        (let* ((cs (overlay-get ov 'helixel-pc-state))
+               (orig-pt (marker-position (helixel-pcs-point cs))))
+          (set-marker (helixel-pcs-point cs) (line-beginning-position))
+          (setf (helixel-pcs-mark-active cs) t)))
+      ;; Real cursor: find next `x' — this pushes mark at current
+      ;; position, then jumps to `x' creating a region.
+      (goto-char 1)
+      (helixel-find-next-char ?x)
+      ;; Dispatch to fake cursors.
+      (let ((this-command 'helixel-find-next-char))
+        (helixel-mc--post-command))
+      ;; After dispatch, each fake MUST have mark-active=t and a
+      ;; non-degenerate region (bol → x).
+      (dolist (ov (helixel-mc-all-cursors))
+        (should (helixel-mc-cursor-mark-active ov))
+        (let ((p (marker-position (helixel-mc-cursor-point ov)))
+              (m (marker-position (helixel-mc-cursor-mark ov))))
+          (should (/= p m))
+          ;; Point should be at or after the found `x'.
+          (should (<= p 10))))
+      (helixel-mc-clear-all))))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

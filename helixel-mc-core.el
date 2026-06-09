@@ -766,10 +766,6 @@ exists (e.g. for real-cursor-only commands like
              this-command)
     ;; `helixel--register-consume' is suppressed while mc is active
     ;; so fake cursors see the same register value during replay.
-    ;; Clear it here after every command except register-select
-    ;; (which just SET the register — keep it for the next command).
-    (unless (eq this-command 'helixel-select-register)
-      (setq helixel--current-register nil))
     (when (and (helixel-mc-any-p)
                (helixel-mc--should-run-for-all-p this-command))
       ;; Ensure the action just produced by `this-command' is on the ring
@@ -800,7 +796,11 @@ exists (e.g. for real-cursor-only commands like
             (error
              (message "helixel-mc: %s outer error: %s"
                       cmd (error-message-string err))))
-          (helixel-mc-dedupe-cursors))))))
+          (helixel-mc-dedupe-cursors)))
+    ;; Now that fake cursors have been dispatched, clear the register
+    ;; (which `helixel--register-consume' preserved during mc replay).
+    (unless (eq this-command 'helixel-select-register)
+      (setq helixel--current-register nil)))))
 
 ;; ── Minor mode ──
 

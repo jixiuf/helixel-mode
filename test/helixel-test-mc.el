@@ -1118,6 +1118,44 @@ textobj."
     (setq helixel--pending-surround-op nil)
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-register-paste-fake-sees-named-register ()
+  "Named register paste (`\"ap`) broadcasts correctly to fake cursors.
+When `helixel--current-register' is set to a named register, fake
+cursors must paste from their OWN per-cursor register copy, NOT
+fall back to the kill ring.  Regression: `helixel-mc--post-command'
+was clearing `helixel--current-register' BEFORE dispatching to fake
+cursors, causing the fake to read `helixel--register-active-p'→nil
+and fall back to `yank' from the kill ring."
+  (unwind-protect
+      (helixel-test-with-buffer "hello\nworld\n"
+        (helixel-enter-normal-state)
+        (goto-char 1)
+        ;; Create fake cursor on second line, with its own register a.
+        (helixel-mc-create-fake-cursor 7)
+        ;; Populate real cursor's register a with "HELLO".
+        (helixel-register-set ?a "HELLO")
+        ;; Populate fake cursor's per-cursor register a with "HELLO"
+        ;; as well (as would happen when `"ad` is dispatched to fakes).
+        (dolist (ov (helixel-mc-all-cursors))
+          (setf (helixel-pcs-registers-alist (overlay-get ov 'helixel-pc-state))
+                (list (cons ?a "HELLO"))))
+        ;; Push "WORLD" onto kill ring so a fallback is detectable.
+        (kill-new "WORLD")
+        ;; Simulate `\"a' — set register for the next command.
+        (setq helixel--current-register ?a)
+        ;; Real cursor runs yank (paste-after).
+        (helixel-yank)
+        ;; Post-command dispatch must replay at fake with same register.
+        (let ((this-command 'helixel-yank))
+          (helixel-mc--post-command))
+        ;; Both cursors should have pasted "HELLO", never "WORLD".
+        (should (string-match-p "HELLO" (buffer-string)))
+        (should-not (string-match-p "WORLD" (buffer-string)))
+        ;; Register cleared after dispatch.
+        (should (null helixel--current-register)))
+    (set-register ?a nil)
+    (setq helixel--current-register nil)))
+
 (ert-deftest helixel-test-mc-find-char-per-fake-no-prompt ()
   "`f<ch>' at real with fakes → each fake searches forward for the
 same char from its own position, using the substitute mechanism."

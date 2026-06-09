@@ -3356,5 +3356,35 @@ it, leaving fake cursors with no visible selection."
           (should (<= p 10))))
       (helixel-mc-clear-all))))
 
+(ert-deftest helixel-test-mc-spawn-zero-width-search ()
+  "Search spawn with zero-width pattern `^$' finds all empty lines.
+Before the fix, `re-search-forward' for `^$' re-matched at the same
+position between calls, triggering the repeated-pos guard which
+signalled `search-failed' after the first match — resulting in
+0 fake cursors.  After the fix the guard manually advances past
+the zero-width match and retries, so every empty line becomes a
+fake cursor."
+  (helixel-test-with-buffer "line1\n\n\n\nline2\n"
+    (helixel-enter-normal-state)
+    ;; Simulate `/^$<RET>' landing on first empty line.
+    (goto-char 7)
+    (push-mark 7 t t)                   ; zero-width region on first empty line
+    (let* ((sel (helixel-sel-create
+                 'search
+                 '(:pattern "^$" :dir forward :entry-kind nil)))
+           (fakes-before (length (helixel-mc-all-cursors))))
+      (helixel-mc-spawn-from-sel sel)
+      ;; 4 ^$-matches: at positions 7, 8, 9, and 16 (terminal empty line).
+      ;; One becomes the real cursor → 3 fake cursors.
+      (should (= 3 (length (helixel-mc-all-cursors))))
+      (should (= 4 (helixel-mc-num-cursors)))
+      ;; Each fake must sit on its own empty line (degenerate zero-width region).
+      (dolist (ov (helixel-mc-all-cursors))
+        (let ((p (marker-position (helixel-mc-cursor-point ov)))
+              (m (marker-position (helixel-mc-cursor-mark ov))))
+          (should (= p m))              ; zero-width match
+          (should (save-excursion (goto-char p) (bolp)))))
+      (helixel-mc-clear-all))))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

@@ -854,9 +854,26 @@ otherwise cause infinite loops at buffer edges."
               (if (helixel-search-advance-edge-seen-p)
                   (signal 'search-failed nil)
                 (helixel-search-advance-edge-seen-set t)))
-            ;; Guard against repeated matches at same position
+            ;; Guard against repeated matches at same position.
+            ;; Zero-width patterns (e.g. `^$') cause re-search-forward
+            ;; to re-match at the same position because it does not
+            ;; auto-advance between calls.  In that case advance past
+            ;; the match and retry rather than bailing so callers like
+            ;; mc-spawn-from-sel can collect every occurrence.
             (when (equal m-beg (helixel-search-advance-last-pos))
-              (signal 'search-failed nil)))
+              (if (= m-beg m-end)
+                  ;; Zero-width: step over it and re-search.
+                  (progn
+                    (if (eq dir 'forward)
+                        (if (eobp) (signal 'search-failed nil)
+                          (forward-char 1))
+                      (if (bobp) (signal 'search-failed nil)
+                        (forward-char -1)))
+                    (helixel-search--search pat dir)
+                    (setq m-beg (match-beginning 0)
+                          m-end (match-end 0)))
+                ;; Non-zero-width repeated match — true deadlock.
+                (signal 'search-failed nil))))
           (helixel-search-advance-done-set t)
           (helixel-search-advance-last-pos-set (match-beginning 0))
           (helixel-search--advance-n-count

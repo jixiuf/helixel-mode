@@ -787,10 +787,8 @@ exists (e.g. for real-cursor-only commands like
                   (helixel-mc-with-each-cursor
                     (condition-case e
                         (if fresh-runnable
-                            (progn
-                              (helixel-with-replay-as 'dot
-                                (helixel-action-replay fresh-runnable))
-                              (deactivate-mark))
+                            (helixel-with-replay-as 'dot
+                              (helixel-action-replay fresh-runnable))
                           (helixel-mc--call-interactively cmd))
                       (search-failed (push cursor dead))
                       (user-error (ignore e))

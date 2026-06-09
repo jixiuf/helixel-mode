@@ -973,7 +973,7 @@ for ERT/batch where `this-command' is nil) to decide insertion position."
         (clean-text (substring-no-properties text)))
     (cond
      ((member cmd '(helixel-yank helixel-replace))
-      (end-of-line)
+      (helixel--line-end-or-invisible)
       (newline)
       (insert (string-trim-right clean-text "\n"))
       (beginning-of-line)

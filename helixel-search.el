@@ -177,6 +177,18 @@ Defaults to `forward' when the search state has no direction set."
 Let-bound by `helixel-search--at-point'.")
 
 ;; ---------------------------------------------------------------------------
+;; Invisible text bridge
+
+(defmacro helixel--with-invisible-search (&rest body)
+  "Run BODY with invisible-search vars set from `helixel-invisible'.
+Binds `search-invisible' and `isearch-invisible' to `helixel-invisible'."
+  (declare (indent 0) (debug t))
+  `(let ((search-invisible helixel-invisible)
+         (isearch-invisible helixel-invisible))
+     ,@body))
+
+
+;; ---------------------------------------------------------------------------
 ;; Isearch-compatible search helper — used by n/N repeat and . replay
 ;;
 ;; `isearch-search-string' respects all isearch settings:
@@ -190,11 +202,21 @@ DIR is \=`forward' or \=`backward'.
 BOUND limits the search range (nil = whole buffer).
 Pattern is searched as a regexp (isearch-regexp = t).
 Signals \=`search-failed' when not found (NOERROR is nil).
-Returns the match position (point moves to \=`match-end')."
-  (let ((isearch-string pattern)
-        (isearch-regexp t)
-        (isearch-forward (eq dir 'forward)))
-    (isearch-search-string pattern bound noerror)))
+Returns the match position (point moves to \=`match-end').
+
+`isearch-search-string' does not call `isearch-filter-predicate';
+we bridge that via `helixel--search-filter-loop'."
+  (helixel--with-invisible-search
+    (let ((isearch-string pattern)
+          (isearch-regexp t)
+          (isearch-forward (eq dir 'forward)))
+      (if helixel-invisible
+          (isearch-search-string pattern bound noerror)
+        (or (helixel--search-filter-loop
+             (lambda () (isearch-search-string pattern bound t))
+             (eq dir 'forward))
+            (unless noerror
+              (signal 'search-failed (list pattern))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Selection context for `.` repeat
@@ -256,12 +278,14 @@ _HAD-REGION is ignored (kept for signature compatibility)."
 (helixel-define-command helixel-search-forward
   (:category search :subcat search :clear-highlights nil)
   (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
-  (call-interactively #'isearch-forward-regexp))
+  (helixel--with-invisible-search
+    (call-interactively #'isearch-forward-regexp)))
 
 (helixel-define-command helixel-search-backward
   (:category search :subcat search :clear-highlights nil)
   (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
-  (call-interactively #'isearch-backward-regexp))
+  (helixel--with-invisible-search
+    (call-interactively #'isearch-backward-regexp)))
 
 ;; ---------------------------------------------------------------------------
 ;; * #  — symbol at point
@@ -302,14 +326,15 @@ If there is a single-line region, use it; otherwise use the symbol at point."
          (inhibit-redisplay t)
          (isearch-wrap-pause 'no-ding))
     (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
-    (if (< dir 0)
-        (progn
-          (goto-char (if (= (point-min) (car bounds))
-                         (point-max)
-                       (1- (car bounds))))
-          (call-interactively #'isearch-backward-regexp))
-      (goto-char (cdr bounds))
-      (call-interactively #'isearch-forward-regexp))
+    (helixel--with-invisible-search
+      (if (< dir 0)
+          (progn
+            (goto-char (if (= (point-min) (car bounds))
+                           (point-max)
+                         (1- (car bounds))))
+            (call-interactively #'isearch-backward-regexp))
+        (goto-char (cdr bounds))
+        (call-interactively #'isearch-forward-regexp)))
     (let ((text (helixel-search--extract-regex bounds)))
       (setq isearch-regexp t)
       (setq isearch-yank-flag t)
@@ -331,19 +356,20 @@ If there is a single-line region, use it; otherwise use the symbol at point."
 (defun helixel-search--isearch-repeat (dir)
   "Repeat isearch in direction DIR (>0 forward, <0 backward).
 Reads pattern from `helixel--active-search'."
-  (let ((inhibit-redisplay t)
-        (isearch-wrap-pause 'no-ding)
-        (isearch-repeat-on-direction-change t)
-        (had-region (region-active-p)))
-    (when-let* ((pat (helixel-search--safe-pattern)))
-      (setq isearch-string pat
-            isearch-regexp t
-            isearch-forward (eq (helixel-search--current-dir) 'forward)))
-    (if (< dir 0)
-        (isearch-repeat-backward (- dir))
-      (isearch-repeat-forward dir))
-    (helixel-search--handle-done had-region)
-    (helixel-search--set-sel-ctx)))
+  (helixel--with-invisible-search
+    (let ((inhibit-redisplay t)
+          (isearch-wrap-pause 'no-ding)
+          (isearch-repeat-on-direction-change t)
+          (had-region (region-active-p)))
+      (when-let* ((pat (helixel-search--safe-pattern)))
+        (setq isearch-string pat
+              isearch-regexp t
+              isearch-forward (eq (helixel-search--current-dir) 'forward)))
+      (if (< dir 0)
+          (isearch-repeat-backward (- dir))
+        (isearch-repeat-forward dir))
+      (helixel-search--handle-done had-region)
+      (helixel-search--set-sel-ctx))))
 
 ;; ---------------------------------------------------------------------------
 ;; Find-char: f F t T
@@ -367,14 +393,24 @@ Tracks how many times n was pressed so . repeats the full sequence."
   "Perform the search-and-position step for find-char.
 CHAR is the target character; TYPE is `next' or `till'; FORWARDP
 is t for forward search.  Caller is responsible for binding
-`case-fold-search' and pushing the pre-mark, etc.  This helper
-adjusts point relative to the character match according to TYPE."
-  (if forwardp
-      (progn (search-forward (char-to-string char))
-             (when (eq type 'till) (backward-char)))
-    (search-backward (char-to-string char))
-    (when (eq type 'till) (forward-char))))
+`case-fold-search' and pushing the pre-mark, etc.
 
+Bridges `search-forward'/`search-backward' (which bypass
+`isearch-filter-predicate') via `helixel--search-filter-loop'.
+Signals `search-failed' if no visible match is found."
+  (helixel--with-invisible-search
+    (let ((needle (char-to-string char))
+          (search-fn (if forwardp #'search-forward #'search-backward)))
+      (or (helixel--search-filter-loop
+           (lambda ()
+             ;; search-forward signals search-failed on failure,
+             ;; which the loop catches.
+             (funcall search-fn needle))
+           forwardp)
+          (signal 'search-failed (list needle)))
+      ;; Apply the till offset AFTER the visible match is confirmed.
+      (when (eq type 'till)
+        (if forwardp (backward-char) (forward-char))))))
 (defun helixel-search--find-char-exec (char type dir)
   "Find CHAR as TYPE (`next' or `till') in direction DIR (>0 forward)."
   (let ((forwardp (> dir 0))

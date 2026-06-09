@@ -451,6 +451,40 @@ for unmatched bracket characters."
 
 ;; ── Line / Rect selection ──
 
+(defun helixel--line-end-or-invisible ()
+  "Move to end of line, expanding past adjacent invisible text if enabled."
+  (if helixel-invisible
+      (progn (end-of-line)
+        (while (and (not (eobp)) (invisible-p (1+ (point))))
+          (goto-char (1+ (point)))
+          (let ((invis-end (if (get-text-property (point) 'invisible)
+                               (next-single-property-change
+                                (point) 'invisible nil (point-max))
+                             (next-overlay-change (point)))))
+            (goto-char (max (point-min) (1- invis-end)))
+            (end-of-line))))
+    (end-of-line)))
+
+(defun helixel--line-beginning-or-invisible ()
+  "Move to beginning of line, expanding past invisible text if enabled."
+  (beginning-of-line)
+  (when helixel-invisible
+    (let ((opoint (point)))
+      (while (and (not (bobp)) (invisible-p (1- (point))))
+        (goto-char
+         (if (get-text-property (1- (point)) 'invisible)
+             (or (previous-single-property-change
+                  (point) 'invisible (point-min))
+           (previous-overlay-change (point))))))
+      (unless (bolp) (goto-char opoint)))))
+
+(defun helixel-toggle-invisible ()
+  "Toggle `helixel-invisible'."
+  (interactive)
+  (setq helixel-invisible (not helixel-invisible))
+  (message "helixel: line expand invisible %s"
+           (if helixel-invisible "on" "off")))
+
 (defun helixel--extend-line-in-dir (dir)
   "Extend or shrink a linewise selection by one line in direction DIR.
 
@@ -475,21 +509,21 @@ new direction."
           (exchange-point-and-mark)
         ;; Extend side: move normally.
         (if (eq dir 'forward)
-            (progn (forward-line 1) (end-of-line))
-          (progn (forward-line -1) (beginning-of-line))))
+            (progn (forward-line 1) (helixel--line-end-or-invisible))
+          (progn (forward-line -1) (helixel--line-beginning-or-invisible))))
     (if (eq dir 'forward)
         ;; Move point DOWN.
         (if (<= (point) (mark))
             ;; Point at or above mark: shrink from top.
-            (progn (forward-line 1) (beginning-of-line))
+            (progn (forward-line 1) (helixel--line-beginning-or-invisible))
           ;; Point below mark: extend from bottom.
-          (progn (forward-line 1) (end-of-line)))
+          (progn (forward-line 1) (helixel--line-end-or-invisible)))
       ;; Move point UP (dir = backward).
       (if (>= (point) (mark))
           ;; Point at or below mark: shrink from bottom.
-          (progn (forward-line -1) (end-of-line))
+          (progn (forward-line -1) (helixel--line-end-or-invisible))
         ;; Point above mark: extend from top.
-        (progn (forward-line -1) (beginning-of-line))))))
+        (progn (forward-line -1) (helixel--line-beginning-or-invisible))))))
 
 (helixel-define-command helixel-select-line
     (:category movement :subcat lineselect
@@ -516,10 +550,10 @@ new direction."
           (helixel--switch-state 'visual))
         (beginning-of-line)
         (push-mark-command t t)
-        (end-of-line)
+        (helixel--line-end-or-invisible)
         (dotimes (_ (1- abs-n))
           (forward-line 1)
-          (end-of-line)))
+          (helixel--line-end-or-invisible)))
       (setq helixel--raw-selection-type 'line)
       (let* ((new-count (if extending
                             (max 1 (1+ (- (line-number-at-pos (region-end))
@@ -554,12 +588,12 @@ new direction."
         ;; New selection (backward: point at top, mark at bottom).
         (unless (helixel-replaying-p)
           (helixel--switch-state 'visual))
-        (end-of-line)
+        (helixel--line-end-or-invisible)
         (push-mark-command t t)
-        (beginning-of-line)
+        (helixel--line-beginning-or-invisible)
         (dotimes (_ (1- abs-n))
           (forward-line -1)
-          (beginning-of-line)))
+          (helixel--line-beginning-or-invisible)))
       (setq helixel--raw-selection-type 'line)
       (let* ((new-count (if extending
                             (max 1 (1+ (- (line-number-at-pos (region-end))

@@ -673,4 +673,31 @@ when the event's sel has no pattern in its ctx (fallback path)."
           (should (string-match "/hello/" display))
           (should-not (string= display "search.search")))))))
 
+
+;;; search + invisible text bridge
+
+(ert-deftest helixel-test-search-invisible-nil-skips ()
+  "search-invisible bound to nil skips invisible matches."
+  (helixel-test-with-buffer "aa\nbb\ncc"
+    (setq-local helixel-invisible nil)
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 2) (point))))
+      (put-text-property start end (quote invisible) (quote outline)))
+    (goto-char 1)
+    (helixel--with-invisible-search
+      (should (search-forward "aa" nil t))
+      (should (= (match-beginning 0) 1)))))
+
+(ert-deftest helixel-test-search-invisible-t-includes ()
+  "search-invisible stays t when helixel-invisible is t."
+  (helixel-test-with-buffer "aa\nbb\ncc"
+    (setq-local helixel-invisible t)
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 2) (point))))
+      (put-text-property start end (quote invisible) (quote outline)))
+    (goto-char 1)
+    (helixel--with-invisible-search
+      (should (eq search-invisible t)))))
+
+
 ;;; helixel-test-search.el ends here

@@ -916,6 +916,49 @@ Set by selection commands (line, rect, textobj, char).
 nil means charwise, `line' means linewise, `rect' means rectangle.
 Use `helixel--selection-type' for the validated version.")
 
+(defvar-local helixel-invisible t
+  "Non-nil means helixel treats invisible text as real content to operate on.
+In buffers like `org-mode', invisible text is folded content —
+\=`x'/\=`X' selections expand into it, and search finds matches inside.
+In buffers like `grep-mode' with `consult-focus-line', set this to nil
+so invisible text is treated as filtered-out content to ignore.
+Default t, matching Emacs' `line-move-ignore-invisible'.
+Set per-buffer via `setq-local' or dir-locals.
+Toggle with \[helixel-toggle-invisible].")
+
+;; ── Search filter loop ──
+
+(defsubst helixel--search-filter-loop (search-fn forwardp)
+  "Call SEARCH-FN (zero-arg) repeatedly, skipping invisible matches.
+SEARCH-FN must move point and set `match-data' on success; it should
+return non-nil on success.  FORWARDP determines the direction for
+skipping empty matches.  Returns the match position or nil.
+
+Uses `isearch-filter-predicate' to check whether a match is visible,
+respecting custom predicates (e.g. org-fold) and `search-invisible'.
+The caller should bind `search-invisible' appropriately."
+  (catch 'search-filter-done
+    (while t
+      (if (condition-case nil
+              (funcall search-fn)
+            (search-failed nil))
+          (if (or helixel-invisible
+                  (funcall isearch-filter-predicate
+                           (match-beginning 0) (match-end 0)))
+              (throw 'search-filter-done (match-beginning 0))
+            ;; Invisible — advance past match and retry.
+            (if (= (match-beginning 0) (match-end 0))
+                ;; Zero-width: advance one char.
+                (if forwardp
+                    (if (eobp) (throw 'search-filter-done nil)
+                      (forward-char 1))
+                  (if (bobp) (throw 'search-filter-done nil)
+                    (forward-char -1)))
+              ;; Non-empty: skip past the entire match.
+              (goto-char (match-end 0))))
+        ;; No more matches.
+        (throw 'search-filter-done nil)))))
+
 (defconst helixel--yank-register ?Y
   "Dedicated register for swap-source from yank/copy.
 Set only by copy (`y') at the real cursor.  In multi-cursor mode

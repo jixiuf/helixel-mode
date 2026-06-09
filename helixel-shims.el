@@ -93,7 +93,10 @@ Entering grep-edit → normal.  Saving → motion."
   (when (fboundp 'grep-edit-mode)
     (add-hook 'grep-edit-mode-hook #'helixel-enter-normal-state)
     (advice-add 'grep-edit-save-changes
-                :after #'helixel-enter-motion-state)))
+                :after #'helixel-enter-motion-state))
+  ;; grep/occur results use invisible for filtering (consult-focus-line).
+  (add-hook 'grep-mode-hook
+            (lambda () (setq-local helixel-invisible nil))))
 
 ;; ── occur-edit (Emacs 29+ built-in) ──
 
@@ -102,7 +105,9 @@ Entering grep-edit → normal.  Saving → motion."
 Entering occur-edit → normal.  Ceasing edit → motion."
   (when (fboundp 'occur-edit-mode)
     (add-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
-    (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state)))
+    (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state))
+  (add-hook 'occur-mode-hook
+            (lambda () (setq-local helixel-invisible nil))))
 
 ;; ── wgrep (third-party) ──
 

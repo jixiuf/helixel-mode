@@ -3221,5 +3221,64 @@ Cursor 1 copies to register a, cursor 2 to register b."
     (should (equal "AAA" (get-register ?a)))
     (helixel-mc-clear-all)))
 
+
+(ert-deftest helixel-test-mc-org-self-insert-invisible ()
+  "org-self-insert-command at invisible fake cursor must not lose chars.
+Reproduces the bug where inserting 'f' 'o' 'o' in org-mode with
+folded content resulted in 'oo' (missing 'f') because org-fold hooks
+interfered with call-interactively dispatch."
+  (helixel-test-with-buffer "foohello"
+    ;; Make the buffer simulate org-fold invisible text
+    (put-text-property 1 9 (quote invisible) (quote outline))
+    (add-to-invisibility-spec (quote (outline . t)))
+    ;; Create a fake cursor at position 1
+    (let ((ov (helixel-mc-create-fake-cursor 1)))
+      (unwind-protect
+          (progn
+            ;; Simulate org-self-insert-command at the fake cursor for 'f', 'o', 'o'
+            (let ((last-command-event 102))  ;; 'f'
+              (helixel-mc--call-interactively (quote org-self-insert-command)))
+            (let ((last-command-event 111))  ;; 'o'
+              (helixel-mc--call-interactively (quote org-self-insert-command)))
+            (let ((last-command-event 111))  ;; 'o'
+              (helixel-mc--call-interactively (quote org-self-insert-command)))
+            ;; Buffer should now have "foofoohello" (foo inserted before hello)
+            (should (string-prefix-p "foofoo" (buffer-string))))
+        (helixel-mc-delete-fake-cursor ov)))))
+
+
+
+(ert-deftest helixel-test-mc-org-self-insert-invisible-dispatch ()
+  "org-self-insert via mc with-each-cursor at invisible cursor preserves chars.
+Tests the actual dispatch path that caused the 'oohello' bug."
+  (helixel-test-with-buffer "foohello"
+    (put-text-property 1 9 (quote invisible) (quote outline))
+    (add-to-invisibility-spec (quote (outline . t)))
+    ;; Simulate what ss+i+foo does: cursor at position 4 (match-beginning of 'hello')
+    (let ((ov (helixel-mc-create-fake-cursor 4 9))
+          (helixel-multi-cursor-mode t))
+      (unwind-protect
+          (progn
+            ;; Simulate org-self-insert-command via the mc dispatcher path
+            (let ((last-command-event 102)  ;; 'f'
+                  (this-command (quote org-self-insert-command))
+                  (helixel--action-ring nil))
+              (helixel-mc-with-each-cursor
+                (helixel-mc--call-interactively (quote org-self-insert-command))))
+            (let ((last-command-event 111)  ;; 'o'
+                  (this-command (quote org-self-insert-command)))
+              (helixel-mc-with-each-cursor
+                (helixel-mc--call-interactively (quote org-self-insert-command))))
+            (let ((last-command-event 111)  ;; 'o'
+                  (this-command (quote org-self-insert-command)))
+              (helixel-mc-with-each-cursor
+                (helixel-mc--call-interactively (quote org-self-insert-command))))
+            ;; After inserting 'foo' before 'hello' within invisible text:
+            ;; the buffer should contain "foofoohello" (original "foo" + inserted "foo" + "hello")
+            (should (string-prefix-p "foofoo" (buffer-string))))
+        (helixel-mc-delete-fake-cursor ov)))))
+
+
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

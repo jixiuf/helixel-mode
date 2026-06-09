@@ -230,13 +230,32 @@ line becomes a fake cursor."
 (defun helixel-mc--search-for-next (text dir)
   "Search for TEXT in direction DIR (1 forward, -1 backward).
 Returns (BEG . END) marker pair on success, nil on failure.
-Does not move point."
+Does not move point.
+
+Filters invisible matches via `isearch-filter-predicate' when
+`helixel-invisible' is nil (e.g. `grep-mode' with consult-focus-line)."
   (save-excursion
-    (let ((case-fold-search nil))
-      (when (if (> dir 0)
-                (search-forward text nil t)
-              (search-backward text nil t))
-        (helixel-mc--make-target (match-beginning 0) (match-end 0))))))
+    (let ((case-fold-search nil)
+          (search-invisible helixel-invisible)
+          (search-fn (if (> dir 0) #'search-forward #'search-backward)))
+      (catch 'found
+        (while t
+          ;; search-forward with noerror=t returns nil on failure.
+          (if (funcall search-fn text nil t)
+              (if (or helixel-invisible
+                      (funcall isearch-filter-predicate
+                               (match-beginning 0) (match-end 0)))
+                  (throw 'found
+                         (helixel-mc--make-target
+                          (match-beginning 0) (match-end 0)))
+                ;; Invisible — skip empty match and retry.
+                (when (= (match-beginning 0) (match-end 0))
+                  (if (> dir 0)
+                      (if (eobp) (throw 'found nil) (forward-char 1))
+                    (if (bobp) (throw 'found nil)
+                      (forward-char -1)))))
+            ;; No match at all.
+            (throw 'found nil)))))))
 
 (defun helixel-mc--mark-like-this (dir)
   "Add a fake cursor at the next occurrence of region text in DIR.
@@ -866,13 +885,18 @@ disabled."
   (helixel-mc--push-history)
   (let (count)
     (helixel-mc-with-regions regions
-      (let ((new-specs
+      (let ((search-invisible helixel-invisible)
+            (new-specs
              (cl-loop
               for (b e fwd) in regions
               append (save-excursion
                        (goto-char b)
                        (cl-loop while (re-search-forward regex e t)
-                                when (> (match-end 0) (match-beginning 0))
+                                when (and (> (match-end 0) (match-beginning 0))
+                                          (or helixel-invisible
+                                              (funcall isearch-filter-predicate
+                                                       (match-beginning 0)
+                                                       (match-end 0))))
                                 collect (list (match-beginning 0)
                                               (match-end 0)
                                               fwd))))))

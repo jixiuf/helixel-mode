@@ -344,9 +344,19 @@ motion or operator."
       (user-error "Find-char selection has no :char"))
     (save-excursion
       (goto-char (point-min))
-      (while (search-forward needle nil t)
-        (let ((pos (if (eq type 'till) (1- (point)) (point))))
-          (push (helixel-mc--make-target pos) targets))))
+      (let ((search-invisible helixel-invisible)
+            (isearch-invisible helixel-invisible))
+        (while (search-forward needle nil t)
+          (when (or helixel-invisible
+                    ;; search-forward doesn't call isearch-filter-predicate.
+                    ;; Filter overlay-invisible matches ourselves.
+                    (funcall isearch-filter-predicate
+                             (match-beginning 0) (match-end 0)))
+            (let ((pos (if (eq type 'till) (1- (point)) (point))))
+              (push (helixel-mc--make-target pos) targets)
+              ;; Skip empty match as isearch-search does.
+              (when (= (match-beginning 0) (match-end 0))
+                (unless (eobp) (forward-char 1))))))))
     (let ((result (nreverse targets)))
       (unless result
         (user-error "No find-char matches in buffer"))

@@ -583,11 +583,22 @@ clause) which the unified dispatcher replays at every fake cursor."
 
 (defun helixel-mc--call-interactively (command)
   "Run COMMAND interactively (skipping `ignore').
-Bound by the dispatch loop to recreate the simulated command loop
-that fake-cursor execution needs."
+For `self-insert-command' at invisible position, inserts
+directly after removing the invisible property — avoiding
+org-fold hooks that would delete the inserted char."
   (unless (eq command 'ignore)
-    (let ((this-command command))
-      (call-interactively command))))
+    (if (and (invisible-p (point))
+             (or (eq command 'self-insert-command)
+                 (eq command 'org-self-insert-command)))
+        ;; Insert directly at invisible position: remove
+        ;; invisibility then `insert' to bypass org-fold hooks
+        ;; that corrupt the insertion.
+        (progn
+          (remove-text-properties (point) (1+ (point))
+                                  '(invisible nil))
+          (insert (char-to-string last-command-event)))
+      (let ((this-command command))
+        (call-interactively command)))))
 
 (defmacro helixel-mc--save-main-state (&rest body)
   "Save real cursor state into a `helixel-pc-state', run BODY, restore.

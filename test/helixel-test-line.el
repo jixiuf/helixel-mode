@@ -1086,5 +1086,44 @@ x x x: continue extending forward."
     (helixel-select-line-up 1)
     (should (= 3 (helixel-sel-count helixel--pending-sel)))))
 
+;;; line selection with invisible text
+
+(ert-deftest helixel-test-line-visible-only-nil ()
+  "x selects only visible line when helixel-invisible is nil."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5"
+    (setq-local helixel-invisible nil)
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 3) (point))))
+      (put-text-property start end (quote invisible) (quote outline)))
+    (goto-char 1)
+    (helixel-select-line)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 6))
+    (should (eq helixel--raw-selection-type (quote line)))))
+
+(ert-deftest helixel-test-line-expand-t ()
+  "x expands through invisible text-property when helixel-invisible is t."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5"
+    (setq-local helixel-invisible t)
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 3) (point))))
+      (put-text-property start end (quote invisible) (quote outline)))
+    (goto-char 1)
+    (helixel-select-line)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 18))
+    (should (eq helixel--raw-selection-type (quote line)))))
+
+(ert-deftest helixel-test-line-toggle ()
+  "helixel-toggle-invisible flips the variable."
+  (with-temp-buffer
+    (setq-local helixel-invisible nil)
+    (helixel-toggle-invisible)
+    (should helixel-invisible)
+    (helixel-toggle-invisible)
+    (should-not helixel-invisible)))
+
+
+
 (provide 'helixel-test-line)
 ;;; helixel-test-line.el ends here

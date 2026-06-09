@@ -235,7 +235,13 @@ Does not move point.
 Filters invisible matches via `isearch-filter-predicate' when
 `helixel-invisible' is nil (e.g. `grep-mode' with consult-focus-line)."
   (save-excursion
-    (let ((case-fold-search nil)
+    (let ((case-fold-search
+           ;; Respect buffer's case-fold-search, but force case-sensitive
+           ;; when TEXT contains uppercase (same rule as find-char f/F).
+           (if (let ((case-fold-search nil))
+                 (string-match-p "[[:upper:]]" text))
+               nil
+             case-fold-search))
           (search-invisible helixel-invisible)
           (search-fn (if (> dir 0) #'search-forward #'search-backward)))
       (catch 'found

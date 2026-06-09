@@ -2993,10 +2993,8 @@ canonical list."
 
 (ert-deftest helixel-test-mc-fake-regions-cleared-after-J ()
   "After mc dispatch of join-lines, fake cursors have no active regions.
-Regression: `helixel--repeat-change-core' (change runner) reactivates
-mark for undo-in-region, which leaked as fake region overlays during
-`c' step in `mhsxJc,' flow.  Fixed by `deactivate-mark' after
-runner replay in mc dispatch."
+The join-lines runner has its own `deactivate-mark' in unwind-protect
+so this is handled at the runner level, not the dispatcher."
   (helixel-test-with-buffer "hello\nhello\nhello\nhello"
     (goto-char 1)
     (mark-whole-buffer)
@@ -3013,11 +3011,45 @@ runner replay in mc dispatch."
         (when (helixel-mc-fake-cursor-p ov)
           (helixel-mc--enter-cursor ov)
           (unwind-protect
-              (progn
-                (helixel-action-replay tx)
-                (deactivate-mark))    ;; same as dispatch fix
+              (helixel-action-replay tx)
             (helixel-mc--leave-cursor ov))))
       ;; Now verify: no fake cursor has an active region
+      (dolist (ov (helixel-mc-all-cursors))
+        (when (helixel-mc-fake-cursor-p ov)
+          (let ((cs (overlay-get ov 'helixel-pc-state)))
+            (should (not (helixel-pcs-mark-active cs)))))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-change-fake-regions-cleared ()
+  "After mc dispatch of change, fake cursors have no active regions.
+Regression: `helixel--repeat-change-core' (change runner) reactivates
+mark for undo-in-region via `push-mark sel-beg t t', which leaked as
+fake-cursor region overlays after dispatch.  The fix: skip push-mark
+in mc-fake context (undo amalgamation already isolates each fake)."
+  (helixel-test-with-buffer "hello\nworld\nfoo"
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-mc-edit-lines (region-beginning) (region-end))
+    (should (= (helixel-mc-num-cursors) 3))
+    ;; Build a change tx simulating `cXXX<ESC>' that inserts "XXX"
+    ;; after deleting each line's content.
+    (let* ((tx (helixel-action-create
+                'change nil
+                :runner (helixel--op-runner 'change)
+                :inserted-text "XXX")))
+      (should tx)
+      (should (helixel-action-runner tx))
+      ;; Replay at each fake cursor inside mc-fake replay context
+      ;; so helixel-replay-in-fake-p returns t (as the real dispatcher
+      ;; does via helixel-mc-with-each-cursor).
+      (dolist (ov (helixel-mc-all-cursors))
+        (when (helixel-mc-fake-cursor-p ov)
+          (helixel-mc--enter-cursor ov)
+          (unwind-protect
+              (helixel-with-replay 'mc-fake
+                (helixel-action-replay tx))
+            (helixel-mc--leave-cursor ov))))
+      ;; Every fake must have no active region after replay.
       (dolist (ov (helixel-mc-all-cursors))
         (when (helixel-mc-fake-cursor-p ov)
           (let ((cs (overlay-get ov 'helixel-pc-state)))

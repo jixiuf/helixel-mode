@@ -370,7 +370,11 @@ rectangle line via `helixel--rect-replay' — no state-switching side
           (when text (insert text)))
         ;; Restore an active region covering the replayed edit
         ;; so undo-in-region limits undo to this replay only.
-        (push-mark sel-beg t t))))))
+        ;; Skip in mc-fake context — the undo amalgamation already
+        ;; isolates each fake, and a stale active mark would leak
+        ;; as a fake-cursor region overlay after dispatch.
+        (unless (helixel-replay-in-fake-p)
+          (push-mark sel-beg t t)))))))
 
 ;; ── Edit-op registry ──
 ;; Each operator registers a `:runner' (called by `.`) and a `:display'

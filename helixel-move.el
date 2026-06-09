@@ -409,26 +409,20 @@ for unmatched bracket characters."
                               d orig (and on-opener equalp) t)))
             (goto-char (car result))
             (throw 'done t))))
-      ;; ── Syntax-table fallback (innermost bracket from any pos) ──
-      (when-let* ((result (helixel--jump-syntax-table char-a char-b orig)))
-        (goto-char (car result))
-        (throw 'done t))
-      ;; ── Tags (XML/HTML tags) ──
-      (when-let* ((d (helixel--make-tag-delimiter))
-                  (result (helixel--jump-target-for-delimiter
-                           d orig nil 'helixel-mark-a-tag)))
-        (goto-char (car result))
-        (throw 'done t))
-      ;; ── Blocks (org, markdown) ──
-      (when-let* ((d (helixel--make-block-delimiter))
-                  (result (helixel--jump-target-for-delimiter
-                           d orig)))
-        (goto-char (car result))
-        (throw 'done t))
-      ;; ── Syntax-table fallback (final safety net) ──
-      (when-let* ((result (helixel--jump-syntax-table char-a char-b orig)))
-        (goto-char (car result))
-        (throw 'done t)))
+      ;; ── Remaining fallbacks: syntax-table, tags, blocks, syntax again ──
+      (dolist (attempt (list (list #'helixel--jump-syntax-table
+                                   char-a char-b orig)
+                             (list #'helixel--jump-target-for-delimiter
+                                   (helixel--make-tag-delimiter)
+                                   orig nil 'helixel-mark-a-tag)
+                             (list #'helixel--jump-target-for-delimiter
+                                   (helixel--make-block-delimiter)
+                                   orig)
+                             (list #'helixel--jump-syntax-table
+                                   char-a char-b orig)))
+        (when-let* ((result (apply (car attempt) (cdr attempt))))
+          (goto-char (car result))
+          (throw 'done t))))
     (when (= (point) orig)
       (message "No matching bracket found"))))
 

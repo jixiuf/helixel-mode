@@ -442,11 +442,11 @@ No-op for movement, textobj, or nil selections.
 Returns t on success, nil otherwise."
   (when-let* ((tx helixel--last-tx)
               (sel (helixel-action-sel tx))
-              (kind (helixel-sel-kind sel)))
-    (when (memq kind '(line search))
-      (setq helixel--repeat-permanent-flip
-            (not helixel--repeat-permanent-flip))
-      t)))
+              (kind (helixel-sel-kind sel))
+              ((memq kind '(line search))))
+    (setq helixel--repeat-permanent-flip
+          (not helixel--repeat-permanent-flip))
+    t))
 
 ;; ── Common repeat setup ──
 

@@ -440,6 +440,17 @@ rectangle line via `helixel--rect-replay' — no state-switching side
     (backward-delete-char-untabify 1 nil)))
   (helixel--clear-data))
 
+(helixel-define-operator helixel-delete-backward-word
+    (:op delete-backward-word :display "C-BS" :moves-point-p t)
+  (helixel--record-action 'delete-backward-word)
+  (if (and (use-region-p) delete-active-region)
+      (helixel--delete-selection t)
+    (unless (bobp)
+      (let ((end (point)))
+        (forward-word -1)
+        (delete-region (point) end))))
+  (helixel--clear-data))
+
 (helixel-define-command helixel-change
     (:category edit :subcat change)
   (helixel--record-action 'change)

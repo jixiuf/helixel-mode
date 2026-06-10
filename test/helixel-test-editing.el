@@ -1988,4 +1988,25 @@ insertions."
       (should (string= (buffer-string) "hlo"))
       (should-not kill-ring))))
 
+(ert-deftest helixel-test-delete-backward-word-basic ()
+  "`helixel-delete-backward-word' deletes from word-start to point."
+  (helixel-test-with-buffer "hello world"
+    (let ((kill-ring nil))
+      (goto-char 12) ;; after 'd' in "world"
+      (helixel-delete-backward-word) ;; delete "world" (word-start to point)
+      (should (string= (buffer-string) "hello "))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-backward-word-repeat ()
+  "Dot-repeat of `helixel-delete-backward-word'."
+  (helixel-test-with-buffer "foo bar baz"
+    (let ((kill-ring nil))
+      (goto-char 12) ;; after "baz"
+      (helixel-delete-backward-word) ;; delete "baz" → "foo bar "
+      (should (string= (buffer-string) "foo bar "))
+      (goto-char 8) ;; after "bar"
+      (helixel-repeat-edit) ;; delete "bar" → "foo  "
+      (should (string= (buffer-string) "foo  "))
+      (should-not kill-ring))))
+
 ;;; helixel-test-edit.el ends here

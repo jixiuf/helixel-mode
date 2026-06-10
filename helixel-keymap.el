@@ -450,6 +450,7 @@ used selection management lives here under `s'."
 (define-key helixel-visual-map "v"    #'helixel-visual-exit)
 (define-key helixel-visual-map "o"    #'helixel-visual-exchange-point-and-mark)
 (define-key helixel-visual-map [escape] #'helixel-visual-exit)
+(define-key helixel-normal-map "\M-;" #'helixel-visual-exchange-point-and-mark)
 
 ;; helixel-motion-map stays empty (full t, user adds bindings)
 

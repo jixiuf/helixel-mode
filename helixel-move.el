@@ -115,14 +115,33 @@ label from `x' / `v' must not bleed into the new region (which
 would make `y' tag the kill as line-wise even when the user
 selected a word).
 
+For the same reason, any non-movement pending-sel is cleared:
+a general movement replaces the selection intent, so the stale
+line/rect/textobj sel must not leak into `helixel--record-action'
+and subsequently into dot-repeat.
+
+INVARIANT: after this macro, `helixel--pending-sel' is either nil
+or already a movement-kind sel — it never holds a line/rect/textobj
+sel that was pushed by a prior special-selection command.
+
 Note: `helixel-define-command' handles `clear-highlights'
 and `track-visual-move'
 automatically, so this macro only does `push-mark' + activate."
   `(let ((current (point)))
+     ;; Clear stale non-movement pending-sel BEFORE the body so
+     ;; `helixel--track-visual-move' (injected by the macro) sees
+     ;; a nil ctx and creates a fresh movement sel.  This keeps
+     ;; pending-sel in sync with raw-selection-type (both nil).
+     ;; Note: do NOT gate on `use-region-p' — highlight clearing
+     ;; may have deactivated the mark before we run.
+     (when (and helixel--pending-sel
+                (not (eq (helixel-sel-kind helixel--pending-sel) 'movement)))
+       (setq helixel--pending-sel nil))
+     ;; A general movement also clears any replay override.
+     (setq helixel--raw-selection-type--override nil)
      ,@body
      (unless (use-region-p)
-       (push-mark current t 'activate))
-     (setq helixel--raw-selection-type nil)))
+       (push-mark current t 'activate))))
 
 ;; ── Word / WORD / symbol movement commands ──
 ;;
@@ -189,6 +208,12 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
     `(helixel-define-command ,name
          (:category movement :subcat pair :clear-highlights nil)
        (interactive)
+       ;; Clear any stale pending-sel from a prior special selection
+       ;; (e.g. x) — delimiter movement replaces the selection context.
+       (when (and helixel--pending-sel
+                  (not (eq (helixel-sel-kind helixel--pending-sel)
+                           'movement)))
+         (setq helixel--pending-sel nil))
        (deactivate-mark)
        (let* ((d (,factory ,@factory-args))
               (b (,bounds-fn d ,inner-p)))
@@ -533,7 +558,7 @@ new direction."
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
         (helixel--sel-push (funcall fn helixel--pending-sel))))
     (let ((extending (and (region-active-p)
-                          (eq helixel--raw-selection-type 'line))))
+                          (eq (helixel--raw-selection-type) 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
           (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
@@ -548,7 +573,6 @@ new direction."
         (dotimes (_ (1- abs-n))
           (forward-line 1)
           (helixel--line-end-or-invisible)))
-      (setq helixel--raw-selection-type 'line)
       (let* ((new-count (if extending
                             (max 1 (1+ (- (line-number-at-pos (region-end))
                                           (line-number-at-pos
@@ -573,7 +597,7 @@ new direction."
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
         (helixel--sel-push (funcall fn helixel--pending-sel))))
     (let ((extending (and (region-active-p)
-                          (eq helixel--raw-selection-type 'line))))
+                          (eq (helixel--raw-selection-type) 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
           (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
@@ -588,7 +612,6 @@ new direction."
         (dotimes (_ (1- abs-n))
           (forward-line -1)
           (helixel--line-beginning-or-invisible)))
-      (setq helixel--raw-selection-type 'line)
       (let* ((new-count (if extending
                             (max 1 (1+ (- (line-number-at-pos (region-end))
                                           (line-number-at-pos
@@ -620,7 +643,6 @@ new direction."
       (dotimes (_ (1- n))
         (forward-line 1)
         (rectangle--reset-point-crutches)))
-    (setq helixel--raw-selection-type 'rect)
     (let* ((prev-count (helixel-sel-count helixel--pending-sel))
            (new-count (if extending (+ prev-count n) n)))
       (helixel--push-selection 'rect `(:count ,new-count)))))
@@ -686,7 +708,7 @@ simple `push-mark' would interact poorly with the rect-mode mark."
       (deactivate-mark)
       (push-mark span-origin t t)
       (activate-mark))
-    (setq helixel--raw-selection-type 'rect)))
+    (setq helixel--raw-selection-type--override 'rect)))
 
 (defun helixel--recreate-movement (ctx)
   "Replay movement selection from CTX.
@@ -799,7 +821,9 @@ No-op during dot-repeat replay, or when no region is active."
              (helixel-sel-update-ctx ctx :moves
                                      (cons entry moves))))))
        ;; Create: first movement that made a region.
-       ;; Only when no sel exists — never clobber line/rect/textobj.
+       ;; INVARIANT: a non-movement ctx is impossible here —
+       ;; `helixel--with-movement-surround' clears stale
+       ;; line/rect/textobj sel before this function runs.
        ((null ctx)
         (helixel--sel-push
          (helixel-sel-create 'movement

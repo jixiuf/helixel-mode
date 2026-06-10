@@ -639,7 +639,6 @@ the count so `.' repeats the full chain of textobj selections."
                              (eq (helixel-sel-textobj-command prev) cmd))
                         (+ (helixel-sel-textobj-count prev) n)
                       n)))
-      (setq helixel--raw-selection-type 'textobj)
       (helixel--sel-push
        (helixel-sel-create
         'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
@@ -746,7 +745,7 @@ Signals errors when no more targets exist."
              (when (= (point) orig)
                (forward-char 1))
              (funcall command cnt)))))))
-  (setq helixel--raw-selection-type 'textobj))
+  (setq helixel--raw-selection-type--override 'textobj))
 
 (defun helixel--repeat-advance-textobj (tx)
   "Advance to next target for TX's textobj selection.

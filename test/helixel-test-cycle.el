@@ -174,7 +174,7 @@
         (helixel-test-with-buffer "hello world"
 				  (push-mark (point) t t)
 				  (goto-char 6)
-				  (setq helixel--raw-selection-type nil)
+				  (setq helixel--raw-selection-type--override nil)
 				  (let ((this-command 'helixel-kill-ring-save))
 				    (helixel-kill-ring-save))
 				  (should helixel--action-ring)
@@ -202,7 +202,7 @@
         (helixel-test-with-buffer "hello world"
 				  (push-mark (point) t t)
 				  (goto-char 6)
-				  (setq helixel--raw-selection-type nil)
+				  (setq helixel--raw-selection-type--override nil)
 				  (helixel--tracking-open 'edit 'kill)
 				  (let* ((tx (helixel-action-create 'kill nil
 								    :runner (lambda (_) nil))))

@@ -76,7 +76,7 @@
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
     (push-mark (point) t t)
     (end-of-line)
-    (setq helixel--raw-selection-type 'line)
+    (setq helixel--raw-selection-type--override 'line)
     (should (eq (helixel--selection-type) 'line))))
 
 (ert-deftest helixel-test-selection-type-line-invalidated ()
@@ -86,7 +86,7 @@
     (goto-char 3)
     (push-mark (point) t t)
     (end-of-line)
-    (setq helixel--raw-selection-type 'line)
+    (setq helixel--raw-selection-type--override 'line)
     (should-not (helixel--selection-type))))
 
 ;;; helixel-select-line sets selection type
@@ -94,9 +94,9 @@
 (ert-deftest helixel-test-select-line-sets-type ()
   "Test `helixel-select-line' sets `helixel--raw-selection-type' to line."
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (helixel-select-line)
-    (should (eq helixel--raw-selection-type 'line))
+    (should (eq (helixel--raw-selection-type) 'line))
     (should (region-active-p))))
 
 ;;; helixel--clear-data resets selection type
@@ -104,9 +104,9 @@
 (ert-deftest helixel-test-clear-data-resets-type ()
   "Test `helixel--clear-data' resets `helixel--raw-selection-type'."
   (helixel-test-with-buffer "hello"
-    (setq helixel--raw-selection-type 'line)
+    (setq helixel--raw-selection-type--override 'line)
     (helixel--clear-data)
-    (should-not helixel--raw-selection-type)))
+    (should-not (helixel--raw-selection-type))))
 
 ;;; helixel--line-bounds-of-region tests
 
@@ -167,7 +167,7 @@
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (helixel-kill-ring-save)
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (car kill-ring) "hello")))))
@@ -213,7 +213,7 @@
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (helixel-kill)
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (buffer-string) " world")))))
@@ -292,7 +292,7 @@
     (goto-char 2)
     (push-mark (point) t t)
     (goto-char 5)                    ; select "bcd"
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (helixel-yank)
     (should (string= (buffer-string) "abcdXYZef"))))
 
@@ -303,7 +303,7 @@
     (goto-char 2)
     (push-mark (point) t t)
     (goto-char 5)                    ; select "bcd"
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (helixel-yank-before)
     (should (string= (buffer-string) "aXYZbcdef"))))
 
@@ -343,7 +343,7 @@
     (goto-char 2)
     (push-mark (point) t t)
     (goto-char 5)                    ; select "bcd"
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (helixel-yank 2)
     ;; pastes after selection (region-end), twice
     (should (string= (buffer-string) "abcdXYXYef"))))
@@ -394,7 +394,7 @@
   "After r, the event mark-region covers the replaced text."
   (helixel-test-with-buffer "hello"
     (let ((helixel-replace-delete-char-p t)
-          (helixel--raw-selection-type nil))
+          (helixel--raw-selection-type--override nil))
       (kill-new "XY")
       (helixel-replace)
       ;; 'h' deleted, "XY" inserted → "XYello"
@@ -508,7 +508,7 @@ paste line-wise instead of char-wise."
     (kill-new (helixel--linewise-text "REPLACED\n"))
     (push-mark (point) t t)
     (goto-char 6)
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (helixel-replace)
     ;; Line-wise kill should be stripped of trailing newline for inline replace
     (should (string= (buffer-string) "REPLACED world"))))
@@ -518,14 +518,14 @@ paste line-wise instead of char-wise."
   (helixel-test-with-buffer "hello"
     (let ((helixel-replace-delete-char-p t))
       (kill-new "X")
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (helixel-replace)
       (should (string= (buffer-string) "Xello"))))
 
   (helixel-test-with-buffer "hello"
     (let ((helixel-replace-delete-char-p nil))
       (kill-new "X")
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (helixel-replace)
       (should (string= (buffer-string) "Xhello")))))
 
@@ -575,7 +575,7 @@ paste line-wise instead of char-wise."
       ;; Select "brave"
       (push-mark 7 t t)
       (goto-char 12)
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (setq last-command nil)
       (helixel-replace)
       (should (string= (buffer-string) "hello cruel world"))
@@ -785,7 +785,7 @@ mark-position-based bounds detection (not use-region-p)."
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (helixel-kill)
       (should (string= (car kill-ring) "hello"))
       (should-not (helixel--linewise-kill-p (car kill-ring)))
@@ -798,9 +798,9 @@ mark-position-based bounds detection (not use-region-p)."
 (ert-deftest helixel-test-begin-selection-clears-line-type ()
   "Test that `helixel-begin-selection' clears line selection type."
   (helixel-test-with-buffer "hello"
-    (setq helixel--raw-selection-type 'line)
+    (setq helixel--raw-selection-type--override 'line)
     (helixel-begin-selection)
-    (should-not helixel--raw-selection-type)))
+    (should-not (helixel--raw-selection-type))))
 
 ;;; Direction flip / shrink tests
 
@@ -810,7 +810,7 @@ mark-position-based bounds detection (not use-region-p)."
     (helixel-enter-normal-state)
     (helixel-select-line)
     (should (eq helixel--current-state 'visual))
-    (should (eq helixel--raw-selection-type 'line))
+    (should (eq (helixel--raw-selection-type) 'line))
     (should (use-region-p))))
 
 (ert-deftest helixel-test-line-select-up-enters-visual ()
@@ -820,7 +820,7 @@ mark-position-based bounds detection (not use-region-p)."
     (goto-char 5)
     (helixel-select-line-up)
     (should (eq helixel--current-state 'visual))
-    (should (eq helixel--raw-selection-type 'line))
+    (should (eq (helixel--raw-selection-type) 'line))
     (should (use-region-p))))
 
 (ert-deftest helixel-test-line-dir-stored-in-ctx ()
@@ -965,7 +965,7 @@ mark-position-based bounds detection (not use-region-p)."
       (should (= pt (mark)))
       (should (= mk (point)))
       ;; rect has no :dir — just verify no error
-      (should-not (eq helixel--raw-selection-type 'line)))))
+      (should-not (eq (helixel--raw-selection-type) 'line)))))
 
 (ert-deftest helixel-test-line-auto-reverse-at-boundary ()
   "At boundary, plain `x' crosses over; `-x' just shrinks (no switch)."
@@ -1099,7 +1099,7 @@ x x x: continue extending forward."
     (helixel-select-line)
     (should (= (region-beginning) 1))
     (should (= (region-end) 6))
-    (should (eq helixel--raw-selection-type (quote line)))))
+    (should (eq (helixel--raw-selection-type) 'line))))
 
 (ert-deftest helixel-test-line-expand-t ()
   "x expands through invisible text-property when helixel-invisible is t."
@@ -1112,7 +1112,7 @@ x x x: continue extending forward."
     (helixel-select-line)
     (should (= (region-beginning) 1))
     (should (= (region-end) 18))
-    (should (eq helixel--raw-selection-type (quote line)))))
+    (should (eq (helixel--raw-selection-type) 'line))))
 
 (ert-deftest helixel-test-line-toggle ()
   "helixel-toggle-invisible flips the variable."

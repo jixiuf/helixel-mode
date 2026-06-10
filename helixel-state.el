@@ -243,7 +243,7 @@ re-enters visual exit."
     (when rectangle-mark-mode
       (rectangle-mark-mode -1))
     (helixel--switch-state 'visual)
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (push-mark-command t t)))
 
 (defun helixel-visual-exchange-point-and-mark ()
@@ -260,7 +260,7 @@ re-enters visual exit."
   (cond
    (rectangle-mark-mode
     (rectangle-exchange-point-and-mark))
-   ((and (eq helixel--raw-selection-type 'line)
+   ((and (eq (helixel--raw-selection-type) 'line)
          helixel--pending-sel
          (eq (helixel-sel-kind helixel--pending-sel) 'line))
     (exchange-point-and-mark)

@@ -289,8 +289,7 @@ search point ends at `match-beginning' (matching isearch behavior)."
         (progn
           (push-mark (match-beginning 0) t t)
           (goto-char (match-end 0)))
-      (push-mark (match-end 0) t t))
-    (setq helixel--raw-selection-type 'char)))
+      (push-mark (match-end 0) t t))))
 
 (defun helixel-search--handle-done (_had-region)
   "Handle region after isearch finishes.
@@ -612,7 +611,6 @@ at the appropriate offset within the match for insert-text ops."
        ctx (lambda () (helixel-search--search pat dir)))
       (push-mark (match-beginning 0) t t)
       (goto-char (match-end 0)))
-    (setq helixel--raw-selection-type 'char)
     (when-let* ((entry-kind (helixel-sel-search-entry-kind ctx)))
       (let* ((base (if (eq entry-kind 'append)
                        (match-end 0)

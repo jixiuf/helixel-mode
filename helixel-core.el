@@ -910,11 +910,26 @@ Shows operator name, display label, and `moves-point-p' flag."
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
 
-(defvar-local helixel--raw-selection-type nil
-  "Internal flag: raw selection type before validation.
-Set by selection commands (line, rect, textobj, char).
-nil means charwise, `line' means linewise, `rect' means rectangle.
-Use `helixel--selection-type' for the validated version.")
+(defvar-local helixel--raw-selection-type--override nil
+  "Override for `helixel--raw-selection-type' during dot-repeat replay.
+Set only by selection-recreate functions to tell operators the
+selection type when `helixel--pending-sel' was already cleared.
+Cleared by `helixel--clear-data-internal'.")
+
+(defun helixel--raw-selection-type ()
+  "Return the raw selection type: nil, `line', `rect', or `textobj'.
+Derived from `helixel--pending-sel' kind — the single source of truth.
+Falls back to `helixel--raw-selection-type--override' for replay.
+Unlike the old variable, pending-sel is NOT popped until `clear-data',
+so this function returns the correct type throughout the operator body."
+  (or helixel--raw-selection-type--override
+      (if helixel--pending-sel
+          (pcase (helixel-sel-kind helixel--pending-sel)
+            ('line 'line)
+            ('rect 'rect)
+            ('textobj 'textobj)
+            (_ nil))
+        nil)))
 
 (defvar-local helixel-invisible t
   "Non-nil means helixel treats invisible text as real content to operate on.
@@ -981,8 +996,8 @@ Returns nil (char), \=`line', or \=`rect'.
 More permissive than `helixel--selection-type' — detects
 `rectangle-mark-mode' directly."
   (cond
-   ((eq helixel--raw-selection-type 'rect) 'rect)
-   ((eq helixel--raw-selection-type 'line) 'line)
+   ((eq (helixel--raw-selection-type) 'rect) 'rect)
+   ((eq (helixel--raw-selection-type) 'line) 'line)
    ((bound-and-true-p rectangle-mark-mode) 'rect)
    (t nil)))
 
@@ -1036,15 +1051,15 @@ Validates that the region actually matches the claimed type.
 Supports `line', `rect' and `textobj'."
   (when (region-active-p)
     (cond
-     ((eq helixel--raw-selection-type 'rect)
+     ((eq (helixel--raw-selection-type) 'rect)
       (when rectangle-mark-mode 'rect))
-     ((eq helixel--raw-selection-type 'line)
+     ((eq (helixel--raw-selection-type) 'line)
       (let ((beg (region-beginning))
             (end (region-end)))
         (when (and (save-excursion (goto-char beg) (bolp))
                    (save-excursion (goto-char end) (or (eolp) (eobp))))
           'line)))
-     ((eq helixel--raw-selection-type 'textobj)
+     ((eq (helixel--raw-selection-type) 'textobj)
       'textobj))))
 
 ;; ----------------------------------------------------------------------

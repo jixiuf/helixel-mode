@@ -1504,4 +1504,26 @@ On a single-char symbol at eob, w selects it."
     (helixel--action-cycle)
     (should (use-region-p))))
 
+;; ── Surround macro clears stale pending-sel ──
+
+(ert-deftest helixel-test-surround-clears-nonmovement-sel ()
+  "Surround clears a non-movement pending-sel."
+  (helixel-test-with-buffer "hello world"
+    (goto-char 1)
+    (helixel--sel-push (helixel-sel-create 'line '(:dir forward :count 1)))
+    (push-mark (point-max) t t)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'line))
+    (helixel-forward-word-start)
+    (should helixel--pending-sel)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
+
+(ert-deftest helixel-test-surround-clears-override ()
+  "Surround clears the raw-selection-type override."
+  (helixel-test-with-buffer "hello world"
+    (goto-char 1)
+    (setq helixel--raw-selection-type--override 'rect)
+    (should (eq (helixel--raw-selection-type) 'rect))
+    (helixel-forward-word-start)
+    (should (null (helixel--raw-selection-type)))))
+
 ;;; helixel-test-move.el ends here

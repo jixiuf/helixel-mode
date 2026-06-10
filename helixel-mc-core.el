@@ -52,7 +52,6 @@
 ;; before those modules are loaded.
 (defvar helixel--pending-sel)             ; from `helixel-core'
 (defvar helixel--last-tx)             ; from `helixel-core'
-(defvar helixel--raw-selection-type)      ; from `helixel-core'
 (defvar helixel--yank-register-source)    ; from `helixel-core' (mc per-cursor)
 (defvar helixel--current-register)        ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
@@ -156,7 +155,6 @@ so on — broadcasts at one cursor never leak into another."
   last-action            ; `helixel-action'      (helixel--last-tx)
   yank-register-source   ; swap-source plist     (helixel--yank-register-source)
   registers-alist        ; list (copy of register-alist)
-  raw-selection-type     ; symbol | nil          (helixel--raw-selection-type)
   active-search          ; `helixel-active-search' (helixel--active-search)
   event-ring             ; list of `helixel-action' (helixel--action-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
@@ -177,7 +175,6 @@ independent of any later movement of point / mark."
    :last-action               helixel--last-tx
    :yank-register-source      helixel--yank-register-source
    :registers-alist            (copy-tree register-alist)
-   :raw-selection-type        helixel--raw-selection-type
    :active-search             helixel--active-search
    :event-ring                helixel--action-ring
    :live-action               helixel--live-action
@@ -196,7 +193,6 @@ Moves point and the `mark-marker' to CS's positions, sets
         helixel--pending-sel   (helixel-pcs-pending-sel cs)
         helixel--last-tx   (helixel-pcs-last-action cs)
         helixel--yank-register-source (helixel-pcs-yank-register-source cs)
-        helixel--raw-selection-type (helixel-pcs-raw-selection-type cs)
         ;; Swap register-alist for per-cursor register isolation.
         ;; The real cursor's alist is preserved by the outer
         ;; `helixel-mc--save-main-state' — we just replace the
@@ -229,7 +225,6 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-last-action cs)            helixel--last-tx
         (helixel-pcs-yank-register-source cs)   helixel--yank-register-source
         (helixel-pcs-registers-alist cs)         (copy-tree register-alist)
-        (helixel-pcs-raw-selection-type cs)     helixel--raw-selection-type
         (helixel-pcs-active-search cs)          helixel--active-search
         (helixel-pcs-event-ring cs)             helixel--action-ring
         (helixel-pcs-live-action cs)            helixel--live-action
@@ -954,7 +949,6 @@ state (kill-ring, event-ring, last-action, …)."
                  (helixel-pcs-yank-register-source ,cs)
                register-alist
                  (helixel-pcs-registers-alist ,cs)
-               helixel--raw-selection-type (helixel-pcs-raw-selection-type ,cs)
                helixel--active-search (helixel-pcs-active-search ,cs)
                helixel--action-ring    (helixel-pcs-event-ring ,cs)
                helixel--live-action   (helixel-pcs-live-action ,cs)

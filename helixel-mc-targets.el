@@ -55,7 +55,7 @@
 (defvar helixel--active-search)
 (defvar helixel--action-ring)
 (defvar helixel--action-pos)
-(defvar helixel--raw-selection-type)
+; was defvar helixel--raw-selection-type (now a function)
 
 ;; ── Helpers ──
 

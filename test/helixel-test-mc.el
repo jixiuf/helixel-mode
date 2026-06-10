@@ -1445,7 +1445,7 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
     ;; Mimic `x x x x' — select 4 lines (point at last EOL).
     (setq this-command 'helixel-select-line)
     (helixel-select-line 4)
-    (should (eq 'line helixel--raw-selection-type))
+    (should (eq 'line (helixel--raw-selection-type)))
     (should (use-region-p))
     (helixel-mc-edit-lines (region-beginning) (region-end))
     ;; 4 lines total → 1 real + 3 fakes.
@@ -1604,13 +1604,13 @@ N word targets, not N+1."
                          :payload '(:keys [?X])))
            (helixel--last-tx sentinel-tx)
            (helixel--pending-sel sentinel-sel)
-           (helixel--raw-selection-type 'textobj))
+           (helixel--raw-selection-type--override 'textobj))
       (helixel-mc--walk-advance (helixel-test-mc--word-sel))
       ;; All globals must be restored exactly — no accumulated count,
       ;; no overwritten command, no flipped raw-type.
       (should (eq helixel--last-tx sentinel-tx))
       (should (eq helixel--pending-sel sentinel-sel))
-      (should (eq helixel--raw-selection-type 'textobj))
+      (should (eq (helixel--raw-selection-type) 'textobj))
       (should (= 1 (helixel-sel-textobj-count
                     (helixel-action-sel helixel--last-tx))))
       (should (eq 'helixel-mark-inner-word
@@ -1800,18 +1800,18 @@ to be filtered out as a stale read."
     (helixel-enter-normal-state)
     (goto-char 1)
     (helixel-select-line)
-    (should (eq helixel--raw-selection-type 'line))
+    (should (eq (helixel--raw-selection-type) 'line))
     (helixel-forward-word-end)
-    (should (null helixel--raw-selection-type))))
+    (should (null (helixel--raw-selection-type)))))
 
 (ert-deftest helixel-test-movement-clears-rect-raw-type ()
   "After `v'/`vvv' (rect select), a movement must clear raw-selection-type."
   (helixel-test-with-buffer "hello world\nfoo bar\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (helixel-forward-word-end)
-    (should (null helixel--raw-selection-type))))
+    (should (null (helixel--raw-selection-type)))))
 
 ;; ============================================================================
 ;; Smoke-test coverage — every checklist item from SMOKE-TEST-MC.md
@@ -2827,7 +2827,7 @@ region cursor per line (Helix `Alt-s' semantics)."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 12)
-    (let ((helixel--raw-selection-type 'line))
+    (let ((helixel--raw-selection-type--override 'line))
       (helixel-mc-edit-lines (region-beginning) (region-end)))
     (should (= 2 (length (helixel-mc-all-cursors))))
     (let ((texts (sort
@@ -3106,7 +3106,7 @@ Verifies per-cursor isolation — cursor 1's copy does not overwrite cursor 2's.
     (should (= (helixel-mc-num-cursors) 2))
     ;; Each cursor copies its line content (AAA / BBB) as swap source.
     (helixel-mc-with-each-cursor
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (push-mark (pos-eol) t t)
       (goto-char (pos-bol))
       (helixel-kill-ring-save))
@@ -3127,14 +3127,14 @@ Verifies per-cursor isolation — cursor 1's copy does not overwrite cursor 2's.
     (should (= (helixel-mc-num-cursors) 3))
     ;; Each cursor copies first word
     (helixel-mc-with-each-cursor
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
         (helixel-kill-ring-save)))
     ;; Delete first word on each line
     (helixel-mc-with-each-cursor
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
@@ -3157,7 +3157,7 @@ per-cursor register content is independent."
     (should (= (helixel-mc-num-cursors) 3))
     ;; Real cursor copies its word to register a (global).
     (goto-char (pos-bol))
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (let ((w (save-excursion (forward-word) (point))))
       (push-mark w t t)
       (exchange-point-and-mark)
@@ -3166,7 +3166,7 @@ per-cursor register content is independent."
     ;; Fake cursors copy their words to per-cursor register a.
     (helixel-mc-with-each-cursor
       (goto-char (pos-bol))
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
@@ -3201,7 +3201,7 @@ Simulates the interactive dispatch path: real cursor runs first
     ;; Step 1: copy at real cursor (would be `y' interactively).
     ;; Real cursor is at the line nearest to point.
     (goto-char (pos-bol))
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (let ((w (save-excursion (forward-word) (point))))
       (push-mark w t t)
       (exchange-point-and-mark)
@@ -3212,7 +3212,7 @@ Simulates the interactive dispatch path: real cursor runs first
     (helixel-mc-with-each-cursor
       (goto-char (pos-bol))
       (should (eq helixel--current-register ?a))
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
@@ -3242,7 +3242,7 @@ is responsible for clearing it."
     ;; Set register on real cursor.
     (setq helixel--current-register ?a)
     ;; Simulate real cursor yank.
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (push-mark (pos-eol) t t)
     (exchange-point-and-mark)
     (helixel-kill-ring-save)
@@ -3250,7 +3250,7 @@ is responsible for clearing it."
     (should (eq helixel--current-register ?a))
     ;; Now simulate what post-command does: dispatch then clear.
     (helixel-mc-with-each-cursor
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (push-mark (pos-eol) t t)
       (exchange-point-and-mark)
       (should (eq helixel--current-register ?a))
@@ -3271,7 +3271,7 @@ Cursor 1 copies to register a, cursor 2 to register b."
     ;; Real cursor: copy to register a.
     (goto-char (pos-bol))
     (setq helixel--current-register ?a)
-    (setq helixel--raw-selection-type nil)
+    (setq helixel--raw-selection-type--override nil)
     (push-mark (pos-eol) t t)
     (exchange-point-and-mark)
     (helixel-kill-ring-save)
@@ -3279,7 +3279,7 @@ Cursor 1 copies to register a, cursor 2 to register b."
     (helixel-mc-with-each-cursor
       (goto-char (pos-bol))
       (setq helixel--current-register ?b)
-      (setq helixel--raw-selection-type nil)
+      (setq helixel--raw-selection-type--override nil)
       (push-mark (pos-eol) t t)
       (exchange-point-and-mark)
       (helixel-kill-ring-save))

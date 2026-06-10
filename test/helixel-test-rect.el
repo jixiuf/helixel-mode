@@ -40,7 +40,7 @@
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
     (call-interactively #'helixel-select-rectangle)
     (should rectangle-mark-mode)
-    (should (eq helixel--raw-selection-type 'rect))
+    (should (eq (helixel--raw-selection-type) 'rect))
     (should (region-active-p))))
 
 (ert-deftest helixel-test-select-rectangle-extends ()
@@ -58,7 +58,7 @@
 (ert-deftest helixel-test-selection-type-rect ()
   "Test `helixel--selection-type' returns `rect' for rectangle selection."
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (push-mark (point) t t)
     (goto-char 8)
     (rectangle-mark-mode 1)
@@ -68,7 +68,7 @@
 (ert-deftest helixel-test-selection-type-rect-without-mode ()
   "Test `helixel--selection-type' returns nil when rect type but mode off."
   (helixel-test-with-buffer "first line\nsecond line"
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (push-mark (point) t t)
     (goto-char 8)
     ;; rectangle-mark-mode not active
@@ -82,7 +82,7 @@
     (helixel-select-rectangle)
     (helixel--clear-data)
     (should-not rectangle-mark-mode)
-    (should-not helixel--raw-selection-type)))
+    (should-not (helixel--raw-selection-type))))
 
 ;;; helixel--rect-wise-text and helixel--rect-wise-kill-p tests
 
@@ -120,7 +120,7 @@
       (push-mark (point) t t)
       (goto-char 14) ;; col 3 on line 2 (space after "DEF")
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type 'rect)
+      (setq helixel--raw-selection-type--override 'rect)
       (helixel-kill)
       (should (helixel--rect-wise-kill-p (car kill-ring)))
       ;; After killing first 3 chars of first two lines:
@@ -134,7 +134,7 @@
       (push-mark (point) t t)
       (goto-char 2)
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type 'rect)
+      (setq helixel--raw-selection-type--override 'rect)
       (helixel-kill)
       (should (helixel--rect-wise-kill-p (car kill-ring)))
       (should (string= (buffer-string) "BCDE"))
@@ -150,7 +150,7 @@
       (push-mark (point) t t)
       (goto-char 14) ;; col 3 on line 2 (space after "DEF")
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type 'rect)
+      (setq helixel--raw-selection-type--override 'rect)
       (helixel-kill-ring-save)
       (should (helixel--rect-wise-kill-p (car kill-ring)))
       ;; Buffer content unchanged
@@ -167,7 +167,7 @@
     (push-mark (point) t t)
     (goto-char 14) ;; col 3 on line 2
     (rectangle-mark-mode 1)
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (helixel-replace)
     (should (string= (buffer-string) "??? line1\nXXX line2\nGHI line3"))))
 
@@ -179,7 +179,7 @@
     (push-mark (point) t t)
     (goto-char 14) ;; col 3 on line 2
     (rectangle-mark-mode 1)
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (helixel-replace)
     ;; "!!" inserted at top-left of rectangle area
     (should (string= (buffer-string) "!! line1\n line2\nGHI line3"))))
@@ -273,7 +273,7 @@ At bol, moves past first char so rect starts at column 1."
     (should rectangle-mark-mode)
     (helixel-begin-selection)
     (should-not rectangle-mark-mode)
-    (should-not helixel--raw-selection-type)))
+    (should-not (helixel--raw-selection-type))))
 
 ;;; Interaction: rect kill doesn't affect line-wise detection
 
@@ -297,7 +297,7 @@ At bol, moves past first char so rect starts at column 1."
       (push-mark (point) t t)
       (goto-char 14) ;; col 3 on line 2 (space after "BBB")
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type 'rect)
+      (setq helixel--raw-selection-type--override 'rect)
       (helixel-kill)
       (should (string= (buffer-string) " line1\n line2\nCCC line3"))
       ;; Now yank at beginning (P to paste before first char)
@@ -331,7 +331,7 @@ At bol, moves past first char so rect starts at column 1."
     (push-mark (point) t t)
     (goto-char 14) ;; col 3 on line 2
     (rectangle-mark-mode 1)
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (helixel-change)
     ;; Rect deleted, now type text in insert mode
     (insert "XXX")
@@ -345,7 +345,7 @@ At bol, moves past first char so rect starts at column 1."
     (push-mark (point) t t)
     (goto-char 14)
     (rectangle-mark-mode 1)
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (helixel-change)
     ;; Exit immediately without typing anything
     (helixel-insert-exit)
@@ -358,7 +358,7 @@ At bol, moves past first char so rect starts at column 1."
     (push-mark (point) t t)
     (goto-char 3) ;; col 2 on same line
     (rectangle-mark-mode 1)
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (helixel-change)
     (insert "XXX")
     (helixel-insert-exit)
@@ -372,7 +372,7 @@ At bol, moves past first char so rect starts at column 1."
     (push-mark (point) t t)
     (goto-char 14)
     (rectangle-mark-mode 1)
-    (setq helixel--raw-selection-type 'rect)
+    (setq helixel--raw-selection-type--override 'rect)
     (helixel-change)
     (insert "XXX")
     (helixel-insert-exit)

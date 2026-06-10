@@ -53,7 +53,7 @@
 (defvar helixel--pending-sel)
 (defvar helixel--last-tx)
 (defvar helixel--live-action)
-(defvar helixel--raw-selection-type)
+; was defvar helixel--raw-selection-type (now a function)
 
 ;; ── High-level entry points ──
 
@@ -180,7 +180,7 @@ line becomes a fake cursor."
   (interactive (when (use-region-p)
                  (list (region-beginning) (region-end))))
   (unless (and beg end) (user-error "Region required"))
-  (let* ((line-mode (eq helixel--raw-selection-type 'line))
+  (let* ((line-mode (eq (helixel--raw-selection-type) 'line))
          (col (and (not line-mode)
                    (save-excursion (goto-char (point)) (current-column))))
          (sl (line-number-at-pos beg))
@@ -213,10 +213,6 @@ line becomes a fake cursor."
                 (push (helixel-mc--make-target (point)) targets)))))
           (forward-line 1))))
     (deactivate-mark)
-    (when line-mode
-      ;; Line-mode entered via `x' sets this; clear so subsequent
-      ;; commands don't treat the now-deactivated region as line-wise.
-      (setq helixel--raw-selection-type nil))
     (helixel-mc--realize-targets (nreverse targets))))
 
 ;; ── Mark next / previous like this ──

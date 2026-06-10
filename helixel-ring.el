@@ -299,10 +299,6 @@ OP is an optional operator symbol (nil for movement/search).
 No-op when `(helixel-replaying-p)` is non-nil (dot-repeat).
 Does NOT commit the new event — caller is responsible for eventual commit."
   (unless (helixel-replaying-p)
-    ;; Clear textobj selection state on non-textobj actions
-    (when (and (eq helixel--raw-selection-type 'textobj)
-               (not (eq category 'textobj)))
-      (setq helixel--raw-selection-type nil))
     (helixel-action-commit)
     (setq helixel--live-action
           (make-helixel-action
@@ -408,7 +404,7 @@ adds a function to exit visual state.")
 Called directly by `helixel--switch-state' to avoid triggering
 hook functions (like visual exit) that would re-enter state switching.
 All other callers should use `helixel--clear-data'."
-  (setq helixel--raw-selection-type nil)
+  (setq helixel--raw-selection-type--override nil)
   (setq helixel--action-pos nil)
   (setq helixel--pending-sel nil)
   (when rectangle-mark-mode

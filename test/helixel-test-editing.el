@@ -366,7 +366,7 @@
     (setq last-command nil this-command 'helixel-yank)
     (helixel-yank)
     (helixel-repeat-edit)
-    (should (null helixel--raw-selection-type))))
+    (should (null (helixel--raw-selection-type)))))
 
 (ert-deftest helixel-test-repeat-edit-copy ()
   "Test repeat copy (yank)."
@@ -1778,7 +1778,7 @@ insertions."
       (push-mark (point) t t)
       (goto-char 14) ;; col 3 on line 2 (space after "DEF")
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type 'rect)
+      (setq helixel--raw-selection-type--override 'rect)
       (helixel-delete)
       (should (string= (buffer-string) " line1\n line2\nGHI line3"))
       (should-not kill-ring)
@@ -1861,7 +1861,7 @@ insertions."
       (push-mark (point) t t)
       (goto-char 14)
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type 'rect)
+      (setq helixel--raw-selection-type--override 'rect)
       (helixel-change-noyank)
       (should (string= (buffer-string) " line1\n line2\nGHI line3"))
       (should-not kill-ring)
@@ -1894,7 +1894,7 @@ insertions."
       (push-mark (point) t t)
       (goto-char 2)
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type 'rect)
+      (setq helixel--raw-selection-type--override 'rect)
       (helixel-delete)
       (should (string= (buffer-string) "BCDE"))
       (should-not kill-ring)
@@ -2008,5 +2008,135 @@ insertions."
       (helixel-repeat-edit) ;; delete "bar" → "foo  "
       (should (string= (buffer-string) "foo  "))
       (should-not kill-ring))))
+
+;; ── Unified raw-selection-type tests ──
+
+(ert-deftest helixel-test-raw-type-from-pending-sel ()
+  "Derive raw-type from pending-sel kind."
+  (helixel-test-with-buffer "hello"
+    (setq helixel--pending-sel nil)
+    (should (null (helixel--raw-selection-type)))
+    (helixel--sel-push (helixel-sel-create 'line '(:dir forward :count 1)))
+    (should (eq (helixel--raw-selection-type) 'line))
+    (helixel--sel-push (helixel-sel-create 'rect '(:count 1)))
+    (should (eq (helixel--raw-selection-type) 'rect))
+    (helixel--sel-push (helixel-sel-create 'textobj '(:command 'iw :count 1)))
+    (should (eq (helixel--raw-selection-type) 'textobj))
+    (helixel--sel-push (helixel-sel-create 'movement '(:moves ((forward-char . 1)))))
+    (should (null (helixel--raw-selection-type)))))
+
+(ert-deftest helixel-test-raw-type-override-for-replay ()
+  "Override wins over pending-sel, cleared by clear-data."
+  (helixel-test-with-buffer "hello"
+    (setq helixel--raw-selection-type--override 'rect)
+    (should (eq (helixel--raw-selection-type) 'rect))
+    (helixel--sel-push (helixel-sel-create 'line '(:dir forward :count 1)))
+    (should (eq (helixel--raw-selection-type) 'rect))
+    (helixel--clear-data)
+    (should (null (helixel--raw-selection-type)))))
+
+;; ── Stale-sel leak prevention ──
+
+(ert-deftest helixel-test-x-bd-dot-no-stale-line-leak ()
+  "After x b d, tx carries movement sel, not stale line sel."
+  (helixel-test-with-buffer "hello world foo"
+    (goto-char 7)
+    (setq last-command nil this-command 'helixel-select-line)
+    (helixel-select-line)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'line))
+    (setq last-command 'helixel-select-line
+          this-command 'helixel-backward-word-start)
+    (helixel-backward-word-start)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))
+    (setq last-command 'helixel-backward-word-start
+          this-command 'helixel-kill)
+    (let ((kill-ring nil))
+      (helixel-kill)
+      (should helixel--last-tx)
+      (should (eq (helixel-sel-kind
+                   (helixel-action-sel helixel--last-tx))
+                  'movement)))))
+
+(ert-deftest helixel-test-x-w-d-no-stale-line-leak ()
+  "After x w d, pending-sel becomes movement."
+  (helixel-test-with-buffer "hello world foo"
+    (goto-char 1)
+    (setq last-command nil this-command 'helixel-select-line)
+    (helixel-select-line)
+    (setq last-command 'helixel-select-line
+          this-command 'helixel-forward-word-start)
+    (helixel-forward-word-start)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
+
+(ert-deftest helixel-test-xxx-d-still-line-sel ()
+  "Regression: x x x d still produces line tx with count 3."
+  (helixel-test-with-buffer "a\nb\nc\nd\ne\n"
+    (goto-char 1)
+    (setq last-command nil this-command 'helixel-select-line)
+    (helixel-select-line)
+    (setq last-command 'helixel-select-line
+          this-command 'helixel-select-line)
+    (helixel-select-line)
+    (setq last-command 'helixel-select-line
+          this-command 'helixel-select-line)
+    (helixel-select-line)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'line))
+    (should (= (helixel-sel-count helixel--pending-sel) 3))
+    (setq last-command 'helixel-select-line this-command 'helixel-kill)
+    (let ((kill-ring nil))
+      (helixel-kill)
+      (should (eq (helixel-sel-kind
+                   (helixel-action-sel helixel--last-tx))
+                  'line))
+      (should (= (helixel-sel-count
+                  (helixel-action-sel helixel--last-tx))
+                 3)))))
+
+(ert-deftest helixel-test-rect-w-d-no-stale-rect-leak ()
+  "After C-v w d, pending-sel becomes movement."
+  (helixel-test-with-buffer "hello world foo"
+    (goto-char 1)
+    (helixel-enter-normal-state)
+    (setq last-command nil this-command 'helixel-select-rectangle)
+    (helixel-select-rectangle)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
+    (setq last-command 'helixel-select-rectangle
+          this-command 'helixel-forward-word-start)
+    (helixel-forward-word-start)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
+
+(ert-deftest helixel-test-x-esc-bd-no-stale-leak ()
+  "ESC after x clears pending-sel, b creates fresh movement."
+  (helixel-test-with-buffer "hello world foo"
+    (goto-char 7)
+    (helixel-enter-normal-state)
+    (setq last-command nil this-command 'helixel-select-line)
+    (helixel-select-line)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'line))
+    (helixel-visual-exit)
+    (should (null helixel--pending-sel))
+    (setq last-command 'helixel-visual-exit
+          this-command 'helixel-backward-word-start)
+    (helixel-backward-word-start)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
+
+(ert-deftest helixel-test-delimiter-clears-stale-sel ()
+  "After x, a delimiter movement clears stale pending-sel.
+The bounds search may fail, but the clearing runs first."
+  (helixel-test-with-buffer "hello world"
+    (goto-char 1)
+    (helixel-enter-normal-state)
+    (setq last-command nil this-command 'helixel-select-line)
+    (helixel-select-line)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'line))
+    ;; Call outer-paren — it will error (no parens) but the clearing
+    ;; runs before the bounds search.
+    (condition-case nil
+        (progn
+          (setq last-command 'helixel-select-line
+                this-command 'helixel-outer-paren)
+          (helixel-outer-paren))
+      (error nil))
+    (should (null helixel--pending-sel))))
 
 ;;; helixel-test-edit.el ends here

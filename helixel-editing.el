@@ -782,7 +782,7 @@ that many times (Vim-like 2p, 3P)."
   ;; to region-end, so insert-rectangle starts on the correct line.
   (when (use-region-p)
     (if (and rectangle-mark-mode
-             (eq helixel--raw-selection-type 'rect))
+             (eq (helixel--raw-selection-type) 'rect))
         (move-to-column (save-excursion
                           (goto-char (region-end))
                           (current-column)) t)

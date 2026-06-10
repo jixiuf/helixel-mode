@@ -79,12 +79,29 @@ Requires pcre2el (<https://github.com/joddie/pcre2el>)."
 
 (defun helixel-search--pcre-to-elisp (pattern)
   "Convert PATTERN from PCRE to elisp regexp if pcre2el is available.
-Returns PATTERN unchanged on failure or when pcre2el is absent."
-  (if (fboundp 'rxt-pcre-to-elisp)
+Returns PATTERN unchanged on failure, when pcre2el is absent,
+or when PATTERN contains elisp-specific regex constructs that
+PCRE would not understand (\\_<, \\_>, \\=<, \\=> — Emacs
+symbol/word-boundary markers automatically inserted by \\=`*' / \\=`#'
+and other search-at-point commands)."
+  (if (and (fboundp 'rxt-pcre-to-elisp)
+           (not (helixel-search--has-elisp-boundary pattern)))
       (condition-case nil
           (rxt-pcre-to-elisp pattern)
         (error pattern))
     pattern))
+
+(defun helixel-search--has-elisp-boundary (pattern)
+  "Return non-nil if PATTERN contains elisp-specific boundary syntax.
+Detects \\_<, \\_>, \\=<, \\=> — Emacs-only regex constructs that
+would confuse a PCRE→elisp converter."
+  (let ((case-fold-search nil))
+    (string-match-p
+     (concat (regexp-quote "\\_<") "\\|"
+             (regexp-quote "\\_>") "\\|"
+             (regexp-quote "\\<") "\\|"
+             (regexp-quote "\\>"))
+     pattern)))
 
 (defun helixel-search--pcre-isearch-search-fun-function ()
   "Value for `isearch-search-fun-function' that converts PCRE→elisp.

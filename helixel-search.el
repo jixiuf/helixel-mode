@@ -254,6 +254,23 @@ is not committed by the next command."
               (make-helixel-active-search
                :category 'search :pattern isearch-string :dir dir))
         (helixel-search--set-sel-ctx)
+        ;; Stash pattern + dir in the payload and attach a runner so
+        ;; the unified mc dispatcher can replay this search at every
+        ;; fake cursor without re-entering isearch mode.
+        (when helixel--live-action
+          (setf (helixel-action-payload helixel--live-action)
+                (list :pattern isearch-string :dir dir))
+          (setf (helixel-action-runner helixel--live-action)
+                (lambda (tx)
+                  (let ((pat (helixel-action-payload-get tx :pattern))
+                        (d (helixel-action-dir tx)))
+                    (setq helixel--active-search
+                          (make-helixel-active-search
+                           :category 'search :pattern pat :dir d))
+                    (helixel-search--search pat d)
+                    (push-mark (match-beginning 0) t t)
+                    (goto-char (match-end 0))
+                    (setq helixel--raw-selection-type 'char)))))
         (helixel-action-commit))
     ;; Cancelled — discard the tracking-open shell so the next
     ;; command's tracking-open does not commit a stale entry.
@@ -801,19 +818,39 @@ FORWARDP: t = use stored direction, nil = toggle it."
 
 (defun helixel-search-setup ()
   "Enable lazy-count, custom isearch prompt, highlight cleanup, and PCRE.
+Also demotes `isearch-lazy-highlight' overlay priority so region
+overlays (real and fake) render above lazy-highlight matches.
 Called by `helixel-mode' activation, NOT at load time."
   (setq isearch-lazy-count t)
   (add-hook 'helixel-keyboard-quit-functions #'helixel-search--unhighlight)
   (add-hook 'lazy-count-update-hook #'helixel-search--count-hook)
   ;; PCRE support: set isearch-search-fun-function per-buffer
-  (add-hook 'helixel-state-change-hook #'helixel-search--buffer-setup-pcre))
+  (add-hook 'helixel-state-change-hook #'helixel-search--buffer-setup-pcre)
+  ;; Demote lazy-highlight overlay priority so region overlays
+  ;; (real + fake-cursor) appear above isearch matches.
+  (when (fboundp 'isearch-lazy-highlight-update)
+    (advice-add 'isearch-lazy-highlight-update :after
+                #'helixel-search--demote-lazy-highlight-priority)))
+
+(defun helixel-search--demote-lazy-highlight-priority (&rest _)
+  "Set lazy-highlight overlay priorities below region overlays.
+Used as :after advice on `isearch-lazy-highlight-update'."
+  (when (and (boundp 'isearch-lazy-highlight-overlays)
+             isearch-lazy-highlight-overlays)
+    (dolist (ov isearch-lazy-highlight-overlays)
+      (when (overlay-buffer ov)
+        (overlay-put ov 'priority -10)))))
+
 (defun helixel-search-teardown ()
   "Disable search-related global settings.
 Called by `helixel-mode' deactivation."
   (remove-hook 'helixel-keyboard-quit-functions
                #'helixel-search--unhighlight)
   (remove-hook 'lazy-count-update-hook #'helixel-search--count-hook)
-  (remove-hook 'helixel-state-change-hook #'helixel-search--buffer-setup-pcre))
+  (remove-hook 'helixel-state-change-hook #'helixel-search--buffer-setup-pcre)
+  (when (fboundp 'isearch-lazy-highlight-update)
+    (advice-remove 'isearch-lazy-highlight-update
+                   #'helixel-search--demote-lazy-highlight-priority)))
 
 ;; ---------------------------------------------------------------------------
 

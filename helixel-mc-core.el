@@ -363,7 +363,7 @@ across the whole window); elsewhere covers the single char at POS."
               (move-overlay region-ov b e)
             (setq region-ov (make-overlay b e nil nil t))
             (overlay-put region-ov 'face 'helixel-mc-fake-region)
-            (overlay-put region-ov 'priority 50)
+            (overlay-put region-ov 'priority 100)
             (overlay-put region-ov 'helixel-mc-region t)
             (overlay-put cursor 'helixel-mc-region region-ov)))
       (when region-ov
@@ -1038,23 +1038,36 @@ without going through the command loop."
 ;; need for per-command `advice-add' or substitute-alist hacks for
 ;; prompt commands like `helixel-replace-char', `helixel-surround-*'.
 
+(defvar helixel-mc--saved-this-command nil
+  "`this-command' snapshot taken by `helixel-mc--pre-command'.
+Used as a fallback in `helixel-mc--fresh-action-from-real' when
+`this-command' has been overwritten by a recursive edit (e.g.
+isearch).  Set to nil after each dispatch to avoid stale reuse.")
+
 (defun helixel-mc--fresh-action-from-real ()
   "Return the `helixel-tx' committed by `this-command' at real, or nil.
 Looks at the front of `helixel--action-ring' — the most recent committed
 action.  Returns its `tx' if and only if:
   - the action carries a `tx',
   - the action carries a runner (replayable),
-  - the action's `by-command' stamp matches `this-command'.
+  - the action's `by-command' stamp matches `this-command' or
+    `helixel-mc--saved-this-command' (fallback for recursive-edit
+    commands like isearch that overwrite `this-command').
 
 The action may have a nil op (movement commands) or a non-nil
 `:preposition' (insert-entry commands' prepos).
 `helixel-action-replay' handles both uniformly: preposition runs
 first, then runner if any."
-  (when (symbolp this-command)
-    (let ((entry (car helixel--action-ring)))
-      (when (and entry
-                 (eq (helixel-action-by-command entry) this-command))
-        entry))))
+  ;; `helixel-mc--saved-this-command' takes priority — after a
+  ;; recursive edit (isearch, query-replace) `this-command' is
+  ;; stale (e.g. `isearch-exit' instead of `helixel-search-forward').
+  (let ((cmd (or helixel-mc--saved-this-command
+                 (and (symbolp this-command) this-command))))
+    (when cmd
+      (let ((entry (car helixel--action-ring)))
+        (when (and entry
+                   (eq (helixel-action-by-command entry) cmd))
+          entry)))))
 
 ;; ── post-command-hook integration ──
 ;;
@@ -1094,6 +1107,13 @@ own parameter."
                      ,cmd (error-message-string e))
             (push ,cursor ,dead))))
 
+(defvar helixel-mc--post-command-depth 0
+  "Nesting depth for mc pre/post-command-hook.
+Incremented in `helixel-mc--pre-command', decremented in
+`helixel-mc--post-command'.  Dispatch only fires when depth
+returns to 1 — the outermost command loop — so inner recursive
+edits (isearch, query-replace) don't trigger double-dispatch.")
+
 (defun helixel-mc--post-command ()
   "Post-command hook — replay `this-command's tx at every fake cursor.
 The tx attached to the freshly-committed action (front of
@@ -1103,47 +1123,79 @@ here) amalgamates all changes — real cursor + fake dispatches — into
 one atomic undo step with cursor-position persistence.
 
 No-op when the mode is off, dispatch is already in progress, we're in
-a keyboard-macro, the command is whitelisted off, or no fresh tx
-exists (e.g. for real-cursor-only commands like
-`helixel-mc-toggle')."
+a keyboard-macro, isearch is active (global modal state), the command
+is whitelisted off, or no fresh tx exists (e.g. for real-cursor-only
+commands like `helixel-mc-toggle')."
   (when (and helixel-multi-cursor-mode
              (not (helixel-mc-dispatch-in-progress-p))
              (not executing-kbd-macro)
              (not defining-kbd-macro)
+             (not isearch-mode)
              this-command)
-    (when (and (helixel-mc-any-p)
-               (helixel-mc--should-run-for-all-p this-command))
-      (helixel-action-commit)
-      (let* ((fresh (helixel-mc--fresh-action-from-real))
-             (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
-             (cmd this-command))
-        (helixel-with-replay 'mc-batch
-          (condition-case err
-              (let ((dead nil))
-                (helixel-mc-with-each-cursor
-                  (helixel-mc--replay-at-one-fake
-                   fresh-runnable cmd cursor dead))
-                (dolist (ov dead)
-                  (helixel-mc-delete-fake-cursor ov)))
-            (error
-             (message "helixel-mc: %s outer error: %s"
-                      cmd (error-message-string err))))
-          (helixel-mc-dedupe-cursors))
-      (helixel-mc--undo-step-finish))
+    ;; Only dispatch when depth ≤ 1 — the outermost command loop.
+    ;; Inner recursive-edit commands (isearch, etc.) are skipped
+    ;; (depth > 1).  When no saved command exists (tests, first
+    ;; command), dispatch falls back to `this-command'.
+    (when (<= helixel-mc--post-command-depth 1)
+      (when (and (helixel-mc-any-p)
+                 (helixel-mc--should-run-for-all-p this-command))
+        (helixel-action-commit)
+        (let* ((fresh (helixel-mc--fresh-action-from-real))
+               (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
+               (cmd this-command))
+          (helixel-with-replay 'mc-batch
+            (condition-case err
+                (let ((dead nil))
+                  (helixel-mc-with-each-cursor
+                    (helixel-mc--replay-at-one-fake
+                     fresh-runnable cmd cursor dead))
+                  (dolist (ov dead)
+                    (helixel-mc-delete-fake-cursor ov)))
+              (error
+               (message "helixel-mc: %s outer error: %s"
+                        cmd (error-message-string err))))
+            (helixel-mc-dedupe-cursors))
+          (helixel-mc--undo-step-finish)))
+      ;; Clear saved command so next outer command gets a fresh snapshot.
+      (setq helixel-mc--saved-this-command nil))
     (unless (eq this-command 'helixel-select-register)
-      (setq helixel--current-register nil)))))
+      (setq helixel--current-register nil)))
+  ;; Always balance the depth — pre-command-hook always increments.
+  ;; Don't go below 0 (tests call post-command without pre-command).
+  (when (> helixel-mc--post-command-depth 0)
+    (setq helixel-mc--post-command-depth
+          (1- helixel-mc--post-command-depth)))
+  ;; Keep real-region overlay above lazy-highlight during mc mode.
+  (when helixel-multi-cursor-mode
+    (helixel-mc--update-real-region)))
 
 ;; ── Pre-command hook ──
 
 (defun helixel-mc--pre-command ()
   "Pre-command hook for mc undo-step wrapping.
 Begins an undo step when mc is active, fake cursors exist,
-`this-command' is eligible for mc dispatch, and the command
-is not itself an undo/redo operation."
+this is the outermost command loop (depth = 1), the command is
+eligible for mc dispatch, and it is not an undo/redo operation.
+
+Also snapshots `this-command' into `helixel-mc--saved-this-command'
+so the dispatcher can find the fresh action even after a recursive
+edit (e.g. isearch) overwrites `this-command'."
+  ;; Snapshot `this-command' early — before any recursive edit
+  ;; (isearch, query-replace, etc.) can overwrite it.  Used by
+  ;; `helixel-mc--fresh-action-from-real' as a fallback.
+  ;; Only save once per outer command — skip overwrites during
+  ;; recursive edits (e.g. isearch inner commands like `isearch-exit').
+  (setq helixel-mc--post-command-depth
+        (1+ helixel-mc--post-command-depth))
+  (when (and (= helixel-mc--post-command-depth 1)
+             (not isearch-mode)
+             (not helixel-mc--saved-this-command))
+    (setq helixel-mc--saved-this-command this-command))
   (when (and helixel-multi-cursor-mode
              (helixel-mc-any-p)
              (not executing-kbd-macro)
              (not defining-kbd-macro)
+             (= helixel-mc--post-command-depth 1)
              this-command
              (helixel-mc--should-run-for-all-p this-command)
              (not (helixel-mc--undo-command-p this-command))
@@ -1155,6 +1207,31 @@ is not itself an undo/redo operation."
 (defvar helixel-multi-cursor-mode-map (make-sparse-keymap)
   "Keymap active while `helixel-multi-cursor-mode' is on.
 Populated by `helixel-keymap'.")
+
+(defvar-local helixel-mc--real-region-ov nil
+  "Overlay showing the real cursor's region during mc mode.
+Created so the real selection appears above isearch lazy-highlight
+and other low-priority overlays.  Has the same priority as
+fake-region overlays (100).")
+
+(defun helixel-mc--update-real-region ()
+  "Create or update the real-cursor region overlay.
+Creates an overlay spanning the real cursor's active region with
+high priority so it renders above lazy-highlight matches.
+Clears the overlay when the region is inactive."
+  (if (and mark-active (mark t) (/= (point) (mark t)))
+      (let ((b (min (point) (mark t)))
+            (e (max (point) (mark t))))
+        (if helixel-mc--real-region-ov
+            (move-overlay helixel-mc--real-region-ov b e)
+          (setq helixel-mc--real-region-ov
+                (make-overlay b e nil nil t))
+          (overlay-put helixel-mc--real-region-ov
+                       'face 'region)
+          (overlay-put helixel-mc--real-region-ov 'priority 100)))
+    (when helixel-mc--real-region-ov
+      (delete-overlay helixel-mc--real-region-ov)
+      (setq helixel-mc--real-region-ov nil))))
 
 ;;;###autoload
 (define-minor-mode helixel-multi-cursor-mode
@@ -1182,7 +1259,11 @@ deactivated when the last one is removed."
           helixel-mc--undo-boundary-marker nil)
     (when helixel-mc--cursors-by-id
       (clrhash helixel-mc--cursors-by-id))
-    (helixel-mc-clear-all)))
+    (helixel-mc-clear-all)
+    ;; Clean up real-region overlay.
+    (when helixel-mc--real-region-ov
+      (delete-overlay helixel-mc--real-region-ov)
+      (setq helixel-mc--real-region-ov nil))))
 
 ;; ── Convenience: default whitelist for safe Emacs primitives ──
 

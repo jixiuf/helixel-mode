@@ -3891,5 +3891,98 @@ After two edits, the undo list has two nil boundaries."
     (should (= 3 (point)))
     (should-not mark-active)))
 
+;; ── Search replay at fake cursors ──
+
+(defun helixel-test-mc--make-search-action (pattern dir)
+  "Return a `helixel-action' simulating `/PATTERN<RET>' with DIR.
+DIR is `forward' or `backward'.  The action carries a runner
+that calls `helixel-search--search' and activates the region."
+  (make-helixel-action
+   :by-command 'helixel-search-forward
+   :category 'search
+   :subcat 'search
+   :payload (list :pattern pattern :dir dir)
+   :runner (lambda (tx)
+             (let ((pat (helixel-action-payload-get tx :pattern))
+                   (d (helixel-action-dir tx)))
+               (setq helixel--active-search
+                     (make-helixel-active-search
+                      :category 'search :pattern pat :dir d))
+               (helixel-search--search pat d)
+               (push-mark (match-beginning 0) t t)
+               (goto-char (match-end 0))
+               (setq helixel--raw-selection-type 'char)))))
+
+(defun helixel-test-mc--replay-action-at-fakes (action)
+  "Replay ACTION at every fake cursor, removing dead ones.
+Binds `this-command' and `helixel-mc--saved-this-command' so
+`helixel-mc--fresh-action-from-real' can find the action."
+  (let ((dead nil)
+        (this-command 'helixel-search-forward)
+        (helixel-mc--saved-this-command 'helixel-search-forward))
+    (helixel-mc-with-each-cursor
+      (helixel-mc--replay-at-one-fake
+       action this-command cursor dead))
+    (dolist (ov dead)
+      (helixel-mc-delete-fake-cursor ov))))
+
+(ert-deftest helixel-test-mc-search-replay-fake-finds-match ()
+  "After `/pattern<RET>', each fake cursor searches from its own
+position and moves to the match."
+  (helixel-test-with-buffer "hello world\nhello world\nxxx ss gh\n"
+    (helixel-enter-normal-state)
+    (helixel-mc-create-fake-cursor 1)   ; line 1: "hello world"
+    (helixel-mc-create-fake-cursor 13)  ; line 2: "hello world"
+    (goto-char 27)                      ; real cursor on line 3
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    (helixel-test-mc--replay-action-at-fakes
+     (helixel-test-mc--make-search-action "world" 'forward))
+    ;; Fake 1 (pos 1) → "world" at 7-11 → match-end=12.
+    ;; Fake 2 (pos 13) → "world" at 19-23 → match-end=24.
+    (let ((pts (sort (mapcar (lambda (ov)
+                               (marker-position
+                                (helixel-mc-cursor-point ov)))
+                             (helixel-mc-all-cursors))
+                     #'<)))
+      (should (equal '(12 24) pts)))
+    (dolist (ov (helixel-mc-all-cursors))
+      (should (helixel-mc-cursor-mark-active ov))
+      (let ((p (marker-position (helixel-mc-cursor-point ov)))
+            (m (marker-position (helixel-mc-cursor-mark ov))))
+        (should (string= "world"
+                         (buffer-substring-no-properties
+                          (min p m) (max p m))))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-search-replay-removes-failing-fake ()
+  "A fake whose line has no match must be dropped."
+  (helixel-test-with-buffer "hello world\nno match here\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 14)  ; second line: no "world"
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (helixel-test-mc--replay-action-at-fakes
+     (helixel-test-mc--make-search-action "world" 'forward))
+    (should (null (helixel-mc-all-cursors)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-search-replay-sets-active-search ()
+  "After search replay, each fake cursor's `helixel--active-search'
+is set so `n'/`N' works."
+  (helixel-test-with-buffer "a world b\nc world d\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 12)  ; second line
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (helixel-test-mc--replay-action-at-fakes
+     (helixel-test-mc--make-search-action "world" 'forward))
+    (dolist (ov (helixel-mc-all-cursors))
+      (let* ((cs (overlay-get ov 'helixel-pc-state))
+             (as (helixel-pcs-active-search cs)))
+        (should as)
+        (should (eq 'search (helixel-active-search--category as)))
+        (should (equal "world" (helixel-active-search--pattern as)))))
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

@@ -41,6 +41,7 @@
 (declare-function eglot-find-implementation "eglot")
 (declare-function eglot-code-action-quickfix "eglot")
 (declare-function eglot-rename "eglot")
+(declare-function helixel-collapse-selection "helixel-mc-core")
 (require 'helixel-state)
 (require 'helixel-move)
 (require 'helixel-editing)
@@ -413,7 +414,8 @@ used selection management lives here under `s'."
   "U"   #'helixel-mc-unmark-previous
   "."   #'helixel-mc-apply-last-action
   ;; Helix-style selection ops
-  ","   #'helixel-mc-clear-all       ; Helix `,' = remove fakes
+  ";"   #'helixel-collapse-selection ; like Helix `;'
+  ","   #'helixel-mc-clear-all       ;`,' = remove fakes
   "v"   #'helixel-mc-restore-cursors ; like Helix gv
   "k"   #'helixel-mc-keep-matching   ; like Helix `K'
   "K"   #'helixel-mc-remove-matching ; like Helix `M-K'

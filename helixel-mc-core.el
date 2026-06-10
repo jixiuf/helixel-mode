@@ -978,6 +978,21 @@ state."
              (unwind-protect (progn ,@body)
                (helixel-mc--leave-cursor cursor))))))))
 
+(defun helixel-collapse-selection ()
+  "Collapse every cursor's selection to a bare cursor (Helix `;').
+Each cursor (real and fake) with an active region has its mark
+deactivated, leaving point unchanged.  Cursors without a region
+are left unchanged.  No cursors are removed."
+  (interactive)
+  ;; Collapse real cursor first.
+  (when (use-region-p)
+    (deactivate-mark))
+  ;; Collapse each fake cursor.
+  (when (helixel-mc-any-p)
+    (helixel-mc-with-each-cursor
+      (when (use-region-p)
+        (deactivate-mark)))))
+
 (defun helixel-mc--enter-cursor (cursor)
   "Restore point/mark/state from CURSOR overlay into globals.
 Does nothing (returns nil) if CURSOR has been detached or its

@@ -350,6 +350,7 @@ e.g. \"helixel-next-%s-end\"."
 (define-key helixel-normal-map ":" #'helixel-execute-command)
 (define-key helixel-normal-map [escape] #'helixel-normal-escape)
 (define-key helixel-normal-map [delete] #'ignore)
+(define-key helixel-normal-map [backspace] #'helixel-delete-backward-char)
 (define-key helixel-normal-map "h" #'helixel-backward-char)
 (define-key helixel-normal-map "l" #'helixel-forward-char)
 (define-key helixel-normal-map "j" #'helixel-next-line)

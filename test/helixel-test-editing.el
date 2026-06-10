@@ -1934,4 +1934,58 @@ insertions."
       (should (string= (buffer-string) "X X foo"))
       (should-not kill-ring))))
 
+;; ── helixel-delete-backward-char (BS) ──
+
+(ert-deftest helixel-test-delete-backward-char-basic ()
+  "`helixel-delete-backward-char' deletes char before point."
+  (helixel-test-with-buffer "hello"
+    (let ((kill-ring nil))
+      (goto-char 3)
+      (helixel-delete-backward-char)
+      (should (string= (buffer-string) "hllo"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-backward-char-at-bob ()
+  "`helixel-delete-backward-char' is no-op at beginning of buffer."
+  (helixel-test-with-buffer "hello"
+    (let ((kill-ring nil))
+      (helixel-delete-backward-char)
+      (should (string= (buffer-string) "hello"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-backward-char-tab ()
+  "`helixel-delete-backward-char' untabifies then deletes 1 char."
+  (helixel-test-with-buffer "\tcode"
+    (let ((kill-ring nil)
+          (backward-delete-char-untabify-method 'untabify)
+          (tab-width 8))
+      (goto-char 2) ;; on 'c' (col 8 after tab)
+      (helixel-delete-backward-char)
+      ;; Tab width 8 → untabify to 8 spaces → delete 1 → 7 spaces + "code"
+      (should (= (point) 8))
+      (should (= (char-after) ?c))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-backward-char-region ()
+  "`helixel-delete-backward-char' deletes active region without kill-ring."
+  (helixel-test-with-buffer "hello world"
+    (let ((kill-ring nil))
+      (push-mark (point) t t)
+      (goto-char 6)
+      (helixel-delete-backward-char)
+      (should (string= (buffer-string) " world"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-backward-char-repeat ()
+  "Dot-repeat of `helixel-delete-backward-char' deletes backward again."
+  (helixel-test-with-buffer "hello"
+    (let ((kill-ring nil))
+      (goto-char 4) ;; on second 'l'
+      (helixel-delete-backward-char) ;; delete 'l' → "helo"
+      (should (string= (buffer-string) "helo"))
+      (goto-char 3) ;; on 'l' in "helo"
+      (helixel-repeat-edit) ;; delete 'e' → "hlo"
+      (should (string= (buffer-string) "hlo"))
+      (should-not kill-ring))))
+
 ;;; helixel-test-edit.el ends here

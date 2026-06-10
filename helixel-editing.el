@@ -26,7 +26,7 @@
 ;; Editing commands (kill, change, copy, replace, yank, indent) plus
 ;; the `helixel-register-op' dot-repeat runners that replay them.
 ;; Also houses selection recreation functions consumed by `.` and the
-;; `helixel--selection-type' validator.
+;; `helixel--region-type' validator.
 ;;
 ;; Keymaps are NOT loaded here — `helixel-keymap' is loaded separately
 ;; by `helixel.el' after this file.
@@ -107,12 +107,12 @@ Used by `helixel-kill' (NOYANK nil), `helixel-delete' (NOYANK t),
     (unless noyank
       (helixel--kill-new (char-to-string (char-after))))
     (delete-char 1))
-   ((eq (helixel--selection-type) 'rect)
+   ((eq (helixel--region-type) 'rect)
     (unless noyank
       (let ((lines (extract-rectangle (region-beginning) (region-end))))
         (helixel--kill-new (helixel--rect-wise-text lines))))
     (delete-rectangle (region-beginning) (region-end)))
-   ((eq (helixel--selection-type) 'line)
+   ((eq (helixel--region-type) 'line)
     (if-let* ((bounds (helixel--line-bounds-of-region)))
         (let ((text (unless noyank
                       (filter-buffer-substring (car bounds) (cdr bounds)))))
@@ -356,7 +356,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
   (let* ((keys (helixel--repeat-get-keys tx))
          (text (helixel-action-payload-get tx :inserted-text)))
     (cond
-     ((and (use-region-p) (eq (helixel--selection-type) 'rect))
+     ((and (use-region-p) (eq (helixel--region-type) 'rect))
       (helixel--rect-change noyank)
       (if keys
           (helixel--execute-keys keys)
@@ -454,7 +454,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 (helixel-define-command helixel-change
     (:category edit :subcat change)
   (helixel--record-action 'change)
-  (if (and (use-region-p) (eq (helixel--selection-type) 'rect))
+  (if (and (use-region-p) (eq (helixel--region-type) 'rect))
       (progn (helixel--rect-change)
              (helixel--register-consume))
     (helixel--delete-selection)
@@ -465,7 +465,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 (helixel-define-command helixel-change-noyank
     (:category edit :subcat change-noyank)
   (helixel--record-action 'change-noyank)
-  (if (and (use-region-p) (eq (helixel--selection-type) 'rect))
+  (if (and (use-region-p) (eq (helixel--region-type) 'rect))
       (helixel--rect-change t)
     (progn
       (helixel--delete-selection t)
@@ -494,7 +494,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
          (pop-start nil))
     (cond
      ;; Rect selection — no pop tracking (rect bounds are multi-line)
-     ((and (use-region-p) (eq (helixel--selection-type) 'rect))
+     ((and (use-region-p) (eq (helixel--region-type) 'rect))
       (let* ((beg (region-beginning))
              (end (region-end))
              (lines (nth 1 (get-text-property 0 'yank-handler text))))
@@ -505,7 +505,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
           (insert bare)))
       (setq helixel--yank-pop-bounds nil))
      ;; Line-wise selection: expand to full line bounds
-     ((and (use-region-p) (eq (helixel--selection-type) 'line))
+     ((and (use-region-p) (eq (helixel--region-type) 'line))
       (when-let* ((bounds (helixel--line-bounds-of-region)))
         (delete-region (car bounds) (cdr bounds))
         (setq pop-start (point))
@@ -658,12 +658,12 @@ instead of `insert-for-yank' — `helixel-replace' passes
         (set-register helixel--yank-register swap-source))
       (when (use-region-p) ;; non-zero-width: store text on kill-ring
         (cond
-         ((eq (helixel--selection-type) 'rect)
+         ((eq (helixel--region-type) 'rect)
           (let ((lines (extract-rectangle (region-beginning) (region-end))))
             (helixel--kill-new
              (helixel--rect-wise-text lines)
              :copy)))
-         ((eq (helixel--selection-type) 'line)
+         ((eq (helixel--region-type) 'line)
           (when-let* ((bounds (helixel--line-bounds-of-region))
                       (text (filter-buffer-substring
                              (car bounds) (cdr bounds))))
@@ -782,7 +782,7 @@ that many times (Vim-like 2p, 3P)."
   ;; to region-end, so insert-rectangle starts on the correct line.
   (when (use-region-p)
     (if (and rectangle-mark-mode
-             (eq (helixel--raw-selection-type) 'rect))
+             (eq (helixel--sel-type) 'rect))
         (move-to-column (save-excursion
                           (goto-char (region-end))
                           (current-column)) t)

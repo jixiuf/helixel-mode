@@ -404,7 +404,7 @@ adds a function to exit visual state.")
 Called directly by `helixel--switch-state' to avoid triggering
 hook functions (like visual exit) that would re-enter state switching.
 All other callers should use `helixel--clear-data'."
-  (setq helixel--raw-selection-type--override nil)
+  (setq helixel--sel-type-override nil)
   (setq helixel--action-pos nil)
   (setq helixel--pending-sel nil)
   (when rectangle-mark-mode

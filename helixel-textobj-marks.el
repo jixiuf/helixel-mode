@@ -141,7 +141,7 @@ RESTRICTED-P non-nil means use restricted version (for word/WORD)."
            (funcall helixel-textobj-action-function 'textobj ,subcat))
          (let ((use-bounds (helixel--use-region-p))
                (followup-p (and (use-region-p)
-                                (eq (helixel--selection-type) 'textobj))))
+                                (eq (helixel--region-type) 'textobj))))
            (cond
             (followup-p
              (goto-char (region-end))
@@ -159,7 +159,7 @@ RESTRICTED-P non-nil means use restricted version (for word/WORD)."
            (funcall helixel-textobj-action-function 'textobj ,subcat))
          (let ((use-bounds (helixel--use-region-p))
                (followup-p (and (use-region-p)
-                                (eq (helixel--selection-type) 'textobj))))
+                                (eq (helixel--region-type) 'textobj))))
            (unless (or use-bounds followup-p)
              (helixel--ensure-point-in-thing))
            (let ((beg (when use-bounds (region-beginning)))

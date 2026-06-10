@@ -1518,12 +1518,12 @@ On a single-char symbol at eob, w selects it."
     (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
 
 (ert-deftest helixel-test-surround-clears-override ()
-  "Surround clears the raw-selection-type override."
+  "Surround clears the sel-type override."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
-    (setq helixel--raw-selection-type--override 'rect)
-    (should (eq (helixel--raw-selection-type) 'rect))
+    (setq helixel--sel-type-override 'rect)
+    (should (eq (helixel--sel-type) 'rect))
     (helixel-forward-word-start)
-    (should (null (helixel--raw-selection-type)))))
+    (should (null (helixel--sel-type)))))
 
 ;;; helixel-test-move.el ends here

@@ -243,7 +243,7 @@ re-enters visual exit."
     (when rectangle-mark-mode
       (rectangle-mark-mode -1))
     (helixel--switch-state 'visual)
-    (setq helixel--raw-selection-type--override nil)
+    (setq helixel--sel-type-override nil)
     (push-mark-command t t)))
 
 (defun helixel-visual-exchange-point-and-mark ()
@@ -260,7 +260,7 @@ re-enters visual exit."
   (cond
    (rectangle-mark-mode
     (rectangle-exchange-point-and-mark))
-   ((and (eq (helixel--raw-selection-type) 'line)
+   ((and (eq (helixel--sel-type) 'line)
          helixel--pending-sel
          (eq (helixel-sel-kind helixel--pending-sel) 'line))
     (exchange-point-and-mark)
@@ -375,7 +375,7 @@ Line and rect selections are in `visual' state but should NOT behave
 like pure visual for highlight clearing, textobj expansion, or
 search mark handling."
   (and (eq helixel--current-state 'visual)
-       (not (memq (helixel--selection-type) '(line rect)))))
+       (not (memq (helixel--region-type) '(line rect)))))
 
 ;; ── Motion-state keymap parent patching ──
 ;; Extend major-mode keymaps with `helixel-normal-map' as fallback

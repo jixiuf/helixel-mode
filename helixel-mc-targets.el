@@ -55,7 +55,7 @@
 (defvar helixel--active-search)
 (defvar helixel--action-ring)
 (defvar helixel--action-pos)
-; was defvar helixel--raw-selection-type (now a function)
+; was defvar helixel--sel-type (now a function)
 
 ;; ── Helpers ──
 
@@ -155,7 +155,7 @@ next iteration lands on a fresh target.  Bounded by
 Fully isolates helixel's event / selection / tracking globals so
 the walk does NOT pollute `helixel--last-tx',
 `helixel--pending-sel', `helixel--live-action' or
-`helixel--raw-selection-type'.  Without this, textobj advance
+`helixel--sel-type'.  Without this, textobj advance
 functions (which internally re-run the textobj command and
 capture `this-command') would clobber `helixel--last-tx'
 with a sel whose `:command' is the outer mc command (e.g.

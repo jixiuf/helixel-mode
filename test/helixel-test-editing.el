@@ -366,7 +366,7 @@
     (setq last-command nil this-command 'helixel-yank)
     (helixel-yank)
     (helixel-repeat-edit)
-    (should (null (helixel--raw-selection-type)))))
+    (should (null (helixel--sel-type)))))
 
 (ert-deftest helixel-test-repeat-edit-copy ()
   "Test repeat copy (yank)."
@@ -1778,7 +1778,7 @@ insertions."
       (push-mark (point) t t)
       (goto-char 14) ;; col 3 on line 2 (space after "DEF")
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type--override 'rect)
+      (setq helixel--sel-type-override 'rect)
       (helixel-delete)
       (should (string= (buffer-string) " line1\n line2\nGHI line3"))
       (should-not kill-ring)
@@ -1861,7 +1861,7 @@ insertions."
       (push-mark (point) t t)
       (goto-char 14)
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type--override 'rect)
+      (setq helixel--sel-type-override 'rect)
       (helixel-change-noyank)
       (should (string= (buffer-string) " line1\n line2\nGHI line3"))
       (should-not kill-ring)
@@ -1894,7 +1894,7 @@ insertions."
       (push-mark (point) t t)
       (goto-char 2)
       (rectangle-mark-mode 1)
-      (setq helixel--raw-selection-type--override 'rect)
+      (setq helixel--sel-type-override 'rect)
       (helixel-delete)
       (should (string= (buffer-string) "BCDE"))
       (should-not kill-ring)
@@ -2009,31 +2009,31 @@ insertions."
       (should (string= (buffer-string) "foo  "))
       (should-not kill-ring))))
 
-;; ── Unified raw-selection-type tests ──
+;; ── Unified sel-type tests ──
 
-(ert-deftest helixel-test-raw-type-from-pending-sel ()
-  "Derive raw-type from pending-sel kind."
+(ert-deftest helixel-test-sel-type-from-pending-sel ()
+  "Derive sel-type from pending-sel kind."
   (helixel-test-with-buffer "hello"
     (setq helixel--pending-sel nil)
-    (should (null (helixel--raw-selection-type)))
+    (should (null (helixel--sel-type)))
     (helixel--sel-push (helixel-sel-create 'line '(:dir forward :count 1)))
-    (should (eq (helixel--raw-selection-type) 'line))
+    (should (eq (helixel--sel-type) 'line))
     (helixel--sel-push (helixel-sel-create 'rect '(:count 1)))
-    (should (eq (helixel--raw-selection-type) 'rect))
+    (should (eq (helixel--sel-type) 'rect))
     (helixel--sel-push (helixel-sel-create 'textobj '(:command 'iw :count 1)))
-    (should (eq (helixel--raw-selection-type) 'textobj))
+    (should (eq (helixel--sel-type) 'textobj))
     (helixel--sel-push (helixel-sel-create 'movement '(:moves ((forward-char . 1)))))
-    (should (null (helixel--raw-selection-type)))))
+    (should (null (helixel--sel-type)))))
 
-(ert-deftest helixel-test-raw-type-override-for-replay ()
+(ert-deftest helixel-test-sel-type-override ()
   "Override wins over pending-sel, cleared by clear-data."
   (helixel-test-with-buffer "hello"
-    (setq helixel--raw-selection-type--override 'rect)
-    (should (eq (helixel--raw-selection-type) 'rect))
+    (setq helixel--sel-type-override 'rect)
+    (should (eq (helixel--sel-type) 'rect))
     (helixel--sel-push (helixel-sel-create 'line '(:dir forward :count 1)))
-    (should (eq (helixel--raw-selection-type) 'rect))
+    (should (eq (helixel--sel-type) 'rect))
     (helixel--clear-data)
-    (should (null (helixel--raw-selection-type)))))
+    (should (null (helixel--sel-type)))))
 
 ;; ── Stale-sel leak prevention ──
 

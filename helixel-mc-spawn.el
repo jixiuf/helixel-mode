@@ -53,7 +53,7 @@
 (defvar helixel--pending-sel)
 (defvar helixel--last-tx)
 (defvar helixel--live-action)
-; was defvar helixel--raw-selection-type (now a function)
+; was defvar helixel--sel-type (now a function)
 
 ;; ── High-level entry points ──
 
@@ -163,7 +163,7 @@ instead of down."
   "Create one cursor per line of the region BEG..END.
 With no region, signals `user-error'.
 
-Behavior depends on `helixel--raw-selection-type':
+Behavior depends on `helixel--sel-type':
 
 - Line-wise selection (`x'): each cursor gets a full-line REGION
   spanning BOL..EOL of its line.  Apply edits to whole lines (`d',
@@ -180,7 +180,7 @@ line becomes a fake cursor."
   (interactive (when (use-region-p)
                  (list (region-beginning) (region-end))))
   (unless (and beg end) (user-error "Region required"))
-  (let* ((line-mode (eq (helixel--raw-selection-type) 'line))
+  (let* ((line-mode (eq (helixel--sel-type) 'line))
          (col (and (not line-mode)
                    (save-excursion (goto-char (point)) (current-column))))
          (sl (line-number-at-pos beg))

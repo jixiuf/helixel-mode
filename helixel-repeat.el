@@ -272,7 +272,7 @@ NOTE: Caller is responsible for calling `helixel--tracking-open' first.
 The `helixel-define-command' macro handles this automatically."
   (unless (or (helixel-replaying-p) executing-kbd-macro
               defining-kbd-macro)
-    (let* ((pop-sel helixel--pending-sel) ; read but don't pop — clear-data does
+    (let* ((pop-sel helixel--pending-sel) ; read but don't pop: clear-data does
            (runner (helixel--op-runner operator))
            ;; helixel--live-action-set already preserves the existing
            ;; preposition from a prior `:tx-runner' clause (mc prepos).

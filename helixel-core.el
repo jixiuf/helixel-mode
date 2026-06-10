@@ -910,19 +910,19 @@ Shows operator name, display label, and `moves-point-p' flag."
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
 
-(defvar-local helixel--raw-selection-type--override nil
-  "Override for `helixel--raw-selection-type' during dot-repeat replay.
+(defvar-local helixel--sel-type-override nil
+  "Override for `helixel--sel-type' during dot-repeat replay.
 Set only by selection-recreate functions to tell operators the
 selection type when `helixel--pending-sel' was already cleared.
 Cleared by `helixel--clear-data-internal'.")
 
-(defun helixel--raw-selection-type ()
-  "Return the raw selection type: nil, `line', `rect', or `textobj'.
+(defun helixel--sel-type ()
+  "Return the selection type from pending-sel: nil, `line', `rect', `textobj'.
 Derived from `helixel--pending-sel' kind — the single source of truth.
-Falls back to `helixel--raw-selection-type--override' for replay.
+Falls back to `helixel--sel-type-override' for replay.
 Unlike the old variable, pending-sel is NOT popped until `clear-data',
 so this function returns the correct type throughout the operator body."
-  (or helixel--raw-selection-type--override
+  (or helixel--sel-type-override
       (if helixel--pending-sel
           (pcase (helixel-sel-kind helixel--pending-sel)
             ('line 'line)
@@ -993,11 +993,11 @@ Format: (:beg MARKER :end MARKER :buffer BUFFER :type TYPE).")
 (defun helixel--swap-source-type ()
   "Return the swap-source type for the current selection.
 Returns nil (char), \=`line', or \=`rect'.
-More permissive than `helixel--selection-type' — detects
+More permissive than `helixel--region-type' — detects
 `rectangle-mark-mode' directly."
   (cond
-   ((eq (helixel--raw-selection-type) 'rect) 'rect)
-   ((eq (helixel--raw-selection-type) 'line) 'line)
+   ((eq (helixel--sel-type) 'rect) 'rect)
+   ((eq (helixel--sel-type) 'line) 'line)
    ((bound-and-true-p rectangle-mark-mode) 'rect)
    (t nil)))
 
@@ -1045,21 +1045,21 @@ treated as a pure positioner (movement commands at fake cursors)."
 
 
 
-(defun helixel--selection-type ()
+(defun helixel--region-type ()
   "Return current selection type, or nil.
-Validates that the region actually matches the claimed type.
+Validates that the region actually matches the sel type.
 Supports `line', `rect' and `textobj'."
   (when (region-active-p)
     (cond
-     ((eq (helixel--raw-selection-type) 'rect)
+     ((eq (helixel--sel-type) 'rect)
       (when rectangle-mark-mode 'rect))
-     ((eq (helixel--raw-selection-type) 'line)
+     ((eq (helixel--sel-type) 'line)
       (let ((beg (region-beginning))
             (end (region-end)))
         (when (and (save-excursion (goto-char beg) (bolp))
                    (save-excursion (goto-char end) (or (eolp) (eobp))))
           'line)))
-     ((eq (helixel--raw-selection-type) 'textobj)
+     ((eq (helixel--sel-type) 'textobj)
       'textobj))))
 
 ;; ----------------------------------------------------------------------

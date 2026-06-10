@@ -110,7 +110,7 @@ Example:
 If a region is already active, no new region is created.
 
 Movement commands redefine the selection, so they reset
-`helixel--raw-selection-type' to nil — a previous `line' / `rect'
+`helixel--sel-type' to nil — a previous `line' / `rect'
 label from `x' / `v' must not bleed into the new region (which
 would make `y' tag the kill as line-wise even when the user
 selected a word).
@@ -131,14 +131,14 @@ automatically, so this macro only does `push-mark' + activate."
      ;; Clear stale non-movement pending-sel BEFORE the body so
      ;; `helixel--track-visual-move' (injected by the macro) sees
      ;; a nil ctx and creates a fresh movement sel.  This keeps
-     ;; pending-sel in sync with raw-selection-type (both nil).
+     ;; pending-sel in sync with sel-type (both nil).
      ;; Note: do NOT gate on `use-region-p' — highlight clearing
      ;; may have deactivated the mark before we run.
      (when (and helixel--pending-sel
                 (not (eq (helixel-sel-kind helixel--pending-sel) 'movement)))
        (setq helixel--pending-sel nil))
      ;; A general movement also clears any replay override.
-     (setq helixel--raw-selection-type--override nil)
+     (setq helixel--sel-type-override nil)
      ,@body
      (unless (use-region-p)
        (push-mark current t 'activate))))
@@ -558,7 +558,7 @@ new direction."
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
         (helixel--sel-push (funcall fn helixel--pending-sel))))
     (let ((extending (and (region-active-p)
-                          (eq (helixel--raw-selection-type) 'line))))
+                          (eq (helixel--sel-type) 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
           (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
@@ -597,7 +597,7 @@ new direction."
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
         (helixel--sel-push (funcall fn helixel--pending-sel))))
     (let ((extending (and (region-active-p)
-                          (eq (helixel--raw-selection-type) 'line))))
+                          (eq (helixel--sel-type) 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
           (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
@@ -708,7 +708,7 @@ simple `push-mark' would interact poorly with the rect-mode mark."
       (deactivate-mark)
       (push-mark span-origin t t)
       (activate-mark))
-    (setq helixel--raw-selection-type--override 'rect)))
+    (setq helixel--sel-type-override 'rect)))
 
 (defun helixel--recreate-movement (ctx)
   "Replay movement selection from CTX.

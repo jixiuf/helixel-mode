@@ -90,7 +90,7 @@ independent of the kill-ring — so `d' does not invalidate it."
   (helixel-test-with-buffer "AAA BBB CCC"
     (let ((kill-ring nil))
       ;; Step 1: copy "AAA" with `y' (stores swap-source in register ?Y)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (push-mark 4 t t)
       (goto-char 1)
       (helixel-kill-ring-save)
@@ -98,7 +98,7 @@ independent of the kill-ring — so `d' does not invalidate it."
       ;; Step 2: delete "BBB" with `d' (does NOT touch register ?Y)
       (push-mark 8 t t)
       (goto-char 5)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (helixel-kill)
       ;; Swap source still intact — register is independent.
       (should (helixel-test--get-swap-source))
@@ -110,7 +110,7 @@ independent of the kill-ring — so `d' does not invalidate it."
     (let ((kill-ring nil))
       (push-mark 1 t t)
       (goto-char 6)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (helixel-kill-ring-save)
       (let ((src (helixel-test--get-swap-source)))
         (should src)
@@ -123,7 +123,7 @@ independent of the kill-ring — so `d' does not invalidate it."
     (let ((kill-ring nil))
       (push-mark 1 t t)
       (goto-char 11)
-      (setq helixel--raw-selection-type--override 'line)
+      (setq helixel--sel-type-override 'line)
       (helixel-kill-ring-save)
       (let ((src (helixel-test--get-swap-source)))
         (should src)
@@ -137,7 +137,7 @@ independent of the kill-ring — so `d' does not invalidate it."
       ;; Select "AAA" and yank it (stores swap-source)
       (push-mark 1 t t)
       (goto-char 4)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (helixel-kill-ring-save)
       ;; Now select "BBB" and swap
       (push-mark 8 t t)
@@ -373,7 +373,7 @@ independent of the kill-ring — so `d' does not invalidate it."
   "End-to-end: `y' copy then `S' swap."
   (helixel-test-with-buffer "AAA BBB CCC"
     (let ((kill-ring nil))
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (push-mark 4 t t)
       (goto-char 1)
       (helixel-kill-ring-save)          ; y: copy "AAA"
@@ -387,14 +387,14 @@ independent of the kill-ring — so `d' does not invalidate it."
   (helixel-test-with-buffer "AAA BBB CCC"
     (let ((kill-ring nil))
       ;; Copy "AAA"
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (push-mark 4 t t)
       (goto-char 1)
       (helixel-kill-ring-save)
       ;; Change "BBB" (c replaces selection, pushes to kill-ring)
       (push-mark 8 t t)
       (goto-char 5)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (helixel-change)
       (insert "XXX")
       (helixel--record-action 'change)
@@ -410,19 +410,19 @@ independent of the kill-ring — so `d' does not invalidate it."
   (helixel-test-with-buffer "AAA BBB CCC DDD"
     (let ((kill-ring nil))
       ;; Copy "AAA"
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (push-mark 4 t t)
       (goto-char 1)
       (helixel-kill-ring-save)
       ;; Delete "BBB"
       (push-mark 8 t t)
       (goto-char 5)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (helixel-kill)
       ;; Delete "DDD"
       (push-mark 14 t t)
       (goto-char 11)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (helixel-kill)
       ;; Buffer: "AAA  CCC ", swap with implied region at point 5
       (goto-char 5)
@@ -437,7 +437,7 @@ independent of the kill-ring — so `d' does not invalidate it."
     (let ((kill-ring nil))
       ;; Copy to register a (swap-source goes to ?Y)
       (setq helixel--current-register ?a)
-      (setq helixel--raw-selection-type--override nil)
+      (setq helixel--sel-type-override nil)
       (push-mark 4 t t)
       (goto-char 1)
       (helixel-kill-ring-save)

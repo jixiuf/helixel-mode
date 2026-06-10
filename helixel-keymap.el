@@ -185,6 +185,9 @@ to composed keymaps with mode overrides on top of the base maps."
 (define-key helixel-goto-map "c" #'helixel-comment-toggle)
 (define-key helixel-goto-map "q" #'helixel-fill)
 (define-key helixel-goto-map "." #'helixel-repeat-edit-pick)
+(define-key helixel-goto-map "|" #'move-to-column)
+(define-key helixel-goto-map ":" #'goto-char)
+(define-key helixel-goto-map ";" #'goto-line)
 
 (define-key helixel-view-map "z" #'recenter-top-bottom)
 

@@ -60,15 +60,13 @@
 ;; last edit once at each cursor's current position" — i.e. the same
 ;; thing `helixel-mc-apply-last-action' does.
 ;;
-;; We override `helixel-repeat-edit' (`.') via
-;; `helixel-repeat-edit-override-functions' so that whenever fake
-;; cursors exist, both the real-cursor invocation AND the per-fake
-;; dispatches collapse to a single `helixel-action-replay' (no advance
-;; loop).  All N applications are then amalgamated into one undo
-;; step by the dispatcher's `undo-amalgamate-change-group' wrapper.
-;;
 ;; The override is installed/removed on `helixel-multi-cursor-mode'
 ;; toggle so it doesn't persist when mc is off.
+;;
+;; Undo amalgamation is handled by the mc undo-step wrapper
+;; (`helixel-mc--pre-command' / `helixel-mc--post-command') which
+;; injects `apply' entries into `buffer-undo-list' and strips
+;; internal boundaries — no `undo-amalgamate-change-group' needed.
 
 (defun helixel-mc--repeat-edit-apply-only (raw-prefix)
   "Hook function for `helixel-repeat-edit-override-functions' under mc.
@@ -96,19 +94,6 @@ the override path — mc dispatches the same edit at each fake."
  '(helixel-repeat-edit
    helixel-repeat-selection))
 
-;; ── Substitute commands for fake-cursor dispatch ──
-;;
-;; Phase 4.3 unification: every prompting command (find-char, replace-
-;; char, surround-add, etc.) now produces a `helixel-tx' whose payload
-;; carries the prompted decisions.  The unified mc dispatcher reads
-;; this tx via `helixel-mc--fresh-action-from-real' and replays the
-;; runner at every fake.  No substitute-alist is needed — the previous
-;; `helixel-mc-defcmd' calls for find-next-char / find-prev-char /
-;; find-till-char / find-prev-till-char have been deleted.
-
-;; The dispatcher (with atomic-undo amalgamation) lives in
-;; helixel-mc-core.el as `helixel-mc--post-command'.
-
 ;; ── Chain end: broadcast the new chain tx ──
 
 (defun helixel-mc--broadcast-last-event ()
@@ -122,11 +107,12 @@ each fake cursor replays the chain (not the pre-chain edit)."
 (defun helixel-mc--apply-chain-once ()
   "Execute `helixel--last-tx' once at every fake cursor.
 Assumes the current `helixel--last-tx' is a chain transaction
-\(or any replayable edit).  Wraps the batch in one undo step."
+\(or any replayable edit).  Wraps the batch in one undo step
+via `helixel-mc--undo-step-begin' / `helixel-mc--undo-step-end-cb'."
   (when (and helixel-multi-cursor-mode helixel--last-tx)
-    (helixel-with-replay-as 'mc-batch
-      (let ((tx helixel--last-tx))
-        (undo-amalgamate-change-group
+    (helixel-mc--with-undo-step
+      (helixel-with-replay-as 'mc-batch
+        (let ((tx helixel--last-tx))
           (helixel-mc-with-each-cursor
             (helixel-with-replay-as 'dot
               (helixel-action-replay tx))))))))

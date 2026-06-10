@@ -220,7 +220,7 @@ has been nulled (zombie state)."
     (should (= 2 (length (helixel-mc-all-cursors))))
     ;; Simulate the zombie state: null out the marker WITHOUT
     ;; removing the overlay from the list (the actual production bug).
-    (let ((victim (car helixel-mc--cursors)))
+    (let ((victim (car (hash-table-values helixel-mc--cursors-by-id))))
       (set-marker (helixel-mc-cursor-point victim) nil))
     ;; Now `all-cursors' must filter the zombie out.
     (should (= 1 (length (helixel-mc-all-cursors))))
@@ -232,7 +232,7 @@ has been nulled (zombie state)."
     (helixel-mc-create-fake-cursor 5)
     (helixel-mc-create-fake-cursor 9)
     ;; Zombie one cursor mid-state.
-    (let ((victim (car helixel-mc--cursors)))
+    (let ((victim (car (hash-table-values helixel-mc--cursors-by-id))))
       (set-marker (helixel-mc-cursor-point victim) nil))
     ;; Dispatching to all should silently skip the zombie.
     (let ((live-count 0))
@@ -3423,6 +3423,473 @@ fake cursor."
           (should (= p m))              ; zero-width match
           (should (save-excursion (goto-char p) (bolp)))))
       (helixel-mc-clear-all))))
+
+;; ── ;; ── ;; ── ;; ── ;; ── ;; ── ;; ── ;; ── Undo/redo cursor-position persistence ──
+;; These tests verify that the mc undo-step capture/restore system
+;; correctly persists and restores fake-cursor positions.
+;;
+;; The undo mechanism injects `apply' entries into `buffer-undo-list'
+;; that `primitive-undo' processes during undo/redo.  To avoid the
+;; `undo' command's region-restriction behavior in batch mode, tests
+;; call `primitive-undo' directly on `buffer-undo-list'.
+
+(ert-deftest helixel-test-mc-with-each-cursor-dispatch ()
+  "Sanity: with-each-cursor dispatches only to fake cursors."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (goto-char 1)
+    (push-mark 7 t t)
+    (helixel-mc-create-fake-cursor 13 19)
+    (delete-region (region-beginning) (region-end))
+    (helixel-mc-with-each-cursor
+      (delete-region (region-beginning) (region-end)))
+    (should (string= "world\nworld\n" (buffer-string)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-step-noop ()
+  "Undo step begin + finish with no text changes leaves list unchanged."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 1)
+    (let ((undo-before (copy-tree buffer-undo-list)))
+      (helixel-mc--undo-step-begin)
+      (helixel-mc--undo-step-finish)
+      (should (equal (length undo-before)
+                     (length buffer-undo-list))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-capture-restore-roundtrip ()
+  "Capture all positions then restore produces identical cursor state."
+  (helixel-test-with-buffer "line one\nline two\nline three\n"
+    (goto-char 4)
+    (push-mark 6 t t)
+    (helixel-mc-create-fake-cursor 13 17)
+    (helixel-mc-create-fake-cursor 22)
+    (let* ((before (helixel-mc--capture-all-positions))
+           (num-cursors (helixel-mc-num-cursors)))
+      (helixel-mc--restore-all-positions before)
+      (should (= num-cursors (helixel-mc-num-cursors)))
+      (let ((after (helixel-mc--capture-all-positions)))
+        (should (equal before after))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-restore-creates-new-cursors ()
+  "Restore from positions alist creates cursors that don't exist yet."
+  (helixel-test-with-buffer "line one\nline two\nline three\n"
+    (goto-char 1)
+    (let ((positions (list (cons 0 (cons 4 8))
+                           (cons 100 (cons 13 17))
+                           (cons 200 (cons 22 nil)))))
+      (helixel-mc--restore-all-positions positions)
+      (should (= 3 (helixel-mc-num-cursors)))
+      (should (helixel-mc-cursor-by-id 100))
+      (should (helixel-mc-cursor-by-id 200))
+      (should (= 4 (point))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-step-markers-injected ()
+  "Undo step begin injects a marker into buffer-undo-list."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 1)
+    (let ((len-before (length buffer-undo-list)))
+      (helixel-mc--undo-step-begin)
+      (should (consp buffer-undo-list))
+      (should (eq 'apply (car (car buffer-undo-list))))
+      (helixel-mc--undo-step-finish)
+      (should (= len-before (length buffer-undo-list))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-step-filters-numbers ()
+  "Undo step finish strips number entries from the undo-list segment."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 1)
+    (helixel-mc--undo-step-begin)
+    (push 42 buffer-undo-list)     ; number entry (point adjustment)
+    (push 99 buffer-undo-list)
+    (push nil buffer-undo-list)    ; boundary
+    (insert "X")                   ; real text entry
+    (helixel-mc--undo-step-finish)
+    ;; After finish: numbers and nils in step segment stripped.
+    (should-not (numberp (car buffer-undo-list)))
+    (helixel-mc-clear-all)))
+
+;; ── Full undo/redo cycle tests ──
+;; These tests perform real edits inside undo-step wrappers, then
+;; use `primitive-undo' to verify cursor positions are restored.
+
+(defun helixel-mc-test--skip-leading-nil (lst)
+  "Return LST with any leading nil (undo boundary) skipped."
+  (while (and (consp lst) (null (car lst)))
+    (setq lst (cdr lst)))
+  lst)
+
+(defun helixel-mc-test--fake-point (cursor)
+  "Return the point position stored in fake CURSOR's state."
+  (marker-position (helixel-mc-cursor-point cursor)))
+
+(ert-deftest helixel-test-mc-undo-delete-restores-positions ()
+  "Undo after mc delete restores fake cursor point to pre-edit position."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (should f1)
+      (let ((fake-before (helixel-mc-test--fake-point f1))
+            (undo-list-snapshot nil))
+        (helixel-mc--undo-step-begin)
+        (delete-region (region-beginning) (region-end))
+        (helixel-mc-with-each-cursor
+          (delete-region (region-beginning) (region-end)))
+        (helixel-mc--undo-step-finish)
+        ;; Buffer modified.
+        (should (string= "world\nworld\n" (buffer-string)))
+        ;; Undo by applying primitive-undo to the undo list.
+        (setq undo-list-snapshot buffer-undo-list)
+        (deactivate-mark)
+        (primitive-undo 1 (helixel-mc-test--skip-leading-nil undo-list-snapshot))
+        ;; Buffer restored.
+        (should (string= "hello world\nhello world\n" (buffer-string)))
+        ;; Fake cursor point restored to pre-edit position.
+        (should (= fake-before
+                   (helixel-mc-test--fake-point f1)))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-full-cycle-restores-positions ()
+  "Undo via primitive-undo restores fake cursor point and buffer text.
+This is the core guarantee: after an mc edit wrapped in undo-step-
+begin/finish, calling primitive-undo on the undo list restores both
+the buffer content and the fake cursor position."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (should f1)
+      (let ((fake-before (helixel-mc-test--fake-point f1))
+            (undo-list-snapshot nil))
+        (helixel-mc--undo-step-begin)
+        (delete-region (region-beginning) (region-end))
+        (helixel-mc-with-each-cursor
+          (delete-region (region-beginning) (region-end)))
+        (helixel-mc--undo-step-finish)
+        ;; Edit happened.
+        (should (string= "world\nworld\n" (buffer-string)))
+        (should-not (= fake-before
+                       (helixel-mc-test--fake-point f1)))
+        ;; Undo via primitive-undo on the saved list.
+        (setq undo-list-snapshot buffer-undo-list)
+        (deactivate-mark)
+        (primitive-undo 1 (helixel-mc-test--skip-leading-nil undo-list-snapshot))
+        ;; Buffer text restored.
+        (should (string= "hello world\nhello world\n"
+                         (buffer-string)))
+        ;; Fake cursor point restored.
+        (should (= fake-before
+                   (helixel-mc-test--fake-point f1)))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-insert-restores-positions ()
+  "Undo after mc insert restores cursor positions."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (setq f1 (helixel-mc-create-fake-cursor 13))
+      (should f1)
+      (let ((fake-before (helixel-mc-test--fake-point f1))
+            (undo-list-snapshot nil))
+        (helixel-mc--undo-step-begin)
+        (insert "XXX")
+        (helixel-mc-with-each-cursor
+          (insert "XXX"))
+        (helixel-mc--undo-step-finish)
+        (should (string= "XXXhello world\nXXXhello world\n" (buffer-string)))
+        (setq undo-list-snapshot buffer-undo-list)
+        (deactivate-mark)
+        (primitive-undo 1 (helixel-mc-test--skip-leading-nil undo-list-snapshot))
+        (should (string= "hello world\nhello world\n" (buffer-string)))
+        (should (= fake-before
+                   (helixel-mc-test--fake-point f1)))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-capture-includes-mark-active ()
+  "Capture-all-positions preserves mark-active state for fake cursors."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (should f1)
+      (should (helixel-mc-cursor-mark-active f1))
+      (let ((pos (helixel-mc--capture-all-positions)))
+        ;; The fake cursor entry should have a non-nil mark.
+        (let ((fake-entry (assq (overlay-get f1 'helixel-mc-id) pos)))
+          (should fake-entry)
+          (should (cddr fake-entry)))))  ; mark is non-nil
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-id-survives-cycle ()
+  "Cursor IDs persist unchanged through undo/redo."
+  (helixel-test-with-buffer "aaa\nbbb\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (let* ((f1 (helixel-mc-create-fake-cursor 5))
+           (id-before (overlay-get f1 'helixel-mc-id)))
+      (should id-before)
+      (helixel-mc--undo-step-begin)
+      (insert "X")
+      (helixel-mc-with-each-cursor
+        (insert "X"))
+      (helixel-mc--undo-step-finish)
+      (let ((undo-list-snapshot buffer-undo-list))
+        (deactivate-mark)
+        (primitive-undo 1 (helixel-mc-test--skip-leading-nil undo-list-snapshot)))
+      (let ((f2 (helixel-mc-cursor-by-id id-before)))
+        (should f2)
+        (should (eq f2 f1)))
+      (helixel-mc-clear-all))))
+
+(ert-deftest helixel-test-mc-undo-callback-roundtrip ()
+  "After undo-step-finish, buffer-undo-list has the start marker.
+After primitive-undo, cursor positions match their pre-edit state."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 1)
+    (let ((pos-before (helixel-mc--capture-all-positions)))
+      (helixel-mc--undo-step-begin)
+      (insert "X")
+      (helixel-mc--undo-step-finish)
+      ;; Verify the undo list has our start marker (skip leading nil).
+      (let ((head (car (helixel-mc-test--skip-leading-nil buffer-undo-list))))
+        (should head)
+        (should (eq 'apply (car-safe head)))
+        (should (eq 'helixel-mc--undo-step-start-cb (cadr head))))
+      ;; Undo.
+      (let ((snap buffer-undo-list))
+        (deactivate-mark)
+        (primitive-undo 1 (helixel-mc-test--skip-leading-nil snap)))
+      ;; Buffer text restored.
+      (should (string= "hello\n" (buffer-string)))
+      ;; Cursor positions equal pre-edit state.
+      (let ((pos-after (helixel-mc--capture-all-positions)))
+        (should (equal pos-before pos-after))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-no-fake-cursors-does-not-inject ()
+  "Undo step begin injects marker, finish pops it when no changes."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (helixel-mc--undo-step-begin)
+    (should (consp buffer-undo-list))
+    (helixel-mc--undo-step-finish)
+    ;; Marker popped since there were no text changes.
+    (should (null buffer-undo-list))))
+
+
+;; ── Region-specific undo tests ──
+
+(ert-deftest helixel-test-mc-undo-region-restored-after-delete ()
+  "After mc delete+undo, fake cursor region is restored correctly.
+The fake cursor should have point at the end of the restored text
+and mark at the beginning — not at BOL (beginning of line)."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      ;; Set up a fake cursor with a region selecting "hello " on line 2.
+      ;; point=19 (before 'w' in 'world'), mark=13 (before 'h').
+      (setq f1 (helixel-mc-create-fake-cursor 19 13))
+      (should f1)
+      (should (helixel-mc-cursor-mark-active f1))
+      (let ((fake-mark-before (marker-position
+                               (helixel-mc-cursor-mark f1)))
+            (fake-point-before (helixel-mc-test--fake-point f1)))
+        (should (= 13 fake-mark-before))
+        (should (= 19 fake-point-before))
+        ;; Select and delete "hello" at real cursor (simulates d command).
+        (goto-char 1)
+        (push-mark 7 t t)     ; "hello " on line 1
+        (helixel-mc--undo-step-begin)
+        (delete-region (region-beginning) (region-end))
+        (helixel-mc-with-each-cursor
+          (delete-region (region-beginning) (region-end)))
+        (helixel-mc--undo-step-finish)
+        (should (string= "world\nworld\n" (buffer-string)))
+        ;; Undo.
+        (let ((snap buffer-undo-list))
+          (deactivate-mark)
+          (primitive-undo 1 (helixel-mc-test--skip-leading-nil snap)))
+        ;; Buffer restored.
+        (should (string= "hello world\nhello world\n" (buffer-string)))
+        ;; Fake cursor: point restored, mark restored, region active.
+        (should (= fake-point-before
+                   (helixel-mc-test--fake-point f1)))
+        (should (= fake-mark-before
+                   (marker-position (helixel-mc-cursor-mark f1))))
+        (should (helixel-mc-cursor-mark-active f1))
+        ;; The mark must NOT be at BOL (position 13 is start of "hello",
+        ;; position 1 or 13 being BOL depends on the line — but it must
+        ;; equal the pre-edit mark).
+        (should-not (= 1 (marker-position (helixel-mc-cursor-mark f1))))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-capture-preserves-mark-and-point ()
+  "Capture-all-positions saves both point and mark correctly.
+When a fake cursor has an active region, the captured alist entry
+must have a non-nil cdr (mark position)."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (let (f1)
+      (setq f1 (helixel-mc-create-fake-cursor 19 13))
+      (should f1)
+      (let ((pos (helixel-mc--capture-all-positions)))
+        ;; Find the fake cursor entry by ID.
+        (let ((id (overlay-get f1 'helixel-mc-id))
+              (entry nil))
+          (dolist (e pos)
+            (when (eq (car e) id)
+              (setq entry e)))
+          (should entry)
+          (should (= 19 (cadr entry)))    ; point
+          (should (= 13 (cddr entry)))))) ; mark
+    (helixel-mc-clear-all)))
+
+
+;; ── Step-boundary and redo tests ──
+
+(ert-deftest helixel-test-mc-undo-step-boundary-present ()
+  "After undo-step-finish, a nil boundary separates this step from
+the next one.  This ensures `undo' treats each mc-dispatched command
+as its own undo step."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 1)
+    ;; Step 1: insert.
+    (helixel-mc--undo-step-begin)
+    (insert "X")
+    (helixel-mc-with-each-cursor (insert "X"))
+    (helixel-mc--undo-step-finish)
+    ;; After finish, the first entry should be nil (the boundary).
+    (should (null (car buffer-undo-list)))
+    ;; Second entry should be the start marker.
+    (let ((head (car (helixel-mc-test--skip-leading-nil buffer-undo-list))))
+      (should (eq 'apply (car-safe head)))
+      (should (eq 'helixel-mc--undo-step-start-cb (cadr head))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-deactivate-mark-cleared ()
+  "After undo-step-end callback restores positions, `deactivate-mark'
+is nil so the command loop does not clear `mark-active'."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (should f1)
+      (helixel-mc--undo-step-begin)
+      (delete-region (region-beginning) (region-end))
+      (helixel-mc-with-each-cursor
+        (delete-region (region-beginning) (region-end)))
+      (helixel-mc--undo-step-finish)
+      (should (string= "world\nworld\n" (buffer-string)))
+      ;; Undo.
+      (let ((snap buffer-undo-list))
+        (deactivate-mark)
+        (primitive-undo 1 (helixel-mc-test--skip-leading-nil snap)))
+      ;; After undo: deactivate-mark must be nil (callback clears it).
+      (should-not deactivate-mark)
+      (should mark-active))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-with-real-undo-command ()
+  "Use `(undo)' command (not primitive-undo) to undo an mc edit.
+Verifies the undo command correctly restores both buffer text
+and fake cursor position."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (should f1)
+      (let ((fake-before (helixel-mc-test--fake-point f1)))
+        (helixel-mc--undo-step-begin)
+        (delete-region (region-beginning) (region-end))
+        (helixel-mc-with-each-cursor
+          (delete-region (region-beginning) (region-end)))
+        (helixel-mc--undo-step-finish)
+        (should (string= "world\nworld\n" (buffer-string)))
+        ;; Use the real `undo' command.
+        (deactivate-mark)
+        (let ((last-command nil))
+          (undo))
+        (should (string= "hello world\nhello world\n"
+                         (buffer-string)))
+        (should (= fake-before
+                   (helixel-mc-test--fake-point f1)))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-boundary-prevents-merging ()
+  "Two sequential edits create separate undo steps (nil boundaries).
+After two edits, the undo list has two nil boundaries."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 1)
+    ;; Edit 1.
+    (helixel-mc--undo-step-begin)
+    (insert "A")
+    (helixel-mc-with-each-cursor (insert "A"))
+    (helixel-mc--undo-step-finish)
+    ;; Edit 2.
+    (helixel-mc--undo-step-begin)
+    (insert "B")
+    (helixel-mc-with-each-cursor (insert "B"))
+    (helixel-mc--undo-step-finish)
+    ;; Count nil boundaries — should be 2 (one per step).
+    (let ((count 0)
+          (lst buffer-undo-list))
+      (while (consp lst)
+        (when (null (car lst))
+          (cl-incf count))
+        (setq lst (cdr lst)))
+      (should (>= count 2)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-restore-deletes-extraneous-fakes ()
+  "Restore-all-positions deletes fake cursors not in the positions alist."
+  (helixel-test-with-buffer "line one\nline two\n"
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 5)
+    (helixel-mc-create-fake-cursor 10)
+    (should (= 3 (helixel-mc-num-cursors)))
+    ;; Restore with only one fake.
+    (let ((positions (list (cons 0 (cons 1 nil))
+                           (cons (overlay-get (car (helixel-mc-all-cursors))
+                                              'helixel-mc-id)
+                                 (cons 5 nil)))))
+      (helixel-mc--restore-all-positions positions)
+      (should (= 2 (helixel-mc-num-cursors))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-restore-deactivates-real-mark ()
+  "Restore-all-positions deactivates real mark when mark-pos is nil."
+  (helixel-test-with-buffer "hello\n"
+    (goto-char 1)
+    (push-mark 5 t t)
+    (should mark-active)
+    ;; Restore with nil mark → should deactivate.
+    (helixel-mc--restore-all-positions (list (cons 0 (cons 3 nil))))
+    (should (= 3 (point)))
+    (should-not mark-active)))
 
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

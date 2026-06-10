@@ -253,14 +253,33 @@ any rendering code that holds them).  Sets the rest by `setf'."
   "Return non-nil if fake CURSOR's mark is active."
   (helixel-pcs-mark-active (overlay-get cursor 'helixel-pc-state)))
 
-;; ── Cursors table (per buffer) ──
+;; ── Cursor IDs ──
+;; Every fake cursor gets a monotonically increasing integer ID that
+;; persists for the cursor's lifetime (including across undo/redo).
+;; The hash table provides O(1) lookup; the ID counter is never reset.
+;; ID 0 is reserved for the real cursor.
 
-(defvar-local helixel-mc--cursors nil
-  "List of fake-cursor overlays in the current buffer.
+(defvar-local helixel-mc--next-cursor-id 0
+  "Monotonically increasing counter for fake-cursor IDs.
+Never reset during the buffer's lifetime — IDs are stable
+across undo/redo cycles.")
+
+(defvar-local helixel-mc--cursors-by-id nil
+  "Hash table mapping integer cursor ID → fake-cursor overlay.
+The single source of truth for all fake cursors in the buffer.
+Populated on first cursor creation, cleared on mode deactivation.
 Each overlay has properties:
   `helixel-mc-cursor'    t (type tag)
-  `helixel-pc-state'           `helixel-pc-state' (per-cursor state)
+  `helixel-mc-id'        integer cursor ID
+  `helixel-pc-state'     `helixel-pc-state' (per-cursor state)
   `helixel-mc-region'    fake-region overlay or nil")
+
+(defun helixel-mc--ensure-cursor-table ()
+  "Initialize `helixel-mc--cursors-by-id' if it doesn't exist.
+Idempotent — safe to call from any context where cursors may be
+created before the minor mode has fully activated."
+  (unless helixel-mc--cursors-by-id
+    (setq helixel-mc--cursors-by-id (make-hash-table :test 'eql))))
 
 (defsubst helixel-mc-fake-cursor-p (ov)
   "Return non-nil if OV is a fake-cursor overlay."
@@ -269,17 +288,19 @@ Each overlay has properties:
 (defun helixel-mc-all-cursors (&optional sort)
   "Return the list of fake-cursor overlays.
 Filters out dead overlays (detached from buffer) and zombie
-overlays whose `helixel-mc-point' marker has been nulled — either
-condition would crash `helixel-mc--enter-cursor's `goto-char'.
-When SORT is non-nil, return them sorted by buffer position."
+overlays whose marker has been nulled — either condition would
+crash `helixel-mc--enter-cursor's `goto-char'.
+When SORT is non-nil, return them sorted by buffer position.
+Iterates the `helixel-mc--cursors-by-id' hash table values."
   (let ((cursors
-         (cl-remove-if-not
-          (lambda (ov)
-            (and (overlay-buffer ov)
-                 (let ((cs (overlay-get ov 'helixel-pc-state)))
-                   (and cs (helixel-pcs-point cs)
-                        (marker-position (helixel-pcs-point cs))))))
-          (copy-sequence helixel-mc--cursors))))
+         (when helixel-mc--cursors-by-id
+           (cl-remove-if-not
+            (lambda (ov)
+              (and (overlay-buffer ov)
+                   (let ((cs (overlay-get ov 'helixel-pc-state)))
+                     (and cs (helixel-pcs-point cs)
+                          (marker-position (helixel-pcs-point cs))))))
+            (hash-table-values helixel-mc--cursors-by-id)))))
     (if sort
         (sort cursors
               (lambda (a b)
@@ -295,7 +316,8 @@ When SORT is non-nil, return them sorted by buffer position."
 
 (defun helixel-mc-any-p ()
   "Return non-nil if any fake cursors exist in the current buffer."
-  (cl-some #'overlay-buffer helixel-mc--cursors))
+  (and helixel-mc--cursors-by-id
+       (> (hash-table-count helixel-mc--cursors-by-id) 0)))
 
 ;; ── Overlay rendering ──
 
@@ -394,9 +416,10 @@ Two passes follow Helix's selection-set semantics:
 Return the total number of fake cursors removed."
   (let ((removed 0))
     ;; ---- Pass 1: identical (point, mark) ----
+    ;; Sort not needed — key-comparison is position-order independent.
     (let ((real-key (helixel-mc--cursor-key :real))
           (seen nil))
-      (dolist (ov (helixel-mc-all-cursors :sort))
+      (dolist (ov (helixel-mc-all-cursors))
         (let ((k (helixel-mc--cursor-key ov)))
           (cond
            ((equal k real-key)
@@ -445,7 +468,9 @@ Snapshots the cursor state into a `helixel-pc-state' struct
 attached to the overlay (so each cursor has its own `kill-ring',
 event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
   (when (and helixel-mc-max-cursors
-             (>= (length helixel-mc--cursors) helixel-mc-max-cursors))
+             (and helixel-mc--cursors-by-id
+                  (>= (hash-table-count helixel-mc--cursors-by-id)
+                      helixel-mc-max-cursors)))
     (user-error "Refusing to create more than %d fake cursors"
                 helixel-mc-max-cursors))
   ;; Dedup against existing fakes only.  We do NOT skip when this
@@ -465,6 +490,7 @@ event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
      (existing nil)                    ; duplicate fake → skip
      (t
       (let* ((ov (make-overlay point point nil nil t))
+             (id (cl-incf helixel-mc--next-cursor-id))
              ;; Snapshot the real cursor's current state into the
              ;; struct, then override the position fields to match
              ;; the requested POINT/MARK so the new fake reflects
@@ -476,32 +502,37 @@ event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
         ;; Fresh fake cursor starts with empty register storage.
         (setf (helixel-pcs-registers-alist cs) nil)
         (overlay-put ov 'helixel-mc-cursor t)
+        (overlay-put ov 'helixel-mc-id id)
         (overlay-put ov 'priority 100)
         (overlay-put ov 'helixel-pc-state cs)
+        (helixel-mc--ensure-cursor-table)
+        (puthash id ov helixel-mc--cursors-by-id)
         (helixel-mc--paint-cursor-overlay ov point)
         (helixel-mc--update-fake-region ov)
         ;; Exit `visual' state on first cursor creation.  Visual's
         ;; "extend" semantics are incompatible with multi-cursor
         ;; "each cursor has its own fresh selection" semantics.
-        ;; Do this BEFORE pushing to helixel-mc--cursors so the
-        ;; state-change hook (helixel-mc--sync-visual-state) won't
-        ;; clear the new cursor's mark-active.
+        ;; Exit visual state BEFORE the cursor becomes visible to
+        ;; the state-change hook (helixel-mc--sync-visual-state).
         (when (eq helixel--current-state 'visual)
           (helixel-enter-normal-state))
-        (push ov helixel-mc--cursors)
         (unless helixel-multi-cursor-mode
           (helixel-multi-cursor-mode 1))
         ov)))))
 
 (defun helixel-mc-delete-fake-cursor (cursor)
   "Delete fake CURSOR overlay and its associated region overlay.
-Releases the markers held by the cursor's `helixel-pc-state'."
+Releases the markers held by the cursor's `helixel-pc-state'.
+Removes the cursor from the ID-lookup hash table."
   (when (helixel-mc-fake-cursor-p cursor)
+    (when (and helixel-mc--cursors-by-id
+               (overlay-get cursor 'helixel-mc-id))
+      (remhash (overlay-get cursor 'helixel-mc-id)
+               helixel-mc--cursors-by-id))
     (helixel-pcs-release (overlay-get cursor 'helixel-pc-state))
     (when-let* ((r (overlay-get cursor 'helixel-mc-region)))
       (delete-overlay r))
-    (delete-overlay cursor)
-    (setq helixel-mc--cursors (delq cursor helixel-mc--cursors))))
+    (delete-overlay cursor)))
 
 (defvar helixel-mc-before-clear-hook nil
   "Hook run BEFORE `helixel-mc-clear-all' destroys cursors.
@@ -510,14 +541,127 @@ undo recording, etc.")
 
 (defun helixel-mc-clear-all ()
   "Remove every fake cursor in the current buffer.
-Runs `helixel-mc-before-clear-hook' first."
+Runs `helixel-mc-before-clear-hook' first.
+Clears the ID-lookup hash table."
   (interactive)
   (run-hooks 'helixel-mc-before-clear-hook)
-  (dolist (ov (copy-sequence helixel-mc--cursors))
-    (helixel-mc-delete-fake-cursor ov))
-  (setq helixel-mc--cursors nil)
+  (when helixel-mc--cursors-by-id
+    (dolist (ov (hash-table-values helixel-mc--cursors-by-id))
+      (helixel-mc-delete-fake-cursor ov))
+    (clrhash helixel-mc--cursors-by-id))
   (when helixel-multi-cursor-mode
     (helixel-multi-cursor-mode -1)))
+
+;; ── Cursor-by-ID accessor ──
+
+(defun helixel-mc-cursor-by-id (id)
+  "Return the fake-cursor overlay with the given integer ID, or nil.
+Lookup is O(1) via the `helixel-mc--cursors-by-id' hash table."
+  (when helixel-mc--cursors-by-id
+    (gethash id helixel-mc--cursors-by-id)))
+
+;; ── Cursor-position capture / restore (for undo integration) ──
+;;
+;; `helixel-mc--capture-all-positions' produces an alist that
+;; `helixel-mc--restore-all-positions' consumes.  The alist format
+;; mirrors hel's `hel-cursors-positions':
+;;
+;;   ((0 . (POINT . MARK-OR-NIL))    ; real cursor (ID 0)
+;;    (ID1 . (P1 . M1))
+;;    (ID2 . (P2 . M2)) ...)
+;;
+;; During undo/redo, `primitive-undo' processes `apply' entries and
+;; calls `helixel-mc--undo-step-end-cb', which calls
+;; `helixel-mc--restore-all-positions' to move both real and fake
+;; cursors to their correct positions.
+
+(defun helixel-mc--capture-all-positions ()
+  "Return an alist of all cursor positions for undo persistence.
+Format: ((0 . (POINT . MARK-OR-NIL)) (ID . (P . M)) ...).
+Real cursor has ID 0; MARK-OR-NIL is nil when mark is inactive.
+Fake cursors are sorted by point position ascending."
+  (let ((real-pos (cons 0
+                        (cons (point)
+                              (and mark-active (mark t)))))
+        (fake-entries nil))
+    (dolist (ov (helixel-mc-all-cursors :sort))
+      (when-let* ((id (overlay-get ov 'helixel-mc-id))
+                  (cs (overlay-get ov 'helixel-pc-state))
+                  (p (helixel-pcs-point cs))
+                  (m (helixel-pcs-mark cs))
+                  (pp (marker-position p))
+                  (mm (marker-position m)))
+        (push (cons id
+                    (cons pp
+                          (and (helixel-pcs-mark-active cs) mm)))
+              fake-entries)))
+    ;; Real first, then fakes sorted ascending.
+    (cons real-pos (nreverse fake-entries))))
+
+(defun helixel-mc--restore-all-positions (positions)
+  "Restore all cursors from the POSITIONS alist.
+POSITIONS is in the format returned by `helixel-mc--capture-all-positions'.
+Restores real cursor (ID 0) first, then creates/updates/deletes
+fake cursors to match.  Auto-toggles `helixel-multi-cursor-mode'."
+  (let ((existing-ids nil)
+        (new-fakes nil))
+    (dolist (entry positions)
+      (let ((id (car entry))
+            (pos (cdr entry)))
+        (pcase id
+          (0
+           ;; Real cursor.
+           (goto-char (car pos))
+           (let ((mark-pos (cdr pos)))
+             (if mark-pos
+                 (progn
+                   (set-marker (mark-marker) mark-pos)
+                   (setq mark-active t))
+               (deactivate-mark))))
+          (_
+           (push id existing-ids)
+           (if-let* ((ov (helixel-mc-cursor-by-id id))
+                     ((overlay-buffer ov)))
+               ;; Existing fake — update position.
+               (let ((cs (overlay-get ov 'helixel-pc-state))
+                     (p (car pos))
+                     (m (cdr pos)))
+                 (set-marker (helixel-pcs-point cs) p)
+                 (set-marker (helixel-pcs-mark cs) (or m p))
+                 (setf (helixel-pcs-mark-active cs) (not (null m)))
+                 (helixel-mc--paint-cursor-overlay ov p)
+                 (helixel-mc--update-fake-region ov))
+             ;; New fake — create with the same ID.
+             (push (cons id pos) new-fakes))))))
+    ;; Create new fakes (reverse so insertion order is sensible).
+    (helixel-mc--ensure-cursor-table)
+    (dolist (entry (nreverse new-fakes))
+      (let* ((id (car entry))
+             (p (cadr entry))
+             (m (cddr entry))
+             (ov (make-overlay p p nil nil t))
+             (cs (helixel-pcs-clone)))
+        (set-marker (helixel-pcs-point cs) p)
+        (set-marker (helixel-pcs-mark cs) (or m p))
+        (setf (helixel-pcs-mark-active cs) (not (null m)))
+        (setf (helixel-pcs-registers-alist cs) nil)
+        (overlay-put ov 'helixel-mc-cursor t)
+        (overlay-put ov 'helixel-mc-id id)
+        (overlay-put ov 'priority 100)
+        (overlay-put ov 'helixel-pc-state cs)
+        (puthash id ov helixel-mc--cursors-by-id)
+        (helixel-mc--paint-cursor-overlay ov p)
+        (helixel-mc--update-fake-region ov)))
+    ;; Delete fakes not present in POSITIONS.
+    (dolist (ov (helixel-mc-all-cursors))
+      (unless (memq (overlay-get ov 'helixel-mc-id) existing-ids)
+        (helixel-mc-delete-fake-cursor ov)))
+    ;; Ensure mc minor mode reflects reality.
+    (if (helixel-mc-any-p)
+        (unless helixel-multi-cursor-mode
+          (helixel-multi-cursor-mode 1))
+      (when helixel-multi-cursor-mode
+        (helixel-multi-cursor-mode -1)))))
 
 ;; ── Whitelist ──
 
@@ -558,6 +702,20 @@ Consults the `multiple-cursors' symbol property; falls back to
   (dolist (c commands)
     (put c 'multiple-cursors nil)))
 
+(cl-defmacro helixel-mc--with-undo-step (&body body)
+  "Execute BODY wrapped in an mc undo step with guaranteed cleanup.
+Calls `helixel-mc--undo-step-begin' before BODY and
+`helixel-mc--undo-step-finish' via `unwind-protect' after.
+
+Use for non-command-loop callers that need atomic undo grouping
+without going through the pre/`post-command-hook' dispatch path
+\(e.g. chain-end broadcast, completion-preview sync)."
+  (declare (indent 0) (debug t))
+  `(progn
+     (helixel-mc--undo-step-begin)
+     (unwind-protect (progn ,@body)
+       (helixel-mc--undo-step-finish))))
+
 (cl-defmacro helixel-mc-defcmd (cmd &key (policy 'all))
   "Declarative dispatch spec for CMD.
 Keyword options:
@@ -574,6 +732,162 @@ clause) which the unified dispatcher replays at every fake cursor."
     `(progn
        (put ',cmd 'multiple-cursors ,(not real-only))
        ',cmd)))
+
+;; ── Undo-step management ──
+;;
+;; When mc is active and fake cursors exist, every command that
+;; dispatches to fakes is wrapped in an undo step via
+;; `pre-command-hook' / `post-command-hook'.  Two `apply' entries
+;; are injected into `buffer-undo-list':
+;;
+;;   pre-hook   → push (apply helixel-mc--undo-step-end-cb P0)
+;;   post-hook  → push (apply helixel-mc--undo-step-start-cb P1)
+;;                        then strip nil & number entries
+;;
+;; During undo, `primitive-undo' processes these entries LIFO:
+;;   1. (apply mc--undo-step-start-cb P1) → pushes counterpart for redo
+;;   2. Text changes undone
+;;   3. (apply mc--undo-step-end-cb P0)   → restore cursors to P0
+;;
+;; Numbers (point adjustments) and nil (undo boundaries) are
+;; stripped so `primitive-undo' doesn't move point between fakes.
+;;
+;; The `-cb' suffix on `start-cb' / `end-cb' distinguishes these
+;; 1-argument `primitive-undo' callbacks from the 0-argument hook
+;; functions `helixel-mc--undo-step-begin' / `-finish'.
+;;
+;; `helixel-mc--with-undo-step' wraps an explicit begin/finish
+;; pair for non-command-loop callers (chain-end broadcast,
+;; completion-preview sync).
+
+(defvar-local helixel-mc--undo-step-active nil
+  "Non-nil while inside an mc undo step.
+Set by `helixel-mc--undo-step-begin', cleared by
+`helixel-mc--undo-step-finish'.  Guards against nested wrapping.")
+(defvar-local helixel-mc--undo-list-pointer nil
+  "Cons cell at the head of `buffer-undo-list' when the step began.
+Set by `helixel-mc--undo-step-begin' for later comparison in
+`helixel-mc--undo-step-finish' to detect no-op steps.")
+(defvar-local helixel-mc--undo-boundary-marker nil
+  "The before-marker `apply' entry pushed at undo-step begin.
+Used by `helixel-mc--undo-step-finish' to detect no-op steps:
+if no text changes occurred, this entry is popped from
+`buffer-undo-list'.")
+
+(defun helixel-mc--undo-command-p (command)
+  "Return non-nil if COMMAND is an undo/redo command.
+These commands should never be wrapped in an mc undo step
+because they manipulate `buffer-undo-list' themselves."
+  (memq command '(undo undo-redo undo-only
+                  undo-tree-undo undo-tree-redo
+                  undo-fu-only-undo undo-fu-only-redo)))
+
+(defun helixel-mc--undo-step-begin ()
+  "Begin an mc undo step.
+Captures cursor positions and pushes a before-marker into
+`buffer-undo-list'.  Guards against double-wrapping and
+disabled undo lists."
+  (unless (or helixel-mc--undo-step-active
+              (eq buffer-undo-list t))
+    (setq helixel-mc--undo-step-active t)
+    (let ((pos (helixel-mc--capture-all-positions)))
+      (setq helixel-mc--undo-boundary-marker
+            `(apply helixel-mc--undo-step-end-cb ,pos))
+      (push helixel-mc--undo-boundary-marker buffer-undo-list)
+      (setq helixel-mc--undo-list-pointer buffer-undo-list))))
+
+(defun helixel-mc--filter-undo-step (list pointer)
+  "Destructively remove nil and number entries from LIST.
+Operates on the segment between LIST's head and POINTER (exclusive).
+Returns the (possibly new) head of LIST.
+
+Nil entries are undo boundaries; number entries are point-movement
+records that `primitive-undo' would otherwise use to move point
+between fake cursors — we handle cursor positions ourselves."
+  (let ((tail list) head)
+    (while (and tail (not (eq tail pointer)))
+      (if (or (numberp (car tail)) (null (car tail)))
+          (progn
+            (setq tail (cdr tail))
+            (if head
+                (setcdr head tail)
+              (setq list tail)))
+        (setq head tail
+              tail (cdr tail))))
+    list))
+
+(defun helixel-mc--undo-skip-leading-nils (lst)
+  "Return LST with any leading nil (undo boundary) entries skipped."
+  (while (and (consp lst) (null (car lst)))
+    (setq lst (cdr lst)))
+  lst)
+
+(defun helixel-mc--undo-step-finish ()
+  "Finish an mc undo step (0-arg management, called from hooks).
+If buffer text was modified during the step, pushes an after-marker,
+strips nil and number entries from the step segment, and maintains
+`undo-equiv-table' for proper undo/redo chaining.
+
+If no changes occurred, pops the unused before-marker.
+Distinct from the 1-arg `helixel-mc--undo-step-end-cb' callback
+that `primitive-undo' calls during undo/redo."
+  (when helixel-mc--undo-step-active
+    (unwind-protect
+        (if (eq buffer-undo-list helixel-mc--undo-list-pointer)
+            ;; No changes — pop our unused marker.
+            (when (eq (car buffer-undo-list)
+                      helixel-mc--undo-boundary-marker)
+              (pop buffer-undo-list))
+          ;; Changes happened — finalize the step.
+          (let ((pos (helixel-mc--capture-all-positions)))
+            (push `(apply helixel-mc--undo-step-start-cb ,pos)
+                  buffer-undo-list)
+            (let* ((lst (helixel-mc--undo-skip-leading-nils
+                         buffer-undo-list))
+                   (prev-head (car lst)))
+              (setq lst (helixel-mc--filter-undo-step
+                         lst helixel-mc--undo-list-pointer))
+              (when-let* (((car lst))
+                          (equiv (gethash prev-head undo-equiv-table)))
+                (puthash (car lst) equiv undo-equiv-table))
+              (setq buffer-undo-list lst)
+              (undo-boundary))))
+      ;; Cleanup always runs, even if body errors.
+      (setq helixel-mc--undo-step-active nil
+            helixel-mc--undo-list-pointer nil
+            helixel-mc--undo-boundary-marker nil))))
+
+;; ── Undo-step callbacks — called by `primitive-undo' via `apply' ──
+;;
+;; These are the 1-argument functions whose names appear in the
+;; `apply' entries pushed into `buffer-undo-list'.  They must NOT
+;; The `-cb' suffix distinguishes these 1-arg callbacks from the
+;; 0-arg hook functions `helixel-mc--undo-step-begin' / `-finish'.
+
+(defun helixel-mc--undo-step-start-cb (positions)
+  "1-arg callback — `primitive-undo' calls this at step START.
+Pushes the counterpart end-cb marker for redo support.
+POSITIONS is the alist from `helixel-mc--capture-all-positions'.
+
+Distinct from the 0-arg hook function `helixel-mc--undo-step-begin'."
+  (push `(apply helixel-mc--undo-step-end-cb ,positions)
+        buffer-undo-list))
+
+(defun helixel-mc--undo-step-end-cb (positions)
+  "1-arg callback — `primitive-undo' calls this at step END.
+Restores all cursor positions from POSITIONS and pushes the
+counterpart start-cb marker for redo support.
+POSITIONS is the alist from `helixel-mc--capture-all-positions'.
+
+Clears the variable `deactivate-mark' so the command loop does
+not clear `mark-active' after `undo' returns — `primitive-undo'
+routinely sets the variable `deactivate-mark' during text restoration.
+
+Distinct from the 0-arg hook function `helixel-mc--undo-step-finish'."
+  (helixel-mc--restore-all-positions positions)
+  (setq deactivate-mark nil)
+  (push `(apply helixel-mc--undo-step-start-cb ,positions)
+        buffer-undo-list))
 
 ;; ── Dispatch loop ──
 ;;
@@ -746,14 +1060,32 @@ first, then runner if any."
 ;; every fake.  No substitute-alist, no prepos symbol property, no
 ;; call-interactively fallback.
 
+(defmacro helixel-mc--replay-at-one-fake (fresh-runnable cmd cursor dead)
+  "Replay FRESH-RUNNABLE (or run CMD) at fake CURSOR.
+Appends to DEAD list on `search-failed' or other errors.
+
+Must be a macro (not a function) because `push' on DEAD must
+mutate the caller's binding — a function would only modify its
+own parameter."
+  (declare (debug (form form form form)))
+  `(condition-case e
+       (if ,fresh-runnable
+           (helixel-with-replay-as 'dot
+             (helixel-action-replay ,fresh-runnable))
+         (helixel-mc--call-interactively ,cmd))
+     (search-failed (push ,cursor ,dead))
+     (user-error (ignore e))
+     (error (message "helixel-mc: %s at fake: %s"
+                     ,cmd (error-message-string e))
+            (push ,cursor ,dead))))
+
 (defun helixel-mc--post-command ()
   "Post-command hook — replay `this-command's tx at every fake cursor.
 The tx attached to the freshly-committed action (front of
 `helixel--action-ring' with matching `by-command' stamp) is replayed
-at each fake inside one `undo-amalgamate-change-group'.  Insert-entry
-commands install a per-fake prepositioner as a `:preposition'
-payload on the action's tx — `helixel-action-replay' calls it before
-the main runner.
+at each fake cursor.  The undo-step wrapping (begin in pre-hook, end
+here) amalgamates all changes — real cursor + fake dispatches — into
+one atomic undo step with cursor-position persistence.
 
 No-op when the mode is off, dispatch is already in progress, we're in
 a keyboard-macro, the command is whitelisted off, or no fresh tx
@@ -764,43 +1096,44 @@ exists (e.g. for real-cursor-only commands like
              (not executing-kbd-macro)
              (not defining-kbd-macro)
              this-command)
-    ;; `helixel--register-consume' is suppressed while mc is active
-    ;; so fake cursors see the same register value during replay.
     (when (and (helixel-mc-any-p)
                (helixel-mc--should-run-for-all-p this-command))
-      ;; Ensure the action just produced by `this-command' is on the ring
-      ;; before we look for a fresh tx.  Movement / textobj commands do
-      ;; not eagerly commit (only `record-action' does), so without this
-      ;; the dispatcher would see the PRIOR action's tx.
       (helixel-action-commit)
       (let* ((fresh (helixel-mc--fresh-action-from-real))
              (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
              (cmd this-command))
         (helixel-with-replay 'mc-batch
           (condition-case err
-              (undo-amalgamate-change-group
-                (let ((dead nil))
-                  (helixel-mc-with-each-cursor
-                    (condition-case e
-                        (if fresh-runnable
-                            (helixel-with-replay-as 'dot
-                              (helixel-action-replay fresh-runnable))
-                          (helixel-mc--call-interactively cmd))
-                      (search-failed (push cursor dead))
-                      (user-error (ignore e))
-                      (error (message "helixel-mc: %s at fake: %s"
-                                      cmd (error-message-string e))
-                             (push cursor dead))))
-                  (dolist (ov dead)
-                    (helixel-mc-delete-fake-cursor ov))))
+              (let ((dead nil))
+                (helixel-mc-with-each-cursor
+                  (helixel-mc--replay-at-one-fake
+                   fresh-runnable cmd cursor dead))
+                (dolist (ov dead)
+                  (helixel-mc-delete-fake-cursor ov)))
             (error
              (message "helixel-mc: %s outer error: %s"
                       cmd (error-message-string err))))
-          (helixel-mc-dedupe-cursors)))
-    ;; Now that fake cursors have been dispatched, clear the register
-    ;; (which `helixel--register-consume' preserved during mc replay).
+          (helixel-mc-dedupe-cursors))
+      (helixel-mc--undo-step-finish))
     (unless (eq this-command 'helixel-select-register)
       (setq helixel--current-register nil)))))
+
+;; ── Pre-command hook ──
+
+(defun helixel-mc--pre-command ()
+  "Pre-command hook for mc undo-step wrapping.
+Begins an undo step when mc is active, fake cursors exist,
+`this-command' is eligible for mc dispatch, and the command
+is not itself an undo/redo operation."
+  (when (and helixel-multi-cursor-mode
+             (helixel-mc-any-p)
+             (not executing-kbd-macro)
+             (not defining-kbd-macro)
+             this-command
+             (helixel-mc--should-run-for-all-p this-command)
+             (not (helixel-mc--undo-command-p this-command))
+             (not (helixel-mc-dispatch-in-progress-p)))
+    (helixel-mc--undo-step-begin)))
 
 ;; ── Minor mode ──
 
@@ -819,12 +1152,21 @@ deactivated when the last one is removed."
   :keymap helixel-multi-cursor-mode-map
   (if helixel-multi-cursor-mode
       (progn
+        (helixel-mc--ensure-cursor-table)
+        (add-hook 'pre-command-hook #'helixel-mc--pre-command 90 t)
         (add-hook 'post-command-hook #'helixel-mc--post-command 90 t)
         (add-hook 'helixel-repeat-edit-override-functions
                   #'helixel-mc--repeat-edit-apply-only))
+    (remove-hook 'pre-command-hook #'helixel-mc--pre-command t)
     (remove-hook 'post-command-hook #'helixel-mc--post-command t)
     (remove-hook 'helixel-repeat-edit-override-functions
                  #'helixel-mc--repeat-edit-apply-only)
+    ;; Clean up lingering undo-step state.
+    (setq helixel-mc--undo-step-active nil
+          helixel-mc--undo-list-pointer nil
+          helixel-mc--undo-boundary-marker nil)
+    (when helixel-mc--cursors-by-id
+      (clrhash helixel-mc--cursors-by-id))
     (helixel-mc-clear-all)))
 
 ;; ── Convenience: default whitelist for safe Emacs primitives ──

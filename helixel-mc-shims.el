@@ -33,6 +33,9 @@
 ;;
 ;; All shims here are loaded lazily via `eval-after-load' so the
 ;; package itself never requires the third-party feature.
+;;
+;; Undo amalgamation is handled by the mc undo-step wrapper
+;; (`helixel-mc--undo-step-begin' / `helixel-mc--undo-step-finish').
 
 ;;; Code:
 
@@ -58,13 +61,14 @@
   "Commands whose inserted text should be mirrored to fake cursors.
 Each command runs only at the real cursor (per its `multiple-cursors'
 property), then `helixel-mc--completion-preview-sync' inserts the
-same text at every fake.")
+same text at every fake within an mc undo step.")
 
 (defun helixel-mc--completion-preview-sync (orig &rest args)
   "Around-advice: run ORIG with ARGS at real cursor, mirror to fakes.
 ORIG is one of the `completion-preview-*' insert commands.  Captures
 the text inserted between point-before and point-after the original
-call and inserts the same string at every fake cursor.
+call and inserts the same string at every fake cursor within an
+mc undo step.
 
 No-op when multi-cursor mode is off, no fakes exist, dispatch is
 already in progress (nested call), or the original call did not
@@ -76,7 +80,7 @@ advance point (preview not active / nothing inserted)."
                (not (helixel-mc-dispatch-in-progress-p))
                (> (point) start))
       (let ((text (buffer-substring-no-properties start (point))))
-        (undo-amalgamate-change-group
+        (helixel-mc--with-undo-step
           (helixel-mc-with-each-cursor
             (insert text)))))))
 

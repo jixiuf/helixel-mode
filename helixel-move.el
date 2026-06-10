@@ -409,7 +409,7 @@ for unmatched bracket characters."
                               d orig (and on-opener equalp) t)))
             (goto-char (car result))
             (throw 'done t))))
-      ;; ── Remaining fallbacks: syntax-table, tags, blocks, syntax again ──
+      ;; ── Remaining fallbacks: syntax-table, tags, blocks, syntax ──
       (dolist (attempt (list (list #'helixel--jump-syntax-table
                                    char-a char-b orig)
                              (list #'helixel--jump-target-for-delimiter

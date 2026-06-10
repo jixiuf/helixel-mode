@@ -23,7 +23,7 @@
 | `helixel-textobj.el` | Facade: requires engine, pair, block, marks. |
 | `helixel-surround.el` | Surround add/delete/replace. |
 | `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
-| `helixel-mc-core.el` | **Multi-cursor core**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook`, whitelist policy, `helixel-multi-cursor-mode`. |
+| `helixel-mc-core.el` | **Multi-cursor core**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook` / `pre-command-hook`, cursor-ID hash table, undo-step management (begin/finish + `buffer-undo-list` `apply` entry injection for cursor-position persistence across undo/redo), whitelist policy, `helixel-multi-cursor-mode`. |
 | `helixel-mc-targets.el` | **Target computation**: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc-spawn-from-sel/-line/-rect/-find-char`, kind registry hooks. |
 | `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors. |
 | `helixel-mc-shims.el` | Third-party mc shims (currently: completion-preview). Lazy-loaded via `eval-after-load'. Mirrors `helixel-shims.el' pattern. |
@@ -51,7 +51,7 @@
 | `test/helixel-test-register.el` | Register |
 | `test/helixel-test-ring.el` | Event ring + jump log |
 | `test/helixel-test-jump.el` | Jump navigation + all-buffer/all-dir repeat tests |
-| `test/helixel-test-mc.el` | Multi-cursor: create/clear, whitelist, with-each-cursor isolation, dispatch insert, spawn-from-line, edit-lines, add-cursor-here, mark-next-like-this, apply-last-edit, kill-ring isolation |
+| `test/helixel-test-mc.el` | Multi-cursor: create/clear, whitelist, with-each-cursor isolation, dispatch insert, spawn-from-line, edit-lines, add-cursor-here, mark-next-like-this, apply-last-edit, kill-ring isolation.  Undo: marker injection, number filtering, noop step, capture/restore roundtrip, restore creates cursors, delete undo, insert undo, full cycle, mark-active capture, ID persistence, independent steps, callback roundtrip |
 | `test/helixel-test-chain-invariant.el` | Chain subsystem invariants (lifecycle flag, chain-control exclusion, runnerless tx exclusion, marker release) |
 | `test/helixel-test-repeat-invariant.el` | Repeat subsystem invariants (replay context, buffer-local last-tx, tx-replay immutability, pre-replay order, cleanup on error) |
 | `test/helixel-test-ring-invariant.el` | Ring + jump-log invariants (dedup, cap, marker release, commit-hook contract, by-command fallback, jump-log lightweight) |
@@ -368,6 +368,41 @@ preferred way to read ctx fields.
   See `helixel-tx-char`, `helixel-tx-type`, `helixel-tx-dir` for
   shared-payload-key convenience accessors (find-char, replace-char,
   surround).
+
+### Mc undo-step architecture
+
+When `helixel-multi-cursor-mode' is active and fake cursors exist, every
+command dispatched to fakes is wrapped in an undo step via
+`pre-command-hook' / `post-command-hook'.
+
+  pre-hook  → `helixel-mc--undo-step-begin'
+    - Captures cursor positions (real + fake) via
+      `helixel-mc--capture-all-positions'
+    - Pushes `(apply helixel-mc--undo-step-end-cb POSITIONS-BEFORE)'
+      into `buffer-undo-list'
+
+  post-hook → `helixel-mc--undo-step-finish' (after fake dispatch)
+    - If buffer changed: pushes after-marker
+      `(apply helixel-mc--undo-step-start-cb P1)', strips nil (undo
+      boundaries) and number (point adjustments) entries from the
+      step segment via `helixel-mc--filter-undo-step'.
+    - Maintains `undo-equiv-table' for undo/redo chaining.
+
+During undo, `primitive-undo' processes entries LIFO:
+  1. `(apply mc--undo-step-start-cb P1)' — pushes redo counterpart
+     `(apply mc--undo-step-end-cb P1)'
+  2. Text changes undone
+  3. `(apply mc--undo-step-end-cb P0)' — calls
+     `helixel-mc--restore-all-positions' with P0, pushes redo
+     counterpart `(apply mc--undo-step-start-cb P0)'
+
+Cursors are identified by persistent integer IDs (ID 0 = real,
+ID ≥ 1 = fake).  The `helixel-mc--cursors-by-id' hash table
+provides O(1) lookup for cursor restoral.  Cursor IDs survive
+undo/redo cycles unchanged.
+
+**Do NOT use `undo-amalgamate-change-group' for mc dispatch** —
+the undo-step management replaces it entirely.
 
 ### `preposition` slot (v5, was `:pre-replay-fn`)
 

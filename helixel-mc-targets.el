@@ -173,78 +173,63 @@ number of walk iterations), breaking dot-repeat at fake cursors."
         (helixel-with-replay-as 'dot
             (deactivate-mark)
             (goto-char (point-min))
-            ;; Search-advance scratch lives on the replay ctx the macro
-            ;; just bound — no need to bind globals here.
             (let ((tx (helixel-mc--make-dummy-tx sel)))
         (catch 'done
           (while (< (length targets) limit)
-            (let ((before (point)))
-              ;; Clean slate before each advance so we cannot read a
-              ;; stale `(mark t)' value left over from the previous
-              ;; iteration.  Setting the mark-marker to point ensures
-              ;; `have-range' below truly reflects what THIS iter set.
-              (deactivate-mark)
-              (set-marker (mark-marker) (point))
-              (unless (condition-case nil
-                          (funcall advance-fn tx)
-                        (error nil))
-                (throw 'done nil))
-              (let* ((mrk (mark t))
-                     ;; `have-range' demands a mark AND `mark-active'
-                     ;; (so the advance fn truly selected something).
-                     ;; The mark-marker reset above means `mrk' can
-                     ;; only be "real" data set by the advance fn.
-                     (have-range (and mrk mark-active
-                                      (/= mrk (point))))
-                     (pt (point))
-                     (mk (if have-range mrk pt))
-                     (rb (min pt mk))
-                     (re (max pt mk))
-                     (key (cons rb re))
-                     (no-progress (and (eq pt before) (not have-range))))
-                ;; Same range as last time → no progress, bail.
-                (when (equal key last-key)
-                  (throw 'done nil))
-                (setq last-key key)
-                ;; Skip degenerate single-point targets that come from
-                ;; an in-place recreate that didn't actually find
-                ;; anything (e.g. textobj with no word at point), and
-                ;; pure-whitespace targets that textobj walkers tend to
-                ;; produce when running off the last word.
-                ;;
-                ;; Also skip targets that OVERLAP any earlier target:
-                ;; textobj fallbacks at EOB (no thing at point) return
-                ;; `(point-min . point-max)' as the "inner word", which
-                ;; would otherwise produce a spurious huge cursor
-                ;; spanning the whole buffer.
-                (let ((overlaps-prior
-                       (and have-range
-                            (cl-some
-                             (lambda (tg)
-                               (let ((a (marker-position (car tg)))
-                                     (b (marker-position (cdr tg))))
-                                 (let ((tb (min a b)) (te (max a b)))
-                                   (and (< rb te) (< tb re)))))
-                             targets))))
-                  (unless (or no-progress
-                              overlaps-prior
-                              (and have-range
-                                   (string-match-p
-                                    "\\`[ \t\n\r\f]*\\'"
-                                    (buffer-substring-no-properties
-                                     rb re))))
-                    ;; Store as (point . mark) so create-fake-cursor
-                    ;; gets the same point/mark direction the advance fn
-                    ;; produced.
-                    (push (helixel-mc--make-target pt mk) targets)))
-                ;; In-place recreate (textobj): jump past the region
-                ;; so the next iteration can land on a fresh target.
-                (when (<= (point) before)
-                  (deactivate-mark)
-                  (goto-char (max re (1+ before)))
-                  (when (>= (point) (point-max))
-                    (throw 'done nil))))))))))
+            (if-let* ((result (helixel-mc--walk-advance-iter
+                               tx advance-fn targets last-key)))
+                (setq last-key (cdr result)
+                      targets (car result))
+              (throw 'done nil)))))))
       (nreverse targets))))
+
+(defun helixel-mc--walk-advance-iter (tx advance-fn targets last-key)
+  "Run one advance iteration for TX with ADVANCE-FN.
+Returns (TARGETS . LAST-KEY) on success, nil to stop.
+TARGETS and LAST-KEY are the current accumulator values."
+  (catch 'walk-advance-iter-done
+    (let ((before (point)))
+      (deactivate-mark)
+      (set-marker (mark-marker) (point))
+      ;; Try advance; bail on error.
+      (condition-case nil (funcall advance-fn tx) (error nil))
+      ;; Collect the region the advance fn produced.
+      (let* ((mrk (mark t))
+             (pt (point))
+             (have-range (and mrk mark-active (/= mrk pt)))
+             (mk (if have-range mrk pt))
+             (rb (min pt mk))
+             (re (max pt mk))
+             (key (cons rb re)))
+        ;; Same range as last time → no progress.
+        (when (equal key last-key)
+          (throw 'walk-advance-iter-done nil))
+        ;; In-place recreate: jump past region for next iteration.
+        (when (<= pt before)
+          (deactivate-mark)
+          (goto-char (max re (1+ before)))
+          (when (>= (point) (point-max))
+            (throw 'walk-advance-iter-done nil)))
+        ;; Skip no-progress, whitespace-only, or overlapping targets.
+        (unless (or (and (eq pt before) (not have-range))
+                    (and have-range
+                         (or (string-match-p
+                              "\\`[ \t\n\r\f]*\\'"
+                              (buffer-substring-no-properties rb re))
+                             (helixel-mc--walk-advance-overlaps-p
+                              rb re targets))))
+          (push (helixel-mc--make-target pt mk) targets))
+        (cons targets key)))))
+
+(defun helixel-mc--walk-advance-overlaps-p (rb re targets)
+  "Return non-nil if region [RB, RE] overlaps any marker pair in TARGETS."
+  (cl-some
+   (lambda (tg)
+     (let ((a (marker-position (car tg)))
+           (b (marker-position (cdr tg))))
+       (let ((tb (min a b)) (te (max a b)))
+         (and (< rb te) (< tb re)))))
+   targets))
 
 ;; ── Generic dispatcher ──
 

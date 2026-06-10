@@ -262,7 +262,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
           ;; Store text as replay fallback (tests, programmatic use)
           (when text
             (setq tx (helixel-action-with-payload tx :text text))
-            (when (eq (helixel-action-op tx) 'change)
+            (when (memq (helixel-action-op tx) '(change change-noyank))
               (setq tx (helixel-action-with-payload tx
                                                   :inserted-text text))))
           (helixel--update-last-event tx))))
@@ -343,11 +343,12 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 ;; ── Edit-op change runner ──
 
-(defun helixel--repeat-change-core (tx)
+(defun helixel--repeat-change-core (tx &optional noyank)
   "Repeat change TX: delete selection, replay keys or insert text.
 TX is the complete edit transaction (see `helixel-action-create').
 Keys (primary) capture the full insert-mode keystrokes.
 Text (fallback) is used when keys are unavailable (tests).
+When NOYANK is non-nil, skip pushing deleted text to `kill-ring'.
 
 For rect selections the stored text is replayed on every subsequent
 rectangle line via `helixel--rect-replay' — no state-switching side
@@ -356,7 +357,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
          (text (helixel-action-payload-get tx :inserted-text)))
     (cond
      ((and (use-region-p) (eq (helixel--selection-type) 'rect))
-      (helixel--rect-change)
+      (helixel--rect-change noyank)
       (if keys
           (helixel--execute-keys keys)
         (when text (insert text)))
@@ -366,7 +367,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
       ;; so we can restore an active region afterward for
       ;; undo-in-region.
       (let ((sel-beg (region-beginning)))
-        (helixel--delete-selection)
+        (helixel--delete-selection noyank)
         ;; Deactivate the mark left by the deleted selection
         ;; so that key replay (e.g. delete-backward-char) does
         ;; not see an active region and delete the wrong span.
@@ -393,6 +394,9 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 ;; Ops with non-trivial runners (need tx payload) → register separately:
 (helixel-register-op change :display "c" :moves-point-p t
   :runner #'helixel--repeat-change-core)
+
+(helixel-register-op change-noyank :display "C" :moves-point-p t
+  :runner (lambda (tx) (helixel--repeat-change-core tx t)))
 
 (helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
@@ -435,6 +439,16 @@ rectangle line via `helixel--rect-replay' — no state-switching side
     (helixel--register-consume)
     (setq helixel--change-track-marker (point-marker))
     (helixel--enter-insert)))
+
+(helixel-define-command helixel-change-noyank
+    (:category edit :subcat change-noyank)
+  (helixel--record-action 'change-noyank)
+  (if (and (use-region-p) (eq (helixel--selection-type) 'rect))
+      (helixel--rect-change t)
+    (progn
+      (helixel--delete-selection t)
+      (setq helixel--change-track-marker (point-marker))
+      (helixel--enter-insert))))
 
 ;; ── Replace ──
 
@@ -1055,8 +1069,9 @@ Tags the text with a rect-wise yank-handler for proper pasting."
 
 ;;; Rect change with replay
 
-(defun helixel--rect-change ()
+(defun helixel--rect-change (&optional noyank)
   "Kill rectangle content, enter insert mode.
+When NOYANK is non-nil, skip pushing to `kill-ring'.
 Replay typed text on all rectangle lines."
   (let* ((beg (region-beginning))
          (end (region-end))
@@ -1064,7 +1079,8 @@ Replay typed text on all rectangle lines."
          (col (save-excursion (goto-char beg) (current-column)))
          (lines (extract-rectangle beg end)))
     (delete-rectangle beg end)
-    (helixel--kill-new (helixel--rect-wise-text lines))
+    (unless noyank
+      (helixel--kill-new (helixel--rect-wise-text lines)))
     (goto-char beg)
     (setq helixel--rect-replay-info
           `(:col ,col :line-count ,line-count :marker ,(point-marker)))

@@ -1830,4 +1830,108 @@ insertions."
     (helixel-repeat-edit)
     (should (string= (buffer-string) "third line\n"))))
 
+;; ── helixel-change-noyank (C) — no-kill-ring change ──
+
+(ert-deftest helixel-test-change-noyank-charwise ()
+  "`helixel-change-noyank' deletes selection without kill-ring, enters insert."
+  (helixel-test-with-buffer "hello world"
+    (let ((kill-ring nil))
+      (push-mark (point) t t)
+      (goto-char 6)
+      (helixel-change-noyank)
+      (should (string= (buffer-string) " world"))
+      (should-not kill-ring)
+      (should (eq helixel--current-state 'insert)))))
+
+(ert-deftest helixel-test-change-noyank-linewise ()
+  "`helixel-change-noyank' deletes line without kill-ring, enters insert."
+  (helixel-test-with-buffer "first line\nsecond line\n"
+    (let ((kill-ring nil))
+      (helixel-select-line)
+      (helixel-change-noyank)
+      (should (string= (buffer-string) "second line\n"))
+      (should-not kill-ring)
+      (should (eq helixel--current-state 'insert)))))
+
+(ert-deftest helixel-test-change-noyank-rect ()
+  "`helixel-change-noyank' deletes rect without kill-ring, enters insert."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (let ((kill-ring nil))
+      (goto-char 1)
+      (push-mark (point) t t)
+      (goto-char 14)
+      (rectangle-mark-mode 1)
+      (setq helixel--raw-selection-type 'rect)
+      (helixel-change-noyank)
+      (should (string= (buffer-string) " line1\n line2\nGHI line3"))
+      (should-not kill-ring)
+      (should (eq helixel--current-state 'insert)))))
+
+(ert-deftest helixel-test-delete-preserves-kill-ring ()
+  "`helixel-delete' does NOT disturb existing kill-ring contents."
+  (helixel-test-with-buffer "hello world"
+    (let ((kill-ring '("existing")) kill-ring-yank-pointer)
+      (push-mark (point) t t)
+      (goto-char 6)
+      (helixel-delete)
+      (should (string= (buffer-string) " world"))
+      (should (equal kill-ring '("existing"))))))
+
+(ert-deftest helixel-test-delete-last-line ()
+  "`helixel-delete' on last line works without trailing newline."
+  (helixel-test-with-buffer "first line\nlast line"
+    (let ((kill-ring nil))
+      (goto-char 12)
+      (helixel-select-line)
+      (helixel-delete)
+      (should (string= (buffer-string) "first line\n"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-rect-single-line ()
+  "`helixel-delete' on single-line rectangle."
+  (helixel-test-with-buffer "ABCDE"
+    (let ((kill-ring nil))
+      (push-mark (point) t t)
+      (goto-char 2)
+      (rectangle-mark-mode 1)
+      (setq helixel--raw-selection-type 'rect)
+      (helixel-delete)
+      (should (string= (buffer-string) "BCDE"))
+      (should-not kill-ring)
+      (should-not rectangle-mark-mode))))
+
+(ert-deftest helixel-test-delete-no-kill-new ()
+  "`helixel-delete' does NOT populate small-delete or numbered registers."
+  (helixel-test-with-buffer "hello"
+    (let (kill-ring
+          (helixel--current-register nil))
+      ;; Clear registers that kill-new normally populates
+      (set-register helixel-register-small-delete-char nil)
+      (set-register ?1 nil)
+      (set-register ?2 nil)
+      (helixel-delete)
+      (should-not (helixel-register-get helixel-register-small-delete-char))
+      (should-not (helixel-register-get ?1))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-change-noyank-dot-repeat ()
+  "Dot-repeat of `helixel-change-noyank' replays without kill-ring."
+  (helixel-test-with-buffer "hello world foo"
+    (let ((kill-ring nil))
+      (goto-char 3)
+      (setq last-command nil this-command 'helixel-mark-inner-word)
+      (helixel-mark-inner-word)
+      (setq last-command 'helixel-mark-inner-word
+            this-command 'helixel-change-noyank)
+      (helixel-change-noyank)
+      (insert "X")
+      (helixel-insert-exit)
+      (should (string= (buffer-string) "X world foo"))
+      (should-not kill-ring)
+      ;; Dot-repeat on next word
+      (goto-char 3)
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "X X foo"))
+      (should-not kill-ring))))
+
 ;;; helixel-test-edit.el ends here

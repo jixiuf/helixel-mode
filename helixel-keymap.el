@@ -320,6 +320,7 @@ e.g. \"helixel-next-%s-end\"."
 (define-key helixel-normal-map "," #'helixel-repeat-selection)
 
 (define-key helixel-normal-map "c" #'helixel-change)
+(define-key helixel-normal-map "C" #'helixel-change-noyank)
 (define-key helixel-normal-map "d" #'helixel-kill)
 (define-key helixel-normal-map "D" #'helixel-delete)
 (define-key helixel-normal-map "y" #'helixel-kill-ring-save)

@@ -97,7 +97,7 @@ point AFTER the selection (or one char past point if no region)."
 (defun helixel--delete-selection (&optional noyank)
   "Delete current region or char at point.
 When NOYANK is non-nil, do NOT push to `kill-ring' or registers
-(Vim `\"_d' / Helix black-hole semantics).  Otherwise pushes to
+\(Vim `\"_d' / Helix black-hole semantics).  Otherwise pushes to
 `kill-ring' and populates rotate / small-delete registers.
 Does NOT record an edit and does NOT clear selection data.
 Used by `helixel-kill' (NOYANK nil), `helixel-delete' (NOYANK t),

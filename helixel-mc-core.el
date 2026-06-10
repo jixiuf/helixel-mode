@@ -961,22 +961,35 @@ state (kill-ring, event-ring, last-action, …)."
                helixel--action-pos    (helixel-pcs-action-pos ,cs))
          (helixel-pcs-release ,cs)))))
 
+(defvar helixel-mc--quit-p nil
+  "Non-nil means `quit' has fired during the per-cursor body.
+Bound by `helixel-mc-with-each-cursor'; prevents
+`helixel-mc--leave-cursor' from saving corrupted state.")
+
 (defmacro helixel-mc-with-each-cursor (&rest body)
   "Evaluate BODY once at each fake cursor.
 Real cursor's state (point, mark, helixel vars) is preserved.
 At each fake cursor BODY runs in an environment where point,
 mark, and the per-cursor state struct have been restored from the
 overlay.  After BODY, the overlay is updated to reflect the new
-state."
+state — unless a `quit' fires during BODY, in which case the
+fake's state is left untouched to avoid corruption from a
+partially-executed command."
   (declare (indent 0) (debug t))
-  `(let ((inhibit-message t))            ; suppress per-fake echo spam
+  `(let ((inhibit-message t)            ; suppress per-fake echo spam
+         (helixel-mc--quit-p nil))
      (helixel-with-replay 'mc-fake
        (helixel-mc--save-main-state
          (dolist (cursor (helixel-mc-all-cursors :sort))
            (when (and (helixel-mc-fake-cursor-p cursor)
                       (helixel-mc--enter-cursor cursor))
-             (unwind-protect (progn ,@body)
-               (helixel-mc--leave-cursor cursor))))))))
+             (setq helixel-mc--quit-p nil)
+             (unwind-protect
+                 (condition-case nil
+                     (progn ,@body)
+                   (quit (setq helixel-mc--quit-p t)))
+               (unless helixel-mc--quit-p
+                 (helixel-mc--leave-cursor cursor)))))))))
 
 (defun helixel-collapse-selection ()
   "Collapse every cursor's selection to a bare cursor (Helix `;').
@@ -1051,7 +1064,7 @@ action.  Returns its `tx' if and only if:
   - the action carries a `tx',
   - the action carries a runner (replayable),
   - the action's `by-command' stamp matches `this-command' or
-    `helixel-mc--saved-this-command' (fallback for recursive-edit
+    `helixel-mc--saved-this-command' (fallback for `recursive-edit'
     commands like isearch that overwrite `this-command').
 
 The action may have a nil op (movement commands) or a non-nil
@@ -1097,10 +1110,12 @@ mutate the caller's binding — a function would only modify its
 own parameter."
   (declare (debug (form form form form)))
   `(condition-case e
-       (if ,fresh-runnable
-           (helixel-with-replay-as 'dot
-             (helixel-action-replay ,fresh-runnable))
-         (helixel-mc--call-interactively ,cmd))
+       (cond
+        (,fresh-runnable
+         (helixel-with-replay-as 'dot
+           (helixel-action-replay ,fresh-runnable)))
+        (,cmd
+         (helixel-mc--call-interactively ,cmd)))
      (search-failed (push ,cursor ,dead))
      (user-error (ignore e))
      (error (message "helixel-mc: %s at fake: %s"
@@ -1108,11 +1123,11 @@ own parameter."
             (push ,cursor ,dead))))
 
 (defvar helixel-mc--post-command-depth 0
-  "Nesting depth for mc pre/post-command-hook.
+  "Nesting depth for mc `pre-command-hook' / `post-command-hook'.
 Incremented in `helixel-mc--pre-command', decremented in
 `helixel-mc--post-command'.  Dispatch only fires when depth
 returns to 1 — the outermost command loop — so inner recursive
-edits (isearch, query-replace) don't trigger double-dispatch.")
+edits (isearch, `query-replace') don't trigger double-dispatch.")
 
 (defun helixel-mc--post-command ()
   "Post-command hook — replay `this-command's tx at every fake cursor.
@@ -1142,7 +1157,15 @@ commands like `helixel-mc-toggle')."
         (helixel-action-commit)
         (let* ((fresh (helixel-mc--fresh-action-from-real))
                (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
-               (cmd this-command))
+               ;; When fresh is nil, skip isearch-internal commands
+               ;; (isearch-abort etc.) that fire after C-g cancels
+               ;; isearch — dispatching them corrupts fake cursors.
+               (cmd (if (and (not fresh)
+                             (symbolp this-command)
+                             (string-prefix-p "isearch-"
+                                              (symbol-name this-command)))
+                        nil
+                      this-command)))
           (helixel-with-replay 'mc-batch
             (condition-case err
                 (let ((dead nil))
@@ -1151,6 +1174,7 @@ commands like `helixel-mc-toggle')."
                      fresh-runnable cmd cursor dead))
                   (dolist (ov dead)
                     (helixel-mc-delete-fake-cursor ov)))
+              (quit nil)  ; stale quit-flag after C-g abort
               (error
                (message "helixel-mc: %s outer error: %s"
                         cmd (error-message-string err))))

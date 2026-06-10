@@ -261,16 +261,7 @@ is not committed by the next command."
           (setf (helixel-action-payload helixel--live-action)
                 (list :pattern isearch-string :dir dir))
           (setf (helixel-action-runner helixel--live-action)
-                (lambda (tx)
-                  (let ((pat (helixel-action-payload-get tx :pattern))
-                        (d (helixel-action-dir tx)))
-                    (setq helixel--active-search
-                          (make-helixel-active-search
-                           :category 'search :pattern pat :dir d))
-                    (helixel-search--search pat d)
-                    (push-mark (match-beginning 0) t t)
-                    (goto-char (match-end 0))
-                    (setq helixel--raw-selection-type 'char)))))
+                #'helixel-search--mc-runner))
         (helixel-action-commit))
     ;; Cancelled — discard the tracking-open shell so the next
     ;; command's tracking-open does not commit a stale entry.
@@ -278,6 +269,28 @@ is not committed by the next command."
                (eq (helixel-action-category helixel--live-action) 'search))
       (setq helixel--live-action nil)))
   (helixel-search--handle-done helixel-search--had-region))
+
+(defun helixel-search--mc-runner (tx)
+  "Replay a search TX at a fake cursor position.
+Used as the :runner attached to search actions so the unified
+mc dispatcher can replay searches at every fake cursor.
+Reads :pattern and :dir from TX's payload, calls
+`helixel-search--search', and activates a region around the
+match.  For forward search point ends at match-end; for backward
+search point ends at match-beginning (matching isearch behavior)."
+  (let* ((pat (helixel-action-payload-get tx :pattern))
+         (d (helixel-action-dir tx))
+         (forwardp (eq d 'forward)))
+    (setq helixel--active-search
+          (make-helixel-active-search
+           :category 'search :pattern pat :dir d))
+    (helixel-search--search pat d)
+    (if forwardp
+        (progn
+          (push-mark (match-beginning 0) t t)
+          (goto-char (match-end 0)))
+      (push-mark (match-end 0) t t))
+    (setq helixel--raw-selection-type 'char)))
 
 (defun helixel-search--handle-done (_had-region)
   "Handle region after isearch finishes.

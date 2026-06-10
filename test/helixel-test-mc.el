@@ -3895,23 +3895,14 @@ After two edits, the undo list has two nil boundaries."
 
 (defun helixel-test-mc--make-search-action (pattern dir)
   "Return a `helixel-action' simulating `/PATTERN<RET>' with DIR.
-DIR is `forward' or `backward'.  The action carries a runner
-that calls `helixel-search--search' and activates the region."
+DIR is `forward' or `backward'.  Uses the same runner as production
+\(`helixel-search--mc-runner')."
   (make-helixel-action
    :by-command 'helixel-search-forward
    :category 'search
    :subcat 'search
    :payload (list :pattern pattern :dir dir)
-   :runner (lambda (tx)
-             (let ((pat (helixel-action-payload-get tx :pattern))
-                   (d (helixel-action-dir tx)))
-               (setq helixel--active-search
-                     (make-helixel-active-search
-                      :category 'search :pattern pat :dir d))
-               (helixel-search--search pat d)
-               (push-mark (match-beginning 0) t t)
-               (goto-char (match-end 0))
-               (setq helixel--raw-selection-type 'char)))))
+   :runner #'helixel-search--mc-runner))
 
 (defun helixel-test-mc--replay-action-at-fakes (action)
   "Replay ACTION at every fake cursor, removing dead ones.
@@ -3982,6 +3973,29 @@ is set so `n'/`N' works."
         (should as)
         (should (eq 'search (helixel-active-search--category as)))
         (should (equal "world" (helixel-active-search--pattern as)))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-search-replay-backward-orientation ()
+  "After `?pattern<RET>', fake cursor point is at match-beginning
+and mark at match-end (matching isearch's backward orientation)."
+  (helixel-test-with-buffer "hello world again\n"
+    (helixel-enter-normal-state)
+    ;; Fake cursor after "world" — backward search should find
+    ;; "world" and place point BEFORE it, mark AFTER it.
+    (goto-char 1)
+    (helixel-mc-create-fake-cursor 15) ; after "world again"
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (helixel-test-mc--replay-action-at-fakes
+     (helixel-test-mc--make-search-action "world" 'backward))
+    (dolist (ov (helixel-mc-all-cursors))
+      (let ((p (marker-position (helixel-mc-cursor-point ov)))
+            (m (marker-position (helixel-mc-cursor-mark ov))))
+        ;; Point at match-beginning (7), mark at match-end (11).
+        (should (= 7 p))
+        (should (= 12 m))
+        (should (string= "world"
+                         (buffer-substring-no-properties
+                          (min p m) (max p m))))))
     (helixel-mc-clear-all)))
 
 (provide 'helixel-test-mc)

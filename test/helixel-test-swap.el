@@ -99,7 +99,7 @@ independent of the kill-ring — so `d' does not invalidate it."
       (push-mark 8 t t)
       (goto-char 5)
       (setq helixel--raw-selection-type nil)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       ;; Swap source still intact — register is independent.
       (should (helixel-test--get-swap-source))
       (should (helixel--swap-source-from-kill)))))
@@ -395,7 +395,7 @@ independent of the kill-ring — so `d' does not invalidate it."
       (push-mark 8 t t)
       (goto-char 5)
       (setq helixel--raw-selection-type nil)
-      (helixel-change-thing-at-point)
+      (helixel-change)
       (insert "XXX")
       (helixel--record-action 'change)
       (helixel--clear-data)
@@ -418,12 +418,12 @@ independent of the kill-ring — so `d' does not invalidate it."
       (push-mark 8 t t)
       (goto-char 5)
       (setq helixel--raw-selection-type nil)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       ;; Delete "DDD"
       (push-mark 14 t t)
       (goto-char 11)
       (setq helixel--raw-selection-type nil)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       ;; Buffer: "AAA  CCC ", swap with implied region at point 5
       (goto-char 5)
       (let ((helixel-swap-imply-region t))

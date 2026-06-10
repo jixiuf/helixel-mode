@@ -110,7 +110,7 @@
   (let ((kill-ring nil))
     (should-not (helixel--rect-wise-kill-p))))
 
-;;; helixel-kill-thing-at-point (d) rect tests
+;;; helixel-kill (d) rect tests
 
 (ert-deftest helixel-test-kill-thing-rect ()
   "Test killing a rectangle selection."
@@ -121,7 +121,7 @@
       (goto-char 14) ;; col 3 on line 2 (space after "DEF")
       (rectangle-mark-mode 1)
       (setq helixel--raw-selection-type 'rect)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should (helixel--rect-wise-kill-p (car kill-ring)))
       ;; After killing first 3 chars of first two lines:
       (should (string= (buffer-string) " line1\n line2\nGHI line3"))
@@ -135,7 +135,7 @@
       (goto-char 2)
       (rectangle-mark-mode 1)
       (setq helixel--raw-selection-type 'rect)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should (helixel--rect-wise-kill-p (car kill-ring)))
       (should (string= (buffer-string) "BCDE"))
       (should-not rectangle-mark-mode))))
@@ -298,7 +298,7 @@ At bol, moves past first char so rect starts at column 1."
       (goto-char 14) ;; col 3 on line 2 (space after "BBB")
       (rectangle-mark-mode 1)
       (setq helixel--raw-selection-type 'rect)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should (string= (buffer-string) " line1\n line2\nCCC line3"))
       ;; Now yank at beginning (P to paste before first char)
       (goto-char 1)
@@ -332,7 +332,7 @@ At bol, moves past first char so rect starts at column 1."
     (goto-char 14) ;; col 3 on line 2
     (rectangle-mark-mode 1)
     (setq helixel--raw-selection-type 'rect)
-    (helixel-change-thing-at-point)
+    (helixel-change)
     ;; Rect deleted, now type text in insert mode
     (insert "XXX")
     (helixel-insert-exit)
@@ -346,7 +346,7 @@ At bol, moves past first char so rect starts at column 1."
     (goto-char 14)
     (rectangle-mark-mode 1)
     (setq helixel--raw-selection-type 'rect)
-    (helixel-change-thing-at-point)
+    (helixel-change)
     ;; Exit immediately without typing anything
     (helixel-insert-exit)
     (should (string= (buffer-string) " line1\n line2\nGHI line3"))))
@@ -359,7 +359,7 @@ At bol, moves past first char so rect starts at column 1."
     (goto-char 3) ;; col 2 on same line
     (rectangle-mark-mode 1)
     (setq helixel--raw-selection-type 'rect)
-    (helixel-change-thing-at-point)
+    (helixel-change)
     (insert "XXX")
     (helixel-insert-exit)
     ;; Only line 1 changed; line-count=1 → no replay
@@ -373,7 +373,7 @@ At bol, moves past first char so rect starts at column 1."
     (goto-char 14)
     (rectangle-mark-mode 1)
     (setq helixel--raw-selection-type 'rect)
-    (helixel-change-thing-at-point)
+    (helixel-change)
     (insert "XXX")
     (helixel-insert-exit)
     (should-not (helixel--rect-replay-get)))

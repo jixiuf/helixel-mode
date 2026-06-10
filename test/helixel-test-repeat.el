@@ -62,8 +62,8 @@
     (setq last-command nil this-command 'helixel-select-line)
     (helixel-select-line)
     (setq last-command 'helixel-select-line
-          this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+          this-command 'helixel-kill)
+    (helixel-kill)
     ;; line1 killed, point at bol of line2
     (should (string= (buffer-string) "line2\nline3\n"))
     (helixel-repeat-edit)
@@ -547,8 +547,8 @@ than call-interactively (which triggers mode-specific side effects)."
   (helixel-test-with-buffer "hello world foo bar"
     (setq helixel--current-state 'normal)
     (helixel-forward-word-start)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "world foo bar"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "foo bar"))
@@ -560,8 +560,8 @@ than call-interactively (which triggers mode-specific side effects)."
   (helixel-test-with-buffer "a b c d e f"
     (setq helixel--current-state 'normal)
     (helixel-forward-word-start)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "b c d e f"))
     (helixel-repeat-edit 3)
     (should (string= (buffer-string) "e f"))))
@@ -574,8 +574,8 @@ than call-interactively (which triggers mode-specific side effects)."
     (helixel-forward-word-start)
     (should (string= (buffer-substring (region-beginning) (region-end))
                      "ello"))
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     ;; Should keep the newline: "h\nworld" not "hworld"
     (should (string= (buffer-string) "h\nworld"))))
 
@@ -587,8 +587,8 @@ than call-interactively (which triggers mode-specific side effects)."
     (helixel-forward-word-start)
     (should (string= (buffer-substring (region-beginning) (region-end))
                      "ello"))
-    (setq last-command nil this-command 'helixel-change-thing-at-point)
-    (helixel-change-thing-at-point)
+    (setq last-command nil this-command 'helixel-change)
+    (helixel-change)
     (insert "XXX")
     (helixel-insert-exit)
     ;; Should keep the newline: "hXXX\nworld" not "hXXXworld"
@@ -600,8 +600,8 @@ than call-interactively (which triggers mode-specific side effects)."
     (setq helixel--current-state 'normal)
     (goto-char 2) ; on 'a' of "aaa"
     (helixel-forward-word-start)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     ;; First wd: delete "aa" (suffix of "aaa"), keep newline
     (should (string= (buffer-string) "a\nbbb\nccc"))
     ;; Manually advance past the newline into the next word
@@ -621,8 +621,8 @@ than call-interactively (which triggers mode-specific side effects)."
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word
-          this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+          this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) " world foo"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "  foo"))
@@ -636,8 +636,8 @@ than call-interactively (which triggers mode-specific side effects)."
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word
-          this-command 'helixel-change-thing-at-point)
-    (helixel-change-thing-at-point)
+          this-command 'helixel-change)
+    (helixel-change)
     (insert "XXX")
     (helixel-insert-exit)
     (should (string= (buffer-string) "XXX world bar"))
@@ -652,8 +652,8 @@ than call-interactively (which triggers mode-specific side effects)."
   "f x d then . deletes up to next x."
   (helixel-test-with-buffer "hello x world x foo"
     (helixel-find-next-char ?x)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) " world x foo"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) " foo"))
@@ -665,8 +665,8 @@ than call-interactively (which triggers mode-specific side effects)."
   "t x d then . deletes up to (not including) next x."
   (helixel-test-with-buffer "hello x world x foo"
     (helixel-find-till-char ?x)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "x world x foo"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "x foo"))))
@@ -681,8 +681,8 @@ than call-interactively (which triggers mode-specific side effects)."
     (helixel-forward-word-start)
     (helixel-forward-word-start)
     (helixel-forward-word-start)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     ;; d deletes the word at point (word3)
     (should (string= (buffer-string)
                      "word1 word2 word4 word5 word6 word7 word8"))
@@ -698,8 +698,8 @@ Verifies that event ring head carries the inserted text in its payload."
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word
-          this-command 'helixel-change-thing-at-point)
-    (helixel-change-thing-at-point)
+          this-command 'helixel-change)
+    (helixel-change)
     (insert "X")
     (helixel-insert-exit)
     ;; Verify event ring head has the inserted-text payload
@@ -758,8 +758,8 @@ replays them, undo should restore the pre-repeat state in one step."
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word
-          this-command 'helixel-change-thing-at-point)
-    (helixel-change-thing-at-point)
+          this-command 'helixel-change)
+    (helixel-change)
     (insert "X")
     (helixel-insert-exit)
     (should (string= (buffer-string) "X world foo"))
@@ -788,8 +788,8 @@ modify `helixel--pending-sel'."
     (helixel-forward-word-start)
     (helixel-forward-word-start)
     (setq last-command 'helixel-forward-word-start
-          this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+          this-command 'helixel-kill)
+    (helixel-kill)
     (helixel--switch-state 'normal)
     ;; After kill, remaining is "foo bar"
     (should (string= (buffer-string) "foo bar"))
@@ -822,8 +822,8 @@ and back."
     (goto-char 5)
     (rectangle-mark-mode 1)
     (setq helixel--raw-selection-type 'rect)
-    (setq last-command nil this-command 'helixel-change-thing-at-point)
-    (helixel-change-thing-at-point)
+    (setq last-command nil this-command 'helixel-change)
+    (helixel-change)
     (insert "X")
     (helixel-insert-exit)
     (helixel--switch-state 'normal)
@@ -1124,8 +1124,8 @@ goto-char(nil) when match data was stale, jumping to buffer start."
       (setq helixel--pending-sel
             (helixel-sel-create
              'search '(:pattern "hello" :dir forward)))
-      (setq last-command nil this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+      (setq last-command nil this-command 'helixel-change)
+      (helixel-change)
       (insert "X")
       (helixel-insert-exit)
       (should (string= (buffer-string) "X world hello"))
@@ -1532,8 +1532,8 @@ must detect we're still on the same line as the ^ match."
             (helixel-sel-create
              'search '(:pattern "hello" :dir forward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       (should (string= (buffer-string) "XXX A hello B hello C"))
@@ -1557,8 +1557,8 @@ must detect we're still on the same line as the ^ match."
             (helixel-sel-create
              'search '(:pattern "hello" :dir forward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       ;; Only B and C changed, not A
@@ -1582,8 +1582,8 @@ must detect we're still on the same line as the ^ match."
             (helixel-sel-create
              'search '(:pattern "hello" :dir backward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       ;; Changed last hello (C)
@@ -1667,8 +1667,8 @@ must detect we're still on the same line as the ^ match."
             (helixel-sel-create
              'search '(:pattern "hello" :dir forward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       (should (string= (buffer-string) "hello A XXX B hello C"))
@@ -1721,8 +1721,8 @@ entry-kind=insert means insert at match-beginning, not match-end."
             (helixel-sel-create
              'search '(:pattern "hello" :dir backward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       (should (string= (buffer-string) "hello A hello B XXX C"))
@@ -1853,8 +1853,8 @@ entry-kind=insert means insert at match-beginning, not match-end."
             (helixel-sel-create
              'search '(:pattern "hello" :dir forward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       ;; Changed B
@@ -1879,8 +1879,8 @@ entry-kind=insert means insert at match-beginning, not match-end."
             (helixel-sel-create
              'search '(:pattern "hello" :dir backward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       ;; Changed C
@@ -1906,8 +1906,8 @@ entry-kind=insert means insert at match-beginning, not match-end."
             (helixel-sel-create
              'search '(:pattern "hello" :dir backward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       ;; Changed B (backward from middle)
@@ -1934,8 +1934,8 @@ entry-kind=insert means insert at match-beginning, not match-end."
             (helixel-sel-create
              'search '(:pattern "hello" :dir forward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       (should (string= (buffer-string) "XXX world"))
@@ -1977,8 +1977,8 @@ After `-1 .' a plain `.` continues in the flipped direction."
             (helixel-sel-create
              'search '(:pattern "hello" :dir forward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       (should (string= (buffer-string) "hello A XXX B hello C"))
@@ -2016,8 +2016,8 @@ After `-1 .' a plain `.` continues in the flipped direction."
             (helixel-sel-create
              'search '(:pattern "hello" :dir backward)))
       (setq last-command nil
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "XXX")
       (helixel-insert-exit)
       (should (string= (buffer-string) "XXX A hello B hello C"))
@@ -2156,8 +2156,8 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     ;; ; — session mark (marks start of session, extends region)
     (helixel--action-cycle)
     ;; d — delete the full span (hello world)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "foo bar baz qux"))
     ;; . — repeat: advance 2 words + full span → deletes "foo bar"
     (helixel-repeat-edit)
@@ -2212,8 +2212,8 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     ;; ; — session mark
     (helixel--action-cycle)
     ;; d — delete from session-start to current (first to second hello)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     ;; After deletion: "x  z hello w" (first two hellos gone)
     (should (string= (buffer-string) "x  z hello w"))
     ;; . — advance search, n-count=1 extra, span → deletes " z hello"
@@ -2249,8 +2249,8 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     ;; ; — session mark
     (helixel--action-cycle)
     ;; d — delete from session-start to current (first to third x)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     ;; After: "a  d x e" (first three x's and text between gone)
     (should (string= (buffer-string) " d x e"))
     ;; . — advance find-char + 2 extra n + span → deletes " d x"
@@ -2285,8 +2285,8 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     ;; ; — session mark
     (helixel--action-cycle)
     ;; d — delete from session-start to current
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     ;; After: " bar baz qux" (hello world foo deleted)
     (should (string= (buffer-string) " bar baz qux"))
     ;; . — textobj count=3 + span → deletes "bar baz qux"
@@ -2415,8 +2415,8 @@ the selection on each word."
     ;; ; — pushes sel with :span t, :normal-mode from the original sel
     (helixel--action-cycle)
     ;; d — delete full span from session-start (hello world)
-    (setq last-command nil this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command nil this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "foo bar baz qux"))
     ;; . — normal-mode + span → should still use visual accumulation
     (helixel-repeat-edit)

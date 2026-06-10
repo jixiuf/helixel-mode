@@ -123,7 +123,7 @@
         (goto-char 2)
         (push-mark (point) t t)
         (goto-char 7)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         (should (null helixel--current-register)) ; consumed
         (should (string= (buffer-string) "hworld"))
         (should (string= (helixel-register-get ?a) "ello ")))
@@ -135,7 +135,7 @@
   (unwind-protect
       (helixel-test-with-buffer "hello"
         (setq helixel--current-register ?a)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         (should (null helixel--current-register))
         (should (string= (buffer-string) "ello"))
         ;; Single char delete goes to kill-ring via delete-char,
@@ -150,7 +150,7 @@
       (helixel-test-with-buffer "line1\nline2\nline3"
         (setq helixel--current-register ?a)
         (helixel-select-line)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         (should (null helixel--current-register))
         ;; One line deleted
         (should (string= (buffer-string) "line2\nline3"))
@@ -270,7 +270,7 @@
         (push-mark (point) t t)
         (goto-char 6)
         (let ((helixel--inhibit-repeat-record t))
-          (helixel-change-thing-at-point))
+          (helixel-change))
         ;; Register is consumed after the kill part
         (should (null helixel--current-register))
         (should (string= (helixel-register-get ?a) "hello"))
@@ -311,7 +311,7 @@
         (goto-char 2)
         (push-mark (point) t t)
         (goto-char 7)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         ;; Register consumed, buffer: "hworld"
         (should (null helixel--current-register))
         (should (string= (helixel-register-get ?a) "ello "))
@@ -335,7 +335,7 @@
         (goto-char 3)
         (push-mark (point) t t)
         (goto-char 7)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         ;; Buffer: "held"
         ;; Step 2: select register b and press .
         (goto-char 1)
@@ -356,11 +356,11 @@
       (helixel-test-with-buffer "hello"
         ;; Store to register a
         (setq helixel--current-register ?a)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         ;; Register a has "h"
         (should (string= (helixel-register-get ?a) "h"))
         ;; Do another operation (no register)
-        (helixel-kill-thing-at-point)  ; kill "e", goes to kill-ring
+        (helixel-kill)  ; kill "e", goes to kill-ring
         ;; Register a still has "h"
         (should (string= (helixel-register-get ?a) "h"))
         ;; Now paste from register a
@@ -393,13 +393,13 @@
         (goto-char 2)
         (push-mark (point) t t)
         (goto-char 7)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         ;; Buffer: "hworld"
         ;; Delete "world" (positions 2-7)
         (goto-char 2)
         (push-mark (point) t t)
         (goto-char 7)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         ;; Register 1 = "world" (most recent), Register 2 = "ello "
         (should (string= (helixel-register-get ?1) "world"))
         (should (string= (helixel-register-get ?2) "ello ")))
@@ -411,7 +411,7 @@
   "Test small delete (single char) sets register -."
   (unwind-protect
       (helixel-test-with-buffer "hello"
-        (helixel-kill-thing-at-point) ; delete "h"
+        (helixel-kill) ; delete "h"
         (should (string= (helixel-register-get ?-) "h"))
         ;; Also goes to register 1 (rotated)
         (should (string= (helixel-register-get ?1) "h")))
@@ -425,7 +425,7 @@
       (helixel-test-with-buffer "line1\nline2"
         (set-register ?- nil) ; ensure empty
         (helixel-select-line)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         ;; Linewise delete has newline, should NOT go to -
         (should (null (helixel-register-get ?-)))
         ;; Does go to register 1
@@ -448,7 +448,7 @@
         (goto-char 7)
         (push-mark (point) t t)
         (goto-char 13)
-        (helixel-kill-thing-at-point)
+        (helixel-kill)
         (should (string= (helixel-register-get ?1) "second"))
         (should (string= (helixel-register-get ?0) "first")))
     (dolist (r '(?0 ?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9 ?-))

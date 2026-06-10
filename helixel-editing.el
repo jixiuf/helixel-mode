@@ -94,28 +94,34 @@ point AFTER the selection (or one char past point if no region)."
 
 ;; ── Shared kill core ──
 
-(defun helixel--delete-selection ()
-  "Delete current region or char at point, pushing to `kill-ring'.
+(defun helixel--delete-selection (&optional noyank)
+  "Delete current region or char at point.
+When NOYANK is non-nil, do NOT push to `kill-ring' or registers
+(Vim `\"_d' / Helix black-hole semantics).  Otherwise pushes to
+`kill-ring' and populates rotate / small-delete registers.
 Does NOT record an edit and does NOT clear selection data.
-Used as the shared kill core by `helixel-kill-thing-at-point',
-`helixel-change-thing-at-point', and `helixel--repeat-change-core'."
+Used by `helixel-kill' (NOYANK nil), `helixel-delete' (NOYANK t),
+`helixel-change', and `helixel--repeat-change-core'."
   (cond
    ((not (use-region-p))
-    (helixel--kill-new (char-to-string (char-after)))
+    (unless noyank
+      (helixel--kill-new (char-to-string (char-after))))
     (delete-char 1))
    ((eq (helixel--selection-type) 'rect)
-    (let ((lines (extract-rectangle (region-beginning) (region-end))))
-      (delete-rectangle (region-beginning) (region-end))
-      (helixel--kill-new (helixel--rect-wise-text lines))))
+    (unless noyank
+      (let ((lines (extract-rectangle (region-beginning) (region-end))))
+        (helixel--kill-new (helixel--rect-wise-text lines))))
+    (delete-rectangle (region-beginning) (region-end)))
    ((eq (helixel--selection-type) 'line)
-    (if-let* ((bounds (helixel--line-bounds-of-region))
-              (text (filter-buffer-substring (car bounds) (cdr bounds))))
-        (progn
-          (helixel--kill-new (helixel--linewise-text text))
+    (if-let* ((bounds (helixel--line-bounds-of-region)))
+        (let ((text (unless noyank
+                      (filter-buffer-substring (car bounds) (cdr bounds)))))
+          (when text (helixel--kill-new (helixel--linewise-text text)))
           (delete-region (car bounds) (cdr bounds)))))
    (t
-    (helixel--kill-new
-     (filter-buffer-substring (region-beginning) (region-end)))
+    (unless noyank
+      (helixel--kill-new
+       (filter-buffer-substring (region-beginning) (region-end))))
     (delete-region (region-beginning) (region-end)))))
 
 (defun helixel--end-of-line-p ()
@@ -406,14 +412,20 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 ;; ── Kill & Change ──
 
-(helixel-define-operator helixel-kill-thing-at-point
+(helixel-define-operator helixel-kill
     (:op kill :display "d" :moves-point-p t)
   (helixel--record-action 'kill)
   (helixel--delete-selection)
   (helixel--register-consume)
   (helixel--clear-data))
 
-(helixel-define-command helixel-change-thing-at-point
+(helixel-define-operator helixel-delete
+    (:op delete :display "D" :moves-point-p t)
+  (helixel--record-action 'delete)
+  (helixel--delete-selection t)
+  (helixel--clear-data))
+
+(helixel-define-command helixel-change
     (:category edit :subcat change)
   (helixel--record-action 'change)
   (if (and (use-region-p) (eq (helixel--selection-type) 'rect))

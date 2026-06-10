@@ -1730,8 +1730,8 @@ must produce `FOO FOO FOO FOO FOO\\n' — NOT `FOOFOOFOO FOO FOO FOO'."
                         (region-beginning) (region-end))))
       ;; c FOO <ESC> — change "alpha" → "FOO".
       (setq last-command 'helixel-mark-inner-word
-            this-command 'helixel-change-thing-at-point)
-      (helixel-change-thing-at-point)
+            this-command 'helixel-change)
+      (helixel-change)
       (insert "FOO")
       (helixel-insert-exit)
       (should (string= "FOO beta gamma delta epsilon\n"
@@ -3138,7 +3138,7 @@ Verifies per-cursor isolation — cursor 1's copy does not overwrite cursor 2's.
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
-        (helixel-kill-thing-at-point)))
+        (helixel-kill)))
     ;; Each cursor still has its own swap-source.
     (helixel-mc-with-each-cursor
       (should (helixel--swap-source-from-kill)))

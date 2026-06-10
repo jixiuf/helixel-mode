@@ -314,8 +314,8 @@
     (goto-char 3)
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
-    (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) " world foo"))
     (goto-char 3)
     (helixel-repeat-edit)
@@ -327,8 +327,8 @@
     (goto-char 3)
     (setq last-command nil this-command 'helixel-select-line)
     (helixel-select-line)
-    (setq last-command 'helixel-select-line this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-select-line this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "second line\nthird line\n"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "third line\n"))))
@@ -424,8 +424,8 @@
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word
-          this-command 'helixel-change-thing-at-point)
-    (helixel-change-thing-at-point)
+          this-command 'helixel-change)
+    (helixel-change)
     (insert "X")
     (helixel-insert-exit)
     (should (string= (buffer-string) "X world foo"))
@@ -460,8 +460,8 @@ deduplication is against the ring front by content."
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word
-          this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+          this-command 'helixel-kill)
+    (helixel-kill)
     ;; Edit should be accessible via event ring
     (should helixel--action-ring)
     (should helixel--last-tx)
@@ -519,8 +519,8 @@ deduplication is against the ring front by content."
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (should helixel--pending-sel)
-    (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill)
+    (helixel-kill)
     (should (null helixel--pending-sel))))
 
 (ert-deftest helixel-test-repeat-invariant-repeat-no-pollute-ring ()
@@ -529,8 +529,8 @@ deduplication is against the ring front by content."
     (goto-char 1)
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
-    (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-mark-inner-word this-command 'helixel-kill)
+    (helixel-kill)
     (let ((ring-len (length helixel--action-ring)))
       (helixel-repeat-edit)
       (should (= (length helixel--action-ring) ring-len)))))
@@ -680,8 +680,8 @@ Inserting \='(' without electric-pair should only insert \='('."
     (setq last-command nil this-command 'helixel-mark-inner-word)
     (helixel-mark-inner-word)
     (setq last-command 'helixel-mark-inner-word
-          this-command 'helixel-change-thing-at-point)
-    (helixel-change-thing-at-point)
+          this-command 'helixel-change)
+    (helixel-change)
     (insert "X")
     (helixel-insert-exit)
     (should (string= (buffer-string) "X world"))
@@ -1544,8 +1544,8 @@ The leading newline is part of content so mt adds newline only before close."
     ;; Verify count stored
     (should (= (helixel-sel-count helixel--pending-sel) 3))
     ;; Kill
-    (setq last-command 'helixel-select-line this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-select-line this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "line4\nline5\nline6\n"))
     ;; Repeat at line4 — should kill 3 lines again
     (goto-char 1)
@@ -1562,8 +1562,8 @@ The leading newline is part of content so mt adds newline only before close."
     ;; Verify count stored
     (should (= (helixel-sel-count helixel--pending-sel) 3))
     ;; Kill
-    (setq last-command 'helixel-select-line this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-select-line this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "line4\nline5\nline6\n"))
     ;; Repeat
     (goto-char 1)
@@ -1580,8 +1580,8 @@ The leading newline is part of content so mt adds newline only before close."
     (helixel-select-line-up 2)
     (should (= (helixel-sel-count helixel--pending-sel) 2))
     ;; Kill
-    (setq last-command 'helixel-select-line-up this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-select-line-up this-command 'helixel-kill)
+    (helixel-kill)
     (should (string= (buffer-string) "line1\nline2\n"))))
 
 (ert-deftest helixel-test-select-line-count-stored-in-tx ()
@@ -1591,8 +1591,8 @@ The leading newline is part of content so mt adds newline only before close."
     (setq last-command nil this-command 'helixel-select-line)
     (helixel-select-line)
     (helixel-select-line)
-    (setq last-command 'helixel-select-line this-command 'helixel-kill-thing-at-point)
-    (helixel-kill-thing-at-point)
+    (setq last-command 'helixel-select-line this-command 'helixel-kill)
+    (helixel-kill)
     ;; The tx sel should have count 2
     (should (= (helixel-sel-count (helixel-action-sel helixel--last-tx)) 2))))
 
@@ -1690,14 +1690,14 @@ insertions."
     (should (not (use-region-p)))))
 
 (ert-deftest helixel-test-kill-exits-visual ()
-  "`helixel-kill-thing-at-point' (d) exits visual state."
+  "`helixel-kill' (d) exits visual state."
   (helixel-test-with-buffer "aaa bbb ccc\n"
     (helixel-enter-normal-state)
     (helixel-begin-selection)
     (helixel-forward-word-start)
     (should (eq helixel--current-state 'visual))
     (should (use-region-p))
-    (helixel-kill-thing-at-point)
+    (helixel-kill)
     (should (eq helixel--current-state 'normal))
     (should (not (use-region-p)))))
 
@@ -1728,7 +1728,106 @@ insertions."
     (helixel-enter-normal-state)
     (helixel-select-line)
     (should (eq helixel--current-state 'visual))
-    (helixel-kill-thing-at-point)
+    (helixel-kill)
     (should (eq helixel--current-state 'normal))))
+
+;; ── helixel-delete (D) — no-kill-ring delete ──
+
+(ert-deftest helixel-test-delete-no-region ()
+  "`helixel-delete' deletes char at point without pushing to kill-ring."
+  (helixel-test-with-buffer "hello"
+    (let ((kill-ring nil))
+      (helixel-delete)
+      (should (string= (buffer-string) "ello"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-charwise ()
+  "`helixel-delete' deletes char-selection without touching kill-ring."
+  (helixel-test-with-buffer "hello world"
+    (let ((kill-ring nil))
+      (push-mark (point) t t)
+      (goto-char 6)
+      (helixel-delete)
+      (should (string= (buffer-string) " world"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-linewise ()
+  "`helixel-delete' deletes whole line without pushing to kill-ring."
+  (helixel-test-with-buffer "first line\nsecond line\nthird line"
+    (let ((kill-ring nil))
+      (helixel-select-line)
+      (helixel-delete)
+      (should (string= (buffer-string) "second line\nthird line"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-linewise-multi ()
+  "`helixel-delete' deletes multiple lines without kill-ring."
+  (helixel-test-with-buffer "line one\nline two\nline three"
+    (let ((kill-ring nil))
+      (helixel-select-line)
+      (helixel-select-line) ;; extend to second line
+      (helixel-delete)
+      (should (string= (buffer-string) "line three"))
+      (should-not kill-ring))))
+
+(ert-deftest helixel-test-delete-rect ()
+  "`helixel-delete' deletes rectangle without pushing to kill-ring."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (let ((kill-ring nil))
+      (goto-char 1)
+      (push-mark (point) t t)
+      (goto-char 14) ;; col 3 on line 2 (space after "DEF")
+      (rectangle-mark-mode 1)
+      (setq helixel--raw-selection-type 'rect)
+      (helixel-delete)
+      (should (string= (buffer-string) " line1\n line2\nGHI line3"))
+      (should-not kill-ring)
+      (should-not rectangle-mark-mode))))
+
+(ert-deftest helixel-test-delete-exits-visual ()
+  "`helixel-delete' (D) exits visual state."
+  (helixel-test-with-buffer "aaa bbb ccc\n"
+    (helixel-enter-normal-state)
+    (helixel-begin-selection)
+    (helixel-forward-word-start)
+    (should (eq helixel--current-state 'visual))
+    (should (use-region-p))
+    (helixel-delete)
+    (should (eq helixel--current-state 'normal))
+    (should (not (use-region-p)))))
+
+(ert-deftest helixel-test-delete-linewise-exits-visual ()
+  "`D' exits visual even with a line-wise selection (x)."
+  (helixel-test-with-buffer "line1\nline2\nline3\n"
+    (helixel-enter-normal-state)
+    (helixel-select-line)
+    (should (eq helixel--current-state 'visual))
+    (helixel-delete)
+    (should (eq helixel--current-state 'normal))))
+
+(ert-deftest helixel-test-delete-repeat-edit ()
+  "Dot-repeat of `helixel-delete' replays delete without kill-ring."
+  (helixel-test-with-buffer "hello world foo"
+    (goto-char 3)
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (setq last-command 'helixel-mark-inner-word this-command 'helixel-delete)
+    (helixel-delete)
+    (should (string= (buffer-string) " world foo"))
+    (goto-char 3)
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "  foo"))))
+
+(ert-deftest helixel-test-delete-repeat-linewise ()
+  "Dot-repeat of line-wise `helixel-delete' replays without kill-ring."
+  (helixel-test-with-buffer "first line\nsecond line\nthird line\n"
+    (goto-char 3)
+    (setq last-command nil this-command 'helixel-select-line)
+    (helixel-select-line)
+    (setq last-command 'helixel-select-line this-command 'helixel-delete)
+    (helixel-delete)
+    (should (string= (buffer-string) "second line\nthird line\n"))
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "third line\n"))))
 
 ;;; helixel-test-edit.el ends here

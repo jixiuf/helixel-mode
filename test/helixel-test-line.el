@@ -172,14 +172,14 @@
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (car kill-ring) "hello")))))
 
-;;; helixel-kill-thing-at-point (d) line-wise tests
+;;; helixel-kill (d) line-wise tests
 
 (ert-deftest helixel-test-kill-thing-linewise ()
-  "Test `helixel-kill-thing-at-point' kills whole line and tags line-wise."
+  "Test `helixel-kill' kills whole line and tags line-wise."
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
     (let ((kill-ring nil))
       (helixel-select-line)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       ;; Kill ring should have the line with trailing newline
       (should (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (car kill-ring) "first line\n"))
@@ -192,7 +192,7 @@
     (let ((kill-ring nil))
       (goto-char 12)
       (helixel-select-line)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (buffer-string) "first line\n")))))
 
@@ -202,26 +202,26 @@
     (let ((kill-ring nil))
       (helixel-select-line)
       (helixel-select-line) ;; extend to second line
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (car kill-ring) "line one\nline two\n"))
       (should (string= (buffer-string) "line three")))))
 
 (ert-deftest helixel-test-kill-thing-charwise ()
-  "Test `helixel-kill-thing-at-point' without line-wise selection."
+  "Test `helixel-kill' without line-wise selection."
   (helixel-test-with-buffer "hello world"
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
       (setq helixel--raw-selection-type nil)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (buffer-string) " world")))))
 
 (ert-deftest helixel-test-kill-thing-no-region ()
-  "Test `helixel-kill-thing-at-point' deletes char when no region."
+  "Test `helixel-kill' deletes char when no region."
   (helixel-test-with-buffer "hello"
-    (helixel-kill-thing-at-point)
+    (helixel-kill)
     (should (string= (buffer-string) "ello"))))
 
 ;;; helixel-yank (p) line-wise tests
@@ -758,7 +758,7 @@ mark-position-based bounds detection (not use-region-p)."
       ;; Select and kill line B
       (goto-char 8)
       (helixel-select-line)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should (string= (buffer-string) "line A\nline C"))
       ;; Now yank (paste below) on line A
       (goto-char 1)
@@ -786,7 +786,7 @@ mark-position-based bounds detection (not use-region-p)."
       (push-mark (point) t t)
       (goto-char 6)
       (setq helixel--raw-selection-type nil)
-      (helixel-kill-thing-at-point)
+      (helixel-kill)
       (should (string= (car kill-ring) "hello"))
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (goto-char 1)

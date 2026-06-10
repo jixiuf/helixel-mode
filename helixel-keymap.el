@@ -319,8 +319,9 @@ e.g. \"helixel-next-%s-end\"."
 (define-key helixel-normal-map "." #'helixel-repeat-edit)
 (define-key helixel-normal-map "," #'helixel-repeat-selection)
 
-(define-key helixel-normal-map "c" #'helixel-change-thing-at-point)
-(define-key helixel-normal-map "d" #'helixel-kill-thing-at-point)
+(define-key helixel-normal-map "c" #'helixel-change)
+(define-key helixel-normal-map "d" #'helixel-kill)
+(define-key helixel-normal-map "D" #'helixel-delete)
 (define-key helixel-normal-map "y" #'helixel-kill-ring-save)
 (define-key helixel-normal-map "S" #'helixel-swap)
 (define-key helixel-normal-map "r" #'helixel-replace)

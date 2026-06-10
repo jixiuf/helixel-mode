@@ -276,8 +276,8 @@ Used as the :runner attached to search actions so the unified
 mc dispatcher can replay searches at every fake cursor.
 Reads :pattern and :dir from TX's payload, calls
 `helixel-search--search', and activates a region around the
-match.  For forward search point ends at match-end; for backward
-search point ends at match-beginning (matching isearch behavior)."
+match.  For forward search point ends at `match-end'; for backward
+search point ends at `match-beginning' (matching isearch behavior)."
   (let* ((pat (helixel-action-payload-get tx :pattern))
          (d (helixel-action-dir tx))
          (forwardp (eq d 'forward)))

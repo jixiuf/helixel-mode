@@ -1110,12 +1110,10 @@ mutate the caller's binding — a function would only modify its
 own parameter."
   (declare (debug (form form form form)))
   `(condition-case e
-       (cond
-        (,fresh-runnable
-         (helixel-with-replay-as 'dot
-           (helixel-action-replay ,fresh-runnable)))
-        (,cmd
-         (helixel-mc--call-interactively ,cmd)))
+       (if ,fresh-runnable
+           (helixel-with-replay-as 'dot
+             (helixel-action-replay ,fresh-runnable))
+         (helixel-mc--call-interactively ,cmd))
      (search-failed (push ,cursor ,dead))
      (user-error (ignore e))
      (error (message "helixel-mc: %s at fake: %s"
@@ -1157,15 +1155,11 @@ commands like `helixel-mc-toggle')."
         (helixel-action-commit)
         (let* ((fresh (helixel-mc--fresh-action-from-real))
                (fresh-runnable (and fresh (helixel-action-runner fresh) fresh))
-               ;; When fresh is nil, skip isearch-internal commands
-               ;; (isearch-abort etc.) that fire after C-g cancels
-               ;; isearch — dispatching them corrupts fake cursors.
-               (cmd (if (and (not fresh)
-                             (symbolp this-command)
-                             (string-prefix-p "isearch-"
-                                              (symbol-name this-command)))
-                        nil
-                      this-command)))
+               (cmd this-command))
+          ;; The with-each-cursor quit guard (added in that macro)
+          ;; makes all fallback call-interactively safe: any command
+          ;; that signals quit gets caught, leave-cursor is skipped,
+          ;; and fake state survives uncorrupted.
           (helixel-with-replay 'mc-batch
             (condition-case err
                 (let ((dead nil))
@@ -1174,7 +1168,7 @@ commands like `helixel-mc-toggle')."
                      fresh-runnable cmd cursor dead))
                   (dolist (ov dead)
                     (helixel-mc-delete-fake-cursor ov)))
-              (quit nil)  ; stale quit-flag after C-g abort
+              (quit nil)  ; belt-and-suspenders after C-g
               (error
                (message "helixel-mc: %s outer error: %s"
                         cmd (error-message-string err))))

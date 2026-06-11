@@ -1203,6 +1203,15 @@ edit (e.g. isearch) overwrites `this-command'."
              (not isearch-mode)
              (not helixel-mc--saved-this-command))
     (setq helixel-mc--saved-this-command this-command))
+  ;; When mc mode is active and the real cursor has an active region,
+  ;; force-deactivate the mark before undo/redo commands run.  Otherwise
+  ;; Emacs' `undo' sees the active region and calls `undo-in-region'
+  ;; instead of a full undo, which is never the user's intent in mc mode.
+  (when (and helixel-multi-cursor-mode
+             mark-active
+             this-command
+             (helixel-mc--undo-command-p this-command))
+    (deactivate-mark t))
   (when (and helixel-multi-cursor-mode
              (helixel-mc-any-p)
              (not executing-kbd-macro)

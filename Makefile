@@ -102,7 +102,9 @@ depgraph:
 # ctx-unique keys — any plist-get on these outside helixel-core.el is forbidden
 CTX_UNIQUE = :kind :cursor-offset :moves :command
 # suspicious keys — flag for manual review (may be used in other plists)
-CTX_SUSPECT = :dir :count :pattern :offset
+CTX_SUSPECT = :dir :count :pattern :offset \
+              :delim-open :delim-close :delim-type \
+              :delim-inner-p :delim-forward-p :last-match-delimiter
 
 ctx-lint:
 	@echo "---- ctx-lint: raw plist-get on sel/ctx"

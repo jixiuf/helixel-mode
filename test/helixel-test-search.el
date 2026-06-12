@@ -149,11 +149,18 @@ exact-case 'Hello' still matches 'Hello'."
 
 (ert-deftest helixel-test-search-repeat-prev-exchange ()
   "Test N exchanges point and mark and toggles direction."
+  ;; N relies on isearch having been previously executed; set up
+  ;; a search state manually so the test is order-independent.
   (helixel-test-with-buffer "hello world"
     (push-mark (point) t t)
     (goto-char 6)
     (let ((pt (point))
           (mk (mark)))
+      ;; Simulate a prior search so N has a pattern to repeat.
+      (setq isearch-string "hello" isearch-regexp nil)
+      (setq helixel--active-search
+            (make-helixel-active-search
+             :category 'search :pattern "hello" :dir 'forward))
       (helixel-search-repeat-reverse)
       (should (eq (or (helixel-active-search--dir helixel--active-search) 'forward) 'backward))
       (should (= (point) mk))

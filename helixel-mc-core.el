@@ -158,7 +158,8 @@ so on — broadcasts at one cursor never leak into another."
   active-search          ; `helixel-active-search' (helixel--active-search)
   event-ring             ; list of `helixel-action' (helixel--action-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
-  action-pos)            ; integer | nil         (helixel--action-pos)
+  action-pos             ; integer | nil         (helixel--action-pos)
+  last-motion-cmd)       ; `helixel--last-motion' or nil
 
 (defun helixel-pcs-clone ()
   "Capture the current cursor state into a fresh `helixel-pc-state'.
@@ -178,7 +179,8 @@ independent of any later movement of point / mark."
    :active-search             helixel--active-search
    :event-ring                helixel--action-ring
    :live-action               helixel--live-action
-   :action-pos                helixel--action-pos))
+   :action-pos                helixel--action-pos
+   :last-motion-cmd           helixel--last-motion-cmd))
 
 (defun helixel-pcs-swap-in (cs)
   "Restore cursor state CS into the current globals.
@@ -201,7 +203,8 @@ Moves point and the `mark-marker' to CS's positions, sets
         helixel--active-search (helixel-pcs-active-search cs)
         helixel--action-ring    (helixel-pcs-event-ring cs)
         helixel--live-action   (helixel-pcs-live-action cs)
-        helixel--action-pos    (helixel-pcs-action-pos cs)))
+        helixel--action-pos    (helixel-pcs-action-pos cs)
+        helixel--last-motion-cmd (helixel-pcs-last-motion-cmd cs)))
 
 (defun helixel-pcs-release (cs)
   "Null the markers held by CS.  Idempotent.
@@ -228,7 +231,8 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-active-search cs)          helixel--active-search
         (helixel-pcs-event-ring cs)             helixel--action-ring
         (helixel-pcs-live-action cs)            helixel--live-action
-        (helixel-pcs-action-pos cs)             helixel--action-pos))
+        (helixel-pcs-action-pos cs)             helixel--action-pos
+        (helixel-pcs-last-motion-cmd cs)        helixel--last-motion-cmd))
 
 ;; ── Cursor accessors (read state via the struct on the overlay) ──
 

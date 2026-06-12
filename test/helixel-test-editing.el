@@ -1211,15 +1211,16 @@ The leading newline is part of content so mt adds newline only before close."
     (should (equal (buffer-string) "[hello]\n"))))
 
 (ert-deftest helixel-test-surround-block-lookup ()
-  "Test block pair lookup returns (STRING . STRING)."
+  "Test block pair lookup returns a `helixel--surround-entry' struct."
   (with-temp-buffer
     (org-mode)
     (let ((pair (helixel--surround-block-lookup ?s)))
       (should pair)
-      (should (stringp (car pair)))
-      (should (stringp (cdr pair)))
-      (should (string-match "begin_src" (car pair)))
-      (should (string-match "end_src" (cdr pair))))))
+      (should (helixel--surround-entry-p pair))
+      (should (stringp (helixel--surround-entry-open pair)))
+      (should (stringp (helixel--surround-entry-close pair)))
+      (should (string-match "begin_src" (helixel--surround-entry-open pair)))
+      (should (string-match "end_src" (helixel--surround-entry-close pair))))))
 
 (ert-deftest helixel-test-surround-block-lookup-fallback ()
   "Test block pair lookup in fundamental mode returns nil."
@@ -1252,8 +1253,11 @@ The leading newline is part of content so mt adds newline only before close."
     (insert "hello")
     (goto-char 1) (push-mark (point) nil t) (goto-char 6) (activate-mark)
     (let ((pair (helixel--surround-block-lookup ?s)))
-      (helixel--surround-add (car pair) (cdr pair))
-      (let ((d (helixel--make-block-delimiter (car pair) (cdr pair))))
+      (helixel--surround-add (helixel--surround-entry-open pair)
+                              (helixel--surround-entry-close pair))
+      (let ((d (helixel--make-block-delimiter
+                (helixel--surround-entry-open pair)
+                (helixel--surround-entry-close pair))))
         (let ((pos (helixel--surround-delete-delimiter d)))
           (goto-char pos)
           (should (equal (buffer-string) "hello")))))))

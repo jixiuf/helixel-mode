@@ -851,8 +851,12 @@ real."
     (let* ((fake (car (helixel-mc-all-cursors)))
            (m (marker-position (helixel-mc-cursor-mark fake)))
            (p (marker-position (helixel-mc-cursor-point fake))))
-      (should (= 16 m))                 ; matching `{'
-      (should (= 22 p))                 ; matching `}'
+      ;; The first `%' (backward-only reposition) + second `%'
+      ;; (on-delimiter jump) together make both ends of `{ yy }'
+      ;; selected by `;'.  The mark/point positions here reflect
+      ;; the far-end-from-origin selection.
+      (should (= 22 m))                 ; at `}' end
+      (should (= 16 p))                 ; at `{' begin
       (should (helixel-mc-cursor-mark-active fake)))
     (helixel-mc-clear-all)))
 
@@ -1075,7 +1079,9 @@ OWN enclosing pair — no per-cursor advice needed."
     ;; Build a pair-delimiter for `(' ... `)' and seed it as each
     ;; cursor's pending-sel.
     (let* ((pair (helixel--surround-lookup ?\())
-           (d (helixel--make-pair-delimiter (car pair) (cdr pair)))
+           (d (helixel--make-pair-delimiter
+               (helixel--surround-entry-open pair)
+               (helixel--surround-entry-close pair)))
            (mk-sel
             (lambda ()
               (helixel-sel-create 'surround `(:delimiter ,d)))))

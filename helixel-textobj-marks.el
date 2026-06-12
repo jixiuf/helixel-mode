@@ -51,11 +51,14 @@
               "evil-textobj-tree-sitter-core" t t)
 (defvar evil-textobj-tree-sitter-use-next-if-not-within)
 
-(defmacro helixel--define-mark-delimited (kind name open close doc inner-p)
+(defmacro helixel--define-mark-delimited (kind name open close doc inner-p
+                                            &rest meta-kv)
   "Internal: define inner/a mark functions for a delimited textobj.
 KIND is `:pair' or `:quote'.  NAME is the object name.
 OPEN and CLOSE are the opening and closing delimiters (characters).
-DOC is the description.  INNER-P non-nil means inner, nil means a."
+DOC is the description.  INNER-P non-nil means inner, nil means a.
+Optional META-KV is a plist (:modes (org-mode ...)) appended to the
+surround-pairs entry for major-mode filtering."
   (declare (indent defun))
   (let* ((func-name (intern (format "helixel-mark-%s-%s"
                                     (if inner-p "inner" "a")
@@ -79,11 +82,27 @@ DOC is the description.  INNER-P non-nil means inner, nil means a."
                                    (when (helixel--use-region-p)
                                      (region-end))
                                    nil count ,inclusive)))
+         (meta-form (if meta-kv
+                        ;; Quote list values so e.g. (org-mode) is not
+                        ;; evaluated as a function call at load time.
+                        (let ((quoted-kv (cl-loop for (k v) on meta-kv by #'cddr
+                                                  collect k
+                                                  collect `(quote ,v))))
+                          `(helixel--make-surround-entry
+                            :open ,open :close ,close
+                            :type ,(if (eq kind :quote) :quote :pair)
+                            :meta (list ,@quoted-kv)))
+                      `(helixel--make-surround-entry
+                        :open ,open :close ,close
+                        :type ,(if (eq kind :quote) :quote :pair))))
          (surround-pushes
           (if (eq kind :quote)
-              `((push (cons ,open ,close) helixel--surround-pairs))
-            `((push (cons ,open ,close) helixel--surround-pairs)
-              (push (cons ,close ,open) helixel--surround-pairs)))))
+              `((push ,meta-form helixel--surround-pairs))
+            `((push ,meta-form helixel--surround-pairs)
+              (push (helixel--make-surround-entry
+                     :open ,close :close ,open :type :pair
+                     :meta (list ,@meta-kv))
+                    helixel--surround-pairs)))))
     `(progn
        (defun ,func-name (&optional count)
          ,func-doc
@@ -96,25 +115,31 @@ DOC is the description.  INNER-P non-nil means inner, nil means a."
           count))
        ,@(unless inner-p surround-pushes))))
 
-(defmacro helixel-define-mark-pair (name open close doc)
+(defmacro helixel-define-mark-pair (name open close doc &rest meta-kv)
   "Define both `mark-inner-NAME' and `mark-a-NAME' for a bracket pair.
 NAME is the name of the bracket pair.  OPEN and CLOSE are the
-opening and closing delimiters.  DOC is a description of the pair."
+opening and closing delimiters.  DOC is a description of the pair.
+Optional META-KV is a plist for the surround-pairs entry
+\(:modes (org-mode ...))."
   (declare (indent defun))
   `(progn
-     (helixel--define-mark-delimited :pair ,name ,open ,close ,doc t)
-     (helixel--define-mark-delimited :pair ,name ,open ,close ,doc nil)))
+     (helixel--define-mark-delimited
+      :pair ,name ,open ,close ,doc t ,@meta-kv)
+     (helixel--define-mark-delimited
+      :pair ,name ,open ,close ,doc nil ,@meta-kv)))
 
-(defmacro helixel-define-mark-quote (name quote-char doc)
+(defmacro helixel-define-mark-quote (name quote-char doc &rest meta-kv)
   "Define both `mark-inner-NAME' and `mark-a-NAME' for a quote char.
 NAME is the name of the quote character.  QUOTE-CHAR is the quotation
-character.  DOC is a description of the quote."
+character.  DOC is a description of the quote.
+Optional META-KV is a plist for the surround-pairs entry
+\(:modes (org-mode ...))."
   (declare (indent defun))
   `(progn
      (helixel--define-mark-delimited
-      :quote ,name ,quote-char ,quote-char ,doc t)
+      :quote ,name ,quote-char ,quote-char ,doc t ,@meta-kv)
      (helixel--define-mark-delimited
-      :quote ,name ,quote-char ,quote-char ,doc nil)))
+      :quote ,name ,quote-char ,quote-char ,doc nil ,@meta-kv)))
 
 (defmacro helixel-define-mark-object
     (name thing doc subcat &optional restricted-p)
@@ -333,12 +358,18 @@ Example:
 
 ;; org-mode emphasis markers: ~code~ =verbatim= _underline_
 ;; /italic/ *bold* +strikethrough+
-(helixel-define-mark-quote "tilde" ?~ "tilde-delimited string")
-(helixel-define-mark-quote "equal" ?= "equal-delimited string")
-(helixel-define-mark-quote "underscore"  ?_ "underscore-delimited string")
-(helixel-define-mark-quote "slash" ?/ "slash-delimited string")
-(helixel-define-mark-quote "star" ?* "star-delimited string")
-(helixel-define-mark-quote "plus" ?+ "plus-delimited string")
+(helixel-define-mark-quote "tilde" ?~ "tilde-delimited string"
+  :modes (org-mode))
+(helixel-define-mark-quote "equal" ?= "equal-delimited string"
+  :modes (org-mode))
+(helixel-define-mark-quote "underscore"  ?_ "underscore-delimited string"
+  :modes (org-mode))
+(helixel-define-mark-quote "slash" ?/ "slash-delimited string"
+  :modes (org-mode))
+(helixel-define-mark-quote "star" ?* "star-delimited string"
+  :modes (org-mode))
+(helixel-define-mark-quote "plus" ?+ "plus-delimited string"
+  :modes (org-mode))
 
 
 (helixel-register-kind textobj

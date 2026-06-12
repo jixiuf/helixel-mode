@@ -37,6 +37,7 @@
 (require 'cl-lib)
 (require 'rect)
 (require 'helixel-state)
+
 (require 'helixel-macros)
 
 (defvar helixel-block-textobj-alist)
@@ -54,7 +55,7 @@
   "Define a movement command NAME wrapping BUILTIN with TYPE.
 
 OPTIONS is a plist supporting:
-  :clear-highlights BOOL — clear highlights before executing (default t)
+  :clear-highlights BOOL - clear highlights before executing (default t)
 
   (helixel-define-movement helixel-forward-char forward-char char)
 
@@ -114,7 +115,7 @@ Example:
 If a region is already active, no new region is created.
 
 Movement commands redefine the selection, so they reset
-`helixel--sel-type' to nil — a previous `line' / `rect'
+`helixel--sel-type' to nil - a previous `line' / `rect'
 label from `x' / `v' must not bleed into the new region (which
 would make `y' tag the kill as line-wise even when the user
 selected a word).
@@ -125,7 +126,7 @@ line/rect/textobj sel must not leak into `helixel--record-action'
 and subsequently into dot-repeat.
 
 INVARIANT: after this macro, `helixel--pending-sel' is either nil
-or already a movement-kind sel — it never holds a line/rect/textobj
+or already a movement-kind sel - it never holds a line/rect/textobj
 sel that was pushed by a prior special-selection command.
 
 Note: `helixel-define-command' handles `clear-highlights'
@@ -136,7 +137,7 @@ automatically, so this macro only does `push-mark' + activate."
      ;; `helixel--track-visual-move' (injected by the macro) sees
      ;; a nil ctx and creates a fresh movement sel.  This keeps
      ;; pending-sel in sync with sel-type (both nil).
-     ;; Note: do NOT gate on `use-region-p' — highlight clearing
+     ;; Note: do NOT gate on `use-region-p' - highlight clearing
      ;; may have deactivated the mark before we run.
      (when (and helixel--pending-sel
                 (not (eq (helixel-sel-kind helixel--pending-sel) 'movement)))
@@ -153,7 +154,7 @@ automatically, so this macro only does `push-mark' + activate."
 ;; share the same body shape; we generate them via
 ;; `helixel--def-thing-move'.  Some `:side' values are NOT mechanical
 ;; (helixel-backward-WORD uses :a, helixel-backward-symbol-start uses
-;; :a, helixel-backward-symbol-end uses :inner — preserved verbatim
+;; :a, helixel-backward-symbol-end uses :inner - preserved verbatim
 ;; from the original definitions).
 
 (defmacro helixel--def-thing-move (name subcat thing fwd-fn sign side)
@@ -218,23 +219,34 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
   (let ((inner-p (not outer-p))
         (bounds-fn (if forward-p
                        'helixel--generic-bounds-next
-                     'helixel--generic-bounds-at)))
+                     'helixel--generic-bounds-at))
+        (delim-open (car factory-args))
+        (delim-close (cadr factory-args))
+        ;; Determine delimiter type from factory name.
+        (delim-type
+         (cl-case factory
+           (helixel--make-pair-delimiter 'pair)
+           (helixel--make-tag-delimiter 'tag)
+           (helixel--make-block-delimiter 'regex))))
     `(helixel-define-command ,name
-         (:category movement :subcat pair :clear-highlights nil)
-       (interactive)
-       ;; Clear any stale pending-sel from a prior special selection
-       ;; (e.g. x) — delimiter movement replaces the selection context.
-       (when (and helixel--pending-sel
-                  (not (eq (helixel-sel-kind helixel--pending-sel)
-                           'movement)))
-         (setq helixel--pending-sel nil))
-       (deactivate-mark)
-       (let* ((d (,factory ,@factory-args))
-              (b (,bounds-fn d ,inner-p)))
-         (when b
-           (helixel--set-mark-region b)
-           (let ((pos (if ,forward-p (cdr b) (car b))))
-             (goto-char pos)))))))
+           (:category movement :subcat pair :clear-highlights nil
+            :motion-extra (list :delim-open ,delim-open
+                                :delim-close ,delim-close
+                                :delim-type ',delim-type
+                                :delim-inner-p ,inner-p
+                                :delim-forward-p ,forward-p))
+         (interactive)
+         (when (and helixel--pending-sel
+                    (not (eq (helixel-sel-kind helixel--pending-sel)
+                             'movement)))
+           (setq helixel--pending-sel nil))
+         (deactivate-mark)
+         (let* ((d (,factory ,@factory-args))
+                (b (,bounds-fn d ,inner-p)))
+           (when b
+             (helixel--set-mark-region b)
+             (let ((pos (if ,forward-p (cdr b) (car b))))
+               (goto-char pos)))))))
 
 ;; ── Pair delimiters (parens, brackets, braces, angle, quotes) ──
 
@@ -390,8 +402,14 @@ ORIG is the original point before jumping."
                    (forward-list 1))
                   ((and char-b (memq (char-syntax char-b) '(5 ?\( ?\))))
                    (forward-list -1))
+                  ;; Only attempt up-list when actually inside a list.
+                  ;; When depth is 0 (e.g. at BOB before #+begin_src),
+                  ;; up-list can find spurious close-delimiters from
+                  ;; syntax-propertize (e.g. \=>\=' in org-mode \=>=\=).
+                  ((> (nth 0 (syntax-ppss)) 0)
+                   (up-list 1))
                   (t
-                   (up-list 1)))
+                   (signal 'scan-error nil)))
                  (point))))
           (goto-char match-end)
           (condition-case nil
@@ -404,66 +422,482 @@ ORIG is the original point before jumping."
                   (cons b e))))
       (error nil))))
 
+(defun helixel--pair-chars (&optional type-filter)
+  "Return all delimiter chars (open+close) from active surround-pairs.
+TYPE-FILTER: :pair, :quote, or nil (all types)."
+  (helixel--active-delim-chars :type type-filter))
+
+;; ── Jump-to-match: table builder ──
+
+(defun helixel--jump-match--tables ()
+  "Return (OPEN->CLOSE . CLOSE->OPEN) hash tables for pair entries.
+Only :pair entries from `helixel--surround-pairs-active' are
+included.  Each canonical (open ≤ close) entry maps open→close;
+the reverse map is built by swapping keys and values."
+  (let* ((open->close (make-hash-table))
+         (close->open (make-hash-table)))
+    (dolist (e (helixel--surround-pairs-active))
+      (when (eq (helixel--surround-entry-type e) :pair)
+        (let ((a (helixel--surround-entry-open e))
+              (b (helixel--surround-entry-close e)))
+          (when (helixel--canonical-pair-p a b)
+            (puthash a b open->close)
+            (puthash b a close->open)))))
+    (cons open->close close->open)))
+
+(defun helixel--jump-match--open-char (char-a char-b open->close close->open)
+  "Determine the opening delimiter character at point.
+CHAR-A is `char-after', CHAR-B is `char-before'.
+OPEN->CLOSE and CLOSE->OPEN are hash tables from
+`helixel--jump-match--tables'.
+Returns the opening character, or nil if none detected.
+Sandwich detection: when between two closers (e.g. \=`))\='),
+prefers the inner one (CHAR-B)."
+  (or (and char-a (gethash char-a open->close) char-a)
+      (and char-b (gethash char-b open->close) char-b)
+      (and char-b (gethash char-b close->open))
+      (and char-a (gethash char-a close->open))))
+
+;; ── Jump-to-match: four strategy sub-functions ──
+;; Each returns (TARGET . DELIMITER) on success, nil on failure.
+;; TARGET is the buffer position to jump to; DELIMITER is the
+;; matched delimiter plist (nil for syntax-table matches).
+
+(defun helixel--jump-via-pair (open-char close-char char-a orig)
+  "Try to jump via a specific pair delimiter.
+OPEN-CHAR and CLOSE-CHAR are the delimiter characters.
+CHAR-A is the original `char-after' at point.
+ORIG is the original point before the jump attempt.
+Returns (TARGET . DELIMITER) or nil."
+  (let* ((d (helixel--make-pair-delimiter open-char close-char))
+         (on-opener (and char-a (eq char-a open-char)))
+         (equalp (eq open-char close-char)))
+    (when on-opener
+      (forward-char)
+      ;; Adjacent pair like \=`()\=': step back inside.
+      (when (and (not equalp) (eq (char-after) close-char))
+        (backward-char)))
+    (when-let* ((result (helixel--jump-target-for-delimiter
+                         d orig (and on-opener equalp) t)))
+      (goto-char (car result))
+      (cons (point) d))))
+
+(defun helixel--jump-via-syntax (char-a char-b orig)
+  "Try to jump via Emacs syntax-table (`forward-list' / `up-list').
+CHAR-A and CHAR-B are as in `helixel--jump-to-match-core'.
+ORIG is the original point.
+Returns (TARGET . nil) or nil."
+  (when-let* ((result (helixel--jump-syntax-table char-a char-b orig)))
+    (goto-char (car result))
+    (cons (point) nil)))
+
+(defun helixel--jump-via-tag (orig)
+  "Try to jump via XML/HTML tag delimiter.
+ORIG is the original point.
+Returns (TARGET . DELIMITER) or nil."
+  (let ((d (helixel--make-tag-delimiter)))
+    (when-let* ((result (helixel--jump-target-for-delimiter
+                         d orig nil 'helixel-mark-a-tag)))
+      (goto-char (car result))
+      (cons (point) d))))
+
+(defun helixel--jump-via-block (orig)
+  "Try to jump via fenced-block delimiter (org/markdown).
+ORIG is the original point.
+Returns (TARGET . DELIMITER) or nil.
+
+When point is inside the block (not on a delimiter line),
+prefer jumping backward to the block opener so the user can
+see the block type and parameters.  When on a delimiter line,
+the standard match-jump (farther-end) logic applies."
+  (let ((d (helixel--make-block-delimiter)))
+    (when-let* ((result (helixel--jump-target-for-delimiter
+                         d orig nil t)))
+      (let ((target (car result))
+            (ob (cadr result))
+            (ce (cddr result)))
+        ;; When strictly inside the block (not on a delimiter line),
+        ;; jump backward to the opener.
+        (when (and (> orig ob) (< orig ce))
+          (setq target ob))
+        (goto-char target)
+        (cons (point) d)))))
+
+;; ── Jump-to-match: orchestration ──
+
+(defun helixel--jump-to-match-core ()
+  "Core match-jump logic, assuming point is already positioned.
+Tries strategies in order:
+  1. Known pair delimiter (when point is on/afer a delimiter)
+  2. Syntax-table (standard Emacs bracket pairs)
+  3. XML/HTML tag delimiter
+  4. Fenced-block delimiter (org/markdown)
+
+Returns (POINT . DELIMITER) on success — POINT is the jump
+target, DELIMITER is the matched delimiter plist (nil for
+syntax-table matches).  Returns nil when no match is found.
+
+Leaves point unchanged on failure."
+  (let* ((orig (point))
+         (tables (helixel--jump-match--tables))
+         (open->close (car tables))
+         (close->open (cdr tables))
+         (char-a (and (not (eobp)) (char-after)))
+         (char-b (and (not (bobp)) (char-before)))
+         (open-char (helixel--jump-match--open-char
+                     char-a char-b open->close close->open))
+         (close-char (and open-char
+                          (gethash open-char open->close)))
+         ;; Sandwich: between two close delimiters, step onto
+         ;; the inner one so % targets the inner pair.
+         (sandwich-p (and char-a char-b
+                          (gethash char-a close->open)
+                          (gethash char-b close->open))))
+    (when sandwich-p (backward-char))
+    (or (when (and open-char close-char
+                   (not (eq open-char ?<)))
+          (helixel--jump-via-pair open-char close-char char-a orig))
+        (helixel--jump-via-syntax char-a char-b orig)
+        (helixel--jump-via-tag orig)
+        (helixel--jump-via-block orig)
+        ;; All strategies failed — restore point.
+        (progn (goto-char orig) nil))))
+
+(defun helixel--close-chars ()
+  "Return all close-delimiter chars from active surround-pairs.
+A character is a close delimiter if it appears as the car of a
+\(CLOSE . OPEN) entry or as both in an equal-pair entry."
+  (helixel--active-delim-chars :close-only t))
+
+(defun helixel--on-or-after-delim-p ()
+  "Return non-nil if point is on or right after a non-quote delimiter.
+Quote chars are excluded so \=`%' ignores them."
+  (let ((delims (helixel--active-delim-chars :type :pair))
+        (close  (helixel--active-delim-chars :type :pair :close-only t)))
+    (or (and (not (eobp))
+             (memq (char-after) delims))
+        (and (not (bobp))
+             (not (memq (char-after) delims))
+             (memq (char-before) close)))))
+
+
+
 (helixel-define-command helixel-jump-to-match
     (:category movement :subcat match)
   "Jump between matching delimiters.
-Uses the textobj delimiter protocol to find the matching end of
-any pair (parens, brackets, braces, quotes, angle-brackets),
-XML tags, or org/markdown blocks.  Falls back to syntax-table
-for unmatched bracket characters."
-  (let* ((orig (point))
-         ;; Build canonical open→close and close→open maps.
-         (open->close
-          (let ((map (make-hash-table)))
-            (dolist (pair helixel--surround-pairs)
-              (let ((a (car pair)) (b (cdr pair)))
-                (when (<= a b)            ; <= so quotes (a=b) are included
-                  (puthash a b map))))
-            map))
-         (close->open
-          (let ((map (make-hash-table)))
-            (maphash (lambda (k v) (puthash v k map)) open->close)
-            map))
-         (char-a (and (not (eobp)) (char-after)))
-         (char-b (and (not (bobp)) (char-before)))
-         (open-char
-          (or (and char-a (gethash char-a open->close) char-a)
-              (and char-b (gethash char-b open->close) char-b)
-              (and char-a (gethash char-a close->open))
-              (and char-b (gethash char-b close->open))))
-         (close-char (and open-char (gethash open-char open->close))))
-    (catch 'done
-      ;; ── Pair delimiters (parens, brackets, braces, quotes) ──
-      ;; Angle brackets (< >) are excluded — handled as tags below.
-      ;; Skip pair handling when on a block delimiter line
-      ;; (e.g. markdown ``` fences — backtick is also a quote char).
-      (when (and open-char close-char (not (eq open-char ?<))
-                 (not (and (eq open-char ?\`)
-                           (helixel--block-spec-at-point))))
-        (let* ((d (helixel--make-pair-delimiter open-char close-char))
-               (on-opener (and char-a (eq char-a open-char)))
-               (equalp (eq open-char close-char)))
-          (when on-opener (forward-char))
-          (when-let* ((result (helixel--jump-target-for-delimiter
-                              d orig (and on-opener equalp) t)))
-            (goto-char (car result))
-            (throw 'done t))))
-      ;; ── Remaining fallbacks: syntax-table, tags, blocks, syntax ──
-      (dolist (attempt (list (list #'helixel--jump-syntax-table
-                                   char-a char-b orig)
-                             (list #'helixel--jump-target-for-delimiter
-                                   (helixel--make-tag-delimiter)
-                                   orig nil 'helixel-mark-a-tag)
-                             (list #'helixel--jump-target-for-delimiter
-                                   (helixel--make-block-delimiter)
-                                   orig)
-                             (list #'helixel--jump-syntax-table
-                                   char-a char-b orig)))
-        (when-let* ((result (apply (car attempt) (cdr attempt))))
-          (goto-char (car result))
-          (throw 'done t))))
-    (when (= (point) orig)
-      (message "No matching bracket found"))))
+When on or right after a delimiter, jump to its match.
+When not on a delimiter, move to the nearest pair character
+backward then jump to its match.  Only if nothing backward
+does it try the core jump from the current position."
+  (let (match-result)
+    (cond
+     ((helixel--on-or-after-delim-p)
+      (unless (setq match-result (helixel--jump-to-match-core))
+        (message "No matching bracket found")))
+     ;; On a block delimiter line?  Try block/tag matching directly
+     ;; so the block finder gets first chance (pair-char search
+     ;; would otherwise steal focus, e.g. \=`#+end_src\=` near \=`)\=`).
+     ((helixel--block-spec-at-point)
+      (unless (setq match-result (helixel--jump-to-match-core))
+        (message "No matching bracket found")))
+     ((helixel--find-pair-char-dir 'backward)
+      ;; Found a pair char backward - run core in save-excursion
+      ;; to set ; mark-region, then STOP.  The user presses % again
+      ;; from the delimiter to actually jump.
+      (save-excursion (helixel--jump-to-match-core)))
+     (t
+      (unless (setq match-result (helixel--jump-to-match-core))
+        (message "No matching bracket found"))))
+    (when match-result
+      (setq helixel--motion-extra
+            (list :last-match-delimiter (cdr match-result))))))
+
+(defvar-local helixel--pair-char-regex nil
+  "Cached regexp for pair delimiter chars, or nil if not yet computed.
+Set by `helixel--find-pair-char-dir'.")
+
+(defvar-local helixel--pair-char-regex--mode nil
+  "Major-mode for which `helixel--pair-char-regex' was computed.
+Used by `helixel--find-pair-char-dir' to detect stale caches
+after major-mode changes.")
+
+(defun helixel--find-pair-char-dir (dir)
+  "Search for nearest non-quote delimiter char in DIR (forward/backward).
+On success, move point and return t.  On failure, return nil.
+Backward search is bounded by the previous blank line — this
+prevents crossing paragraph/block boundaries to find unrelated
+delimiters.  Forward search has no bound (nil).
+Caches the regexp in `helixel--pair-char-regex' for performance."
+  (when (or (null helixel--pair-char-regex)
+            (not (eq major-mode helixel--pair-char-regex--mode)))
+    (when-let* ((chars (helixel--active-delim-chars :type :pair)))
+      (setq helixel--pair-char-regex
+            (regexp-opt (mapcar #'char-to-string chars))
+            helixel--pair-char-regex--mode major-mode)))
+  (when helixel--pair-char-regex
+    (if (eq dir 'forward)
+        (when (re-search-forward helixel--pair-char-regex nil t)
+          (goto-char (match-beginning 0)))
+      (let ((bound (save-excursion
+                     (when (re-search-backward "^[ \t]*$" nil t)
+                       (line-beginning-position 2)))))
+        (when (re-search-backward helixel--pair-char-regex bound t)
+          (goto-char (match-beginning 0)))))))
+
+;; ── One-level outward navigation (unified for forward/backward) ──
+
+(defun helixel--up-list-once (dir &optional delim)
+  "Move one nesting level outward in DIR (:backward or :forward).
+DELIM is the delimiter plist to use for the outward lookup.
+When nil, falls back to `helixel--last-motion-cmd's
+:last-match-delimiter entry.  If neither is available, uses raw
+`up-list'.  Sets mark-region for `;' support.
+Returns t on success, nil (point unchanged) on failure.
+
+Outward candidates are collected from four sources:
+  1. stored delimiter (from \=`%' recording) - always wins if available
+  2. raw \=`up-list' (parent pair of any bracket type)
+  3. block delimiter (#+begin_src / #+end_src etc.)
+  4. tag delimiter (XML/HTML)
+
+The candidate closest to the original position wins, so
+\=`M-.' naturally expands layer-by-layer from innermost to
+outermost, whether the enclosing structure is a bracket pair or
+a fenced block."
+  (let* ((backward-p (eq dir :backward))
+         (orig (point))
+         (d (or delim
+                (and helixel--last-motion-cmd
+                     (helixel--last-motion-last-match-delimiter
+                      helixel--last-motion-cmd))))
+         (search-pos
+          (save-excursion
+            (unless d
+              (helixel--step-off-delimiter))
+            (point)))
+         target)
+    ;; Stored delimiter (from %) always wins.
+    (setq target (save-excursion
+                   (goto-char search-pos)
+                   (cond
+                    ((and d (eq (helixel-delimiter-type d) 'pair))
+                     (helixel--up-via-syntax-table d backward-p))
+                    ((and d (helixel-delimiter-type d))
+                     (helixel--up-via-bounds d backward-p)))))
+    ;; Closest of the remaining candidates when stored delimiter
+    ;; gives no target.
+    (unless target
+      (let ((raw (save-excursion
+                   (goto-char search-pos)
+                   (helixel--up-raw backward-p)))
+            (block
+             (ignore-errors
+               (let ((helixel--block-no-bracket-fallback t)
+                     (block-d (helixel--make-block-delimiter)))
+                 (save-excursion
+                   (goto-char search-pos)
+                   (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                                 (helixel-delimiter-bounds-flat block-d)))
+                     (when-let* ((tgt (if backward-p ob ce)))
+                       (cons (abs (- tgt orig)) tgt)))))))
+            (tag
+             (ignore-errors
+               (let ((tag-d (helixel--make-tag-delimiter)))
+                 (save-excursion
+                   (goto-char search-pos)
+                   (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                                 (helixel-delimiter-bounds-flat tag-d)))
+                     (when-let* ((tgt (if backward-p ob ce)))
+                       (cons (abs (- tgt orig)) tgt))))))))
+        ;; Pick the closest (lowest distance) valid candidate.
+        (let ((best (car (sort (delq nil (list raw block tag))
+                               (lambda (a b)
+                                 (let ((da (if (consp a) (car a)
+                                             (abs (- a orig))))
+                                       (db (if (consp b) (car b)
+                                             (abs (- b orig)))))
+                                   (< da db)))))))
+          (setq target (if (consp best) (cdr best) best)))))
+    (if target
+        (progn (goto-char target)
+               ;; Run core to set mark-region for ; support.
+               (save-excursion (helixel--jump-to-match-core))
+               t)
+      (goto-char orig)
+      nil)))
+
+(defun helixel--rebuild-delimiter (motion)
+  "Reconstruct the delimiter plist from MOTION.
+Returns a plist suitable for `helixel-delimiter-bounds-flat'
+etc., or nil if MOTION carries insufficient info."
+  (pcase (helixel--last-motion-delim-type motion)
+    ('pair (when-let* ((open (helixel--last-motion-delim-open motion))
+                       (close (helixel--last-motion-delim-close motion)))
+             (helixel--make-pair-delimiter open close)))
+    ('tag (helixel--make-tag-delimiter))
+    ('regex (helixel--make-block-delimiter))
+    (_ nil)))
+
+(defun helixel--step-off-delimiter ()
+  "If point is on a delimiter, step inside the pair.
+Stepping direction depends only on whether the char at point
+is a close or open delimiter."
+  (when (memq (char-after) (helixel--pair-chars))
+    (if (memq (char-after) (helixel--close-chars))
+        (backward-char)
+      (forward-char))))
+
+(defun helixel--up-via-syntax-table (d backward-p)
+  "Use raw `up-list' with temp syntax-table for BACKWARD-P pair D.
+Returns point on success, nil when no parent pair exists.
+For backward, two `up-list -1' calls (exit child, exit parent).
+For forward (from at-ce or inside a pair), one `up-list 1' suffices.
+Returns nil if forward lands at eob (no parent)."
+  (let* ((open (helixel-delimiter-open d))
+         (close (helixel-delimiter-close d))
+         forward-sexp-function)
+    (condition-case nil
+        (with-syntax-table (copy-syntax-table (syntax-table))
+          (modify-syntax-entry open (format "(%c" close))
+          (modify-syntax-entry close (format ")%c" open))
+          (up-list (if backward-p -1 1))
+          (when backward-p
+            (unless (bobp)
+              (backward-char)
+              (up-list -1)))
+          (if (and (not backward-p) (eobp))
+              nil
+            (point)))
+      (error nil))))
+
+(defun helixel--up-via-bounds (d backward-p)
+  "Use `helixel-delimiter-bounds-flat' on D to locate parent pair.
+BACKWARD-P controls direction."
+  (if backward-p
+      (pcase-let* ((`(,ob ,_oe ,_cb ,_ce)
+                    (helixel-delimiter-bounds-flat d)))
+        ;; When ob is at the buffer start there is no outer pair -
+        ;; return ob itself (the opener of the outermost enclosing pair).
+        (if (> ob (point-min))
+            (progn (goto-char (1- ob))
+                   (car (helixel-delimiter-bounds-flat d)))
+          ob))
+    ;; Go before the current pair's open so the next lookup
+    ;; finds the enclosing (parent) pair, not the current one.
+    (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                  (helixel-delimiter-bounds-flat d)))
+      (if (> ob (point-min))
+          (progn (goto-char (1- ob))
+                 (condition-case nil
+                     (nth 3 (helixel-delimiter-bounds-flat d))
+                   (error ce)))
+        ce))))
+
+(defun helixel--up-raw (backward-p)
+  "Raw `up-list' fallback - two levels outward in BACKWARD-P direction.
+If BACKWARD-P is non-nil, move backward; otherwise forward.
+Returns point on success, nil when no parent pair exists."
+  (condition-case nil
+      (progn
+        (up-list (if backward-p -1 1))
+        (unless (if backward-p (bobp) (eobp))
+          (if backward-p (backward-char) (forward-char)))
+        (up-list (if backward-p -1 1))
+        (unless backward-p (backward-char))
+        (point))
+    (error nil)))
+
+(defun helixel--motion-skip-past (motion)
+  "Advance point past the current boundary for MOTION's subcat.
+
+For pair subcat:
+  Rebuilds the delimiter from MOTION's EXTRA and uses
+  `helixel-delimiter-bounds-flat' to find the current pair's
+  bounds (OB OE CB CE), then skips past them:
+  - Forward: goto CE (past the closing delimiter), then
+    \=`skip-chars-forward' whitespace.
+  - Backward: goto (1- OB) (before the opening delimiter), then
+    \=`skip-chars-backward' whitespace.
+  This handles both single-char (parens, brackets) and
+  multi-char (tags, blocks) delimiters correctly.
+
+For paragraph/sentence/function: skips past newline/whitespace.
+
+MOTION is a `helixel--last-motion' struct."
+  (let ((sub (helixel--last-motion-subcat motion))
+        (dir (helixel--last-motion-dir motion)))
+    (condition-case nil
+        (pcase sub
+          ('pair
+           (when-let* ((dir)
+                       (d (helixel--rebuild-delimiter motion)))
+             (condition-case _err
+                 (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                               (helixel-delimiter-bounds-flat d)))
+                   (if (eq dir 'forward)
+                       (progn (goto-char ce)
+                              (skip-chars-forward " \t\n\r"))
+                     (goto-char (max (point-min) (1- ob)))
+                     (skip-chars-backward " \t\n\r")))
+               (error
+                ;; Bounds lookup failed (e.g. no enclosing pair) -
+                ;; move one char in dir as minimal skip.
+                (if (eq dir 'forward)
+                    (forward-char)
+                  (backward-char))))))
+          ('match nil)              ; handled by forward/backward-match
+          ((or 'paragraph 'sentence 'function)
+           (when dir
+             (if (eq dir 'forward)
+                 (progn (forward-char) (skip-chars-forward " \t\n\r"))
+               (progn (backward-char) (skip-chars-backward " \t\n\r")))))
+          (_ nil))
+      (scan-error
+       ;; Skip-past is best-effort; leave point unchanged.
+       nil))))
+
+(helixel-define-command helixel-forward-match
+    (:category movement :subcat match)
+  "Move to the closer of the enclosing parent pair."
+  (unless (helixel--up-list-once :forward)
+    (message "No enclosing bracket")))
+
+(helixel-define-command helixel-backward-match
+    (:category movement :subcat match)
+  "Move to the opener of the enclosing parent pair."
+  (unless (helixel--up-list-once :backward)
+    (message "No enclosing bracket")))
+
+;; ── Motion repeaters registered via `helixel-register-motion-repeater' ──
+
+(defun helixel--repeat-match-motion (rec)
+  "Replay a match (%) outward motion from REC.
+Uses the stored delimiter from the original % jump for precise
+outward navigation via `helixel--up-list-once'."
+  (let* ((dir (helixel--last-motion-dir rec))
+         (delim (helixel--last-motion-last-match-delimiter rec))
+         (outward (if (eq dir 'forward) :forward :backward)))
+    (unless (helixel--up-list-once outward delim)
+      (message "No enclosing bracket"))))
+
+(defun helixel--repeat-movement-motion (rec)
+  "Replay a general movement motion from REC.
+Skips past the current boundary via `helixel--motion-skip-past'
+then re-invokes the original command with the recorded prefix arg."
+  (let ((cmd (helixel--last-motion-command rec)))
+    (helixel--motion-skip-past rec)
+    (unless (commandp cmd)
+      (user-error "No motion command to repeat"))
+    (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
+      (call-interactively cmd))))
+
+;; Register: specific (movement match) before general (movement nil).
+;; `push' adds to the front; the lookup scans sequentially, so the
+;; specific entry is found before the nil-subcat fallback.
+(helixel-register-motion-repeater 'movement nil
+  #'helixel--repeat-movement-motion)
+(helixel-register-motion-repeater 'movement 'match
+  #'helixel--repeat-match-motion)
 
 (helixel-define-command helixel-go-beginning-buffer
     (:category movement :subcat goto)
@@ -706,7 +1140,7 @@ When :span is set, extends region back to the pre-recreate origin
 without disturbing the rectangle's own mark.
 
 NOTE: Does NOT use `helixel--with-span' because `push-mark' inside
-`rectangle-mark-mode' behaves differently — we must deactivate the
+`rectangle-mark-mode' behaves differently - we must deactivate the
 rectangle mark, push the span origin, then reactivate.  The macro's
 simple `push-mark' would interact poorly with the rect-mode mark."
   (let ((n (helixel-sel-rect-count ctx))
@@ -772,7 +1206,7 @@ fresh rather than extending a stale mark."
 (defun helixel--repeat-advance-movement (tx)
   "Advance to next target for TX's movement selection.
 Calls the selection's recreate function from the current cursor
-position.  The recreate IS the advance (inline — movement commands
+position.  The recreate IS the advance (inline - movement commands
 inherently create the region).  Returns t on success, nil when
 point does not move.
 The strategy skips the separate `recreate-selection' call for inline
@@ -817,7 +1251,7 @@ advance functions to avoid double-moving."
 (defun helixel--track-visual-move (cmd)
   "Append movement CMD to `helixel--pending-sel'.
 Creates/updates a `helixel-sel' struct of kind `movement' whenever
-a region is active — from visual mode or `normal-mode' movements that
+a region is active - from visual mode or `normal-mode' movements that
 created a selection (e.g. w, e, b).
 No-op during dot-repeat replay, or when no region is active."
   (when (and (not (helixel-replaying-p))
@@ -835,7 +1269,7 @@ No-op during dot-repeat replay, or when no region is active."
              (helixel-sel-update-ctx ctx :moves
                                      (cons entry moves))))))
        ;; Create: first movement that made a region.
-       ;; INVARIANT: a non-movement ctx is impossible here —
+       ;; INVARIANT: a non-movement ctx is impossible here -
        ;; `helixel--with-movement-surround' clears stale
        ;; line/rect/textobj sel before this function runs.
        ((null ctx)
@@ -848,3 +1282,4 @@ No-op during dot-repeat replay, or when no region is active."
 
 (provide 'helixel-move)
 ;;; helixel-move.el ends here
+

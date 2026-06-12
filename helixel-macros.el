@@ -65,6 +65,14 @@ METADATA is a plist:
   :subcat   SUB — action subcategory (word, kill, insert, etc.)
   :clear-highlights — default t for :category movement, nil otherwise
   :params   PARAM-LIST — optional function parameter list
+  :motion-extra FORM — optional form whose value is a plist of extra
+                        keys for \=`helixel--record-movement-motion'.
+                        Only meaningful for :category movement.
+                        The plist is passed directly to the recording
+                        function, eliminating symbol-property
+                        indirection.  Useful for compile-time-known
+                        data (pair delimiters) or nil (the body can
+                        `setq' `helixel--motion-extra' at runtime).
   :tx-runner FN — optional unary function (TX) to attach to the live
                    action's tx as a `:preposition' slot.
                    Used to make the command's effect replayable at
@@ -82,6 +90,9 @@ METADATA is a plist:
 For :category movement:
   - Auto-injects `helixel--track-visual-move' for \=`.\=` replay.
   - Auto-injects `helixel--clear-highlights' (unless :clear-highlights nil).
+  - A `let'-bound variable `helixel--motion-extra' is available
+    inside BODY — commands can `setq' it to pass runtime-discovered
+    data (e.g. a matched delimiter plist) into the motion recording.
 
 All tracking code is expanded inline at compile time — zero hooks.
 BODY is the command's business logic."
@@ -96,6 +107,7 @@ BODY is the command's business logic."
          (interactive-form (if has-interactive (car body) '(interactive)))
          (rest-body (if has-interactive (cdr body) body))
          (params (plist-get metadata :params))
+         (motion-extra-form (plist-get metadata :motion-extra))
          (tx-runner (plist-get metadata :tx-runner))
          (track-visual
           (when (eq cat 'movement)
@@ -131,10 +143,21 @@ BODY is the command's business logic."
                          ,tx-runner)))))
          ;; ── Highlight clearing ──
          ,@(when clear '((helixel--clear-highlights)))
-         ;; ── Body (pure business logic) ──
-         ,@rest-body
-         ;; ── Visual-mode tracking (for . replay of movements) ──
-         ,@track-visual))))
+         ;; ── Body + motion tracking + visual tracking ──
+         ;; Wrap in a let to capture origin so :dir is computed
+         ;; from the actual point movement.  `helixel--motion-extra'
+         ;; is available for the body to `setq' with runtime-discovered
+         ;; data (e.g. matched delimiter from `helixel--jump-to-match-core').
+         ,@(if (eq cat 'movement)
+               `((let ((helixel--motion-origin (point))
+                       (helixel--motion-extra ,motion-extra-form))
+                   ,@rest-body
+                   (helixel--record-movement-motion
+                    ',name ',sub helixel--motion-origin
+                    helixel--motion-extra)
+                   ,@track-visual))
+             `(,@rest-body
+               ,@track-visual))))))
 
 ;; ── Operator definition macro ──
 

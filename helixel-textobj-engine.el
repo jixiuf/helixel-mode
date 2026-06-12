@@ -779,8 +779,23 @@ backward one char."
 ;; ============================================================================
 
 (defvar helixel--surround-pairs nil
-  "Alist mapping a delimiter char to (open . close) for surround.
-Auto-populated by `helixel-define-mark-pair' and `helixel-define-mark-quote'.")
+  "List of `helixel--surround-entry' structs for surround and jump-to-match.
+Each entry is created by `helixel--make-surround-entry' with:
+  :open  — the opening-delimiter character.
+  :close — the closing-delimiter character.
+  :type  — :pair for bracket pairs or :quote for quote chars.
+  :meta  — plist, optional.  Currently supports one key:
+           :modes — list of major-mode symbols; the entry only
+                    applies when `derived-mode-p' matches one.
+                    Omit for entries that apply in all modes.
+
+Auto-populated by `helixel-define-mark-pair' and
+`helixel-define-mark-quote'.
+
+Surround uses all entry types valid in the current mode
+\(see `helixel--surround-pairs-active').
+`helixel-jump-to-match' (% / M-.) only considers :pair entries
+from `helixel--surround-pairs-active'.")
 
 
 (declare-function evil-textobj-tree-sitter--range
@@ -852,8 +867,9 @@ advance functions to avoid double-moving."
 (provide 'helixel-textobj-engine)
 
 (defun helixel--skip-newline-forward ()
-  "If point is at a newline or whitespace before a newline,
-move forward past one newline to the next word.
+  "Skip forward past one newline when point is at one.
+If point is at a newline or whitespace before a newline, move
+forward past one newline to the next word.
 Used by word/WORD/symbol motion commands so \n is not treated
 as a separate word.  The caller (\=`helixel--with-movement-surround')
 captures the origin after this skip, so the region excludes \n.
@@ -875,7 +891,8 @@ Does nothing when the buffer has only whitespace past point."
       (forward-char))))
 
 (defun helixel--skip-newline-backward ()
-  "If point is right after a newline or at whitespace after one,
+  "Skip backward past one newline when point is after one.
+If point is right after a newline or at whitespace after one,
 move backward past one newline to the previous word.
 Used by word/WORD/symbol motion commands so \n is not treated
 as a separate word.

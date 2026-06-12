@@ -59,7 +59,7 @@ See ~M-x customize-group RET helixel RET~ for all 26 options.
 | ~m d~ ~m r~           | Surround delete / replace                                        |
 | ~;~                    | Set mark to previous session start                               |
 | ~C-o~ ~C-i~           | Jump to older / newer position (global, cross-buffer)            |
-| ~M-.~                 | Repeat last find-char                                            |
+| ~M-.~  ~'~            | Repeat last motion (f, t, %, [, ], {, })                        |
 | ~n~ ~N~               | Repeat / reverse direction repeat (~C-u n~ pick from history)   |
 | ~.~                    | Repeat last edit. Prefixes: ~3.~ = 3 times; ~0.~ = all remaining; ~C-u .~ = entire buffer; ~C-u - 3 .~ = 3 times reversed. Works for all selection kinds (line, search, movement w/e/b, textobj, find-char). ~M-x helixel-repeat-edit-pick~ chooses from the per-buffer ring. |
 | ~,~                    | Repeat last selection without editing (same prefix behavior as ~.~). |
@@ -742,6 +742,7 @@ share a session; different types start new ones.
 | textobj-tag       | =textobj-tag=         | ~mit~ ~mat~                                     |
 | search            | =search=              | ~/~ ~?~ ~*~ ~#~ then ~n~/~N~                    |
 | find-char         | =find-char=           | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~M-.~              |
+| movement          | =pair= =match=        | ~%~ ~[~p ~]~p then ~M-.~                        |
 | edit-paste        | =edit-paste-after=    | ~p~ ~P~ — ~;~ re-selects pasted text             |
 | edit-replace      | =edit-replace=        | ~r~ — ~;~ re-selects replaced text               |
 
@@ -822,6 +823,92 @@ their start position via advice.  To register your own commands:
   ;; Categories visible during C-o / C-i cycling (default: same as above)
   ;; Narrow this to exclude basic movements for a tighter jumplist:
   (setq helixel-jump-cycle-categories '(search find-char edit goto))
+#+end_src
+
+*** Motion Repeat (~M-.~ / ~'~)
+
+~M-.~ (and ~'~ — same command) repeats the most recent motion
+self-contained from its recording — it does not depend on =helixel--active-search=
+or the current region.  Supported motion types:
+
+| Kind            | Subcat                         | Example                                       |
+|-----------------+--------------------------------+-----------------------------------------------|
+| find-char       | =next= / =till=                | ~f x~ → ~M-.~ finds next x (like ~n~)         |
+| movement        | =pair=                         | ~]~ → ~M-.~ skip past next paren boundary     |
+| movement        | =match=                        | ~%~ → ~M-.~ expand one nesting level outward  |
+| movement        | =paragraph= / =sentence= / =function= | ~}~ → ~M-.~ skip past next boundary    |
+| search          | —                              | ~/foo~ → ~M-.~ find next match (like ~n~)     |
+
+**** Layer-by-layer outward (~%~ + ~M-.~)
+
+Inside a nested pair, ~%~ jumps to the matching delimiter.  ~M-.~ then moves
+one level outward to the enclosing pair:
+
+#+begin_example
+  (a (b (c)))
+        ↑
+  %     → jump to ) after (c)
+  M-.   → outward to ) after (b)
+  M-.   → outward to ) after (a)
+  ;; ; now marks the outermost (a ...) pair
+#+end_example
+
+This works through mixed bracket types (~( ] }~) and across block delimiters
+(~#+begin_src / #+end_src~):
+
+#+begin_example
+  #+begin_src elisp
+  (let ((x 1))
+    (message x))
+  #+end_src
+  ;; % inside (message x) → jump to matching )
+  ;; M-. → outward to enclosing (let ...)
+  ;; M-. → outward to #+begin_src
+#+end_example
+
+**** find-char: ~M-.~ vs ~n~
+
+Both ~n~ and ~M-.~ repeat the last find-char, but they differ in one key way:
+~M-.~ reads from a self-contained snapshot taken at record time, so it survives
+across an intervening search (~/~).  ~n~ consults =helixel--active-search= and
+will switch to repeating the search instead.
+
+#+begin_example
+  f x        find x — recorded for M-.
+  /pattern   active-search now points to search, not find-char
+  M-.        still finds the next x (from snapshot)
+  n          repeats /pattern (from active-search)
+#+end_example
+
+**** For pair motions (~]~ ~[~ ~}~ ~{~)
+
+~M-.~ uses the stored delimiter bounds to skip past the current pair entirely
+before re-invoking the original command.  This means consecutive ~M-.~ presses
+walk through consecutive pairs rather than re-executing on the same one:
+
+#+begin_example
+  (a) (b) (c)
+  ]     → after ) of (a)
+  M-.   → after ) of (b)
+  M-.   → after ) of (c)
+#+end_example
+
+**** Configuration
+
+#+begin_src elisp
+  ;; Categories and subcats that M-. and ' can repeat.
+  ;; Format: (CATEGORY . SUBCAT) or just CATEGORY.
+  ;; A plain symbol matches all subcats under that category;
+  ;; a cons matches only the specified subcat.
+  (setq helixel-motion-repeat-categories
+        '((movement . pair) (movement . match) (movement . paragraph)
+          (movement . sentence) (movement . function) search find-char))
+
+  ;; Disable motion repeat entirely:
+  (setq helixel-motion-repeat-categories nil)
+
+  ;; Add custom motion subcats:
+  (push '(movement . my-thing) helixel-motion-repeat-categories)
 #+end_src
 
 *** Multi-Cursor (~s~ prefix, Helix-style)

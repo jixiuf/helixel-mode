@@ -95,15 +95,16 @@ Each entry is (MODE (CHAR . (OPEN-STRING . CLOSE-STRING)) ...)."
   "Return a list of strings describing available surround keys."
   (let* ((seen nil)
          (result nil))
-    (dolist (e helixel--surround-pairs)
-      (let ((key (car e)))
+    (dolist (e (helixel--surround-pairs-active))
+      (let ((key (helixel--surround-entry-open e))
+            (close (helixel--surround-entry-close e)))
         (when (and (characterp key)
                    (memq key '(?\( ?\[ ?\{ ?\< ?\" ?\' ?\`)))
           (let ((key-str (format "%c" key)))
             (unless (member key-str seen)
               (push key-str seen)
               (push (concat (propertize key-str 'face 'font-lock-keyword-face)
-                            (format ":%c" (cdr e)))
+                            (format ":%c" close))
                     result))))))
     (when-let* ((mode-entry (cl-find-if
                              (lambda (e) (derived-mode-p (car e)))
@@ -132,24 +133,32 @@ Each entry is (MODE (CHAR . (OPEN-STRING . CLOSE-STRING)) ...)."
 
 (defun helixel--surround-block-lookup (char)
   "Look up CHAR in `helixel-surround-block-alist' for current mode.
-Returns (OPEN-STRING . CLOSE-STRING) or nil."
+Returns a `helixel--surround-entry' struct with :type :block, or nil."
   (let ((mode-entries (cl-find-if (lambda (e) (derived-mode-p (car e)))
                                   helixel-surround-block-alist)))
-    (when-let* ((entry (and mode-entries (assoc char (cdr mode-entries)))))
-      (cdr entry))))
+    (when-let* ((entry (and mode-entries (assoc char (cdr mode-entries))))
+                (pair (cdr entry)))
+      (helixel--make-surround-entry
+       :open (car pair) :close (cdr pair) :type :block))))
 
 (defun helixel--surround-lookup (char)
-  "Look up CHAR in block alist then in char-pairs.
-Returns (OPEN . CLOSE) where each is a char or string, or nil."
+  "Look up CHAR in block alist then in active surround-pairs.
+Returns a `helixel--surround-entry' struct, or nil if not found."
   (or (helixel--surround-block-lookup char)
-      (assoc char helixel--surround-pairs)))
+      (cl-find char (helixel--surround-pairs-active)
+               :key #'helixel--surround-entry-open)))
 
 (defun helixel--surround-lookup-delimiter (char)
   "Look up CHAR and return a helixel-delimiter plist, or nil."
   (if-let* ((block (helixel--surround-block-lookup char)))
-      (helixel--make-block-delimiter (car block) (cdr block))
-    (when-let* ((pair (assoc char helixel--surround-pairs)))
-      (helixel--make-pair-delimiter (car pair) (cdr pair)))))
+      (helixel--make-block-delimiter
+       (helixel--surround-entry-open block)
+       (helixel--surround-entry-close block))
+    (when-let* ((entry (cl-find char (helixel--surround-pairs-active)
+                                :key #'helixel--surround-entry-open)))
+      (helixel--make-pair-delimiter
+       (helixel--surround-entry-open entry)
+       (helixel--surround-entry-close entry)))))
 
 ;; ============================================================================
 ;; Core: surround-add (wrap region)
@@ -289,9 +298,9 @@ D is the tag delimiter plist used to locate the tags."
       (user-error "No active selection to surround"))
     (let* ((char (read-char (helixel--surround-prompt "surround add:")))
            (pair (helixel--surround-lookup char))
-           (open (car pair))
-           (close (cdr pair))
-           (is-block (not (characterp open))))
+           (open (helixel--surround-entry-open pair))
+           (close (helixel--surround-entry-close pair))
+           (is-block (eq (helixel--surround-entry-type pair) :block)))
       (unless pair
         (user-error "Unknown surround delimiter: %c" char))
       (helixel--surround-add open close)
@@ -400,7 +409,8 @@ so the user can select a target with one keypress."
   :runner (lambda (tx)
             (when-let* ((char (helixel-action-char tx))
                         (pair (helixel--surround-lookup char)))
-              (helixel--surround-add (car pair) (cdr pair)))))
+              (helixel--surround-add (helixel--surround-entry-open pair)
+                                      (helixel--surround-entry-close pair)))))
 
 (helixel-register-op surround-add-tag
   :display (lambda (tx)
@@ -438,7 +448,9 @@ so the user can select a target with one keypress."
                    (when new-char
                      (when-let* ((pair (helixel--surround-lookup new-char)))
                        (helixel--surround-delete-delimiter d)
-                       (helixel--surround-add (car pair) (cdr pair))))))))))
+                       (helixel--surround-add
+                        (helixel--surround-entry-open pair)
+                        (helixel--surround-entry-close pair))))))))))
 
 ;; ============================================================================
 ;; Pending surround op — auto-retry after textobj selection

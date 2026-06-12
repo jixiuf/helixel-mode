@@ -270,6 +270,10 @@ is not committed by the next command."
         (setq helixel--active-search
               (make-helixel-active-search
                :category 'search :pattern isearch-string :dir dir))
+        ;; Record for M-. repeat: store category+pattern+dir
+        ;; so M-. can replay search via `helixel-search--isearch-repeat'.
+        (helixel--record-last-motion nil
+          :category 'search :pattern isearch-string :dir dir)
         (helixel-search--set-sel-ctx)
         ;; Stash pattern + dir in the payload and attach a runner so
         ;; the unified mc dispatcher can replay this search at every
@@ -499,11 +503,12 @@ Signals `search-failed' if no visible match is found."
             (make-helixel-active-search
              :category 'find-char :type type :char char :dir sym-dir)))))
 
-(defun helixel-search--find-char-core (&optional dir)
+(defun helixel-search--find-char-core (&optional dir char type)
   "Execute find-char in direction DIR.
-Reads type/char from `helixel--active-search'."
-  (let* ((type (helixel-search--safe-type))
-         (char (helixel-search--safe-char)))
+When CHAR and TYPE are non-nil, use them directly.
+Otherwise read from `helixel--active-search'."
+  (let* ((type (or type (helixel-search--safe-type)))
+         (char (or char (helixel-search--safe-char))))
     (when (and type char)
       (let* ((fdir (if (eq (or dir (helixel-search--current-dir)) 'forward)
                        'forward 'backward))
@@ -530,6 +535,12 @@ DOC is the docstring."
      (let ((helixel--current-command ',name)
            (this-command ',name))
        (helixel--tracking-open 'find-char ',type)
+       ;; Record this as the last motion for M-. repeat.
+       ;; Stash char/type/dir so M-. replays self-contained
+       ;; without consulting `helixel--active-search'.
+       (let ((sym-dir (if (> ,dir 0) 'forward 'backward)))
+         (helixel--record-last-motion ',name
+           :category 'find-char :char char :type ',type :dir sym-dir))
        ;; unwind-protect: on error (e.g. char not found), discard the
        ;; stale live-action so the next command does not commit a shell.
        (unwind-protect
@@ -649,21 +660,78 @@ the full f x n n sequence.  Extends region back to origin when
           (search-failed nil))))
      t)))
 
-(defun helixel-find-repeat ()
-  "Repeat the last find-char in the current direction.
-Updates n-count in the pending sel so . repeats the full sequence."
+(defun helixel-search--repeat-find-char (&optional char type dir)
+  "Repeat the last find-char.
+When CHAR, TYPE and DIR are given (from \=`M-.'), use them directly.
+Otherwise (from \=`n') read from `helixel--active-search'.
+Passes CHAR/TYPE/DIR explicitly to `helixel-search--find-char-core'
+so no temp dynamic binding of `helixel--active-search' is needed.
+Updates n-count in the pending sel so \=`.' repeats the full sequence."
+  (let ((char (or char (helixel-search--safe-char)))
+        (type (or type (helixel-search--safe-type)))
+        (dir  (or dir  (helixel-search--current-dir))))
+    (unless (and char type)
+      (user-error "No find-char to repeat"))
+    (helixel--tracking-open 'find-char type)
+    (helixel-search--find-char-core dir char type)
+    (helixel-action-commit)
+    ;; Track n-count so . repeats the full n sequence.
+    (helixel-search--find-char-set-sel char type dir)))
+
+(defun helixel-repeat-last-motion ()
+  "Repeat the last motion (f, t, /, ?, \\=`%', \\=`[', \\=`]', \\=`{', \\=`}').
+Reads self-contained replay data from `helixel--last-motion-cmd'.
+The stored category+subcat is checked against
+`helixel-motion-repeat-categories' via `helixel--category-match-p'.
+Dispatches via `helixel--motion-repeater-alist' — extend by
+calling `helixel-register-motion-repeater'.
+Never consults the global `helixel--active-search'."
   (interactive)
-  (let* ((type (helixel-search--safe-type))
-         (char (helixel-search--safe-char))
-         (dir (helixel-search--current-dir)))
-    (if (and type char)
-        (progn
-          (helixel--tracking-open 'find-char type)
-          (helixel-search--find-char-core dir)
-          (helixel-action-commit)
-          ;; Track n-count so . repeats the full n sequence.
-          (helixel-search--find-char-set-sel char type dir))
-      (message "No find-char to repeat"))))
+  (let ((rec helixel--last-motion-cmd))
+    (unless (and rec
+                 (helixel--category-match-p
+                  (helixel--last-motion-category rec)
+                  (helixel--last-motion-subcat rec)
+                  helixel-motion-repeat-categories))
+      (if rec
+          (user-error
+           "Last motion `%s' is not in `helixel-motion-repeat-categories'"
+           (or (helixel--last-motion-subcat rec)
+               (helixel--last-motion-category rec)))
+        (user-error "No motion to repeat")))
+    (if-let* ((fn (helixel--lookup-motion-repeater rec)))
+        (funcall fn rec)
+      (user-error "No repeater registered for category `%s'"
+                  (helixel--last-motion-category rec)))))
+
+;; ── Motion repeaters registered via `helixel-register-motion-repeater' ──
+
+(defun helixel--repeat-search-motion (rec)
+  "Replay a search (/) motion from REC.
+Creates a temporary `helixel--active-search' from the stored
+pattern and direction, then calls `helixel-search--isearch-repeat'."
+  (let ((helixel--active-search
+         (make-helixel-active-search
+          :category 'search
+          :pattern (helixel--last-motion-pattern rec)
+          :dir (helixel--last-motion-dir rec))))
+    (helixel-search--isearch-repeat
+     (if (eq (helixel--last-motion-dir rec) 'forward) 1 -1))))
+
+(defun helixel--repeat-find-char-motion (rec)
+  "Replay a find-char (f/t) motion from REC.
+Passes the stored char, type, and direction directly to
+`helixel-search--repeat-find-char' — no `helixel--active-search'
+consultation needed."
+  (helixel-search--repeat-find-char
+   (helixel--last-motion-char rec)
+   (helixel--last-motion-type rec)
+   (helixel--last-motion-dir rec)))
+
+(helixel-register-motion-repeater 'search nil
+  #'helixel--repeat-search-motion)
+(helixel-register-motion-repeater 'find-char nil
+  #'helixel--repeat-find-char-motion)
 
 ;; ---------------------------------------------------------------------------
 ;; n / N  — repeat
@@ -689,7 +757,7 @@ With prefix ARG (\\[universal-argument]), pick from history."
     (let ((cat (helixel-search--safe-category))
           (dir (helixel-search--current-dir)))
       (pcase cat
-        ('find-char (helixel-find-repeat))
+        ('find-char (helixel-search--repeat-find-char))
         (_ (helixel-search--isearch-repeat
             (if (eq dir 'forward) 1 -1)))))))
 

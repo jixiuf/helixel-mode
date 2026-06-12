@@ -2288,11 +2288,11 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     (setq last-command nil this-command 'helixel-find-next-char)
     (helixel-find-next-char ?x)
     ;; n — second x
-    (setq last-command 'helixel-find-repeat
-          this-command 'helixel-find-repeat)
-    (helixel-find-repeat)
+    (setq last-command 'helixel-repeat-last-motion
+          this-command 'helixel-repeat-last-motion)
+    (helixel-repeat-last-motion)
     ;; n — third x
-    (helixel-find-repeat)
+    (helixel-repeat-last-motion)
     ;; ; — session mark
     (helixel--action-cycle)
     ;; d — delete from session-start to current (first to third x)

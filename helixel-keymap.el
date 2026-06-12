@@ -571,17 +571,18 @@ Example with multiple callbacks:
 ;; ── Search & find-char keybindings ──
 
 
-(helixel-define-key 'normal "/" #'helixel-search-forward)
-(helixel-define-key 'normal "?" #'helixel-search-backward)
-(helixel-define-key 'normal "*" #'helixel-search-at-point-next)
-(helixel-define-key 'normal "#" #'helixel-search-at-point-prev)
-(helixel-define-key 'normal "f" #'helixel-find-next-char)
-(helixel-define-key 'normal "F" #'helixel-find-prev-char)
-(helixel-define-key 'normal "t" #'helixel-find-till-char)
-(helixel-define-key 'normal "T" #'helixel-find-prev-till-char)
-(helixel-define-key 'normal "n" #'helixel-search-repeat-next)
-(helixel-define-key 'normal "N" #'helixel-search-repeat-reverse)
-(helixel-define-key 'normal "M-." #'helixel-find-repeat)
+(helixel-define-key 'normal "/"    #'helixel-search-forward)
+(helixel-define-key 'normal "?"    #'helixel-search-backward)
+(helixel-define-key 'normal "*"    #'helixel-search-at-point-next)
+(helixel-define-key 'normal "#"    #'helixel-search-at-point-prev)
+(helixel-define-key 'normal "f"    #'helixel-find-next-char)
+(helixel-define-key 'normal "F"    #'helixel-find-prev-char)
+(helixel-define-key 'normal "t"    #'helixel-find-till-char)
+(helixel-define-key 'normal "T"    #'helixel-find-prev-till-char)
+(helixel-define-key 'normal "n"    #'helixel-search-repeat-next)
+(helixel-define-key 'normal "N"    #'helixel-search-repeat-reverse)
+(helixel-define-key 'normal "\M-." #'helixel-repeat-last-motion)
+(helixel-define-key 'normal "'"    #'helixel-repeat-last-motion)
 
 ;; ── Org-mode emphasis marker text objects (~ = _ / * +) ──
 ;; These are quote-style text objects that only activate in org-mode

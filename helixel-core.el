@@ -412,8 +412,22 @@ should set this to avoid a false match for equal open/close chars."
     (when (eobp) (skip-chars-backward " \t\n\r"))
     (when (and (not no-close-backoff)
                (characterp close) (> (point) 1)
-               (= (char-before) close))
+               (= (char-before) close)
+               (not (eq (char-after) close)))
       (backward-char))
+    ;; String-based close backoff: if point is right after a string
+    ;; close delimiter, step back to before it so the backward finder
+    ;; can locate the opener without the close thwarting the counter.
+    ;; Only apply when close differs from open (toggle-based delimiters
+    ;; don't need backoff) and only when the matched close ends at point.
+    (when (and (not no-close-backoff)
+               (stringp close)
+               (not (string= close (helixel-delimiter-open d))))
+      (let ((orig (point)))
+        (if (and (re-search-backward close nil t)
+                 (= (match-end 0) orig))
+            (goto-char (match-beginning 0))
+          (goto-char orig))))
     (unwind-protect
         (progn
           (unless (zerop (helixel-delimiter-find d -1))
@@ -499,6 +513,70 @@ pair's bounds so callers can still move to that closing."
               (when tag-p (search-forward ">" nil t))
               (helixel--generic-bounds-at d inner-p t)))))))
 
+;; ── Surround-pair entry struct ──
+;;
+;; Each entry in `helixel--surround-pairs' is a `helixel--surround-entry'
+;; struct.  Accessors below are thin wrappers that also accept block cons
+;; cells (OPEN . CLOSE) for code that receives union types from
+;; `helixel--surround-lookup'.
+
+(cl-defstruct (helixel--surround-entry
+               (:constructor helixel--make-surround-entry)
+               (:conc-name helixel--sre-)
+               (:copier nil))
+  "A surround-pair or block entry.
+OPEN  — opening delimiter (character or string).
+CLOSE — closing delimiter (character or string).
+TYPE  — :pair, :quote, or :block.
+META  — plist (supports :modes key) or nil."
+  open
+  close
+  type
+  meta)
+
+(defvar helixel--surround-pairs)  ; forward-declare, defined in textobj-engine
+
+(defsubst helixel--surround-entry-open (e)
+  "Return the opening delimiter from `helixel--surround-entry' E."
+  (helixel--sre-open e))
+
+(defsubst helixel--surround-entry-close (e)
+  "Return the closing delimiter from `helixel--surround-entry' E."
+  (helixel--sre-close e))
+
+(defsubst helixel--surround-entry-type (e)
+  "Return the type (:pair, :quote, or :block) from `helixel--surround-entry' E."
+  (helixel--sre-type e))
+
+(defsubst helixel--surround-entry-meta (e)
+  "Return the META plist from `helixel--surround-entry' E."
+  (helixel--sre-meta e))
+
+(defun helixel--surround-entry-applicable-p (e)
+  "Return non-nil if surround-pairs entry E applies in current `major-mode'.
+Checks the :modes key in the META plist.  Entries without
+:modes are universal — always applicable.
+Entries with :modes apply only when the current `major-mode'
+is `derived-mode-p' from one of the listed modes."
+  (if-let* ((modes (plist-get (helixel--surround-entry-meta e) :modes)))
+      (cl-some #'derived-mode-p modes)
+    t))
+
+(defun helixel--surround-pairs-active ()
+  "Return surround-pair entries valid for the current `major-mode'.
+Filters `helixel--surround-pairs' through
+`helixel--surround-entry-applicable-p'."
+  (cl-remove-if-not #'helixel--surround-entry-applicable-p
+                    helixel--surround-pairs))
+
+(defsubst helixel--canonical-pair-p (open close)
+  "Return non-nil if (OPEN . CLOSE) is in canonical (forward) direction.
+An entry is canonical when OPEN's codepoint <= CLOSE's.
+This is the single source of truth for forward/reverse
+entry discrimination — both `helixel--active-delim-chars'
+and `helixel--jump-to-match-core' delegate here."
+  (<= open close))
+
 
 ;; ----------------------------------------------------------------------
 ;; Part 2b — Active Search State (mutable, per-buffer)
@@ -523,6 +601,184 @@ Slots:
   (type    nil :read-only t)
   (char    nil :read-only t)
   entry-kind)
+
+;; ── Last-Motion Struct ──
+;;
+;; Each completed motion (pair/textobj movement, find-char, search, %)
+;; records a `helixel--last-motion' struct so `'' and `M-.' can replay
+;; it self-contained without consulting global state.
+
+(cl-defstruct (helixel--last-motion (:copier nil))
+  "Self-contained record of the last repeatable motion.
+Slots:
+  CATEGORY    — 'movement, 'search, or 'find-char.
+  SUBCAT      — 'pair, 'match, 'paragraph, 'sentence, 'function, or nil.
+  DIR         — 'forward or 'backward.
+  COMMAND     — command symbol (nil for search).
+  PREFIX-ARG  — raw `current-prefix-arg' at record time.
+  CHAR        — (find-char) the searched character.
+  TYPE        — (find-char) 'next or 'till.
+  PATTERN     — (search) the regexp string.
+  ENTRY-KIND  — (search) 'insert, 'append, or nil.
+  DELIM-OPEN  — (pair) opener character.
+  DELIM-CLOSE — (pair) closer character.
+  DELIM-TYPE  — (pair) :pair, :tag, or :regex.
+  DELIM-INNER-P — (pair) non-nil for inner.
+  DELIM-FORWARD-P — (pair) non-nil for forward.
+  LAST-MATCH-DELIMITER — (match) delimiter plist from % jump."
+  category subcat dir command prefix-arg
+  char type pattern entry-kind
+  delim-open delim-close delim-type delim-inner-p delim-forward-p
+  last-match-delimiter)
+
+(defcustom helixel-motion-repeat-categories
+  '((movement . pair) (movement . match) (movement . paragraph)
+    (movement . sentence) (movement . function) search find-char)
+  "Motion categories that \=`M-.' and \=`'' can repeat.
+Each element is either a plain category symbol (matches all
+subcats) or a cons (CATEGORY . SUBCAT) for precise matching —
+the same format as `helixel-action-cycle-categories'.
+
+Plain symbols \='search and \='find-char match their respective
+commands.  Cons entries like (movement . pair) match only the
+specified subcat under that category.
+
+Set to nil to disable motion repeat entirely."
+  :type '(repeat (choice symbol (cons symbol symbol)))
+  :group 'helixel)
+
+(defun helixel--category-match-p (category subcat checklist)
+  "Return non-nil if (CATEGORY . SUBCAT) matches CHECKLIST.
+
+Each element of CHECKLIST is a plain symbol (matches any subcat
+under that category) or a cons (C . S) (matches the specific
+subcat S of category C).
+
+Used by \=`;' cycling visibility, \=`M-.' motion-repeat filtering,
+and semicolon mark-thing selection.  They share the
+same (CAT . SUBCAT) or CAT pattern for precise category+subcat
+matching."
+  (cl-some
+   (lambda (entry)
+     (if (consp entry)
+         (and (eq category (car entry))
+              (eq subcat (cdr entry)))
+       (eq category entry)))
+   checklist))
+
+(defvar-local helixel--last-motion-cmd nil
+  "The last motion, nil or a `helixel--last-motion' struct.
+Set by eligible movement commands (pair, match, paragraph,
+sentence, function subcats) and find-char / search commands.
+Read by `helixel-repeat-last-motion' and its accessors.")
+
+(defun helixel--record-last-motion (cmd &rest extra-kv)
+  "Record CMD as the last motion, with EXTRA-KV as keyword arguments.
+
+EXTRA-KV accepts: :category :subcat :dir :char :type :pattern
+:entry-kind :delim-open :delim-close :delim-type :delim-inner-p
+:delim-forward-p :last-match-delimiter.
+
+Respects `helixel-motion-repeat-categories': when :category and
+:subcat don't match, recording is silently skipped."
+  (let ((cat (plist-get extra-kv :category))
+        (sub (plist-get extra-kv :subcat)))
+    (when (or (not cat)
+              (helixel--category-match-p
+               cat sub helixel-motion-repeat-categories))
+      (setq helixel--last-motion-cmd
+            (apply #'make-helixel--last-motion
+                   :command cmd :prefix-arg current-prefix-arg
+                   extra-kv)))))
+
+(defun helixel--record-movement-motion
+    (cmd subcat origin &optional motion-extra)
+  "Record CMD as the last motion for movement SUBCAT.
+Determines :dir from (point) vs ORIGIN — captures direction
+from actual cursor movement.  MOTION-EXTRA is an optional plist
+of extra keys passed directly by the caller.
+
+Called from the code injected by `helixel-define-command'
+for :category movement commands."
+  (let* ((dir (if (> (point) origin) 'forward 'backward)))
+    (apply #'helixel--record-last-motion cmd
+           :category 'movement :subcat subcat :dir dir
+           motion-extra)))
+
+;; ── Motion Repeater Registry ──
+;;
+;; Extensible dispatch for `helixel-repeat-last-motion'.
+;; Third-party packages register repeater functions for custom
+;; motion categories; the command looks them up here instead of
+;; using a hardcoded `pcase'.
+
+(defvar helixel--motion-repeater-alist nil
+  "Alist mapping (CATEGORY . SUBCAT) to repeater function.
+Each function receives one argument, the `helixel--last-motion'
+struct, and should replay the recorded motion.
+When SUBCAT is nil, the entry matches any subcat under CATEGORY.
+Entries are checked in order — first match wins.
+Populated by `helixel-register-motion-repeater'.")
+
+(defun helixel-register-motion-repeater (category subcat fn)
+  "Register FN as the motion repeater for (CATEGORY . SUBCAT).
+CATEGORY is a symbol like \='movement, \='search, or \='find-char.
+SUBCAT is a symbol like \='pair, \='match, or nil for \='any subcat\='.
+FN receives the `helixel--last-motion' struct and should replay it.
+
+Specific (CAT . SUB) entries take priority over nil-subcat
+entries because `push' adds to the front of the alist and
+`helixel--lookup-motion-repeater' scans sequentially."
+  (push (cons (cons category subcat) fn)
+        helixel--motion-repeater-alist))
+
+(defun helixel--lookup-motion-repeater (rec)
+  "Find the repeater function for the motion REC.
+Returns the function, or nil if no repeater is registered.
+Scans `helixel--motion-repeater-alist' — first match wins.
+Specific (CAT . SUB) entries match before nil-subcat fallbacks
+because `push' adds later registrations to the front."
+  (let* ((cat (helixel--last-motion-category rec))
+         (sub (helixel--last-motion-subcat rec)))
+    (cl-some (lambda (entry)
+               (let ((key (car entry)))
+                 (when (and (eq (car key) cat)
+                            (or (null (cdr key))
+                                (eq (cdr key) sub)))
+                   (cdr entry))))
+             helixel--motion-repeater-alist)))
+
+;; ── Unified delimiter-char query ──
+;; All delimiter-char enumeration uses this single function.
+;; The per-type/-direction helpers below are thin wrappers.
+
+(cl-defun helixel--active-delim-chars (&key type open-only close-only)
+  "Return deduplicated delimiter chars from active surround-pairs.
+TYPE   — :pair, :quote, or nil (all types).
+OPEN-ONLY — if t, return only open chars.
+CLOSE-ONLY — if t, return only close chars.
+
+For CLOSE-ONLY / OPEN-ONLY, only entries where open and close
+are characters AND canonical (close >= open codepoint, per
+`helixel--canonical-pair-p') are included.  String-delimiter
+entries (e.g. block fences) are excluded from char-based queries."
+  (let (result)
+    (dolist (e (helixel--surround-pairs-active))
+      (when (or (null type)
+                (eq (helixel--surround-entry-type e) type))
+        (let ((open (helixel--surround-entry-open e))
+              (close (helixel--surround-entry-close e)))
+          (when (and (characterp open) (characterp close))
+            (let ((canonical (helixel--canonical-pair-p open close)))
+              (cond
+               (close-only
+                (when canonical (push close result)))
+               (open-only
+                (when canonical (push open result)))
+               (t
+                (push open result)
+                (push close result))))))))
+    (delete-dups (nreverse result))))
 
 ;; ----------------------------------------------------------------------
 ;; Part 3 — Kind Registry (centralised kind protocol)

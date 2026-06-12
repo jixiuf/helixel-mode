@@ -717,6 +717,53 @@ Verifies that event ring head carries the inserted text in its payload."
     (helixel-repeat-edit)
     (should (string= (buffer-string) "X X foo"))))
 
+(ert-deftest helixel-test-repeat-pick-reconstruction-invariant ()
+  "Picked event: reconstructed tx preserves op, sel, runner, not just payload.
+Tests the reconstruction path inside `helixel-repeat-edit-pick'
+\(apply #\='helixel-action-create op sel :display :runner payload).
+This ensures that `helixel-action-copy'+`setq' replaces the
+entire `helixel--last-tx', not just the payload."
+  (helixel-test-with-buffer "hello world foo"
+    (goto-char 1)
+    ;; Record: ciw X <esc>
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (setq last-command 'helixel-mark-inner-word
+          this-command 'helixel-change)
+    (helixel-change)
+    (insert "X")
+    (helixel-insert-exit)
+    ;; Get the front event from the ring
+    (let* ((event (car helixel--action-ring))
+           ;; Reconstruct tx exactly as repeat-edit-pick does
+           (reconstructed
+            (apply #'helixel-action-create
+                   (helixel-action-op event)
+                   (helixel-action-sel event)
+                   :display (helixel-action-display-format event)
+                   :runner (helixel-action-runner event)
+                   (helixel-action-payload event))))
+      (should event)
+      (should reconstructed)
+      ;; Verify all replay-relevant slots match
+      (should (eq (helixel-action-op reconstructed)
+                  (helixel-action-op event)))
+      (should (eq (helixel-action-sel reconstructed)
+                  (helixel-action-sel event)))
+      (should (eq (helixel-action-runner reconstructed)
+                  (helixel-action-runner event)))
+      ;; Payload: inserted-text must be preserved
+      (should (string=
+               (plist-get (helixel-action-payload reconstructed)
+                          :inserted-text)
+               (plist-get (helixel-action-payload event)
+                          :inserted-text)))
+      ;; Set as last-tx and replay
+      (goto-char 4)
+      (setq helixel--last-tx (helixel-action-copy reconstructed))
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "X X foo")))))
+
 (ert-deftest helixel-test-repeat-pick-insert-end-to-end ()
   "After iZ<esc>, ring head has :text payload; pick replays correctly."
   (let ((helixel--last-tx nil)

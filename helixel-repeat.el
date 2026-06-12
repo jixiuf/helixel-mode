@@ -642,17 +642,17 @@ The chosen event's edit data becomes the new `helixel--last-tx'."
            (choice (completing-read "Repeat edit: " collection nil t))
            (event (cdr (assoc choice items))))
       (when event
-        ;; Reconstruct tx from event.  Payload keys are spread via apply.
-        ;; helixel-action-create signature: (op sel-ctx &rest payload-kv)
-        ;; so sel-ctx is the second positional arg, then
-        ;; remaining payload plist keys are spread via apply.
-        (helixel--update-last-event
-         (apply #'helixel-action-create
-                (helixel-action-op event)
-                (helixel-action-sel event)
-                :display (helixel-action-display-format event)
-                :runner (helixel-action-runner event)
-                (helixel-action-payload event)))
+        ;; Reconstruct tx from event and set it as `helixel--last-tx'.
+        ;; Must use `helixel-action-copy' (not `helixel--update-last-event'
+        ;; which only copies the payload, leaving op/sel/runner stale).
+        (setq helixel--last-tx
+              (helixel-action-copy
+               (apply #'helixel-action-create
+                      (helixel-action-op event)
+                      (helixel-action-sel event)
+                      :display (helixel-action-display-format event)
+                      :runner (helixel-action-runner event)
+                      (helixel-action-payload event))))
         (helixel-repeat-edit)))))
 
 (defun helixel-repeat-debug ()

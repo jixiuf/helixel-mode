@@ -410,7 +410,6 @@ that pre-chain commands don't leak into the tx-list."
          :init-bounds (when (use-region-p)
                         (cons (copy-marker (region-beginning))
                               (copy-marker (region-end))))))
-  (deactivate-mark)
   (run-hooks 'helixel-chain-start-hook)
   (message "Chain rec \u2022 esc to finish"))
 

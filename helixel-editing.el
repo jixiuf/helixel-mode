@@ -38,6 +38,7 @@
 (require 'helixel-move)
 (require 'helixel-core)
 (require 'helixel-macros)
+(defvar helixel-chain-insert-entry-functions)
 (require 'helixel-search)
 
 ;; ── Insert-entry prepositioner helpers ──
@@ -235,6 +236,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
       (helixel--sel-push
        (helixel-sel-update-ctx helixel--pending-sel
                                :entry-kind 'insert))
+      (run-hook-with-args
+       'helixel-chain-insert-entry-functions 'insert)
       (goto-char (region-beginning)))
      ;; Manual region
      ((use-region-p)
@@ -290,6 +293,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
       (helixel--sel-push
        (helixel-sel-update-ctx helixel--pending-sel
                                :entry-kind 'append))
+      (run-hook-with-args
+       'helixel-chain-insert-entry-functions 'append)
       (goto-char (region-end)))
      ;; Manual region
      ((use-region-p)
@@ -1172,7 +1177,7 @@ Return the region replaced as (NEW-BEG . NEW-END)."
     (goto-char beg)
     (unless (eq beg end)
       (delete-region beg end))
-    (unless (string-empty-p str)
+    (when (and (stringp str) (not (string-empty-p str)))
       (insert str))
     (when i-end-ofs
       (goto-char (+ (point) i-end-ofs)))

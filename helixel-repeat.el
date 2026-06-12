@@ -590,7 +590,8 @@ automatically invalidates the preview."
   (cl-destructuring-bind (tx prefix saved-state)
       (helixel--repeat-setup raw-prefix)
     (helixel-with-replay-as 'dot
-      (unless (helixel-action-sel tx)
+      (unless (or (helixel-action-sel tx)
+                  (eq (helixel-action-op tx) 'chain))
         (user-error (concat "Previous edit has no selection to repeat."
                             "  Use a textobj (e.g. ciw)"
                             " or line/rect selection first")))

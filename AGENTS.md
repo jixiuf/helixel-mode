@@ -262,6 +262,18 @@ make depgraph                               # regenerate docs/DEPGRAPH.md from `
 ### Always recompile after edits
 Stale .elc silently hides changes. `rm -f *.elc && make compile` before testing.
 
+### Simulate interactive commands in batch mode
+`call-interactively` doesn't work in `--batch` (no real event loop). Use:
+```elisp
+(execute-kbd-macro (kbd "M-x your-command RET"))
+```
+This is equivalent to the user pressing `M-x your-command RET` even in batch mode.
+Works for any key sequence, e.g. `(kbd "C-x C-f")`.
+
+**Note**: this triggers the full hook chain (`pre-command-hook`, `post-command-hook`,
+`after-change-functions`, etc.) — just like real key presses. If you don't want
+these side effects in tests, call the underlying function directly instead.
+
 ### Docstring rules
 - Max 80 cols per line (`make lint` checks this)
 - Lisp symbols in backticks: ``` `foo' ```

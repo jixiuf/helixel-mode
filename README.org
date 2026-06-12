@@ -619,37 +619,67 @@ Prefixes:
 
 ~q~ starts recording, ~ESC~ finishes and creates a repeatable
 compound transaction.  ~.~ advances to the next target and replays
-the entire sequence.
+the entire sequence.  Both helixel commands (movement, edit, state)
+and vanilla Emacs commands are captured.
 
 | Key   | Action                                                                       |
 |-------|------------------------------------------------------------------------------|
-| ~q~   | Start chain recording (snapshots selection context, starts key recording)    |
-| ~ESC~ | End chain, create repeatable compound transaction                            |
-| ~.~   | Advance to next target and replay the recorded sequence                      |
-| ~,~   | Preview the next target without editing                                      |
+| ~q~   | Start chain recording (snapshots selection context, starts tx recording)     |
+| ~ESC~ | End chain, create repeatable compound transaction                            |n| ~.~   | Advance to next target and replay the recorded sequence                      |
+| ~,~   | Preview the next target without editing                                      |n| ~C-g~ | Cancel chain (discard recording)                                            |
 
 *How it works:*
 
 1. Select a target (line with ~x~, search match with ~/~) — this
    establishes the /advance context/.
-2. Press ~q~ — starts key recording, snapshots the selection.
-3. Perform any editing operations (insert, normal-mode commands, etc.)
-   — all keystrokes are captured.
+2. Press ~q~ — starts recording, snapshots the selection.
+3. Perform any editing operations — all commands (helixel and vanilla
+   Emacs) are captured as replayable entries in chronological order.
 4. Press ~ESC~ — stops recording, creates a chain transaction.
 5. ~.~ advances to the *next* target and replays the recorded sequence.
 6. ~.~ again — advance further, replay again.
+
+*Capture details:*
+
+| Command type           | Capture mechanism                        | Replay method                          |
+|------------------------|------------------------------------------|----------------------------------------|
+| Helixel edits (d, c)   | ~action-commit-hook~                     | Runner function                        |
+| Helixel movements (w)  | ~action-commit-hook~                     | Selection recreate (positioning)       |
+| Insert-mode typing     | ~insert-record~ (after-change-functions) | Text segments verbatim                 |
+| Vanilla commands (C-a) | ~post-command-hook~                      | ~execute-kbd-macro~ with original keys |
+
+Insert-mode commands (~RET~, ~DEL~, etc.) are captured exclusively by
+the insert-recording mechanism and NOT duplicated as vanilla entries.
+This prevents double-replay (e.g. two newlines instead of one).
 
 *Advance behavior:*
 
 | Init ctx        | Advance                                                         |
 |-----------------|-----------------------------------------------------------------|
 | Line (~x~)      | Next line (EOL positioning matches recording context)           |
-| Search (~/~)    | Next match                                                      |
-| None            | Default line advance                                            |
+| Search (~/~)    | Next match                                                      |n| None            | In-place (no advance, replay at cursor position)               |
 
 Cursor position at ~ESC~ time: if the cursor has left the original
 target range (e.g. moved to a different line), advance is *disabled*
 and ~.~ replays in-place.
+
+*Third-party integration:*
+
+#+begin_src elisp
+  ;; Exclude additional commands from vanilla capture
+  (add-hook 'helixel-chain-vanilla-exclude-predicates
+            (lambda (cmd) (memq cmd '(my-custom-cmd))))
+
+  ;; Custom replay for vanilla commands
+  (setq helixel-chain-vanilla-replay-function
+        (lambda (cmd entry)
+          (my-replay-command cmd (helixel-action-payload-get entry :prefix))))
+
+  ;; Chain lifecycle hooks
+  (add-hook 'helixel-chain-start-hook  #'my-chain-setup)
+  (add-hook 'helixel-chain-end-hook    #'my-chain-commit)
+  (add-hook 'helixel-chain-cancel-hook #'my-chain-cleanup)
+#+end_src
 
 *Examples:*
 

@@ -205,7 +205,8 @@ whatever the hook produced live."
                  (offset (or (plist-get seg :offset) 0))) ; ctx-lint-ok
             (when (> del 0)
               (delete-char (- (min del (- (point) (point-min))))))
-            (insert str)
+            (when (stringp str)
+              (insert str))
             (unless (zerop offset)
               (goto-char (+ (point) offset)))))
          ((plist-member seg :keys)

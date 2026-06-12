@@ -18,22 +18,32 @@
 ;;; Commentary:
 ;;
 ;; Compound dot-repeat: `q' starts a chain, ESC ends it, `C-g'
-;; cancels.  After Phase 4.4 chain recording captures the LIST of
-;; helixel-tx values produced by the commands run during the chain
-;; (every helixel command produces a tx via Phase 4.3).  Replay
-;; iterates the list and calls `helixel-action-replay' on each tx in
-;; chronological order.  No more keystroke / kmacro capture.
+;; cancels.  Chain recording captures the LIST of helixel-action
+;; values produced by the commands run during the chain.  Replay
+;; iterates the list and replays each entry in chronological order.
 ;;
-;; Accumulation: chain registers a function on
-;; `helixel-action-commit-hook' (in `helixel-ring.el').  Every time
-;; an action commits to the ring, the hook checks if a chain is
-;; active and the committed action's tx has a runner (i.e. it can be
-;; replayed).  If yes, append the tx to the session's `tx-list'.
+;; Architecture (v2 — eager commit, single capture point):
 ;;
-;; Inter-command motion: Phase 4.3 made every movement command
-;; produce a tx whose runner re-invokes the command.  These motion
-;; txs land in the same `tx-list', so replay positions point exactly
-;; as during recording \u2014 no separate move-keys / edit-keys split.
+;;   Capture: a single `post-command-hook' handles EVERY command:
+;;     1. Eager commit — commit any pending `helixel--live-action'
+;;        at the END of its command (not deferred to next command).
+;;        This fires `action-commit-hook' → `helixel--chain-push-entry' pushes
+;;        helixel entries to tx-list.
+;;     2. Vanilla capture — for non-helixel commands, create a
+;;        vanilla entry with `this-command', `current-prefix-arg',
+;;        and key sequence, then push DIRECTLY to tx-list.
+;;     No vanilla queue, no flush hacks, no ordering flags.
+;;
+;;   Replay: the chain runner iterates the tx-list and dispatches:
+;;     - Edit entries (runner present)       → funcall runner
+;;     - Movement entries (sel, no runner)   → recreate selection
+;;     - Vanilla entries (by-command only)   → call-interactively
+;;       with saved prefix-arg; key-sequence fallback on error.
+;;
+;;   Entry-kind propagation: insert-entry commands propagate their
+;;   entry-kind to the chain session's init-ctx during recording
+;;   (via `helixel--chain-propagate-entry-kind'), so search-based
+;;   chains correctly skip the current match on dot-repeat.
 
 ;;; Code:
 
@@ -41,7 +51,9 @@
 (require 'helixel-core)         ; helixel-action-create
 (require 'helixel-ring)         ; helixel-action-commit-hook
 (require 'helixel-macros)       ; helixel-with-action-tracking
-(require 'helixel-repeat)       ; helixel--maybe-flip-dir-action, strategy
+(require 'helixel-repeat)       ; helixel--maybe-flip-dir-action
+
+(defvar helixel--current-state)  ; from `helixel-state'
 
 ;; ── Session struct (single buffer-local) ──
 
@@ -50,12 +62,12 @@
                (:copier nil))
   "Per-buffer chain recording session.
 Slots:
-  ACTIVE-P    \u2014 non-nil while recording.
-  TX-LIST     \u2014 list of `helixel-tx' values committed during the
+  ACTIVE-P    — non-nil while recording.
+  TX-LIST     — list of `helixel-action' values committed during the
                 chain (chronological after `nreverse').
-  INIT-CTX    \u2014 `helixel-sel' snapshotted at chain-start; drives
+  INIT-CTX    — `helixel-sel' snapshotted at chain-start; drives
                 advance behaviour at replay time.
-  INIT-BOUNDS \u2014 (BEG . END) markers of the initial region, or nil."
+  INIT-BOUNDS — (BEG . END) markers of the initial region, or nil."
   active-p
   tx-list
   init-ctx
@@ -69,55 +81,237 @@ Slots:
   (and helixel--chain-session
        (helixel-chain-session-active-p helixel--chain-session)))
 
-;; ── tx-list accumulator: hook on action-commit ──
+;; ── Extension points for third-party integration ──
 
-(defun helixel--chain-on-commit (entry)
-  "Append ENTRY's replayable tx to the active chain session, if any.
-Hooked into `helixel-action-commit-hook'.  Skips ENTRYs whose
-`by-command' is a chain-control command (so chain-start / ESC /
-chain-end / chain-cancel are not themselves replayed)."
+(defcustom helixel-chain-vanilla-exclude-predicates
+  '(helixel--chain-vanilla-exclude-default-p)
+  "List of predicate functions for excluding vanilla commands.
+Each function receives the command symbol and should return
+non-nil to EXCLUDE the command from vanilla capture during
+chain recording.
+
+Built-in default excludes:
+  - `self-insert-command' (captured by insert-record)
+  - Commands running during insert state (captured by insert-record)
+  - Commands whose name starts with \"helixel-\" (captured by
+    `helixel--chain-push-entry')
+  - Chain-control commands (chain-start/end/cancel, normal-escape)
+
+Add functions here to exclude additional commands (e.g. commands
+from third-party packages that have their own recording mechanism)."
+  :type '(repeat function)
+  :group 'helixel)
+
+(defcustom helixel-chain-vanilla-replay-function nil
+  "Optional function to replay vanilla entries instead of `call-interactively'.
+If non-nil, called with two arguments:
+  CMD    — the command symbol to replay
+  ENTRY  — the vanilla `helixel-action' entry (contains :prefix, :keys).
+Should execute the command's effect at point.
+When nil (default), vanilla entries are replayed via
+`call-interactively' with the saved prefix argument.
+
+Set this to provide custom replay for commands that need special
+handling (e.g. commands that read from the minibuffer or depend on
+state not captured in the entry)."
+  :type '(choice (const nil) function)
+  :group 'helixel)
+
+(defvar helixel-chain-start-hook nil
+  "Hook run after a chain recording session starts.
+Called with no arguments.  The chain session is available via
+`helixel--chain-session'.")
+
+(defvar helixel-chain-end-hook nil
+  "Hook run before a chain recording session is committed.
+Called with the tx-list (chronological order) as argument.
+The chain session is still active; use this to add final entries
+or modify the tx-list before it is sealed into the chain tx.")
+
+(defvar helixel-chain-cancel-hook nil
+  "Hook run when a chain recording session is cancelled.
+Called with no arguments before the session is destroyed.")
+
+(defconst helixel--chain-control-commands
+  '(helixel-repeat-chain-start
+    helixel-repeat-chain-end
+    helixel-repeat-chain-cancel
+    helixel-normal-escape)
+  "Commands that control chain lifecycle; excluded from tx-list.")
+
+(defun helixel--chain-vanilla-exclude-default-p (cmd)
+  "Default vanilla-command exclusion predicate.
+Returns non-nil if CMD should NOT be captured as a vanilla entry.
+Excludes self-insert, insert-mode commands, helixel commands, and
+chain-control commands."
+  (or (eq cmd 'self-insert-command)
+      (eq helixel--current-state 'insert)
+      (string-prefix-p "helixel-" (symbol-name cmd))
+      (memq cmd helixel--chain-control-commands)))
+
+;; ── tx-list push helper (unified path for helixel + vanilla) ──
+
+(defun helixel--chain-push-entry (entry)
+  "Push ENTRY into the active chain session's tx-list.
+Filters out chain-control commands and non-replayable entries.
+Called from `helixel-action-commit-hook' (helixel entries) and
+`helixel--chain-post-cmd-hook' (vanilla entries), giving a single
+code path for tx-list accumulation."
   (when (helixel--chain-active-p)
-    (let ((cmd (helixel-action-by-command entry)))
-      (unless (memq cmd
-                    '(helixel-repeat-chain-start
-                      helixel-repeat-chain-end
-                      helixel-repeat-chain-cancel
-                      helixel-normal-escape))
-        ;; Only edit txs (those with a runner) contribute to the chain.
-        ;; Movement-only events (op nil, preposition only) are not
-        ;; replayed as part of chain dot-repeat.
-        (when (helixel-action-runner entry)
-          (push entry (helixel-chain-session-tx-list
-                       helixel--chain-session)))))))
+    (unless (memq (helixel-action-by-command entry)
+                  helixel--chain-control-commands)
+      (when (or (helixel-action-runner entry)
+                (helixel-action-sel entry)
+                (and (helixel-action-by-command entry)
+                     (not (eq (helixel-action-category entry)
+                              'state))))
+        (push entry (helixel-chain-session-tx-list
+                     helixel--chain-session))))))
 
-(add-hook 'helixel-action-commit-hook #'helixel--chain-on-commit)
+(add-hook 'helixel-action-commit-hook #'helixel--chain-push-entry)
 
-;; ── Runner ──
+;; ── Entry-kind propagation hook ──
+
+(defvar helixel-chain-insert-entry-functions nil
+  "Abnormal hook run when entering insert mode during a chain.
+Called with one argument ENTRY-KIND, either `insert' (from `i')
+or `append' (from `a').  The default handler propagates the
+entry-kind to the chain session's init-ctx so search-initiated
+chains can skip the current match on dot-repeat.
+
+Third-party packages can add functions here to react to insert-mode
+entry during chain recording.")
+
+(defun helixel--chain-propagate-entry-kind (entry-kind)
+  "Propagate ENTRY-KIND to the active chain session's init-ctx.
+Ensures `helixel-search--skip-current-match' can skip the current
+match during dot-repeat advance for search-initiated chains.
+No-op when no chain is active or the init-ctx is not a search sel."
+  (when (and (helixel--chain-active-p)
+             (helixel-chain-session-init-ctx helixel--chain-session)
+             (eq (helixel-sel-kind helixel--pending-sel) 'search))
+    (setf (helixel-chain-session-init-ctx helixel--chain-session)
+          (helixel-sel-update-ctx
+           (helixel-chain-session-init-ctx helixel--chain-session)
+           :entry-kind entry-kind))))
+
+(add-hook 'helixel-chain-insert-entry-functions
+          #'helixel--chain-propagate-entry-kind)
+
+;; ── Runner helpers ──
+
+(defun helixel--chain-replay-edit (sub-tx)
+  "Replay an edit entry SUB-TX.
+For movement-kind sels (built from pre-edit w/e/b moves),
+recreates the accumulated selection before running the runner.
+For other sel kinds (search, line, rect, etc.) the chain advance
+already positioned point and the runner handles the rest."
+  (when-let* ((edit-sel (helixel-action-sel sub-tx))
+              ((eq (helixel-sel-kind edit-sel) 'movement)))
+    (deactivate-mark)
+    (condition-case nil
+        (helixel-sel-call-recreate edit-sel)
+      (user-error nil)))
+  (funcall (helixel-action-runner sub-tx) sub-tx))
+
+(defun helixel--chain-replay-movement (sub-tx)
+  "Replay a movement-only entry SUB-TX via selection recreation.
+Used for inter-edit positioning (e.g. j, gh between edits of
+different sel kinds) and post-chain navigation."
+  (deactivate-mark)
+  (condition-case nil
+      (helixel-sel-call-recreate (helixel-action-sel sub-tx))
+    (user-error nil)))
+
+(defun helixel--chain-replay-vanilla (sub-tx)
+  "Replay a vanilla (non-helixel) entry SUB-TX.
+Primary: replay saved key sequence via `execute-kbd-macro'
+\(triggers full command loop, works in batch mode).  Wrapped in
+`helixel-with-replay-as' to prevent hooks from re-recording the
+replayed commands as new chain entries.
+Fallback: `call-interactively' with saved `prefix-arg'.
+Third-party override: `helixel-chain-vanilla-replay-function'."
+  (when-let* ((cmd (helixel-action-by-command sub-tx))
+              ((commandp cmd)))
+    (if helixel-chain-vanilla-replay-function
+        (funcall helixel-chain-vanilla-replay-function cmd sub-tx)
+      (let ((keys (helixel-action-payload-get sub-tx :keys)))
+        (if (and keys (vectorp keys) (> (length keys) 0))
+            (condition-case err
+                (helixel-with-replay-as 'dot
+                  (execute-kbd-macro keys))
+              (error
+               (message "helixel-chain: key replay error %s: %s"
+                        cmd (error-message-string err))))
+          (let ((current-prefix-arg
+                 (helixel-action-payload-get sub-tx :prefix))
+                (real-this-command cmd))
+            (condition-case err
+                (call-interactively cmd)
+              (error
+               (message "helixel-chain: error replaying %s: %s"
+                        cmd (error-message-string err))))))))))
+
+(defun helixel--chain-build-skip-vector (tx-list chain-sel)
+  "Return a `bool-vector' marking entries in TX-LIST to skip during replay.
+A movement-only entry (sel but no runner) is skipped when:
+  (a) its sel kind matches the next edit's sel kind (pre-edit), or
+  (b) its sel kind matches CHAIN-SEL's kind (advance handles positioning).
+Uses a single backward pass — O(N) instead of O(N*M) per-entry scans."
+  (let* ((len (length tx-list))
+         (skips (make-bool-vector len nil))
+         (next-edit-kind nil))
+    (cl-loop for i from (1- len) downto 0
+             for sub-tx = (nth i tx-list)
+             do
+             (if (helixel-action-runner sub-tx)
+                 (setq next-edit-kind
+                       (when-let* ((s (helixel-action-sel sub-tx)))
+                         (helixel-sel-kind s)))
+               (when (and (helixel-action-sel sub-tx)
+                          (not (helixel-action-runner sub-tx)))
+                 (let ((kind (helixel-sel-kind
+                              (helixel-action-sel sub-tx))))
+                   (when (or (eq kind next-edit-kind)
+                             (and chain-sel
+                                  (eq kind (helixel-sel-kind chain-sel))))
+                     (aset skips i t))))))
+    skips))
+
+;; ── Chain runner ──
 
 (defun helixel--repeat-chain-runner (tx)
   "Replay each tx in chain TX's `:tx-list' payload, in order.
 For search-initiated chains, reposition to `match-beginning' before
-replay so insert-position semantics match the original recording
-\(insert text starts at region-begin, not `match-end')."
-  (let* ((sel (helixel-action-sel tx))
+replay so insert-position semantics match the original recording.
+
+Dispatch per entry:
+  - Skip (pre-computed)      → pre-edit movement, advance covers it.
+  - Edit (runner present)    → recreate sel then funcall runner.
+  - Movement (sel, no runner) → recreate selection for positioning.
+  - Vanilla (by-command only) → `execute-kbd-macro' / `call-interactively'."
+  (let* ((chain-sel (helixel-action-sel tx))
          (tx-list (helixel-action-payload-get tx :tx-list)))
     (helixel-with-replay-as 'dot
       (when tx-list
-        (when (and sel (eq (helixel-sel-kind sel) 'search)
+        (when (and chain-sel (eq (helixel-sel-kind chain-sel) 'search)
                    (match-beginning 0))
           (goto-char (match-beginning 0)))
-        (dolist (sub-tx tx-list)
-          (helixel-action-replay sub-tx))))))
+        (let ((skips (helixel--chain-build-skip-vector tx-list chain-sel)))
+          (cl-loop for i from 0 for sub-tx in tx-list
+                   do
+                   (cond
+                    ((aref skips i) nil)
+                    ((helixel-action-runner sub-tx)
+                     (helixel--chain-replay-edit sub-tx))
+                    ((helixel-action-sel sub-tx)
+                     (helixel--chain-replay-movement sub-tx))
+                    (t
+                     (helixel--chain-replay-vanilla sub-tx)))))))))
 
 (helixel-register-op chain
   :display "chain"
   :runner #'helixel--repeat-chain-runner)
-
-;; Note: chain previously had a custom `:strategy-builder' that
-;; differed from the default only in allowing in-place repeat when the
-;; sel kind had no `:advance' fn (e.g. chain after J / join-lines).
-;; That special case is now baked into `helixel--repeat-advance' directly
-;; via `(eq op 'chain)' — cleaner than maintaining a separate builder.
 
 
 ;; ── Cleanup helper ──
@@ -134,19 +328,71 @@ clears `helixel--chain-session'.  Idempotent."
   (setq helixel--chain-session nil))
 
 
+;; ── post-command-hook: unified capture (eager commit + vanilla) ──
+
+(defun helixel--chain-post-cmd-hook ()
+  "Capture every command during chain recording in correct order.
+Runs in `post-command-hook'.
+
+Step 1 — Eager commit:
+  Commit any pending `helixel--live-action' at command-end rather
+  than deferring to the next command's `tracking-open'.  This
+  fires `action-commit-hook' → `helixel--chain-push-entry' pushes the
+  helixel entry to tx-list at the CORRECT chronological position.
+
+Step 2 — Vanilla capture:
+  For non-helixel, non-self-insert, non-chain-control commands,
+  push a vanilla entry directly to tx-list.  Each entry carries
+  the command symbol, prefix argument, and key sequence for
+  faithful replay."
+  (when (helixel--chain-active-p)
+    ;; Step 1: Eager commit — flush pending helixel action NOW.
+    (when helixel--live-action
+      (helixel-action-commit))
+    ;; Step 2: Capture vanilla commands via unified push path.
+    (when (and this-command
+               (symbolp this-command)
+               (commandp this-command)
+               (not (run-hook-with-args-until-success
+                     'helixel-chain-vanilla-exclude-predicates
+                     this-command)))
+      (helixel--chain-push-entry
+       (make-helixel-action
+        :category 'movement
+        :subcat 'vanilla
+        :by-command this-command
+        :op nil :runner nil :sel nil
+        :payload (list :prefix current-prefix-arg
+                       :keys (ignore-errors
+                               (copy-sequence
+                                (this-single-command-keys))))
+        :mark-region (let ((pm (point-marker)))
+                       (cons pm pm))
+        :timestamp (float-time)
+        :buffer (current-buffer))))))
+
 ;; ── Lifecycle commands ──
 
 ;;;###autoload
 (defun helixel-repeat-chain-start ()
   "Start recording a compound dot-repeat chain.
 Snapshots the current selection context for advance decisions.
-Commands run from now on are accumulated (their replay txs are
-appended to the session via `helixel-action-commit-hook').  Call
-`helixel-repeat-chain-end' to finish or
-`helixel-repeat-chain-cancel' to discard."
+Commands run from now on are accumulated (their replay entries are
+appended to the session via `helixel-action-commit-hook' for
+helixel commands, and directly in `post-command-hook' for vanilla
+commands).  Call `helixel-repeat-chain-end' to finish or
+`helixel-repeat-chain-cancel' to discard.
+
+Flushes any deferred live action (e.g. from `x' before `q') so
+that pre-chain commands don't leak into the tx-list."
   (interactive)
   (when (or (helixel--chain-active-p) executing-kbd-macro)
     (user-error "Already chaining or macro replay in progress"))
+  ;; Flush any deferred live action (e.g. from `x' before `q')
+  ;; so it commits to the ring BEFORE the chain hook is active,
+  ;; preventing pre-chain selections from leaking into the tx-list.
+  (helixel-action-commit)
+  (add-hook 'post-command-hook #'helixel--chain-post-cmd-hook nil t)
   (setq helixel--chain-session
         (make-helixel-chain-session
          :active-p t
@@ -156,6 +402,7 @@ appended to the session via `helixel-action-commit-hook').  Call
                         (cons (copy-marker (region-beginning))
                               (copy-marker (region-end))))))
   (deactivate-mark)
+  (run-hooks 'helixel-chain-start-hook)
   (message "Chain rec \u2022 esc to finish"))
 
 ;;;###autoload
@@ -167,22 +414,34 @@ by the initial selection context snapshotted at chain-start."
   (interactive)
   (unless (helixel--chain-active-p)
     (user-error "Not chaining"))
+  ;; Eager commit in post-command-hook already handled the last
+  ;; command's pending action.  Defensive commit for edge cases
+  ;; (e.g. called programmatically without command loop).
+  (when helixel--live-action
+    (helixel-action-commit))
   (let* ((s helixel--chain-session)
          (_ (setf (helixel-chain-session-active-p s) nil))
          (tx-list (nreverse (helixel-chain-session-tx-list s)))
+         (init-bounds (helixel-chain-session-init-bounds s))
          (init-ctx (helixel-chain-session-init-ctx s))
-         ;; Merge entry-kind from live ctx (i/a updates it after
-         ;; snapshot, e.g. search + `i' transitions to search-i).
-         (live-ctx helixel--pending-sel)
-         (init-ctx (if (and init-ctx live-ctx
-                            (eq (helixel-sel-kind init-ctx) 'search)
-                            (not (helixel-sel-search-entry-kind init-ctx))
-                            (helixel-sel-search-entry-kind live-ctx))
-                       (helixel-sel-update-ctx
-                        init-ctx :entry-kind
-                        (helixel-sel-search-entry-kind live-ctx))
-                     init-ctx))
          (had-content (and tx-list (consp tx-list))))
+    ;; If the cursor has left the original target range
+    ;; (e.g. moved to a different line), disable advance so
+    ;; `.` replays in-place instead of advancing to a
+    ;; mismatched target.  Only applies to line/rect selections
+    ;; — search advance moves to the next match regardless
+    ;; of cursor position.
+    (when (and init-ctx init-bounds
+               (memq (helixel-sel-kind init-ctx) '(line rect))
+               (not (and (marker-position (car init-bounds))
+                         (marker-position (cdr init-bounds))
+                         (>= (point) (car init-bounds))
+                         (<= (point) (cdr init-bounds)))))
+      (setq init-ctx nil))
+    ;; Entry-kind (search chains) is propagated to init-ctx during
+    ;; recording by `helixel--chain-propagate-entry-kind'.  At this
+    ;; point the chain tx is built with the fully-populated init-ctx.
+    (run-hook-with-args 'helixel-chain-end-hook tx-list)
     (when had-content
       (let ((tx (helixel-action-create 'chain init-ctx
                    :runner #'helixel--repeat-chain-runner
@@ -193,22 +452,18 @@ by the initial selection context snapshotted at chain-start."
             (:op 'chain :category 'edit :subcat 'chain)
           (helixel--live-action-set tx))))
     (let ((n (length (or tx-list '()))))
+      (remove-hook 'post-command-hook #'helixel--chain-post-cmd-hook t)
       (helixel--chain-reset-state)
       (if had-content
           (message "Chain recorded (%d txs)" n)
-        (message "Chain empty \u2014 nothing recorded")))
-    ;; The action-commit-hook will fire when the chain action is
-    ;; committed (via `helixel-with-action-tracking''s deferred
-    ;; commit on the next command).  Integration layers (e.g.
-    ;; `helixel-mc-integrate') filter for
-    ;; by-command=`helixel-repeat-chain-end' on that hook
-    ;; instead of using a separate chain-specific hook.
-  ))
+        (message "Chain empty \u2014 nothing recorded")))))
 
 ;;;###autoload
 (defun helixel-repeat-chain-cancel ()
   "Discard the current chain without recording."
   (interactive)
+  (remove-hook 'post-command-hook #'helixel--chain-post-cmd-hook t)
+  (run-hooks 'helixel-chain-cancel-hook)
   (helixel--chain-reset-state)
   (message "Chain cancelled"))
 

@@ -556,17 +556,13 @@ DIR is `forward' or `backward'.  Only operates when ENTRY-KIND is non-nil.
 Returns t if a skip was performed, nil otherwise."
   (when entry-kind
     (when (or (looking-at pat)
-              (save-excursion
-                (condition-case nil
-                    (progn
-                      (helixel-search--search pat 'backward)
-                      (let ((m-end (match-end 0))
-                            (m-beg (match-beginning 0)))
-                        (if (= m-beg m-end)
-                            (= (line-number-at-pos)
-                               (line-number-at-pos m-end))
-                          (<= (- (point) m-end) (length pat)))))
-                  (search-failed nil))))
+              (let ((orig-pt (point)))
+                (save-excursion
+                  (condition-case nil
+                      (progn
+                        (helixel-search--search pat 'backward)
+                        (>= orig-pt (match-beginning 0)))
+                    (search-failed nil)))))
       (if (eq dir 'backward)
           (goto-char (max (point-min) (1- (match-beginning 0))))
         (goto-char (if (= (match-beginning 0) (match-end 0))
@@ -894,11 +890,20 @@ Called by `helixel-mode' deactivation."
 Positions point and sets `match-data' so `helixel--recreate-search'
 can reuse it without re-searching.  Returns nil if no more matches.
 Guards against zero-width patterns (`$', `^') that would
-otherwise cause infinite loops at buffer edges."
+otherwise cause infinite loops at buffer edges.
+
+When TX's sel has no `:pattern' (e.g. `insert-selection-end' outside
+a search context), fall back to recreating the selection in-place."
   (let* ((sel (helixel-action-sel tx))
-         (pat (helixel-sel-search-pattern sel))
-         (dir (helixel-sel-search-dir sel))
-         (entry-kind (helixel-sel-search-entry-kind sel)))
+         (pat (helixel-sel-search-pattern sel)))
+    (if (not pat)
+        ;; Not a search-initiated insert — just recreate the
+        ;; selection at point and return t (in-place repeat).
+        (condition-case nil
+            (progn (helixel-sel-call-recreate sel) t)
+          (error nil))
+      (let* ((dir (helixel-sel-search-dir sel))
+             (entry-kind (helixel-sel-search-entry-kind sel)))
     (helixel-search--skip-current-match pat dir entry-kind)
     (unless entry-kind
       (helixel-search--backward-unstick dir))
@@ -914,7 +919,7 @@ otherwise cause infinite loops at buffer edges."
           (helixel--with-span (helixel-sel-ctx sel)
             (helixel--recreate-selection sel))
           t)
-      (search-failed nil))))
+      (search-failed nil))))))
 
 (defsubst helixel-search--advance-past-zero-width (dir)
   "Step one char past a zero-width match in DIR.

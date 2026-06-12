@@ -1068,11 +1068,19 @@ Supports `line', `rect' and `textobj'."
 
 (defun helixel-sel--copy (sel)
   "Deep-copy `helixel-sel' struct SEL.
-Copies the ctx plist so the copy is independent."
+Copies the ctx plist and its mutable sub-structures (e.g. :moves
+list whose elements' cdrs are mutated by `setcdr' in
+track-visual-move) so the copy is fully independent."
   (when (helixel-sel-p sel)
-    (helixel-sel--internal
-     :kind (helixel-sel--kind sel)
-     :ctx (copy-sequence (helixel-sel--ctx sel)))))
+    (let ((ctx (copy-sequence (helixel-sel--ctx sel))))
+      ;; Deep-copy :moves to prevent mutation of shared list
+      ;; structure (track-visual-move increments move counts via
+      ;; setcdr, which would corrupt previously-committed entries).
+      (when-let* ((moves (plist-get ctx :moves)))
+        (setq ctx (plist-put ctx :moves (copy-tree moves))))
+      (helixel-sel--internal
+       :kind (helixel-sel--kind sel)
+       :ctx ctx))))
 
 
 ;; ----------------------------------------------------------------------

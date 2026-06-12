@@ -79,7 +79,7 @@ after BODY to keep ert clean."
                    :by-command 'helixel-repeat-chain-end
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
-      (helixel--chain-on-commit entry)
+      (helixel--chain-push-entry entry)
       (should (null (helixel-chain-session-tx-list
                      helixel--chain-session))))
     ;; Now a real edit action should be appended.
@@ -90,30 +90,30 @@ after BODY to keep ert clean."
                    :by-command 'helixel-kill-thing
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
-      (helixel--chain-on-commit entry)
+      (helixel--chain-push-entry entry)
       (should (equal (length (helixel-chain-session-tx-list
                               helixel--chain-session))
                      1)))
     (helixel-repeat-chain-cancel)))
 
-;; ── INV-CHAIN-3: actions without runner stay out of tx-list ──
+;; ── INV-CHAIN-3: pure motion commands (no runner, no sel) ARE captured ──
 
-(ert-deftest helixel-test-inv-chain-runnerless-tx-excluded ()
-  "INV: a committed action whose tx has no runner does NOT enter tx-list.
-Movement / textobj selections produce txs with op=nil + runner=nil
-that participate in mc dispatch but must not be replayed via chain."
+(ert-deftest helixel-test-inv-chain-runnerless-tx-captured ()
+  "INV: pure motion commands (no runner, no sel, but by-command)
+are now captured for chain replay via `call-interactively'."
   (helixel-chain-inv-with-buffer "abc\n"
     (helixel-repeat-chain-start)
     (let* ((entry (make-helixel-action
                    :category 'movement
                    :subcat 'word
-                   :op nil :runner nil
+                   :op nil :runner nil :sel nil
                    :by-command 'helixel-forward-word
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
-      (helixel--chain-on-commit entry)
-      (should (null (helixel-chain-session-tx-list
-                     helixel--chain-session))))
+      (helixel--chain-push-entry entry)
+      (should (equal (length (helixel-chain-session-tx-list
+                              helixel--chain-session))
+                     1)))
     (helixel-repeat-chain-cancel)))
 
 ;; ── INV-CHAIN-4: cancel releases init-bounds markers ──
@@ -134,6 +134,28 @@ that participate in mc dispatch but must not be replayed via chain."
       (should-not (marker-position me))
       ;; Session itself is gone.
       (should-not helixel--chain-session))))
+
+;; ── INV-CHAIN-5: movement entry sel :moves lists are independent ──
+
+(ert-deftest helixel-test-inv-chain-sel-copy-independence ()
+  "INV: `helixel-sel--copy' deep-copies the :moves list.
+When two movement entries share a :moves list via shallow copy,
+track-visual-move's setcdr mutation on the second entry corrupts
+the first entry's stored count.  The fix uses `copy-tree' on :moves."
+  (let* ((sel1 (helixel-sel-create 'movement
+                 '(:moves ((helixel-forward-word-start . 1))
+                   :inline-advance t :normal-mode t)))
+         (copy1 (helixel-sel--copy sel1)))
+    ;; Mutate the ORIGINAL's moves count (simulating track-visual-move)
+    (setcdr (car (helixel-sel-movement-moves
+                  (helixel-sel-ctx sel1)))
+            2)
+    ;; The copy MUST still have count=1 (not mutated to 2)
+    (should (= 1 (cdar (helixel-sel-movement-moves
+                        (helixel-sel-ctx copy1)))))
+    ;; The original now has count=2 (mutated)
+    (should (= 2 (cdar (helixel-sel-movement-moves
+                        (helixel-sel-ctx sel1)))))))
 
 (provide 'helixel-test-chain-invariant)
 ;;; helixel-test-chain-invariant.el ends here

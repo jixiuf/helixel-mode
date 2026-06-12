@@ -296,7 +296,7 @@ application path; chain-end does not re-replay."
 ;; and yields the user-visible "chain applied at 0 fake cursors".
 
 (ert-deftest helixel-test-mc-chain-end-excludes-normal-escape ()
-  "`helixel--chain-on-commit' must skip chain-control commands so the
+  "`helixel--chain-push-entry' must skip chain-control commands so the
 chain's tx-list does not contain entries for chain-start /
 chain-end / chain-cancel / normal-escape."
   (helixel-test-with-buffer "abc\n"
@@ -308,7 +308,7 @@ chain-end / chain-cancel / normal-escape."
       (setf (helixel-action-category entry) 'state
             (helixel-action-subcat entry) 'escape
             (helixel-action-by-command entry) 'helixel-normal-escape)
-      (helixel--chain-on-commit entry))
+      (helixel--chain-push-entry entry))
     (should (null (helixel-chain-session-tx-list helixel--chain-session)))
     (setq helixel--chain-session nil)))
 

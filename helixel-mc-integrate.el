@@ -119,8 +119,7 @@ via `helixel-mc--undo-step-begin' / `helixel-mc--undo-step-end-cb'."
 
 (defun helixel-mc--on-chain-end (entry)
   "If ENTRY is the chain-end commit, broadcast to all fake cursors.
-Runs from `helixel-action-commit-hook' (replaces the former
-`helixel-chain-recorded-functions' dedicated hook).  The chain
+Hooked into `helixel-action-commit-hook'.  The chain
 end action has by-command=`helixel-repeat-chain-end'.  We only
 broadcast — during recording the per-command dispatch already
 applied every keystroke at every fake cursor live."

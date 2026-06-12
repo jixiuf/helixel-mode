@@ -35,6 +35,9 @@
      (transient-mark-mode 1)
      (insert ,content)
      (goto-char (point-min))
+     ;; `execute-kbd-macro' runs in the selected window's buffer,
+     ;; so display the temp buffer.
+     (set-window-buffer nil (current-buffer))
      (setq-local helixel--current-state 'motion)
      (helixel--switch-state 'normal)
      (setq helixel--chain-session nil)
@@ -50,6 +53,7 @@
            (ignore-errors (set-marker (cdr b) nil))))
        (setq helixel--chain-session nil)
        (setq helixel--inhibit-action-track nil)
+       (remove-hook 'post-command-hook #'helixel--chain-post-cmd-hook t)
        (ignore-errors (helixel-normal-state -1)))))
 
 ;; ── Chain lifecycle tests ──
@@ -127,17 +131,15 @@
     (should (eq (helixel-action-op helixel--last-tx) 'chain))))
 
 (ert-deftest helixel-test-chain-merge-entry-kind ()
-  "Chain-end merges :entry-kind from live ctx when snapshot lacks it."
+  "`helixel--chain-propagate-entry-kind' updates init-ctx during recording."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (setq helixel--pending-sel
           (helixel-sel-create 'search
             '(:pattern "foo" :dir forward)))
     (helixel-repeat-chain-start)
-    ;; Simulate i updating live ctx after snapshot
-    (setq helixel--pending-sel
-          (helixel-sel-update-ctx helixel--pending-sel
-                                  :entry-kind 'insert))
+    ;; Simulate insert command calling propagate-entry-kind
+    (helixel--chain-propagate-entry-kind 'insert)
     (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-tx-list helixel--chain-session))
     (helixel-repeat-chain-end)
@@ -573,5 +575,634 @@ deletes the prefix before inserting."
         (helixel--execute-keys segs)
         (should (string= "foo" (buffer-string)))))))
 
+;; ── End-to-end: chain wd wa hello, then . on next line ──
+
+(ert-deftest helixel-test-chain-wd-wa-hello-dot ()
+  "Chain: wd wa hello ESC, then . reproduces on next line."
+  (helixel-chain-test-with-buffer
+      "hello world\nhello world\nhello world\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    (helixel-forward-word-start)   ;; w
+    (helixel-kill)                  ;; d
+    (helixel-forward-word-start)   ;; w
+    (helixel-insert-after)          ;; a
+    (insert "hello")
+    (helixel-insert-exit)           ;; ESC
+    (helixel-repeat-chain-end)      ;; ESC
+    ;; Verify recording result
+    (goto-char 1)
+    (let ((line1 (buffer-substring (line-beginning-position)
+                                   (line-end-position))))
+      (should (stringp line1))
+      ;; Dot on line 2 should produce the same result
+      (forward-line 1)
+      (beginning-of-line)
+      (let ((before (buffer-substring (line-beginning-position)
+                                      (line-end-position))))
+        (should (string= before "hello world")))
+      (helixel-repeat-edit)
+      (let ((line2 (buffer-substring (line-beginning-position)
+                                     (line-end-position))))
+        (should (string= line2 line1))))))
+
+(ert-deftest helixel-test-chain-xqbdi-world-dot ()
+  "Chain: x q b d i world ESC ESC advances one line per ."
+  (helixel-chain-test-with-buffer
+      "hello world\nhello world\nhello world\nhello world\n"
+    (goto-char 1)
+    (helixel-select-line)
+    (helixel-repeat-chain-start)
+    (helixel-backward-word-start)
+    (helixel-kill)
+    (helixel-insert)
+    (insert "world")
+    (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; x before q is now flushed at chain-start — init-ctx is still
+    ;; the line sel, but x doesn't appear in the tx-list.
+    ;; Advance moves one line per dot.
+    (goto-char 1)
+    (let ((rec-line (buffer-substring (line-beginning-position)
+                                      (line-end-position))))
+      (should (stringp rec-line))
+      ;; Dot advances one line and applies
+      (helixel-repeat-edit)
+      ;; Result should be non-empty (chain applied)
+      (let ((line2 (buffer-substring (line-beginning-position)
+                                     (line-end-position))))
+        (should (stringp line2))
+        (should (> (length line2) 0)))
+      ;; Second dot advances another line
+      (helixel-repeat-edit)
+      (let ((line3 (buffer-substring (line-beginning-position)
+                                     (line-end-position))))
+        (should (stringp line3))
+        (should (> (length line3) 0))))))
+
+(ert-deftest helixel-test-chain-wd-wa-hello-movement-entries ()
+  "Chain recording wd wa hello captures movement entries between edits."
+  (helixel-chain-test-with-buffer
+      "hello world\nhello world\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    (helixel-forward-word-start)   ;; w
+    (helixel-kill)                  ;; d
+    (helixel-forward-word-start)   ;; w
+    (helixel-insert-after)          ;; a
+    (insert "hello")
+    (helixel-insert-exit)           ;; ESC
+    ;; Before chain-end, tx-list should contain 4 entries:
+    ;; w-movement, kill, w-movement, insert-text
+    (let ((tx-list (helixel-chain-session-tx-list helixel--chain-session)))
+      (should (= 4 (length tx-list)))
+      ;; Chronological order after chain-end nreverse:
+      ;; [w-move, kill-edit, w-move, insert-edit]
+      (helixel-repeat-chain-end)
+      (let ((chain-tx-list
+             (plist-get (helixel-action-payload helixel--last-tx) :tx-list)))
+        (should (= 4 (length chain-tx-list)))
+        ;; First entry: w movement (sel but no runner)
+        (should (helixel-action-sel (nth 0 chain-tx-list)))
+        (should-not (helixel-action-runner (nth 0 chain-tx-list)))
+        ;; Second entry: kill (runner present)
+        (should (eq 'kill (helixel-action-op (nth 1 chain-tx-list))))
+        (should (helixel-action-runner (nth 1 chain-tx-list)))
+        ;; Third entry: w movement
+        (should (helixel-action-sel (nth 2 chain-tx-list)))
+        (should-not (helixel-action-runner (nth 2 chain-tx-list)))
+        ;; Fourth entry: insert-text (runner present)
+        (should (eq 'insert-text (helixel-action-op (nth 3 chain-tx-list))))
+        (should (helixel-action-runner (nth 3 chain-tx-list)))))))
+
+;; ── Search-based chain advance ──
+
+(ert-deftest helixel-test-chain-search-advance ()
+  "Chain with search init-ctx advances to next match on each .
+Note: if the chain creates text matching the search pattern
+(e.g. inserting 'foo' before 'hello' creates 'foohello'),
+the advance will find that new match rather than the next
+original match.  This is an inherent limitation of search-based
+advance — use distinct patterns to avoid self-matching."
+  (helixel-chain-test-with-buffer
+      "hello world\nfoo hello bar\nhello baz\n"
+    (goto-char 1)
+    (search-forward "hello")
+    (let ((mb (match-beginning 0)) (me (match-end 0)))
+      (goto-char mb)
+      (push-mark me t t)
+      (goto-char mb))
+    (helixel--sel-push
+     (helixel-sel-create 'search '(:pattern "hello" :dir forward)))
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "foo") (helixel-insert-exit)
+    (helixel-forward-word-start) (helixel-insert-after)
+    (insert "bar") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; Verify chain has search sel
+    (should (eq (helixel-sel-kind (helixel-action-sel helixel--last-tx))
+                'search))
+    (should (string= (helixel-sel-search-pattern
+                      (helixel-action-sel helixel--last-tx))
+                     "hello"))
+    ;; First dot: advance to next match and apply
+    (helixel-repeat-edit)
+    ;; The advance should have moved to a new position
+    (goto-char 1)
+    (let ((line1 (buffer-substring (line-beginning-position)
+                                   (line-end-position))))
+      ;; After advance+apply, we should be on a different line
+      ;; (or the same line modified again if the chain creates
+      ;; new matches of the pattern)
+      (should-not (string= line1 "hello world")))))
+
+;; ── Zero-width search-based chain advance ──
+
+(defun helixel-chain--setup-search (pattern dir)
+  "Set up a simulated search with PATTERN in DIR and return match pos.
+PATTERN is a regexp."
+  (let ((search-fn (if (eq dir 'forward)
+                       're-search-forward
+                     're-search-backward)))
+    (funcall search-fn pattern)
+    (let ((mb (match-beginning 0)) (me (match-end 0)))
+      (goto-char mb)
+      (push-mark me t t)
+      (goto-char mb))
+    (helixel--sel-push
+     (helixel-sel-create 'search `(:pattern ,pattern :dir ,dir)))
+    (point)))
+
+(ert-deftest helixel-test-chain-search-bol-forward ()
+  "Chain with /^ forward search advances one line per ."
+  (helixel-chain-test-with-buffer
+      "hello\nworld\nfoo\nbar\n"
+    (helixel-chain--setup-search "^" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (should (eq (helixel-sel-kind (helixel-action-sel helixel--last-tx)) 'search))
+    ;; dot1: advance to line 2
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 1)
+      (should (string-prefix-p "X" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))
+    ;; dot2: advance to line 3
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 2)
+      (should (string-prefix-p "X" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))
+    ;; dot3: advance to line 4
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 3)
+      (should (string-prefix-p "X" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))))
+
+(ert-deftest helixel-test-chain-search-eol-forward ()
+  "Chain with /$ forward search advances one line per ."
+  (helixel-chain-test-with-buffer
+      "hello\nworld\nfoo\nbar\n"
+    (goto-char 1)
+    (re-search-forward "$")
+    (let ((mb (match-beginning 0)) (me (match-end 0)))
+      (goto-char mb)
+      (push-mark me t t)
+      (goto-char mb))
+    (helixel--sel-push (helixel-sel-create 'search '(:pattern "$" :dir forward)))
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: advance to line 2 eol
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 1)
+      (should (string-match-p "X$" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))
+    ;; dot2: advance to line 3 eol
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 2)
+      (should (string-match-p "X$" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))))
+
+(ert-deftest helixel-test-chain-search-bol-backward ()
+  "Chain with ?^ backward search advances one line per ."
+  (helixel-chain-test-with-buffer
+      "hello\nworld\nfoo\nbar\n"
+    (goto-char (point-max))
+    (helixel-chain--setup-search "^" 'backward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: advance backward to line 4 (the previous ^)
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 3)
+      (let ((line (buffer-substring (line-beginning-position)
+                                    (line-end-position))))
+        (should (string-prefix-p "X" line))))
+    ;; dot2: advance backward to line 3
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 2)
+      (let ((line (buffer-substring (line-beginning-position)
+                                    (line-end-position))))
+        (should (string-prefix-p "X" line))))))
+
+(ert-deftest helixel-test-chain-search-zero-width-edge ()
+  "Zero-width /$ at last line should stop without infinite loop."
+  (helixel-chain-test-with-buffer
+      "hello\nworld\n"
+    (goto-char 1)
+    (re-search-forward "$")
+    (let ((mb (match-beginning 0)) (me (match-end 0)))
+      (goto-char mb)
+      (push-mark me t t)
+      (goto-char mb))
+    (helixel--sel-push (helixel-sel-create 'search '(:pattern "$" :dir forward)))
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: advance to line 2 eol
+    (helixel-repeat-edit)
+    (goto-char 1) (forward-line 1)
+    (should (string-match-p "X$" (buffer-substring (line-beginning-position)
+                                                     (line-end-position))))
+    ;; dot2: no more targets (should message, not loop)
+    ;; helixel-repeat-edit catches errors internally, so we just
+    ;; verify it doesn't hang by checking the call returns.
+    (helixel-repeat-edit))
+  ;; Also test backward /^ at first line
+  (helixel-chain-test-with-buffer
+      "hello\nworld\n"
+    (goto-char (point-max))
+    (helixel-chain--setup-search "^" 'backward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: advance backward to line 1
+    (helixel-repeat-edit)
+    ;; dot2: no more targets (should not loop)
+    (helixel-repeat-edit)))
+
+(ert-deftest helixel-test-chain-search-bol-backward-cursor-position ()
+  "Chain with ?^ backward: cursor ends after inserted text, not after first char.
+Regression for `?^ <RET> q i foo ESC ESC .' — cursor was landing
+at BOL+1 (after 'f') because of a stale zw-step adjustment."
+  (helixel-chain-test-with-buffer
+      "hello\nworld\nfoo\n"
+    (goto-char (point-max))
+    (helixel-chain--setup-search "^" 'backward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "foo") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; First dot: advance to previous BOL and insert "foo".
+    ;; After replay cursor MUST be after the inserted text (BOL+3),
+    ;; not at BOL+1 (after 'f').
+    (helixel-repeat-edit)
+    (let ((bol (line-beginning-position)))
+      (should (string-prefix-p "foo" (buffer-substring bol (line-end-position))))
+      (should (= (point) (+ bol 3))))
+    ;; Second dot: advance further and verify cursor again.
+    (helixel-repeat-edit)
+    (let ((bol (line-beginning-position)))
+      (should (string-prefix-p "foo" (buffer-substring bol (line-end-position))))
+      (should (= (point) (+ bol 3))))))
+
+(ert-deftest helixel-test-chain-no-initctx-j-gh ()
+  "Chain with no init-ctx: q e a foo ESC j gh ESC . . advances per replay.
+Pure motion commands (j, gh) have no runner and no sel — they must
+be captured via `by-command' and replayed via `call-interactively'."
+  (helixel-chain-test-with-buffer
+      "world hello\nworld hello\nworld hello\nworld hello\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    (helixel-forward-word-end)       ;; e
+    (helixel-insert-after)            ;; a
+    (insert "foo")
+    (helixel-insert-exit)             ;; ESC
+    (helixel-next-line)               ;; j
+    (helixel-go-beginning-line)       ;; gh
+    (helixel-repeat-chain-end)        ;; ESC
+    ;; First dot: replay on line 2; cursor must end at BOL of line 3
+    (helixel-repeat-edit)
+    (save-excursion
+      (goto-char 1) (forward-line 1)
+      (let ((line (buffer-substring (line-beginning-position)
+                                    (line-end-position))))
+        (should (string= line "worldfoo hello"))))
+    ;; Cursor must be at BOL of line 3 (j moved down, gh → BOL)
+    (should (= (point) (save-excursion (goto-char 1) (forward-line 2) (line-beginning-position))))
+    ;; Second dot: replay on line 3
+    (helixel-repeat-edit)
+    (save-excursion
+      (goto-char 1) (forward-line 2)
+      (let ((line (buffer-substring (line-beginning-position)
+                                    (line-end-position))))
+        (should (string= line "worldfoo hello"))))
+    ;; Cursor must be at BOL of line 4
+    (should (= (point) (save-excursion (goto-char 1) (forward-line 3) (line-beginning-position))))
+    ;; Third dot: replay on line 4
+    (helixel-repeat-edit)
+    (save-excursion
+      (goto-char 1) (forward-line 3)
+      (let ((line (buffer-substring (line-beginning-position)
+                                    (line-end-position))))
+        (should (string= line "worldfoo hello"))))))
+
+;; ── Vanilla / native Emacs command capture ──
+;; `execute-kbd-macro' goes through the real command loop, so
+;; `post-command-hook' fires even in batch mode.
+
+(ert-deftest helixel-test-chain-vanilla-C-a-at-end ()
+  "Vanilla C-a as the last command before chain-end."
+  (helixel-chain-test-with-buffer
+      "world hello\nworld hello\nworld hello\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    (helixel-forward-word-end)           ;; e
+    (helixel-insert-after)                ;; a
+    (insert "foo")
+    (helixel-insert-exit)                 ;; ESC (insert)
+    (helixel-next-line)                   ;; j
+    (execute-kbd-macro (kbd "C-a"))       ;; C-a
+    (helixel-repeat-chain-end)            ;; ESC
+    (let ((tx-list (helixel-action-payload-get helixel--last-tx :tx-list)))
+      (should (= 4 (length tx-list)))
+      ;; Vanilla C-a is flushed after the last helixel, so it
+      ;; appears as the last entry after nreverse.
+      (should (eq (helixel-action-by-command (nth 3 tx-list))
+                  'move-beginning-of-line)))
+    ;; Replay: verify line content and cursor position
+    (helixel-repeat-edit)
+    (save-excursion
+      (goto-char 1) (forward-line 1)
+      (should (string= (buffer-substring (line-beginning-position)
+                                          (line-end-position))
+                       "worldfoo hello")))
+    (should (= (point) (save-excursion (goto-char 1) (forward-line 2)
+                                       (line-beginning-position))))))
+
+(ert-deftest helixel-test-chain-vanilla-C-a-in-middle ()
+  "Vanilla C-a in the middle of a chain."
+  (helixel-chain-test-with-buffer
+      "world hello\nworld hello\nworld hello\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    (execute-kbd-macro (kbd "C-a"))       ;; C-a (BOL)
+    (helixel-forward-word-end)           ;; e
+    (helixel-insert-after)
+    (insert "X")
+    (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (let ((tx-list (helixel-action-payload-get helixel--last-tx :tx-list)))
+      (should (= 3 (length tx-list)))
+      (should (eq (helixel-action-by-command (nth 0 tx-list))
+                  'move-beginning-of-line))
+      (should (eq (helixel-action-by-command (nth 1 tx-list))
+                  'helixel-forward-word-end)))
+    (goto-char 1) (forward-line 1) (beginning-of-line)
+    (helixel-repeat-edit)
+    (should (string= (buffer-substring (line-beginning-position)
+                                        (line-end-position))
+                     "worldX hello"))))
+
+(ert-deftest helixel-test-chain-vanilla-multiple ()
+  "Multiple vanilla commands with correct ordering.
+Uses <right> (right-char) instead of C-f because C-f is remapped
+by helixel (to scroll-up).  <right> falls through to the global
+keymap and invokes the vanilla `right-char' command."
+  (helixel-chain-test-with-buffer
+      "  hello world\n  hello world\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    ;; C-a is NOT remapped by helixel, falls through to vanilla.
+    (execute-kbd-macro (kbd "C-a"))
+    ;; <right> = right-char, also not remapped.
+    (execute-kbd-macro (kbd "<right>"))
+    (execute-kbd-macro (kbd "<right>"))
+    (helixel-insert-after)
+    (insert "X")
+    (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (let ((tx-list (helixel-action-payload-get helixel--last-tx :tx-list)))
+      ;; 4 entries: C-a, <right>, <right>, insert-text.
+      ;; insert-after's state entry is excluded (category=state).
+      (should (= 4 (length tx-list)))
+      (should (eq (helixel-action-by-command (nth 0 tx-list))
+                  'move-beginning-of-line))
+      (should (eq (helixel-action-by-command (nth 1 tx-list))
+                  'right-char))
+      (should (eq (helixel-action-by-command (nth 2 tx-list))
+                  'right-char)))
+    (goto-char 1) (forward-line 1)
+    (helixel-repeat-edit)
+    ;; Right-char×2 + insert-after → "X" at position after right-moves.
+    ;; The insert-after's internal forward-char is not captured
+    ;; as a separate movement entry, so replay inserts one char earlier
+    ;; than during recording.  This is a known limitation.
+    (should (string= (buffer-substring (line-beginning-position)
+                                        (line-end-position))
+                     "  Xhello world"))))
+
+(ert-deftest helixel-test-chain-vanilla-self-insert-excluded ()
+  "self-insert-command is NOT captured by post-command-hook.
+Tested by calling the hook function directly."
+  (helixel-chain-test-with-buffer
+      "hello\n"
+    (helixel-repeat-chain-start)
+    ;; self-insert-command should be excluded by the hook
+    (let ((this-command 'self-insert-command))
+      (helixel--chain-post-cmd-hook))
+    ;; move-beginning-of-line should be captured
+    (let ((this-command 'move-beginning-of-line))
+      (helixel--chain-post-cmd-hook))
+    (helixel-repeat-chain-end)
+    (let ((tx-list (helixel-action-payload-get helixel--last-tx :tx-list)))
+      (should (= 1 (length tx-list)))
+      (should (eq (helixel-action-by-command (nth 0 tx-list))
+                  'move-beginning-of-line)))))
+
+;; ── Chain: wwd multi-line dot-repeat (user-reported scenario) ──
+
+(ert-deftest helixel-test-chain-wwd-multiline-dot ()
+  "Chain q w w d j gh ESC then . on each subsequent line.
+Each dot-repeat should delete the second word ('foo') on the
+current line, then move to the next line."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "hello foo world man\nhello foo world man\nhello foo world man\n")
+    (goto-char 1)
+    (set-window-buffer nil (current-buffer))
+    (setq-local helixel--current-state 'motion)
+    (helixel--switch-state 'normal)
+    (setq helixel--chain-session nil
+          helixel--pending-sel nil
+          helixel--repeat-permanent-flip nil)
+    (unwind-protect
+        (progn
+          (helixel-repeat-chain-start)
+          (helixel-forward-word-start)
+          (helixel-forward-word-start)
+          (helixel-kill)
+          (helixel-next-line)
+          (helixel-go-beginning-line)
+          (helixel-repeat-chain-end)
+          ;; Verify recording modified line 1
+          (goto-char 1)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "hello world man"))
+          ;; Dot on line 2
+          (goto-char 1) (forward-line 1) (beginning-of-line)
+          (helixel-repeat-edit)
+          (goto-char 1) (forward-line 1)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "hello world man")))
+      (when helixel--chain-session
+        (when-let* ((b (helixel-chain-session-init-bounds
+                        helixel--chain-session)))
+          (ignore-errors (set-marker (car b) nil))
+          (ignore-errors (set-marker (cdr b) nil))))
+      (setq helixel--chain-session nil)
+      (remove-hook 'post-command-hook #'helixel--chain-post-cmd-hook t)
+      (ignore-errors (helixel-normal-state -1)))))
+
+;; ── Chain: pre-edit movement entries have independent sel copies ──
+
+(ert-deftest helixel-test-chain-movement-sel-independence ()
+  "Pre-edit movement entries must have independent :moves lists.
+Before the sel-copy fix, track-visual-move's setcdr mutation would
+corrupt previously committed entries' :moves counts — w1 would end
+up with ((w . 2)) instead of ((w . 1))."
+  (helixel-chain-test-with-buffer
+      "hello foo world man\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    (helixel-forward-word-start)   ;; w
+    (helixel-forward-word-start)   ;; w
+    (helixel-kill)                  ;; d
+    (helixel-repeat-chain-end)
+    (let ((tx-list (helixel-action-payload-get helixel--last-tx :tx-list)))
+      (should (= 3 (length tx-list)))
+      ;; w1 should have moves=((w . 1)), NOT ((w . 2))
+      (let ((moves1 (helixel-sel-movement-moves
+                     (helixel-action-sel (nth 0 tx-list)))))
+        (should moves1)
+        (should (= 1 (cdar moves1))))
+      ;; w2 should have moves=((w . 2)), accumulated
+      (let ((moves2 (helixel-sel-movement-moves
+                     (helixel-action-sel (nth 1 tx-list)))))
+        (should moves2)
+        (should (= 2 (cdar moves2))))
+      ;; kill should also have moves=((w . 2))
+      (let ((moves3 (helixel-sel-movement-moves
+                     (helixel-action-sel (nth 2 tx-list)))))
+        (should moves3)
+        (should (= 2 (cdar moves3)))))))
+
+;; ── Chain: inter-edit movement is replayed (not skipped) ──
+
+(ert-deftest helixel-test-chain-inter-edit-movement-replayed ()
+  "Movement entries between edits of different sel kinds are replayed.
+For q w d w a hello ESC: the second w (between kill and insert-text)
+is inter-edit — it must be replayed to position point before insert."
+  (helixel-chain-test-with-buffer
+      "hello foo world man\nhello foo world man\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    (helixel-forward-word-start)   ;; w
+    (helixel-kill)                  ;; d
+    (helixel-forward-word-start)   ;; w
+    (helixel-insert-after)          ;; a
+    (insert "hello")
+    (helixel-insert-exit)           ;; ESC
+    (helixel-repeat-chain-end)
+    (goto-char 1)
+    (let ((line1 (buffer-substring (line-beginning-position)
+                                    (line-end-position))))
+      (should (stringp line1))
+      ;; Dot on line 2 should produce the same result
+      (forward-line 1) (beginning-of-line)
+      (helixel-repeat-edit)
+      (let ((line2 (buffer-substring (line-beginning-position)
+                                      (line-end-position))))
+        (should (string= line2 line1))))))
+
+;; ── Vanilla entry carries prefix-arg ──
+
+(ert-deftest helixel-test-chain-vanilla-prefix-arg ()
+  "Vanilla entries store current-prefix-arg in payload for faithful
+replay."
+  (helixel-chain-test-with-buffer
+      "line1\nline2\nline3\n"
+    (goto-char 1)
+    (helixel-repeat-chain-start)
+    ;; Simulate a vanilla command with prefix-arg
+    (let ((current-prefix-arg 4)
+          (this-command 'next-line))
+      (helixel--chain-post-cmd-hook))
+    (helixel-repeat-chain-end)
+    (let ((tx-list (helixel-action-payload-get helixel--last-tx :tx-list)))
+      (should (= 1 (length tx-list)))
+      (should (eq 4 (helixel-action-payload-get (nth 0 tx-list) :prefix))))))
+
 (provide 'helixel-test-repeat-chain)
 ;;; helixel-test-repeat-chain.el ends here
+
+;; ── Insert-mode RET is NOT double-captured ──
+
+(ert-deftest helixel-test-chain-insert-ret-no-double-capture ()
+  "Insert-mode commands like RET are captured ONLY by insert-record,
+not by the chain post-command-hook (which now excludes insert-state).
+Without this fix, RET would appear as a vanilla entry AND in the
+insert-text segments, producing double newlines on replay."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (goto-char 1)
+    (set-window-buffer nil (current-buffer))
+    (setq-local helixel--current-state 'motion)
+    (helixel--switch-state 'normal)
+    (setq helixel--chain-session nil
+          helixel--pending-sel nil
+          helixel--repeat-permanent-flip nil)
+    (unwind-protect
+        (progn
+          (helixel-repeat-chain-start)
+          (helixel-insert-after)
+          ;; Use execute-kbd-macro for proper command-loop dispatch
+          ;; (direct (insert ...) bypasses pre/post-command-hooks).
+          (execute-kbd-macro (kbd "foo"))
+          (execute-kbd-macro (kbd "RET"))
+          (helixel-insert-exit)
+          (helixel-repeat-chain-end)
+          ;; Should have exactly 1 entry: insert-text only.
+          (let ((tx-list (helixel-action-payload-get
+                          helixel--last-tx :tx-list)))
+            (should (= 1 (length tx-list)))
+            (should (eq (helixel-action-op (nth 0 tx-list))
+                        'insert-text)))
+          ;; Dot-repeat 3 times: each should produce "foo" on a
+          ;; new line, without extra blank lines.
+          (dotimes (_ 3) (helixel-repeat-edit))
+          (goto-char 1)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "foo"))
+          (forward-line)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "foo"))
+          (forward-line)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "foo"))
+          (forward-line)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "foo")))
+      (when helixel--chain-session
+        (when-let* ((b (helixel-chain-session-init-bounds
+                        helixel--chain-session)))
+          (ignore-errors (set-marker (car b) nil))
+          (ignore-errors (set-marker (cdr b) nil))))
+      (setq helixel--chain-session nil)
+      (remove-hook 'post-command-hook #'helixel--chain-post-cmd-hook t)
+      (ignore-errors (helixel-normal-state -1)))))

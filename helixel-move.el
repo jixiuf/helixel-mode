@@ -72,6 +72,10 @@ the action carries no tx with a runner)."
     `(helixel-define-command ,name
          (:category movement :subcat ,type
                     :clear-highlights ,clear)
+       ;; Clear any stale pending-sel so pure motion commands
+       ;; (j, gh, etc.) don't inherit a selection from a prior
+       ;; edit (e.g. insert-selection-end from insert-exit).
+       (setq helixel--pending-sel nil)
        (call-interactively #',builtin))))
 
 (defmacro helixel-define-movements (&rest specs)

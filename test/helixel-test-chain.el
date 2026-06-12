@@ -1144,6 +1144,53 @@ replay."
       (should (= 1 (length tx-list)))
       (should (eq 4 (helixel-action-payload-get (nth 0 tx-list) :prefix))))))
 
+(ert-deftest helixel-test-chain-line-insert-bol-dot ()
+  "Chain x q i foo ESC ESC then . inserts at BOL on next lines.
+Before the fix, the line init-ctx lacked entry-kind so chain
+advance didn't position to BOL — foo was inserted at EOL."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "line1\nline2\nline3\n")
+    (goto-char 1)
+    (set-window-buffer nil (current-buffer))
+    (setq-local helixel--current-state 'motion)
+    (helixel--switch-state 'normal)
+    (setq helixel--chain-session nil
+          helixel--pending-sel nil
+          helixel--repeat-permanent-flip nil)
+    (unwind-protect
+        (progn
+          (helixel-select-line)            ;; x
+          (helixel-repeat-chain-start)     ;; q
+          (helixel-insert)                 ;; i
+          (insert "foo")
+          (helixel-insert-exit)            ;; ESC
+          (helixel-repeat-chain-end)       ;; ESC
+          ;; Verify recording: line1 has "foo" at BOL
+          (goto-char 1)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "fooline1"))
+          ;; Dot from line 1 (original recording position):
+          ;; chain advance moves to line 2, inserts at BOL.
+          (helixel-repeat-edit)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "fooline2"))
+          ;; Dot again: advances to line 3, inserts at BOL.
+          (helixel-repeat-edit)
+          (should (string= (buffer-substring (line-beginning-position)
+                                              (line-end-position))
+                           "fooline3")))
+      (when helixel--chain-session
+        (when-let* ((b (helixel-chain-session-init-bounds
+                        helixel--chain-session)))
+          (ignore-errors (set-marker (car b) nil))
+          (ignore-errors (set-marker (cdr b) nil))))
+      (setq helixel--chain-session nil)
+      (remove-hook 'post-command-hook #'helixel--chain-post-cmd-hook t)
+      (ignore-errors (helixel-normal-state -1)))))
+
 (provide 'helixel-test-repeat-chain)
 ;;; helixel-test-repeat-chain.el ends here
 

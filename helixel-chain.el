@@ -185,11 +185,14 @@ entry during chain recording.")
 (defun helixel--chain-propagate-entry-kind (entry-kind)
   "Propagate ENTRY-KIND to the active chain session's init-ctx.
 Ensures `helixel-search--skip-current-match' can skip the current
-match during dot-repeat advance for search-initiated chains.
-No-op when no chain is active or the init-ctx is not a search sel."
+match during dot-repeat advance for search-initiated chains, and
+the chain advance positions point at BOL/EOL for line-initiated
+insert/append chains.
+No-op when no chain is active or the init-ctx is not a search/line sel."
   (when (and (helixel--chain-active-p)
              (helixel-chain-session-init-ctx helixel--chain-session)
-             (eq (helixel-sel-kind helixel--pending-sel) 'search))
+             (memq (helixel-sel-kind helixel--pending-sel)
+                   '(search line)))
     (setf (helixel-chain-session-init-ctx helixel--chain-session)
           (helixel-sel-update-ctx
            (helixel-chain-session-init-ctx helixel--chain-session)
@@ -204,14 +207,20 @@ No-op when no chain is active or the init-ctx is not a search sel."
   "Replay an edit entry SUB-TX.
 For movement-kind sels (built from pre-edit w/e/b moves),
 recreates the accumulated selection before running the runner.
-For other sel kinds (search, line, rect, etc.) the chain advance
+For line-kind sels with :entry-kind (insert/append from `i'/`a'),
+also recreates to reposition point to BOL/EOL — the chain
+advance may not have applied entry-kind positioning.
+For other sel kinds (search, rect, etc.) the chain advance
 already positioned point and the runner handles the rest."
   (when-let* ((edit-sel (helixel-action-sel sub-tx))
-              ((eq (helixel-sel-kind edit-sel) 'movement)))
-    (deactivate-mark)
-    (condition-case nil
-        (helixel-sel-call-recreate edit-sel)
-      (user-error nil)))
+              (kind (helixel-sel-kind edit-sel)))
+    (when (or (eq kind 'movement)
+              (and (eq kind 'line)
+                   (plist-get (helixel-sel-ctx edit-sel) :entry-kind)))
+      (deactivate-mark)
+      (condition-case nil
+          (helixel-sel-call-recreate edit-sel)
+        (user-error nil))))
   (funcall (helixel-action-runner sub-tx) sub-tx))
 
 (defun helixel--chain-replay-movement (sub-tx)

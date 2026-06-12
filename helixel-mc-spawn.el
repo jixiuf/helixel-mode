@@ -770,7 +770,10 @@ regions are included.  Result is sorted by BEG."
 REGION-SPECS is a list of (BEG END FORWARD) triples.  The FIRST
 spec is installed on the real cursor; the rest become fakes.
 All existing fakes are cleared first.  If REGION-SPECS is empty
-the mc session is fully disabled."
+the mc session is fully disabled.
+
+A triple with BEG = END represents a point-only cursor (no active
+region)."
   (helixel-mc-clear-all)
   (cond
    ((null region-specs)
@@ -778,16 +781,23 @@ the mc session is fully disabled."
    (t
     (let* ((first (car region-specs))
            (b (nth 0 first)) (e (nth 1 first)) (fwd (nth 2 first)))
-      (if fwd (progn (goto-char e) (set-marker (mark-marker) b))
-        (goto-char b) (set-marker (mark-marker) e))
-      (setq mark-active t))
+      (if (= b e)
+          ;; Point-only real cursor: just move point, no region.
+          (progn (goto-char b) (deactivate-mark))
+        (if fwd (progn (goto-char e) (set-marker (mark-marker) b))
+          (goto-char b) (set-marker (mark-marker) e))
+        (setq mark-active t)))
     (dolist (spec (cdr region-specs))
       (let* ((b (nth 0 spec)) (e (nth 1 spec)) (fwd (nth 2 spec))
-             (p (if fwd e b)) (m (if fwd b e))
+             (empty-p (= b e))
+             (p (if fwd e b))
+             (m (if empty-p p (if fwd b e)))
              (ov (helixel-mc-create-fake-cursor p m)))
         (when ov
-          (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t)
-          (helixel-mc--update-fake-region ov)))))))
+          (unless empty-p
+            (setf (helixel-pcs-mark-active
+                   (overlay-get ov 'helixel-pc-state)) t)
+            (helixel-mc--update-fake-region ov))))))))
 
 (defmacro helixel-mc-with-regions (regions-var &rest body)
   "Bind REGIONS-VAR to active (BEG END FORWARD) triples; install BODY's result.
@@ -823,22 +833,31 @@ edge of all active regions.  All fakes are cleared."
                 t))))
 
 (defun helixel-mc--trim-region (beg end)
-  "Return (TRIMMED-BEG . TRIMMED-END) for region [BEG, END)."
+  "Return (TRIMMED-BEG . TRIMMED-END) for region [BEG, END).
+When the region consists entirely of whitespace, returns
+\(POS . POS) where POS is the end of the leading whitespace
+\(i.e. the start of non-whitespace content)."
   (save-excursion
     (let* ((s (buffer-substring-no-properties beg end))
            (lead (if (string-match "\\`[ \t\r\n]+" s)
                      (match-end 0) 0))
            (trail (if (string-match "[ \t\r\n]+\\'" s)
                       (- (length s) (match-beginning 0)) 0)))
-      (cons (+ beg lead) (- end trail)))))
+      (if (>= (+ lead trail) (- end beg))
+          ;; Region is all whitespace — collapse to point-only at
+          ;; the end of leading whitespace.
+          (let ((pos (+ beg lead)))
+            (cons pos pos))
+        (cons (+ beg lead) (- end trail))))))
 
 (defun helixel-mc-trim ()
-  "Trim leading and trailing whitespace from every cursor's region."
+  "Trim leading and trailing whitespace from every cursor's region.
+Regions that become empty after trimming are converted to
+point-only cursors instead of being removed."
   (interactive)
   (helixel-mc-with-regions regions
     (cl-loop for (b e fwd) in regions
              for trimmed = (helixel-mc--trim-region b e)
-             when (< (car trimmed) (cdr trimmed))
              collect (list (car trimmed) (cdr trimmed) fwd))))
 
 ;;;###autoload

@@ -2787,6 +2787,27 @@ on both real and fakes, so the second call hit
     (should (= 6 (point)))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-trim-whitespace-only-region ()
+  "`helixel-mc-trim' on all-whitespace region keeps cursor as point-only."
+  (helixel-test-with-buffer "   world hello\n"
+    (helixel-enter-normal-state)
+    ;; Real: select leading spaces only (1..4) — all whitespace.
+    (goto-char 1) (push-mark 1 t t) (goto-char 4)
+    ;; Fake: select leading spaces at same positions.
+    (let ((ov (helixel-mc-create-fake-cursor 4 1)))
+      (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
+    ;; Trim should convert both to point-only cursors, not drop them.
+    (helixel-mc-trim)
+    ;; Real cursor: point at end of whitespace, no region.
+    (should (= 4 (point)))
+    (should (not mark-active))
+    ;; Fake cursor: should still exist as point-only (no region).
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (let ((fov (car (helixel-mc-all-cursors))))
+      (should (not (helixel-mc-cursor-mark-active fov)))
+      (should (= 4 (marker-position (helixel-mc-cursor-point fov)))))
+    (helixel-mc-clear-all)))
+
 (ert-deftest helixel-test-mc-align-pads-to-max-column ()
   "`helixel-mc-align' inserts spaces so all cursors share max column."
   (helixel-test-with-buffer "a\nbb\nccc\n"

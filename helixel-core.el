@@ -39,8 +39,16 @@
 
 (require 'cl-lib)
 
+(defvar helixel--single-line-things
+  '(helixel-word helixel-WORD helixel-symbol)
+  "List of thing symbols that do not naturally span multiple lines.
+Line-crossing trim and newline-skip logic in
+\=`helixel--forward-beginning', \=`helixel--forward-end', and
+\=`helixel--def-thing-move' only apply to these things.
+Multi-line things (paragraph, sentence, function) are unaffected.")
+
 ;; ----------------------------------------------------------------------
-;; Part 1 — helixel-sel: Selection Descriptor
+;; helixel-sel: Selection Descriptor
 ;; ----------------------------------------------------------------------
 
 (cl-defstruct (helixel-sel (:conc-name helixel-sel--)

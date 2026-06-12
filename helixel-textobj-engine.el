@@ -230,6 +230,25 @@ do not cross the newline; stop at the end of the current THING instead."
   (if (< count 0)
       (let ((pt (point)))
         (forward-thing thing count)
+        ;; When forward-thing crossed a line boundary backward,
+        ;; skip past \n so it's not included in the motion range.
+        ;; Only apply to single-line things (word/WORD/symbol).
+        (when (and (< (point) pt)
+                   (< (line-number-at-pos (point))
+                      (line-number-at-pos pt))
+                   (not (bobp))
+                   (memq thing helixel--single-line-things))
+          (if (bound-and-true-p helixel--pending-op)
+              (progn
+                (goto-char (save-excursion
+                             (goto-char pt)
+                             (line-beginning-position)))
+                (skip-chars-forward "\n"))
+            (let ((bol (save-excursion
+                         (goto-char pt)
+                         (line-beginning-position))))
+              (unless (<= pt (1+ bol))
+                (goto-char (1+ bol))))))
         (when (< (point) pt) (point)))
     (let ((bnd (bounds-of-thing-at-point thing))
           (pt (point))
@@ -243,11 +262,39 @@ do not cross the newline; stop at the end of the current THING instead."
                    (not (and (eobp) (use-region-p))))
         (ignore-errors
           (forward-thing thing count)
-          (setq bnd (bounds-of-thing-at-point thing))
-          (when (and bnd (not (bobp))
-                     (not (and (bolp) (eobp))))
-            (backward-char))
-          (when bnd (beginning-of-thing thing))
+          (let ((skip-post nil))
+            ;; When forward-thing crossed a line boundary, avoid
+            ;; including \n in the motion range.
+            ;; Only apply to single-line things (word/WORD/symbol).
+            (when (and (> (point) pt)
+                       (> (line-number-at-pos (point))
+                          (line-number-at-pos pt))
+                       (or (not (eobp))
+                           (and (char-before)
+                                (not (eq (char-syntax (char-before))
+                                         ?\s))))
+                       (memq thing helixel--single-line-things))
+              (if (bound-and-true-p helixel--pending-op)
+                  (progn
+                    (goto-char (save-excursion
+                                 (goto-char pt)
+                                 (line-end-position)))
+                    (skip-chars-backward "\n"))
+                (let ((eol (save-excursion
+                             (goto-char pt)
+                             (line-end-position))))
+                  (if (>= pt (1- eol))
+                      nil
+                    (setq skip-post t)
+                    (goto-char eol)))))
+            ;; Run the word-beginning post-processing except when
+            ;; we trimmed within-line (skip-post=t).
+            (unless skip-post
+              (setq bnd (bounds-of-thing-at-point thing))
+              (when (and bnd (not (bobp))
+                         (not (and (bolp) (eobp))))
+                (backward-char))
+              (when bnd (beginning-of-thing thing))))
           (when (> (point) pt) pt))))))
 
 (defun helixel--forward-end (thing &optional count backward-char-p)
@@ -262,6 +309,28 @@ When BACKWARD-CHAR-P is non-nil, adjust point by one char after motion."
         (prog2
             (forward-thing thing count)
             (when (> (point) pt) (point))
+          ;; When forward-thing crossed a line boundary, avoid
+          ;; including \n in the motion range.
+          ;; Only apply to single-line things (word/WORD/symbol).
+          (when (and (> (point) pt)
+                     (> (line-number-at-pos (point))
+                        (line-number-at-pos pt))
+                     (or (not (eobp))
+                         (and (char-before)
+                              (not (eq (char-syntax (char-before))
+                                       ?\s))))
+                     (memq thing helixel--single-line-things))
+            (if (bound-and-true-p helixel--pending-op)
+                (progn
+                  (goto-char (save-excursion
+                               (goto-char pt)
+                               (line-end-position)))
+                  (skip-chars-backward "\n"))
+              (let ((eol (save-excursion
+                           (goto-char pt)
+                           (line-end-position))))
+                (unless (>= pt (1- eol))
+                  (goto-char eol)))))
           (when (and backward-char-p (not (bobp)))
             (backward-char))))
     (unless (bobp) (forward-char -1))
@@ -271,6 +340,25 @@ When BACKWARD-CHAR-P is non-nil, adjust point by one char after motion."
         (goto-char (car bnd)))
       (ignore-errors
         (forward-thing thing count)
+        ;; When forward-thing crossed a line boundary backward,
+        ;; skip past \n so it's not included in the motion range.
+        ;; Only apply to single-line things (word/WORD/symbol).
+        (when (and (< (point) pt)
+                   (< (line-number-at-pos (point))
+                      (line-number-at-pos pt))
+                   (not (bobp))
+                   (memq thing helixel--single-line-things))
+          (if (bound-and-true-p helixel--pending-op)
+              (progn
+                (goto-char (save-excursion
+                             (goto-char pt)
+                             (line-beginning-position)))
+                (skip-chars-forward "\n"))
+            (let ((bol (save-excursion
+                         (goto-char pt)
+                         (line-beginning-position))))
+              (unless (<= pt (1+ bol))
+                (goto-char (1+ bol))))))
         (setq bnd (bounds-of-thing-at-point thing))
         (if bnd
             (prog2 (end-of-thing thing) (point)
@@ -762,4 +850,48 @@ advance functions to avoid double-moving."
         (error nil)))))
 
 (provide 'helixel-textobj-engine)
+
+(defun helixel--skip-newline-forward ()
+  "If point is at a newline or whitespace before a newline,
+move forward past one newline to the next word.
+Used by word/WORD/symbol motion commands so \n is not treated
+as a separate word.  The caller (\=`helixel--with-movement-surround')
+captures the origin after this skip, so the region excludes \n.
+Only active outside visual-mode region extension.
+Does nothing when the buffer has only whitespace past point."
+  (when (and (not (eobp))
+             (not (use-region-p))
+             ;; Only skip if there is actual content after whitespace.
+             (save-excursion
+               (skip-chars-forward " \t\n\r\f")
+               (not (eobp)))
+             ;; And there is a newline at/near point (after optional
+             ;; spaces/tabs).
+             (save-excursion
+               (skip-chars-forward " \t")
+               (memq (char-after) '(?\n ?\r))))
+    (skip-chars-forward " \t")
+    (when (memq (char-after) '(?\n ?\r))
+      (forward-char))))
+
+(defun helixel--skip-newline-backward ()
+  "If point is right after a newline or at whitespace after one,
+move backward past one newline to the previous word.
+Used by word/WORD/symbol motion commands so \n is not treated
+as a separate word.
+Does nothing when the buffer has only whitespace before point."
+  (when (and (not (bobp))
+             (not (use-region-p))
+             ;; Only skip if there is actual content before whitespace.
+             (save-excursion
+               (skip-chars-backward " \t\n\r\f")
+               (not (bobp)))
+             ;; And there is a newline before point (after optional
+             ;; spaces/tabs).
+             (save-excursion
+               (skip-chars-backward " \t")
+               (memq (char-before) '(?\n ?\r))))
+    (skip-chars-backward " \t")
+    (when (memq (char-before) '(?\n ?\r))
+      (backward-char))))
 ;;; helixel-textobj-engine.el ends here

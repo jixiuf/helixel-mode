@@ -100,14 +100,14 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (helixel-forward-WORD-start)
     (should (= (point) 11))
     (should (= (- (region-end) (region-beginning)) 4))
-    ;; From \n, jump to next WORD on next line
-    (helixel-forward-WORD-start)
-    (should (= (point) 12))
-    (should (= (- (region-end) (region-beginning)) 1))
-    ;; Then to the next WORD
+    ;; From \n, skip to the next WORD on the next line
     (helixel-forward-WORD-start)
     (should (= (point) 19))
-    (should (= (- (region-end) (region-beginning)) 7))))
+    (should (= (- (region-end) (region-beginning)) 7))
+    ;; Then to the next WORD
+    (helixel-forward-WORD-start)
+    (should (= (point) 23))
+    (should (= (- (region-end) (region-beginning)) 4))))
 
 (ert-deftest helixel-test-forward-WORD-start-empty-lines ()
   "Test forward movement with empty lines.
@@ -220,9 +220,10 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (helixel-forward-WORD-end)
     (should (= (point) 11)) ; end of "line"
     (should (= (- (region-end) (region-beginning)) 5))
+    ;; Skip \n, go to end of "second"
     (helixel-forward-WORD-end)
     (should (= (point) 18)) ; end of "second"
-    (should (= (- (region-end) (region-beginning)) 7))))
+    (should (= (- (region-end) (region-beginning)) 6))))
 
 (ert-deftest helixel-test-forward-WORD-end-empty-lines ()
   "Test forward movement to word ends with empty lines."
@@ -235,7 +236,7 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (should (= (- (region-end) (region-beginning)) 5))
     (helixel-forward-WORD-end)
     (should (= (point) 8)) ; newline after empty lines
-    (should (= (- (region-end) (region-beginning)) 2))))
+    (should (= (- (region-end) (region-beginning)) 1))))
 
 (ert-deftest helixel-test-forward-WORD-end-at-end-of-buffer ()
   "Test that forward movement to word end at end of buffer doesn't move."
@@ -346,9 +347,10 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (helixel-backward-WORD)
     (should (= (point) 24)) ; start of "third"
     (should (= (- (region-end) (region-beginning)) 5))
+    ;; Skip \n, go to start of "line"
     (helixel-backward-WORD)
     (should (= (point) 19)) ; start of "line"
-    (should (= (- (region-end) (region-beginning)) 5))
+    (should (= (- (region-end) (region-beginning)) 4))
     (helixel-backward-WORD)
     (should (= (point) 12)))) ; start of "second"
 
@@ -362,7 +364,7 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (should (= (point) 9)) ; start of "second"
     (should (= (- (region-end) (region-beginning)) 6))
     (helixel-backward-WORD)
-    (should (= (point) 8)) ; empty line before "first"
+    (should (= (point) 7)) ; empty line before "first"
     (should (= (- (region-end) (region-beginning)) 1))))
 
 (ert-deftest helixel-test-backward-WORD-at-beginning-of-buffer ()
@@ -532,6 +534,268 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
       (helixel-backward-word-end)
       (should (= (point) 6)) ; cursor at word end
       (should (= (- (region-end) (region-beginning)) 5)))))
+
+;;; Word/WORD/symbol newline-skip and line-crossing trim tests
+
+(ert-deftest helixel-test-word-newline-not-included ()
+  "Test that w from within a line stops at \n, excluding it."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "foo bar \nbaz")
+    (goto-char 5)  ; start of "bar"
+    (deactivate-mark)
+    (setq last-command nil)
+    (helixel-forward-word-start)
+    ;; Should stop at \n position, range excludes \n.
+    (should (= (point) 9))
+    (should (= (- (region-end) (region-beginning)) 4)) ; "bar "
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "bar "))))
+
+(ert-deftest helixel-test-word-www-skips-newline ()
+  "Test that www skips \n entirely, selecting three words."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "foo bar \nbaz")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    ;; 1st w
+    (call-interactively #'helixel-forward-word-start)
+    (should (= (point) 5))              ; start of "bar"
+    (should (= (- (region-end) (region-beginning)) 4)) ; "foo "
+    ;; 2nd w
+    (call-interactively #'helixel-forward-word-start)
+    (should (= (point) 9))              ; \n position
+    (should (= (- (region-end) (region-beginning)) 4)) ; "bar "
+    ;; 3rd w — should skip \n and select "baz"
+    (call-interactively #'helixel-forward-word-start)
+    (should (= (point) 13))             ; past "baz"
+    (should (= (- (region-end) (region-beginning)) 3)) ; "baz"
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "baz"))))
+
+(ert-deftest helixel-test-word-e-stops-at-end-no-newline ()
+  "Test that e from within a line stops at end of word, excluding \n."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "foo bar \nbaz")
+    (goto-char 5)  ; start of "bar"
+    (deactivate-mark)
+    (setq last-command nil)
+    (helixel-forward-word-end)
+    (should (= (point) 8))              ; end of "bar" (before space)
+    (should (= (- (region-end) (region-beginning)) 3)) ; "bar"
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "bar"))))
+
+(ert-deftest helixel-test-word-e-ee-skips-newline ()
+  "Test that ee from end of line skips \n and goes to next word end."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "foo bar \nbaz")
+    (goto-char 5)  ; start of "bar"
+    (deactivate-mark)
+    (setq last-command nil)
+    ;; 1st e: end of "bar"
+    (call-interactively #'helixel-forward-word-end)
+    (should (= (point) 8))              ; end of "bar"
+    (should (= (- (region-end) (region-beginning)) 3)) ; "bar"
+    ;; 2nd e: should skip \n and go to end of "baz"
+    (call-interactively #'helixel-forward-word-end)
+    (should (= (point) 13))             ; past "baz"
+    (should (= (- (region-end) (region-beginning)) 3)) ; "baz"
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "baz"))))
+
+(ert-deftest helixel-test-word-b-skips-newline-backward ()
+  "Test that b from start of word after \n skips back past \n."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "foo bar \nbaz")
+    (goto-char 10)  ; start of "baz" (after \n)
+    (deactivate-mark)
+    (setq last-command nil)
+    (call-interactively #'helixel-backward-word-start)
+    ;; Should skip \n backward and go to start of "bar"
+    (should (= (point) 5))
+    (should (= (- (region-end) (region-beginning)) 4)) ; "bar "
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "bar "))))
+
+(ert-deftest helixel-test-WORD-www-skips-newline ()
+  "Test that WWW skips \n entirely, selecting three WORDs."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "foo bar \nbaz")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    ;; 1st W
+    (call-interactively #'helixel-forward-WORD-start)
+    (should (= (point) 5))              ; start of "bar"
+    (should (= (- (region-end) (region-beginning)) 4)) ; "foo "
+    ;; 2nd W
+    (call-interactively #'helixel-forward-WORD-start)
+    (should (= (point) 9))              ; \n position
+    (should (= (- (region-end) (region-beginning)) 4)) ; "bar "
+    ;; 3rd W — should skip \n and select "baz"
+    (call-interactively #'helixel-forward-WORD-start)
+    (should (= (point) 13))             ; past "baz"
+    (should (= (- (region-end) (region-beginning)) 3)) ; "baz"
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "baz"))))
+
+(ert-deftest helixel-test-symbol-skips-newline ()
+  "Test that symbol motion (o) skips \n."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "foo.bar \nbaz.qux")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    ;; 1st symbol: "foo"
+    (call-interactively #'helixel-forward-symbol-start)
+    (should (= (point) 4))              ; after "foo", before "."
+    (should (= (- (region-end) (region-beginning)) 3)) ; "foo"
+    ;; 2nd symbol: "." (punctuation is a separate symbol)
+    (call-interactively #'helixel-forward-symbol-start)
+    (should (= (point) 5))              ; after "."
+    (should (= (- (region-end) (region-beginning)) 1)) ; "."
+    ;; 3rd symbol: "bar " (stops before \n via line-crossing trim)
+    (call-interactively #'helixel-forward-symbol-start)
+    (should (= (point) 9))              ; \n position
+    (should (= (- (region-end) (region-beginning)) 4)) ; "bar "
+    ;; 4th symbol: should skip \n, select "baz"
+    (call-interactively #'helixel-forward-symbol-start)
+    (should (= (point) 13))             ; after "baz"
+    (should (= (- (region-end) (region-beginning)) 3)) ; "baz"
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "baz"))))
+
+(ert-deftest helixel-test-word-newline-at-buffer-start ()
+  "Test w when buffer starts with a newline."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "\nfoo bar")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    (call-interactively #'helixel-forward-word-start)
+    ;; Should skip the leading \n and select "foo "
+    (should (= (point) 6))              ; start of "bar"
+    (should (= (- (region-end) (region-beginning)) 4)) ; "foo "
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "foo "))))
+
+(ert-deftest helixel-test-word-multiple-consecutive-newlines ()
+  "Test w through multiple consecutive newlines."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "foo\n\n\nbar")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    ;; 1st w: "foo"
+    (call-interactively #'helixel-forward-word-start)
+    (should (= (point) 4))              ; \n after "foo"
+    (should (= (- (region-end) (region-beginning)) 3)) ; "foo"
+    ;; 2nd w: one \n
+    (call-interactively #'helixel-forward-word-start)
+    (should (= (point) 6))              ; next \n
+    (should (= (- (region-end) (region-beginning)) 1)) ; "\n"
+    ;; 3rd w: should reach past "bar" on line 4
+    (call-interactively #'helixel-forward-word-start)
+    (should (= (point) 10))             ; past "bar" (point-max)
+    (should (= (- (region-end) (region-beginning)) 3)) ; "bar"
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "bar"))))
+
+;;; Verify paragraph/sentence/function are NOT affected by newline skip
+
+(ert-deftest helixel-test-paragraph-not-affected-by-newline-skip ()
+  "Test that paragraph motion still spans multiple lines naturally."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "line one\n\nline two\n")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    (call-interactively #'helixel-forward-paragraph-start)
+    ;; Paragraph motion should move to the next paragraph across \n\n
+    (should (>= (point) 10))
+    (should (>= (- (region-end) (region-beginning)) 9))))
+
+(ert-deftest helixel-test-sentence-not-affected-by-newline-skip ()
+  "Test that sentence motion still works normally across lines."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "First. Second.\nThird.")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    (call-interactively #'helixel-forward-sentence-end)
+    ;; Sentence end should find the end of a sentence (moved past 1st)
+    (should (> (point) 7))
+    (should (> (- (region-end) (region-beginning)) 7))))
+
+(ert-deftest helixel-test-function-not-affected-by-newline-skip ()
+  "Test that function movement still spans multiple lines."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (emacs-lisp-mode)
+    (insert "(defun foo ()\n  (message \"hello\"))\n\n(defun bar ()\n  (message \"world\"))")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    (call-interactively #'helixel-forward-function-end)
+    ;; Function end should move point forward from start of defun
+    (should (> (point) 1))
+    (should (> (- (region-end) (region-beginning)) 1))))
+
+;;; Operator-pending (dw) integration test
+
+(ert-deftest helixel-test-word-operator-newline ()
+  "Test that dw at end of line does not eat the newline."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "foo bar \nbaz")
+    (goto-char 5)  ; start of "bar"
+    (setq helixel--pending-op 'delete)
+    (helixel-forward-word-start)
+    ;; In operator-pending, the range should exclude \n
+    (should (= (point) 9))              ; at \n (trim to end of line)
+    (should (= (- (region-end) (region-beginning)) 4)) ; "bar "
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "bar "))))
+
+(ert-deftest helixel-test-word-pure-whitespace-buffer ()
+  "Test w in a buffer with only whitespace goes to eob."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "   \t\n  ")
+    (goto-char 1)
+    (deactivate-mark)
+    (setq last-command nil)
+    (call-interactively #'helixel-forward-word-start)
+    ;; Should go to end of buffer on pure whitespace
+    (should (= (point) (point-max)))
+    (should (= (- (region-end) (region-beginning))
+               (1- (point-max))))))
 
 ;;; Backward WORD end tests
 
@@ -966,6 +1230,30 @@ On a single-char symbol at eob, w selects it."
     (goto-char 18)
     (helixel-backward-paragraph-start)
     (should (>= (point) 10))))
+
+(ert-deftest helixel-test-paragraph-move-forward-end ()
+  "Test ]p moves past current paragraph separator, not stuck at line end."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "line one\n\nline two\n")
+    (goto-char 1)
+    (helixel-forward-paragraph-end)
+    ;; Position 9 is the end of the first line (\n).
+    ;; The old (broken) line-crossing trim pulled point back here.
+    ;; After fix, ]p must reach past the paragraph separator (>=10).
+    (should (> (point) 9))
+    (should (< (point) (point-max)))))
+
+(ert-deftest helixel-test-paragraph-move-backward-end ()
+  "Test [p moves backward past paragraph separator."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "line one\n\nline two\n")
+    (goto-char (point-max))
+    (helixel-backward-paragraph-end)
+    ;; Must move backward past the blank line separator.
+    (should (< (point) (point-max)))
+    (should (> (point) 1))))
 
 (ert-deftest helixel-test-sentence-move-forward-end ()
   "Test ] s moves to next sentence end."

@@ -162,11 +162,21 @@ NAME is the command symbol; SUBCAT the :subcat tag; THING the
 thing category (`helixel-word' / -WORD / -symbol);
 FWD-FN is one of `forward-beginning' / `forward-end' (interned
 relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner."
-  (let ((fn (intern (format "helixel--%s" fwd-fn))))
+  (let* ((fn (intern (format "helixel--%s" fwd-fn)))
+         (skip-fn (if (> sign 0)
+                      'helixel--skip-newline-forward
+                    'helixel--skip-newline-backward))
+         ;; Only skip newlines for single-line things (word/WORD/symbol).
+         ;; Multi-line things like paragraph/sentence/function naturally
+         ;; span lines and should not have newlines skipped.
+         (single-line-p (memq thing helixel--single-line-things)))
     `(helixel-define-command ,name
          (:category movement :subcat ,subcat
           :params (&optional count))
        (interactive "p")
+       ;; Skip past a newline before capturing the motion origin,
+       ;; so \n is not treated as a separate word.
+       ,@(when single-line-p `((,skip-fn)))
        (helixel--with-movement-surround
         (,fn ',thing (* ,sign (or count 1))))
        (helixel--set-mark-region ',thing ,side))))

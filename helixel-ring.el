@@ -166,7 +166,12 @@ Releases markers of evicted entries to prevent leaks."
           (set-marker (cdr mr) nil))
         (when-let* ((sp (helixel-action-start-point e))
                     ((markerp sp)))
-          (set-marker sp nil)))
+          (set-marker sp nil))
+        (when-let* ((gs (plist-get (helixel-action-payload e)
+                                    :group-span-mr))
+                    ((consp gs)))
+          (when (markerp (car gs)) (set-marker (car gs) nil))
+          (when (markerp (cdr gs)) (set-marker (cdr gs) nil))))
     (setcdr (nthcdr (1- helixel-action-ring-max)
                     helixel--action-ring)
             nil))))
@@ -239,22 +244,40 @@ Returns the committed entry or nil."
   "Compute and store group-span-mr on ENTRY when extending a group.
 If the previous action in the ring shares category+subcat with
 ENTRY, merge their mark-regions into a single :group-span-mr
-payload entry on ENTRY.  When the previous action already carries
-a :group-span-mr (chained group), use its car to preserve the
-original group-start position."
+payload entry on ENTRY.  Uses the bounding box of all available
+positions so both forward and backward movement groups produce a
+valid span (car ≤ cdr)."
   (when-let* ((prev (cadr helixel--action-ring))
               ((helixel-action--same-group-p prev entry))
               (curr-mr (helixel-action-mark-region entry))
-              ;; Use the group-start begin: either prev's own
-              ;; group-span car (chained) or prev's mark-region car.
-              (prev-begin
-               (or (car-safe (plist-get (helixel-action-payload prev)
-                                        :group-span-mr))
-                   (car-safe (helixel-action-mark-region prev)))))
-    (setf (helixel-action-payload entry)
-          (plist-put (helixel-action-payload entry)
-                     :group-span-mr
-                     (cons prev-begin (cdr curr-mr))))))
+              (prev-mr (helixel-action-mark-region prev)))
+    (let* ((prev-gs (plist-get (helixel-action-payload prev)
+                                :group-span-mr))
+           (a (or (car-safe prev-gs) (car-safe prev-mr)))
+           (b (or (cdr-safe prev-gs) (cdr-safe prev-mr)))
+           (c (car curr-mr))
+           (d (cdr curr-mr)))
+      (when (and (markerp a) (markerp b) (markerp c) (markerp d))
+        ;; Get positions, then pick the actual markers at min/max.
+        (let* ((pa (marker-position a))
+               (pb (marker-position b))
+               (pc (marker-position c))
+               (pd (marker-position d))
+               (min-pos (min pa pb pc pd))
+               (max-pos (max pa pb pc pd))
+               (min-marker (cond ((= min-pos pa) a)
+                                 ((= min-pos pb) b)
+                                 ((= min-pos pc) c)
+                                 (t d)))
+               (max-marker (cond ((= max-pos pa) a)
+                                 ((= max-pos pb) b)
+                                 ((= max-pos pc) c)
+                                 (t d))))
+          (setf (helixel-action-payload entry)
+                (plist-put (helixel-action-payload entry)
+                           :group-span-mr
+                           (cons (copy-marker min-marker)
+                                 (copy-marker max-marker t)))))))))
 
 (add-hook 'helixel-action-commit-hook
           #'helixel--on-action-commit-group-span)

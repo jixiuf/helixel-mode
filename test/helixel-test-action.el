@@ -355,7 +355,6 @@
 
 (ert-deftest helixel-test-c-g-cancels-session ()
   "Test C-g breaks session and pushes cancel sentinel."
-  (let ((helixel-semicolon-mark-thing nil))
   (helixel-test-with-buffer "hello world test extra"
     (setq helixel--action-ring nil helixel--live-action nil
           helixel--action-pos nil
@@ -388,7 +387,7 @@
       (should (eq (helixel-action-category
                    (nth helixel--action-pos helixel--action-ring))
                   'movement))
-      (should (= (region-beginning) 1))))))
+      (should (= (region-beginning) 1)))))
 
 (provide 'helixel-test-action)
 ;;; helixel-test-action.el ends here

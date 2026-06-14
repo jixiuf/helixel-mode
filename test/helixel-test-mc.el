@@ -980,6 +980,27 @@ the call doesn't error and the fake's ring still exists."
       (should (listp (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state)))))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-jump-cycle-at-each-fake ()
+  "`C-;' broadcasts to fakes: each fake cycles its own ring
+and pushes mark to its own start-point, independent of real."
+  (helixel-test-with-buffer "abc { xx } def { yy } ghi\n"
+    (helixel-enter-normal-state)
+    (goto-char 5)  ;; inside first braces
+    (helixel-mc-create-fake-cursor 16)  ;; inside second braces
+    ;; Build a motion event in each ring via `%'.
+    (helixel-mc-with-each-cursor (helixel-jump-to-match))
+    ;; C-; broadcasts: real + fake each cycle their own ring.
+    (let ((last-command 'helixel-jump-to-match))
+      (helixel-mc-with-each-cursor (helixel-action-cycle-jump)))
+    (let* ((fake (car (helixel-mc-all-cursors)))
+           (m (marker-position (helixel-mc-cursor-mark fake)))
+           (p (marker-position (helixel-mc-cursor-point fake))))
+      ;; Fake's mark should be at its OWN start-point (inside { yy }),
+      ;; not at the real cursor's position.
+      (should (helixel-mc-cursor-mark-active fake))
+      (should (> m 10)))  ;; somewhere in the second braces area
+    (helixel-mc-clear-all)))
+
 ;; ── Performance: large cursor counts ────────────────────────
 
 (ert-deftest helixel-test-mc-eol-cursor-string-cached ()

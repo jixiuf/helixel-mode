@@ -143,5 +143,41 @@
         (should (plist-get entry :buffer))
         (should-not (plist-member entry :tx))))))
 
+;; ── INV-RING-7: start-point is deep-copied to ring ──
+
+(ert-deftest helixel-test-inv-ring-start-point-copied ()
+  "INV: start-point marker is deep-copied into ring entries."
+  (helixel-ring-inv-with-buffer "hello world\n"
+    (goto-char 4)
+    (helixel--tracking-open 'movement 'word)
+    (should (helixel-action-start-point helixel--live-action))
+    (let ((live-sp (helixel-action-start-point helixel--live-action)))
+      (should (markerp live-sp))
+      (helixel-action-commit)
+      (let ((ring-entry (car helixel--action-ring)))
+        (should (helixel-action-start-point ring-entry))
+        (should (markerp (helixel-action-start-point ring-entry)))
+        (should-not (eq live-sp (helixel-action-start-point ring-entry)))))))
+
+;; ── INV-RING-8: ring cap releases start-point markers ──
+
+(ert-deftest helixel-test-inv-ring-start-point-released ()
+  "INV: evicted ring entries have their start-point markers released."
+  (helixel-ring-inv-with-buffer "hello world\n"
+    (let ((helixel-action-ring-max 2))
+      (goto-char 1)
+      (helixel--tracking-open 'movement 'word)
+      (helixel-action-commit)
+      (let ((sp1 (helixel-action-start-point (car helixel--action-ring))))
+        (should (markerp sp1))
+        (should (marker-buffer sp1))
+        (goto-char 5)
+        (helixel--tracking-open 'movement 'WORD)
+        (helixel-action-commit)
+        (goto-char 9)
+        (helixel--tracking-open 'movement 'symbol)
+        (helixel-action-commit)
+        (should (null (marker-buffer sp1)))))))
+
 (provide 'helixel-test-ring-invariant)
 ;;; helixel-test-ring-invariant.el ends here

@@ -1444,21 +1444,22 @@ On a single-char symbol at eob, w selects it."
     ;; Should have committed live event and be cycling
     (should helixel--action-pos)))
 
-(ert-deftest helixel-test-mark-thing-disabled-by-defcustom ()
-  "Test mark-thing disabled when helixel-semicolon-mark-thing is nil."
-  (let ((helixel-semicolon-mark-thing nil))
-    (with-temp-buffer
-      (transient-mark-mode 1)
-      (setq helixel--action-ring nil helixel--live-action nil
-          helixel--action-pos nil)
-      (insert "hello world")
-      (deactivate-mark)
-      (goto-char 1)
-      (helixel-forward-word-start)
-      (helixel--action-cycle)
-      ;; ; did NOT do mark-thing: region is from movement, action cycle started
-      (should (region-active-p))
-      (should helixel--action-pos))))
+(ert-deftest helixel-test-c-semicolon-non-mark-thing ()
+  "Test `C-;' pushes mark to event start without selecting the full span."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil helixel--jump-cycle-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    (helixel-action-cycle-jump)
+    ;; C-; does NOT select the full span (non-mark-thing path).
+    ;; The region should be active (push-mark with activate=t) but
+    ;; from current point to the thing-start, not the whole word.
+    (should (region-active-p))
+    (should helixel--jump-cycle-pos)))
 
 ;;; Tag pair movement [t and ; mark-thing
 

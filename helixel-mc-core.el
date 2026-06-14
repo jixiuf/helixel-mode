@@ -58,6 +58,7 @@
 (defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
 (defvar helixel--action-pos)              ; from `helixel-ring'
+(defvar helixel--jump-cycle-pos)          ; from `helixel-ring'
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
                   (raw-prefix))
@@ -159,6 +160,7 @@ so on — broadcasts at one cursor never leak into another."
   event-ring             ; list of `helixel-action' (helixel--action-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
   action-pos             ; integer | nil         (helixel--action-pos)
+  jump-cycle-pos         ; integer | nil         (helixel--jump-cycle-pos)
   last-motion-cmd)       ; `helixel--last-motion' or nil
 
 (defun helixel-pcs-clone ()
@@ -180,6 +182,7 @@ independent of any later movement of point / mark."
    :event-ring                helixel--action-ring
    :live-action               helixel--live-action
    :action-pos                helixel--action-pos
+   :jump-cycle-pos            helixel--jump-cycle-pos
    :last-motion-cmd           helixel--last-motion-cmd))
 
 (defun helixel-pcs-swap-in (cs)
@@ -204,6 +207,7 @@ Moves point and the `mark-marker' to CS's positions, sets
         helixel--action-ring    (helixel-pcs-event-ring cs)
         helixel--live-action   (helixel-pcs-live-action cs)
         helixel--action-pos    (helixel-pcs-action-pos cs)
+        helixel--jump-cycle-pos (helixel-pcs-jump-cycle-pos cs)
         helixel--last-motion-cmd (helixel-pcs-last-motion-cmd cs)))
 
 (defun helixel-pcs-release (cs)
@@ -232,6 +236,7 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-event-ring cs)             helixel--action-ring
         (helixel-pcs-live-action cs)            helixel--live-action
         (helixel-pcs-action-pos cs)             helixel--action-pos
+        (helixel-pcs-jump-cycle-pos cs)         helixel--jump-cycle-pos
         (helixel-pcs-last-motion-cmd cs)        helixel--last-motion-cmd))
 
 ;; ── Cursor accessors (read state via the struct on the overlay) ──
@@ -956,7 +961,8 @@ state (kill-ring, event-ring, last-action, …)."
                helixel--active-search (helixel-pcs-active-search ,cs)
                helixel--action-ring    (helixel-pcs-event-ring ,cs)
                helixel--live-action   (helixel-pcs-live-action ,cs)
-               helixel--action-pos    (helixel-pcs-action-pos ,cs))
+               helixel--action-pos    (helixel-pcs-action-pos ,cs)
+               helixel--jump-cycle-pos (helixel-pcs-jump-cycle-pos ,cs))
          (helixel-pcs-release ,cs)))))
 
 (defvar helixel-mc--quit-p nil

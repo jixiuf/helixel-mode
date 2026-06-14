@@ -365,6 +365,7 @@ e.g. \"helixel-next-%s-end\"."
 (define-key helixel-normal-map "G" #'helixel-goto-line)
 (define-key helixel-normal-map "%" #'helixel-jump-to-match)
 (define-key helixel-normal-map ";" #'helixel-action-cycle)
+(define-key helixel-normal-map (kbd "C-;") #'helixel-action-cycle-jump)
 (define-key helixel-normal-map "\C-o" #'helixel-jump-backward)
 (define-key helixel-normal-map "\C-i" #'helixel-jump-forward)
 (define-key helixel-normal-map "\C-f" #'helixel-scroll-up-command)

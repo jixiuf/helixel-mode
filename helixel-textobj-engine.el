@@ -714,7 +714,7 @@ the count so `.' repeats the full chain of textobj selections."
     (push-mark (car range) nil t)
     (goto-char (if (consp (cdr range)) (cadr range) (cdr range)))
     ;; Update the live event's mark-region so `;' can mark the full
-    ;; textobj selection (helixel-semicolon-mark-thing).
+    ;; textobj selection.
     (helixel--set-mark-region
      (cons (car range)
            (if (consp (cdr range)) (cadr range) (cdr range))))

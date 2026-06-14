@@ -908,6 +908,12 @@ Replay slots (used by `.'/`,'/chain/mc):
   MARK-REGION   — cons (START . END) of two markers; the position
                   where the event was originally recorded.  Used
                   for `;' jump targets AND by some runners.
+  START-POINT   — marker; the original cursor position at
+                  `tracking-open' time, before any movement.
+                  Used by `C-;' (`helixel-action-cycle-jump') to
+                  push mark to the pre-motion cursor position.
+                  Never modified after creation.  Free-standing
+                  marker — not part of `mark-region'.
   DISPLAY       — string or function (EVENT) → string for history.
 
 History slots (used by ring + jump-log):
@@ -923,6 +929,7 @@ History slots (used by ring + jump-log):
   runner
   preposition
   mark-region
+  start-point
   display
   ;; History slots
   category
@@ -960,7 +967,8 @@ MARK-REGION is initialised from `point' at call time."
      :runner runner
      :display display-field
      :mark-region (let ((pm (point-marker)))
-                    (cons pm (copy-marker pm t))))))
+                    (cons pm (copy-marker pm t)))
+     :start-point (point-marker))))
 
 (defun helixel-action-copy (event)
   "Return a shallow copy of EVENT (alias-friendly name)."
@@ -1013,6 +1021,9 @@ The result is fully independent of EVENT for ring storage."
         (setf (helixel-action-mark-region copy)
               (cons (copy-marker (car mr))
                     (copy-marker (cdr mr) t))))
+      (when-let* ((sp (helixel-action-start-point event))
+                  ((markerp sp)))
+        (setf (helixel-action-start-point copy) (copy-marker sp)))
       (when-let* ((s (helixel-action-sel event)))
         (setf (helixel-action-sel copy) (helixel-sel--copy s)))
       copy)))

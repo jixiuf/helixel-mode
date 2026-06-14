@@ -57,7 +57,8 @@ See ~M-x customize-group RET helixel RET~ for all 26 options.
 | ~m i~ ~m a~           | Text objects (word, symbol, sentence, paragraph, pairs, quotes, tags) |
 | ~m s~ ~m t~           | Surround add / add tag                                           |
 | ~m d~ ~m r~           | Surround delete / replace                                        |
-| ~;~                    | Set mark to previous session start                               |
+| ~;~                    | Action cycle: first press selects the full span, subsequent presses cycle older events |
+| ~C-;~                  | Jump cycle: push mark to original pre-motion cursor position, cycle events          |
 | ~C-o~ ~C-i~           | Jump to older / newer position (global, cross-buffer)            |
 | ~M-.~  ~'~            | Repeat last motion (f, t, %, [, ], {, })                        |
 | ~n~ ~N~               | Repeat / reverse direction repeat (~C-u n~ pick from history)   |
@@ -68,7 +69,7 @@ See ~M-x customize-group RET helixel RET~ for all 26 options.
 | ~v~                    | Enter visual mode                                                |
 | ~d~ ~c~ ~y~ ~r~ ~R~   | Edit: delete, change, copy, replace, replace-char              |
 | ~S~                    | Swap regions (see [[Swap]])                                      |
-| ~p~ ~P~               | Paste after / before; pasted text tracked for ~;~ re-select     |
+| ~p~ ~P~               | Paste after / before; pasted text tracked for ~;~ / ~C-;~ re-select     |
 | ~<~ ~>~               | Indent left / right                                              |
 | ~u~ ~U~               | Undo / redo                                                      |
 | ~x~                    | Select current line                                              |
@@ -77,7 +78,9 @@ See ~M-x customize-group RET helixel RET~ for all 26 options.
 | ~C-w~                  | Window prefix                                                    |
 | ~m~                    | Text-object prefix (~mi~ inner, ~ma~ outer, ~mh~ whole buffer, surround ~ms~/~mt~/~md~/~mr~) |
 | ~[~ / ~]~ / ~{~ / ~}~ | Pair & structure movement prefixes (see below)                   |
-| ~;~                    | Cycle action history; after pair movement: mark the thing        |
+| ~s~                      | Multi-cursor prefix                                            |
+| ~;~                      | Action cycle (mark-thing) — see [[Action cycle / Jump cycle]]   |
+| ~C-;~                    | Jump cycle (original position) — see [[Action cycle / Jump cycle]] |
 | ~%~                    | Jump to matching bracket                                         |
 | ~:~                    | ex commands                                                      |
 | ~ESC~                  | Normal mode                                                      |
@@ -255,9 +258,11 @@ Structure sub-keys (also on ~[~ / ~]~):
 - ~[ (~ — jump outward to the nearest enclosing ~(~.
 - ~] (~ — jump forward to the end of the next ~(...)~ pair.
 - Press ~;~ after a movement to select the full thing (mark-thing).
-  Customize =helixel-semicolon-mark-thing=: a list of categories or
-  ~(category . subcat)~ conses (e.g. ~'((movement . pair) textobj)~).
-  Set to nil to disable.  Available categories and subcats:
+  Subsequent ~;~ presses cycle to older events.  Press ~C-;~ to
+  push mark to the event start position instead (without selecting
+  the full span).  Both commands navigate the same event history.
+
+  Available categories and subcats:
 
   | category  | subcat     | example keys             |
   |-----------+------------+--------------------------|
@@ -295,6 +300,23 @@ Structure sub-keys (also on ~[~ / ~]~):
   |           | replace    | r                        |
   |           | yank-pop   | M-y                      |
 
+** Action cycle (~;~) and Jump cycle (~C-;~)
+
+~;~ and ~C-;~ navigate the event history ring (=helixel--action-ring=).
+Both commands visit the same events but differ in what they mark:
+
+- ~;~ (action cycle): The first press after a movement *selects the full
+  span* (mark-thing) — the region from the far edge of the thing to point.
+  Subsequent presses cycle to older events, pushing mark to the event start.
+- ~C-;~ (jump cycle): *Every press pushes mark to the original pre-motion
+  cursor position* (start-point).  It never selects the full span.
+  Subsequent presses cycle to older events.
+
+Both commands share the same grouping logic: consecutive movements of the
+same kind (e.g. ~ww~) form a group, and the cycle shows the group-start.
+They maintain independent cycle positions, so pressing ~;~ a few times
+does not affect where ~C-;~ will start.
+
 After ~p~ / ~P~ / ~r~ / ~M-y~, the pasted or replaced text bounds are
 stored in the event's =:mark-region=.  The first ~;~ after a paste or
 replace jumps back to the edit spot and marks the full span of the
@@ -303,6 +325,15 @@ Subsequent ~;~ presses cycle through older session starts as usual.
 Note: the default =helixel-action-cycle-categories= includes only the
 paste/replace/yank-pop edit subcats; kill, change and others are
 excluded by default (add = (edit . kill)= etc. to include them).
+
+*Example:* Buffer ="hello world"=, cursor at =hel|lo= (position 4).
+- Press ~ww~ — two word-forward movements, point lands at buffer end.
+- Press ~;~ — selects the full span: ="hello world"= (1..12).
+- Press ~C-;~ instead — selects ="lo world"= (4..12), from the original
+  cursor position to the end of the last word.
+
+Both ~;~ and ~C-;~ accept a ~C-u~ prefix to go forward (newer) instead
+of backward.
 
 - ~%~ — jump to matching bracket/paren/quote/tag/block.
 

@@ -325,33 +325,33 @@ of commands from modules `mc-integrate' itself depends on."
 ;; path A after textobj selection and broadcast goes through
 ;; fresh-edit dispatch normally.
 
-;; ── Action cycle (`;') and jump nav (C-o / C-i)
+;; ── Action cycle (`;') and jump cycle (`C-;') ──
 ;;
-;; These commands navigate GLOBAL state:
-;;   `helixel--action-pos' + `helixel--action-ring' for `;'
-;;   `helixel--jump-pos'   + `helixel--global-jump-log' for C-o/C-i
-;; They are not per-cursor: broadcasting them N times advances the
-;; same global ring N times, with no useful effect on fakes.
+;; `helixel-action-cycle' and `helixel-action-cycle-jump' are
+;; dispatched to fake cursors.  Each fake owns its own
+;; `helixel--action-ring', `helixel--live-action', `helixel--action-pos',
+;; and `helixel--jump-cycle-pos' via `helixel-pc-state'.  When
+;; broadcast, each fake navigates its OWN ring independently.
 ;;
-;; Mark them real-only.  For per-cursor movement repeat, users
-;; should re-press the underlying motion key (e.g. `])', `]b'),
-;; which broadcasts naturally.
+;; Global jump nav (C-o / C-i) uses the shared
+;; `helixel--global-jump-log' and is real-cursor-only.
 
 (helixel-mc-mark-all-for-real-cursor-only
  '(helixel-jump-backward
    helixel-jump-forward))
 
 (helixel-mc-mark-all-for-multi-cursors
- '(helixel-action-cycle))
+ '(helixel-action-cycle
+   helixel-action-cycle-jump))
 
-;; ── `;' action-cycle at fakes is handled by the per-fake event
-;; ring (see `helixel-mc--cursor-vars' registration of
-;; `helixel--action-ring' / `--live-edit' / `--action-pos').
-;; When `;' broadcasts, each fake runs the SAME `helixel-action--
-;; cycle-show' code path against its OWN ring — the first `;'
-;; press selects the traversed span, subsequent presses cycle
-;; the history, and group-start logic all work naturally with
-;; no mc-specific bookkeeping.
+;; ── `;' and `C-;' at fakes are handled by the per-fake event
+;; ring (see `helixel-pc-state' slots `event-ring', `live-action',
+;; `action-pos', and `jump-cycle-pos').
+;; When `;' or `C-;' broadcasts, each fake runs against its OWN
+;; ring — `;' marks the traversed span on first press, `C-;' pushes
+;; mark to the event start position.  Subsequent presses cycle
+;; the history, and all logic works naturally with no mc-specific
+;; bookkeeping.
 
 ;; ── Third-party shims ──
 ;;

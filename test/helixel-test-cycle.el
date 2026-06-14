@@ -233,5 +233,171 @@
     (should-not (helixel-action--newest-for-mark-p
                  (make-helixel-action :category 'edit :subcat 'replace)))))
 
+;; ── `C-;' jump cycle tests ──
+
+(ert-deftest helixel-test-jump-cycle-first-press ()
+  "First `C-;' shows ring\=[0] and sets jump-cycle-pos."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    (helixel-action-cycle-jump)
+    (should helixel--jump-cycle-pos)
+    (should (region-active-p))))
+
+(ert-deftest helixel-test-jump-cycle-empty-ring ()
+  "`C-;' on empty ring shows a message."
+  (with-temp-buffer
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil)
+    (helixel-action-cycle-jump)
+    (should-not helixel--jump-cycle-pos)))
+
+(ert-deftest helixel-test-semicolon-always-mark-thing ()
+  "`;' always does mark-thing on first press regardless of category."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    ;; ; should mark the full thing (the word we moved into)
+    (helixel-action-cycle)
+    (should (region-active-p))
+    (should helixel--action-pos)))
+
+(ert-deftest helixel-test-jump-cycle-live-action ()
+  "`C-;' commits live action before showing ring\=[0]."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    (should helixel--live-action)
+    (helixel-action-cycle-jump)
+    ;; Live action should be committed, ring should have 1 entry
+    (should-not helixel--live-action)
+    (should (= (length helixel--action-ring) 1))
+    (should helixel--jump-cycle-pos)))
+
+(ert-deftest helixel-test-jump-cycle-second-press ()
+  "Second `C-;' advances or shows group-span without error."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    (goto-char 1)
+    (helixel-forward-WORD-start)  ;; different subcat — no group
+    ;; First C-; commits live → 2 ring entries
+    (helixel-action-cycle-jump)
+    (should (= (length helixel--action-ring) 2))
+    (should helixel--jump-cycle-pos)
+    (should (region-active-p))
+    ;; Second C-; should not error (may advance or show group-span)
+    (deactivate-mark)
+    (helixel-action-cycle-jump)
+    (should (region-active-p))))
+
+(ert-deftest helixel-test-jump-cycle-c-u-prefix ()
+  "`C-u C-;' returns to live action or shows \"At newest\" without error."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    ;; First C-; commits and shows the event.
+    (helixel-action-cycle-jump)
+    (should (= (length helixel--action-ring) 1))
+    (should helixel--jump-cycle-pos)
+    (should (region-active-p))
+    ;; Now jump-cycle-pos is non-nil.  C-u C-; with a live action
+    ;; returns to the live state and pushes mark.
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)  ;; new live action
+    (helixel-action-cycle-jump 1)  ;; C-u C-; → shows live
+    (should (region-active-p))))
+
+(ert-deftest helixel-test-jump-cycle-independent-from-semicolon ()
+  "`C-;' and `;' have independent cycle positions."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    (goto-char 1)
+    (helixel-forward-word-start)
+    ;; Press ; twice to advance
+    (helixel-action-cycle)
+    (helixel-action-cycle)
+    (let ((semicolon-pos helixel--action-pos))
+      ;; Press C-; — should start from beginning, not from ;'s position
+      (setq last-command nil)  ;; force reset
+      (helixel-action-cycle-jump)
+      (should helixel--jump-cycle-pos)
+      ;; ;'s position should be unchanged
+      (should (equal helixel--action-pos semicolon-pos)))))
+
+(ert-deftest helixel-test-jump-cycle-uses-start-point ()
+  "`C-;' pushes mark to start-point, not mark-region car."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 4)  ;; between two l's
+    (helixel-forward-word-start)  ;; moves to "world" start (pos 7)
+    ;; Live action exists with start-point at pos 4.
+    ;; mark-region car = thing-start of "hello" (pos 1).
+    (should helixel--live-action)
+    (should (helixel-action-start-point helixel--live-action))
+    (let ((sp-pos (marker-position
+                   (helixel-action-start-point helixel--live-action))))
+      (should (= sp-pos 4)))  ;; original cursor, not thing-start
+    ;; C-; commits live action and pushes mark to start-point.
+    (helixel-action-cycle-jump)
+    (should (region-active-p))
+    ;; Region begins at start-point (=4), not thing-start (=1).
+    (should (= (region-beginning) 4))))
+
+(ert-deftest helixel-test-jump-cycle-multi-event-group ()
+  "`C-;' handles multi-event groups using group-start's start-point."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--action-ring nil helixel--live-action nil
+          helixel--jump-cycle-pos nil helixel--action-pos nil)
+    (insert "hello world")
+    (deactivate-mark)
+    (goto-char 4)  ;; between two l's
+    (helixel-forward-word-start)  ;; first w: pos4 → pos7, mark-region=(1 . 7)
+    (helixel-forward-word-start)  ;; second w: pos7 → pos12, mark-region=(7 . 12)
+    ;; Two events form a group (movement.word).
+    ;; group-span-mr = (1 . 12), group-start is the first event.
+    ;; For C-;, mr car should be group-start's start-point (=4), not thing-start (=1).
+    (helixel-action-cycle-jump)
+    (should (region-active-p))
+    ;; Region begins at original cursor position (4), not at "hello" start (1)
+    (should (= (region-beginning) 4))))
+
 (provide 'helixel-test-cycle)
 ;;; helixel-test-cycle.el ends here

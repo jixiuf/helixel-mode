@@ -589,21 +589,31 @@ Example with multiple callbacks:
 ;; and derived modes, where ~...~ =...= _..._ /.../ *...* +...+ are
 ;; standard Org emphasis delimiters (code, verbatim, underline, italic,
 ;; bold, strikethrough).
-(pcase-dolist (`(,key . ,name)
-               '(("~" . "tilde")
-                 ("=" . "equal")
-                 ("_" . "underscore")
-                 ("/" . "slash")
-                 ("*" . "star")
-                 ("+" . "plus")))
-  (helixel-define-key 'textobj-inner key
-                       (intern (format "helixel-mark-inner-%s" name))
-                       'org-mode)
-  (helixel-define-key 'textobj-outer key
-                       (intern (format "helixel-mark-a-%s" name))
-                       'org-mode))
+(helixel-define-key 'textobj-inner "~" #'helixel-mark-inner-tilde
+                    'org-mode)
+(helixel-define-key 'textobj-outer "~" #'helixel-mark-a-tilde
+                    'org-mode)
+(helixel-define-key 'textobj-inner "=" #'helixel-mark-inner-equal
+                    'org-mode)
+(helixel-define-key 'textobj-outer "=" #'helixel-mark-a-equal
+                    'org-mode)
+(helixel-define-key 'textobj-inner "_" #'helixel-mark-inner-underscore
+                    'org-mode)
+(helixel-define-key 'textobj-outer "_" #'helixel-mark-a-underscore
+                    'org-mode)
+(helixel-define-key 'textobj-inner "/" #'helixel-mark-inner-slash
+                    'org-mode)
+(helixel-define-key 'textobj-outer "/" #'helixel-mark-a-slash
+                    'org-mode)
+(helixel-define-key 'textobj-inner "*" #'helixel-mark-inner-star
+                    'org-mode)
+(helixel-define-key 'textobj-outer "*" #'helixel-mark-a-star
+                    'org-mode)
+(helixel-define-key 'textobj-inner "+" #'helixel-mark-inner-plus
+                    'org-mode)
+(helixel-define-key 'textobj-outer "+" #'helixel-mark-a-plus
+                    'org-mode)
 
-;; ── Hook registrations ──
 
 (add-hook 'helixel-state-change-hook #'helixel--refresh-overriding-maps)
 (add-hook 'helixel-state-change-hook #'helixel--refresh-textobj-overrides)

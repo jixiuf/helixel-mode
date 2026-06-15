@@ -1413,7 +1413,7 @@ already committed."
 ;; ----------------------------------------------------------------------
 ;;
 ;; Tiny utility shared by insert-mode recording
-;; (`helixel-insert-record.el').  Chain recording used to share
+;; (`helixel-repeat.el').  Chain recording used to share
 ;; this with insert-record but Phase 4.4 replaced chain's
 ;; keystroke capture with tx-list accumulation — only the
 ;; per-keystroke insert recorder still needs `keyrec-capture'.

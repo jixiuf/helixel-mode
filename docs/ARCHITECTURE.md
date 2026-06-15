@@ -583,7 +583,7 @@ mc-core's minimal-deps invariant), `insert-record.el' → `repeat.el'
 Resolved items from previous Watch List:
 
 1. ~~`helixel-action--ensure-tx`~~ — RESOLVED in v5 (merged tx/action).
-2. ~~Third `eval-after-load`~~ — RESOLVED in v5 (PR 2: moved to `helixel-mc-shims.el`).
+2. ~~Third `eval-after-load`~~ — RESOLVED in v5 (PR 2: moved to `helixel-shims.el`).
 3. ~~`helixel-mc-integrate.el` size~~ — RESOLVED in v5 (PR 2: completion-preview extracted, now ~350 LOC).
 
 Current (post-v5) watch items:

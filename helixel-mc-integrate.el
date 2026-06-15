@@ -356,11 +356,9 @@ of commands from modules `mc-integrate' itself depends on."
 ;; ── Third-party shims ──
 ;;
 ;; Lazy-loaded integration with third-party packages (e.g.
-;; completion-preview) has moved to `helixel-mc-shims.el' to keep
+;; completion-preview) has moved to `helixel-shims.el' to keep
 ;; this file focused on core repeat / chain / insert glue.  Mirrors
 ;; the split between `helixel-state' and `helixel-shims'.
-
-(require 'helixel-mc-shims)
 
 (provide 'helixel-mc-integrate)
 ;;; helixel-mc-integrate.el ends here

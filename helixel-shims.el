@@ -37,6 +37,7 @@
 
 (require 'helixel-state)
 (require 'helixel-keymap)
+(eval-when-compile (require 'helixel-mc-core))
 
 ;; ── Declare external functions (byte-compiler) ──
 
@@ -230,6 +231,61 @@ Called at top-level when this file is loaded."
   (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode))
 
 (helixel-shims--register-deferred)
+
+;; ── Multi-cursor shims ──
+;;
+;; completion-preview (Emacs 30.1+):
+;;   `completion-preview-mode' overlays live only at the real
+;;   cursor.  We mark the three preview-accept commands as
+;;   real-only and add :around advice that mirrors the inserted
+;;   text to every fake cursor in one undo group.
+
+(defvar helixel-mc-completion-preview-commands
+  ;; Build via `intern' so package-lint does not see literal symbols
+  ;; from a package introduced in Emacs 30.1 and demand a hard
+  ;; dependency bump.
+  (mapcar #'intern
+          '("completion-preview-insert"
+            "completion-preview-insert-word"
+            "completion-preview-insert-sexp"))
+  "Commands whose inserted text should be mirrored to fake cursors.
+Each command runs only at the real cursor (per its `multiple-cursors'
+property), then `helixel-mc--completion-preview-sync' inserts the
+same text at every fake within an mc undo step.")
+
+(defun helixel-mc--completion-preview-sync (orig &rest args)
+  "Around-advice: run ORIG with ARGS at real cursor, mirror to fakes.
+ORIG is one of the `completion-preview-*' insert commands.  Captures
+the text inserted between point-before and point-after the original
+call and inserts the same string at every fake cursor within an
+mc undo step.
+
+No-op when multi-cursor mode is off, no fakes exist, dispatch is
+already in progress (nested call), or the original call did not
+advance point (preview not active / nothing inserted)."
+  (let ((start (point)))
+    (apply orig args)
+    (when (and helixel-multi-cursor-mode
+               (helixel-mc-any-p)
+               (not (helixel-mc-dispatch-in-progress-p))
+               (> (point) start))
+      (let ((text (buffer-substring-no-properties start (point))))
+        (helixel-mc--with-undo-step
+          (helixel-mc-with-each-cursor
+            (insert text)))))))
+
+(defun helixel-mc--setup-completion-preview ()
+  "Wire `completion-preview-*' insert commands into multi-cursor sync.
+Marks each command real-only (so the `post-command-hook' dispatcher
+doesn't try to call it at fakes) and installs the sync advice."
+  (dolist (cmd helixel-mc-completion-preview-commands)
+    (put cmd 'multiple-cursors nil)
+    (advice-add cmd :around #'helixel-mc--completion-preview-sync)))
+
+;; Defer setup until `completion-preview' loads.  The `intern'
+;; indirection keeps package-lint quiet about the Emacs 30.1 feature.
+(funcall (intern "eval-after-load") (intern "completion-preview")
+         '(funcall 'helixel-mc--setup-completion-preview))
 
 (provide 'helixel-shims)
 ;;; helixel-shims.el ends here

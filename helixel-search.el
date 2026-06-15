@@ -704,7 +704,7 @@ Never consults the global `helixel--active-search'."
       (user-error "No repeater registered for category `%s'"
                   (helixel--last-motion-category rec)))))
 
-;; ── Motion repeaters registered via `helixel-register-motion-repeater' ──
+;; Motion repeaters registered via `helixel-register-motion-repeater'
 
 (defun helixel--repeat-search-motion (rec)
   "Replay a search (/) motion from REC.

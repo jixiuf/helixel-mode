@@ -946,7 +946,12 @@ PAYLOAD-KV are keyword/value pairs.  Special keys:
   :runner  FUNCTION       — stored in RUNNER slot.
   :display STRING|FUNCTION — stored in DISPLAY slot.
 All other keys form the :payload plist.
-MARK-REGION is initialised from `point' at call time."
+MARK-REGION is initialised from `point' at call time.
+START-POINT is intentionally left nil — it is set at
+`tracking-open' time by `helixel--live-action-set' which
+captures the pre-motion cursor position.  For edit events
+where start-point is nil, `C-;' falls back to the
+mark-region car (which is the pre-edit point)."
   (let (runner display-field rest)
     (while payload-kv
       (pcase (car payload-kv)
@@ -967,8 +972,7 @@ MARK-REGION is initialised from `point' at call time."
      :runner runner
      :display display-field
      :mark-region (let ((pm (point-marker)))
-                    (cons pm (copy-marker pm t)))
-     :start-point (point-marker))))
+                    (cons pm (copy-marker pm t))))))
 
 (defun helixel-action-copy (event)
   "Return a shallow copy of EVENT (alias-friendly name)."

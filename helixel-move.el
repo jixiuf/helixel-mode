@@ -868,7 +868,7 @@ MOTION is a `helixel--last-motion' struct."
   (unless (helixel--up-list-once :backward)
     (message "No enclosing bracket")))
 
-;; ── Motion repeaters registered via `helixel-register-motion-repeater' ──
+;; Motion repeaters registered via `helixel-register-motion-repeater'
 
 (defun helixel--repeat-match-motion (rec)
   "Replay a match (%) outward motion from REC.

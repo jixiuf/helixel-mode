@@ -125,6 +125,12 @@ nil = live event.  0 = newest ring entry.  N = older.")
   "Bound to t during `C-;' to disable mark-thing path.
 Internal dynvar — see `helixel-action-cycle-jump'.")
 
+(defsubst helixel--cycle-mark-thing-p ()
+  "Return non-nil if the current cycle mode should select the full span.
+Returns t for `;' (mark-thing), nil for `C-;' (jump cycle).
+Delegates to the inverse of `helixel--cycle-jump-p'."
+  (not helixel--cycle-jump-p))
+
 (defvar-local helixel--jump-cycle-pos nil
   "Ring position for `C-;' (`helixel-action-cycle-jump') cycling.
 nil = not cycling.  0 = newest ring entry.  N = older.
@@ -171,7 +177,11 @@ Releases markers of evicted entries to prevent leaks."
                                     :group-span-mr))
                     ((consp gs)))
           (when (markerp (car gs)) (set-marker (car gs) nil))
-          (when (markerp (cdr gs)) (set-marker (cdr gs) nil))))
+          (when (markerp (cdr gs)) (set-marker (cdr gs) nil)))
+        (when-let* ((gsp (plist-get (helixel-action-payload e)
+                                     :group-start-point))
+                    ((markerp gsp)))
+          (set-marker gsp nil)))
     (setcdr (nthcdr (1- helixel-action-ring-max)
                     helixel--action-ring)
             nil))))
@@ -236,17 +246,22 @@ Returns the committed entry or nil."
       entry)))
 
 ;; ── Group-span pre-computation ──
-;; When consecutive events share category+subcat (e.g. two %% presses),
-;; the newest event carries the full group-span as :group-span-mr in its
-;; payload.  `;' reads this directly — no cross-referencing ring entries.
+;; When consecutive events share category+subcat, the newest event
+;; carries pre-computed data in its payload:
+;;   :group-span-mr    — bounding box of the entire group's mark-regions
+;;   :group-start-point — original cursor before the first motion
+;; Both ; and C-; read from here — no cross-referencing ring entries.
 
 (defun helixel--on-action-commit-group-span (entry)
-  "Compute and store group-span-mr on ENTRY when extending a group.
-If the previous action in the ring shares category+subcat with
-ENTRY, merge their mark-regions into a single :group-span-mr
-payload entry on ENTRY.  Uses the bounding box of all available
-positions so both forward and backward movement groups produce a
-valid span (car ≤ cdr)."
+  "Compute and store group-span-mr and group-start-point on ENTRY.
+When the previous action in the ring shares category+subcat with
+ENTRY, compute the bounding box of both mark-regions and store it
+as :group-span-mr.  Also carry forward the group's start-point
+\(original cursor position before the first motion in the group).
+
+Both :group-span-mr and :group-start-point are stored in ENTRY's
+payload as marker conses; ; and C-; read them directly without
+cross-referencing ring entries."
   (when-let* ((prev (cadr helixel--action-ring))
               ((helixel-action--same-group-p prev entry))
               (curr-mr (helixel-action-mark-region entry))
@@ -258,26 +273,29 @@ valid span (car ≤ cdr)."
            (c (car curr-mr))
            (d (cdr curr-mr)))
       (when (and (markerp a) (markerp b) (markerp c) (markerp d))
-        ;; Get positions, then pick the actual markers at min/max.
-        (let* ((pa (marker-position a))
-               (pb (marker-position b))
-               (pc (marker-position c))
-               (pd (marker-position d))
-               (min-pos (min pa pb pc pd))
-               (max-pos (max pa pb pc pd))
-               (min-marker (cond ((= min-pos pa) a)
-                                 ((= min-pos pb) b)
-                                 ((= min-pos pc) c)
-                                 (t d)))
-               (max-marker (cond ((= max-pos pa) a)
-                                 ((= max-pos pb) b)
-                                 ((= max-pos pc) c)
-                                 (t d))))
+        (let* ((endpoints (list a b c d))
+               (positions (mapcar #'marker-position endpoints))
+               (min-pos (apply #'min positions))
+               (max-pos (apply #'max positions))
+               (min-marker (cl-find min-pos endpoints
+                                    :key #'marker-position))
+               (max-marker (cl-find max-pos endpoints
+                                    :key #'marker-position))
+               ;; The group's start-point: chain-inherit from prev's
+               ;; :group-start-point, or use prev's own start-point.
+               (start-pt (or (plist-get (helixel-action-payload prev)
+                                         :group-start-point)
+                             (helixel-action-start-point prev))))
           (setf (helixel-action-payload entry)
                 (plist-put (helixel-action-payload entry)
                            :group-span-mr
                            (cons (copy-marker min-marker)
-                                 (copy-marker max-marker t)))))))))
+                                 (copy-marker max-marker t))))
+          (when (and start-pt (markerp start-pt))
+            (setf (helixel-action-payload entry)
+                  (plist-put (helixel-action-payload entry)
+                             :group-start-point
+                             (copy-marker start-pt)))))))))
 
 (add-hook 'helixel-action-commit-hook
           #'helixel--on-action-commit-group-span)
@@ -642,16 +660,17 @@ to session-start, matching `;''s behaviour."
   "Mark the region during `;' cycling using mark-region MR from EVENT.
 MR is a cons (START . END) of two markers.
 If FIRST-CALL is non-nil, MR is non-degenerate, and
-`helixel--cycle-jump-p' is nil, activate a real region pointing at
-the far edge from point (mark-thing) and return t (did-mark).
+`helixel--cycle-mark-thing-p' returns non-nil, activate a real
+region pointing at the far edge from point (mark-thing) and
+return t (did-mark).
 Otherwise just push the mark to the begin marker and return nil.
 
-When `helixel--cycle-jump-p' is non-nil (from `C-;'), the mark-thing
-path is skipped entirely — every call is non-mark-thing."
+When `helixel--cycle-mark-thing-p' returns nil (from `C-;'), the
+mark-thing path is skipped entirely — every call is non-mark-thing."
   (let* ((a (marker-position (car mr)))
          (b (marker-position (cdr mr)))
          (degenerate (= a b)))
-    (if (and (not helixel--cycle-jump-p)
+    (if (and (helixel--cycle-mark-thing-p)
              first-call
              (not degenerate))
         (let ((p (point)))
@@ -701,21 +720,25 @@ Thin orchestrator after step 15 — work split into
               sel-event
             event))
          ;; When multiple events exist in a group, the newest event
-         ;; carries a pre-computed :group-span-mr (set at commit time
-         ;; by `helixel--on-action-commit-group-span').  For single
-         ;; events, fall back to the event's own mark-region.
-         ;;
-         ;; In `C-;' (jump) mode, replace the car with the
-         ;; group-start event's start-point (original cursor position).
+         ;; carries pre-computed payload entries (set at commit time
+         ;; by `helixel--on-action-commit-group-span'):
+         ;;   :group-span-mr  — bounding box of the entire group
+         ;;   :group-start-point — original cursor before 1st motion
+         ;; For single events, fall back to the event's own mark-region.
+         ;; Both ; and C-; read from sel-event's payload — no need to
+         ;; cross-reference ring entries.
          (mr (let ((raw-mr
                     (if multi-event-p
                         (or (plist-get (helixel-action-payload sel-event)
                                        :group-span-mr)
                             (helixel-action-mark-region mark-event))
                       (helixel-action-mark-region mark-event))))
-               (if helixel--cycle-jump-p
-                   (cons (helixel--cycle-mark-start event) (cdr raw-mr))
-                 raw-mr))))
+               (if (helixel--cycle-mark-thing-p)
+                   raw-mr
+                 (cons (or (plist-get (helixel-action-payload sel-event)
+                                      :group-start-point)
+                           (helixel--cycle-mark-start event))
+                       (cdr raw-mr))))))
     ;; For newest-for-mark categories with multiple events, set
     ;; action-pos to newest-pos so the next ; walks within the
     ;; same group (marking the full span) before going older.
@@ -733,16 +756,16 @@ Thin orchestrator after step 15 — work split into
 
 (defun helixel--cycle-mark-start (event)
   "Return the start marker/position for EVENT based on cycle mode.
-When `helixel--cycle-jump-p' is non-nil (C-; mode), returns
+When `helixel--cycle-mark-thing-p' returns nil (C-; mode), returns
 EVENT's start-point (the original pre-motion cursor position).
 Otherwise returns the car of EVENT's mark-region.
 Falls back to mark-region car when start-point is nil."
-  (if helixel--cycle-jump-p
-      (let ((sp (helixel-action-start-point event)))
-        (if (and sp (markerp sp) (marker-buffer sp))
-            sp
-          (car-safe (helixel-action-mark-region event))))
-    (car-safe (helixel-action-mark-region event))))
+  (if (helixel--cycle-mark-thing-p)
+      (car-safe (helixel-action-mark-region event))
+    (let ((sp (helixel-action-start-point event)))
+      (if (and sp (markerp sp) (marker-buffer sp))
+          sp
+        (car-safe (helixel-action-mark-region event))))))
 
 (defun helixel-action--same-group-p (a b)
   "Return non-nil if `helixel-action' structs A and B share a group.
@@ -816,7 +839,7 @@ Optional prefix ARG is passed to the underlying commands."
             ;; When stepping within a newest-for-mark group
             ;; (pos is still same (category subcat)), mark the
             ;; full group span instead of jumping older.
-            (if (and (not helixel--cycle-jump-p)
+            (if (and (helixel--cycle-mark-thing-p)
                      (helixel-action--newest-for-mark-p
                       (nth helixel--action-pos helixel--action-ring))
                      (funcall #'helixel-action--same-group-p
@@ -832,15 +855,15 @@ Optional prefix ARG is passed to the underlying commands."
                         helixel--action-ring helixel--action-pos
                         #'helixel-action--same-group-p))
                  (grp-event (nth gpos helixel--action-ring)))
-            (if (and (not helixel--cycle-jump-p)
+            (if (and (helixel--cycle-mark-thing-p)
                      (helixel-action--newest-for-mark-p grp-event))
                 (setq helixel--action-pos
                       (helixel-action--cycle-mark-group-span
                        helixel--action-ring helixel--action-pos))
               (let ((mr (helixel-action-mark-region grp-event)))
-                (push-mark (if helixel--cycle-jump-p
-                               (helixel--cycle-mark-start grp-event)
-                             (car mr))
+                (push-mark (if (helixel--cycle-mark-thing-p)
+                               (car mr)
+                             (helixel--cycle-mark-start grp-event))
                            t t)
                 (message "%s" (helixel-action--cycle-display
                                grp-event gpos helixel--action-ring))))))))
@@ -868,10 +891,10 @@ Optional prefix ARG is passed to the underlying commands."
 ;; newest-for-mark, group-span-mr, auto-advance) via `helixel--action-cycle'.
 ;; It uses the same ring, visibility, and grouping as `;'.  The two
 ;; differences are:
-;;   1. Marking: `helixel--cycle-jump-p' is bound to t, disabling the
-;;      mark-thing path in `helixel-action--cycle-mark-region'.
-;;      Every press pushes mark to the thing-start (non-mark-thing).
-;;   2. Position: `helixel--action-pos' is temporarily redirected to
+;;   1. Marking: `helixel--cycle-mark-thing-p' returns nil, disabling
+;;      the mark-thing path.  Every press pushes mark to the
+;;      thing-start (non-mark-thing).
+;;   2. Position: `helixel--action-pos' is let-bound from
 ;;      `helixel--jump-cycle-pos' so the two commands track their
 ;;      cycle positions independently.
 
@@ -886,14 +909,12 @@ Optional prefix ARG reverses direction (go newer)."
   (unless (eq last-command 'helixel-action-cycle-jump)
     (setq helixel--jump-cycle-pos nil))
   (let ((helixel--cycle-jump-p t)
-        (saved-pos helixel--action-pos))
-    ;; Redirect helixel--action-pos so the shared cycle logic
-    ;; reads/writes C-;'s own position.
-    (setq helixel--action-pos helixel--jump-cycle-pos)
+        (helixel--action-pos helixel--jump-cycle-pos))
+    ;; helixel--action-pos is let-bound from helixel--jump-cycle-pos
+    ;; so the shared cycle logic reads/writes C-;'s own position.
     (unwind-protect
         (helixel--action-cycle arg)
-      (setq helixel--jump-cycle-pos helixel--action-pos
-            helixel--action-pos saved-pos))))
+      (setq helixel--jump-cycle-pos helixel--action-pos))))
 
 ;; ----------------------------------------------------------------------
 ;; Global jump list (C-o / C-i)

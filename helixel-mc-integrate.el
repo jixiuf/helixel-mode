@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -131,8 +132,6 @@ applied every keystroke at every fake cursor live."
       (message "helixel-mc: chain recorded for %d fake cursor%s"
                n (if (= n 1) "" "s")))))
 
-(add-hook 'helixel-action-commit-hook
-          #'helixel-mc--on-chain-end)
 
 ;; ── Insert-state per-cursor pre-positioning ──
 ;;
@@ -158,7 +157,7 @@ Called from `helixel-mode-off-hook'."
       (when helixel-multi-cursor-mode
         (helixel-multi-cursor-mode -1)))))
 
-(add-hook 'helixel-mode-off-hook #'helixel-mc--cleanup-on-mode-off)
+;; Mode-off hook deferred to `helixel-mc-integrate--init' (see end of file).
 
 ;; ── Public command: explicitly apply last edit to all cursors ──
 
@@ -188,7 +187,6 @@ Wired via `helixel-keyboard-quit-functions'."
   (when helixel-multi-cursor-mode
     (helixel-mc-clear-all)))
 
-(add-hook 'helixel-keyboard-quit-functions #'helixel-mc--maybe-clear-on-quit)
 
 ;; ── Visual state sync ──
 ;;
@@ -246,7 +244,6 @@ before dispatch can use it."
             (helixel-mc-with-each-cursor
               (setq mark-active nil)))))))))
 
-(add-hook 'helixel-state-change-hook #'helixel-mc--sync-visual-state)
 
 (helixel-mc-mark-all-for-real-cursor-only
  '(helixel-begin-selection
@@ -359,6 +356,16 @@ of commands from modules `mc-integrate' itself depends on."
 ;; completion-preview) has moved to `helixel-shims.el' to keep
 ;; this file focused on core repeat / chain / insert glue.  Mirrors
 ;; the split between `helixel-state' and `helixel-shims'.
+
+(defun helixel-mc-integrate--init ()
+  "Wire mc-integrate internals."
+  (add-hook 'helixel-mode-off-hook #'helixel-mc--cleanup-on-mode-off)
+  (add-hook 'helixel-action-commit-hook
+            #'helixel-mc--on-chain-end)
+  (add-hook 'helixel-keyboard-quit-functions #'helixel-mc--maybe-clear-on-quit)
+  (add-hook 'helixel-state-change-hook #'helixel-mc--sync-visual-state))
+;; helixel-mc-integrate--init registered via `helixel--register-mode-hooks'
+;; in helixel.el.
 
 (provide 'helixel-mc-integrate)
 ;;; helixel-mc-integrate.el ends here

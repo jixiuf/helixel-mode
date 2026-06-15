@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify

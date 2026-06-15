@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -89,10 +90,10 @@ commands (scroll, `;' action cycle, etc.)."
   "Alist of symbol state name to minor mode.")
 
 (defvar helixel-mode-on-hook nil
-  "Hook run after helixel-mode activates in a buffer.")
+  "Hook run after `helixel-mode' activates in a buffer.")
 
 (defvar helixel-mode-off-hook nil
-  "Hook run after helixel-mode deactivates in a buffer.")
+  "Hook run after `helixel-mode' deactivates in a buffer.")
 
 (defvar helixel-state-change-hook nil
   "Hook run after the modal state changes.
@@ -189,11 +190,7 @@ Stores mode-specific helixel bindings registered via `helixel-define-key'.")
 Set by operator commands (d, c, y) when awaiting a selection.
 Consumed alongside `helixel--pending-sel'.")
 
-;; Wire textobj hooks for action recording and visual state detection.
-(setq helixel-textobj-action-function #'helixel--tracking-open)
-(setq helixel-textobj-visual-state-p-function
-      #'helixel--pure-visual-state-p)
-(setq helixel-jump-cleanup-function #'helixel--clear-data)
+;; Internal wiring deferred to `helixel-state--init' (see end of file).
 
 (defun helixel--switch-state (state)
   "Switch to STATE."
@@ -233,7 +230,7 @@ re-enters visual exit."
   (when (eq helixel--current-state 'visual)
     (helixel-visual-exit)))
 
-(add-hook 'helixel-clear-data-hook #'helixel--clear-data-exit-visual)
+;; Clear-data hook deferred to `helixel-state--init' (see end of file).
 
 (defun helixel-begin-selection ()
   "Begin visual selection or exit visual state."
@@ -411,8 +408,7 @@ Runs on `helixel-motion-state-hook'."
            (make-composed-keymap (keymap-parent map)
                                  helixel-normal-map)))))))
 
-(add-hook 'helixel-motion-state-hook
-          #'helixel--motion-patch-keymap-parent)
+;; Motion-state hook deferred to `helixel-state--init' (see end of file).
 
 ;; ── Mode activation ──
 
@@ -495,8 +491,7 @@ is installed at module load (see below).")
 ;; load so it's active regardless of `helixel-mode' state — each
 ;; registered fn is responsible for its own gate (e.g. `when
 ;; helixel-multi-cursor-mode').
-(advice-add #'keyboard-quit :before
-            #'helixel--run-keyboard-quit-functions)
+;; keyboard-quit advice deferred to `helixel-state--init' (see end of file).
 
 ;;;###autoload
 (defun helixel-mode ()
@@ -527,6 +522,19 @@ is installed at module load (see below).")
                eglot-find-implementation))
   (helixel-define-jump-command cmd))
 
+
+(defun helixel-state--init ()
+  "Wire internals for helixel-state (load-time)."
+  (setq helixel-textobj-action-function #'helixel--tracking-open)
+  (setq helixel-textobj-visual-state-p-function
+        #'helixel--pure-visual-state-p)
+  (setq helixel-jump-cleanup-function #'helixel--clear-data)
+  (add-hook 'helixel-clear-data-hook #'helixel--clear-data-exit-visual)
+  (add-hook 'helixel-motion-state-hook
+            #'helixel--motion-patch-keymap-parent)
+  (advice-add #'keyboard-quit :before
+              #'helixel--run-keyboard-quit-functions))
+(helixel-state--init)
 
 (provide 'helixel-state)
 ;;; helixel-state.el ends here

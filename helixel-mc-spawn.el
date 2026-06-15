@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -86,7 +87,7 @@ Otherwise spawn from:
   "Snapshot real cursor to a fake, then move real to next line.
 DIRECTION is +1 (down) or -1 (up).
 
-Mirrors Helix `C' / `Alt-C':
+Mirrors Helix C / Alt-C:
   - if a region is active, the region is copied to the next line
     keeping the same column span (point/mark direction preserved);
   - otherwise the point is copied to the next line, same column.
@@ -135,7 +136,7 @@ No-op (returns nil) if no suitable target line exists."
       t)))
 
 (defun helixel-mc-add-cursor-here ()
-  "Copy current selection / cursor to the line below (Helix `C').
+  "Copy current selection / cursor to the line below (Helix C).
 
 Snapshot the real cursor (with its region, if any) as a fake at
 the current position, then move the real cursor to the next line
@@ -1018,7 +1019,11 @@ into history."
 ;; `clear-all' is harmless: `--push-history' requires at least
 ;; one fake cursor in the snapshot, and by that point the fakes
 ;; have already been deleted.
-(add-hook 'helixel-mc-before-clear-hook #'helixel-mc--push-history)
+(defun helixel-mc-spawn--init ()
+  "Wire mc-spawn internals."
+  (add-hook 'helixel-mc-before-clear-hook #'helixel-mc--push-history))
+;; helixel-mc-spawn--init registered via `helixel--register-mode-hooks'
+;; in helixel.el.
 
 (provide 'helixel-mc-spawn)
 ;;; helixel-mc-spawn.el ends here

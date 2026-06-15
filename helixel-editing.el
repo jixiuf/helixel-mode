@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -73,11 +74,11 @@ point AFTER the selection (or one char past point if no region)."
   (setq mark-active nil))
 
 (defun helixel-mc--prepos-bol ()
-  "Move to beginning of line at this fake cursor (`I' semantics)."
+  "Move to beginning of line at this fake cursor (I semantics)."
   (beginning-of-line))
 
 (defun helixel-mc--prepos-eol ()
-  "Move to end of line at this fake cursor (`A' semantics)."
+  "Move to end of line at this fake cursor (A semantics)."
   (end-of-line))
 
 (defun helixel-mc--prepos-newline-after ()
@@ -86,7 +87,7 @@ point AFTER the selection (or one char past point if no region)."
   (newline-and-indent))
 
 (defun helixel-mc--prepos-newline-before ()
-  "Open a new line above this fake cursor (`O' semantics)."
+  "Open a new line above this fake cursor (O semantics)."
   (beginning-of-line)
   (let ((electric-indent-mode nil))
     (newline nil t)
@@ -357,7 +358,7 @@ When NOYANK is non-nil, skip pushing deleted text to `kill-ring'.
 
 For rect selections the stored text is replayed on every subsequent
 rectangle line via `helixel--rect-replay' — no state-switching side
--effect (avoids an unnecessary helixel-insert-exit during replay)."
+-effect (avoids an unnecessary `helixel-insert-exit' during replay)."
   (let* ((keys (helixel--repeat-get-keys tx))
          (text (helixel-action-payload-get tx :inserted-text)))
     (cond
@@ -609,7 +610,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
           (goto-char beg)
           (if (and ends-with-newline
                    (not (string-suffix-p "\n" text)))
-              (insert (concat text "\n"))
+              (insert text "\n")
             (insert-for-yank text))
           (setq helixel--yank-pop-bounds (cons beg (point)))
           ;; Store bounds as mark-region for `;' re-select.

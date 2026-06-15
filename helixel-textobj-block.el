@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -217,7 +218,7 @@ contains the block name (1-based)."
                         (string= (car tags) (match-string cl-name)))
                    ;; backward: matching closer, pop; break if stack empty
                    (pop tags)
-                   (not (null tags)))
+                   tags)
                   ((> dir 0)
                    ;; forward: pop matching closer (skip non-matching first)
                    (while (and tags
@@ -225,7 +226,7 @@ contains the block name (1-based)."
                                              (match-string cl-name))))
                      (pop tags))
                    (pop tags)
-                   (not (null tags)))           ; break if stack now empty
+                   tags)           ; break if stack now empty
                   (t t))))                       ; non-matching closer: skip
         (unless (setq match (and match (match-data t)))
           (setq match nil)

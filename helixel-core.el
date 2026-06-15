@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -1213,7 +1214,7 @@ so this function returns the correct type throughout the operator body."
 (defvar-local helixel-invisible t
   "Non-nil means helixel treats invisible text as real content to operate on.
 In buffers like `org-mode', invisible text is folded content —
-\=`x'/\=`X' selections expand into it, and search finds matches inside.
+\"x\"/\"X\" selections expand into it, and search finds matches inside.
 In buffers like `grep-mode' with `consult-focus-line', set this to nil
 so invisible text is treated as filtered-out content to ignore.
 Default t, matching Emacs' `line-move-ignore-invisible'.
@@ -1257,9 +1258,9 @@ The caller should bind `search-invisible' appropriately."
 
 (defconst helixel--yank-register ?Y
   "Dedicated register for swap-source from yank/copy.
-Set only by copy (`y') at the real cursor.  In multi-cursor mode
+Set only by copy (\"y\") at the real cursor.  In multi-cursor mode
 fake cursors write to `helixel--yank-register-source' instead.
-Read by swap (`S') — falls back to this register when the
+Read by swap (\"S\") — falls back to this register when the
 per-cursor variable is nil (real cursor, non-mc mode).
 Contains (:beg MARKER :end MARKER :buffer BUFFER :type TYPE).")
 
@@ -1288,7 +1289,7 @@ More permissive than `helixel--region-type' — detects
 (defun helixel--blank-line-p ()
   "Return non-nil if the current line is blank (empty or whitespace only)."
   (save-excursion
-    (goto-char (line-beginning-position))
+    (beginning-of-line)
     (looking-at-p "[ \t]*$")))
 
 (defun helixel--recreate-selection (sel-ctx)
@@ -1591,9 +1592,9 @@ form to evaluate."
     (?* . primary))
   "Alist mapping register characters to storage backends.
 Each entry is (CHAR . BACKEND) where BACKEND is a keyword:
-- `kill-ring': Emacs kill ring (default for \\=\").
-- `clipboard': System clipboard (`CLIPBOARD' selection).
-- `primary': Primary selection (`PRIMARY' selection).
+- :kill-ring: Emacs kill ring (default for \\=\").
+- :clipboard: System clipboard (CLIPBOARD selection).
+- :primary: Primary selection (PRIMARY selection).
 Characters not listed here use Emacs `register-alist' (via
 `get-register'/`set-register'), which supports a-z, 0-9, and
 any other character Emacs registers accept."

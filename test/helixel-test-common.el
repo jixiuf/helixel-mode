@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: tests
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -28,13 +29,17 @@
 
 (defmacro helixel-test-with-buffer (content &rest body)
   "Execute BODY in a temp buffer with CONTENT and transient-mark-mode on.
-Buffer starts with point at position 1."
+Buffer starts at point 1.  Internal hooks are activated without enabling
+`helixel-mode' (avoids state-machine side-effects in tests)."
   (declare (indent 1))
   `(with-temp-buffer
      (transient-mark-mode 1)
      (insert ,content)
      (goto-char 1)
-     ,@body))
+     (helixel--activate-all-hooks)
+     (unwind-protect
+         (progn ,@body)
+       (helixel--deactivate-all-hooks))))
 
 (provide 'helixel-test-common)
 ;;; helixel-test-common.el ends here

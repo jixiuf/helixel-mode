@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -21,7 +22,7 @@
 
 ;;; Commentary:
 ;;
-;; Region swap command (bound to `S' in normal mode).
+;; Region swap command (bound to S in normal mode).
 ;;
 ;; Swaps the current region (or implied region) with a previously
 ;; yanked/copied source stored as a text property on the kill-ring
@@ -102,7 +103,7 @@ Each range is a cons (BEG . END)."
 (defcustom helixel-swap-imply-region t
   "When non-nil, `helixel-swap' implies a region when none is active.
 The implied region extends from point with the same dimensions
-as the swap source (stored by `y' or `Y')."
+as the swap source (stored by y or Y)."
   :type 'boolean
   :group 'helixel)
 

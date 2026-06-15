@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -964,7 +965,7 @@ Otherwise point moves in DIR:
 - If the move would go away from mark it extends.
 
 The stored `:dir' in the selection context determines the direction;
-after `-x'/`-X' flips `:dir', subsequent `x'/`X' presses follow the
+after -x'/-X' flips `:dir', subsequent x'/X' presses follow the
 new direction."
   (if (= (line-number-at-pos) (line-number-at-pos (mark)))
       ;; Same line: cross over only when point is on the wrong side
@@ -1000,7 +1001,7 @@ new direction."
          (abs-n (abs n))
          (flip-p (< n 0))
          (current-prefix-arg nil))
-    ;; Flip permanent direction on negative prefix (like `N' for search).
+    ;; Flip permanent direction on negative prefix (like N for search).
     (when (and flip-p helixel--pending-sel
                (eq (helixel-sel-kind helixel--pending-sel) 'line))
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
@@ -1039,7 +1040,7 @@ new direction."
          (abs-n (abs n))
          (flip-p (< n 0))
          (current-prefix-arg nil))
-    ;; Flip permanent direction on negative prefix (like `N' for search).
+    ;; Flip permanent direction on negative prefix (like N for search).
     (when (and flip-p helixel--pending-sel
                (eq (helixel-sel-kind helixel--pending-sel) 'line))
       (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))

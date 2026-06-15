@@ -3,6 +3,7 @@
 ;; Copyright (C) 2025  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -285,7 +286,7 @@ doesn't try to call it at fakes) and installs the sync advice."
 ;; Defer setup until `completion-preview' loads.  The `intern'
 ;; indirection keeps package-lint quiet about the Emacs 30.1 feature.
 (funcall (intern "eval-after-load") (intern "completion-preview")
-         '(funcall 'helixel-mc--setup-completion-preview))
+         (lambda () (helixel-mc--setup-completion-preview)))
 
 (provide 'helixel-shims)
 ;;; helixel-shims.el ends here

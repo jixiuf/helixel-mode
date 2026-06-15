@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -273,7 +274,7 @@ is ignored."
       (progn
         ;; we need special linewise exclusive selection
         (unless inclusive (setq inclusive 'exclusive-line))
-        (let ((thing #'(lambda (&optional cnt)
+        (let ((thing (lambda (&optional cnt)
                            (helixel-up-paren open close cnt)))
                 (bnd (or (bounds-of-thing-at-point 'helixel-string)
                          (bounds-of-thing-at-point 'helixel-comment)

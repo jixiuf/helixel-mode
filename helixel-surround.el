@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -476,8 +477,12 @@ Clears `helixel--pending-surround-op' regardless."
                   (format "@%s" (helixel-delimiter-type d))
                 "surround")))
 
-(add-hook 'helixel-textobj-after-select-functions
-          #'helixel--surround-execute-pending)
+(defun helixel-surround--init ()
+  "Wire surround internals."
+  (add-hook 'helixel-textobj-after-select-functions
+            #'helixel--surround-execute-pending))
+;; helixel-surround--init registered via `helixel--register-mode-hooks'
+;; in helixel.el.
 
 (provide 'helixel-surround)
 ;;; helixel-surround.el ends here

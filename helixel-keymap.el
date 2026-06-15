@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -166,48 +167,7 @@ to composed keymaps with mode overrides on top of the base maps."
                     (make-composed-keymap outer-overrides
                                           helixel-textobj-outer-map))))))
 
-
 ;; ── Prefix keymaps ──
-
-(define-key helixel-goto-map "l" #'helixel-go-end-line)
-(define-key helixel-goto-map "h" #'helixel-go-beginning-line)
-(define-key helixel-goto-map "s" #'helixel-go-first-nonwhitespace)
-(define-key helixel-goto-map "g" #'helixel-go-beginning-buffer)
-(define-key helixel-goto-map "e" #'helixel-go-end-buffer)
-(define-key helixel-goto-map "j" #'helixel-next-line)
-(define-key helixel-goto-map "k" #'helixel-previous-line)
-(define-key helixel-goto-map "r" #'xref-find-references)
-(define-key helixel-goto-map "d" #'xref-find-definitions)
-(define-key helixel-goto-map "y" #'eglot-find-typeDefinition)
-(define-key helixel-goto-map "i" #'eglot-find-implementation)
-(define-key helixel-goto-map "u" #'helixel-downcase)
-(define-key helixel-goto-map "U" #'helixel-upcase)
-(define-key helixel-goto-map "c" #'helixel-comment-toggle)
-(define-key helixel-goto-map "q" #'helixel-fill)
-(define-key helixel-goto-map "." #'helixel-repeat-edit-pick)
-(define-key helixel-goto-map "|" #'move-to-column)
-(define-key helixel-goto-map ":" #'goto-char)
-(define-key helixel-goto-map ";" #'goto-line)
-
-(define-key helixel-view-map "z" #'recenter-top-bottom)
-
-(define-key helixel-space-map "f" #'project-find-file)
-(define-key helixel-space-map "b" #'project-switch-to-buffer)
-(define-key helixel-space-map "j" #'project-switch-project)
-(define-key helixel-space-map "/" #'project-find-regexp)
-(define-key helixel-space-map "a" #'eglot-code-action-quickfix)
-(define-key helixel-space-map "r" #'eglot-rename)
-(define-key helixel-space-map "d" #'flymake-show-buffer-diagnostics)
-
-(define-key helixel-window-map "h" #'windmove-left)
-(define-key helixel-window-map "l" #'windmove-right)
-(define-key helixel-window-map "j" #'windmove-down)
-(define-key helixel-window-map "k" #'windmove-up)
-(define-key helixel-window-map "w" #'other-window)
-(define-key helixel-window-map "v" #'split-window-right)
-(define-key helixel-window-map "s" #'split-window-below)
-(define-key helixel-window-map "q" #'delete-window)
-(define-key helixel-window-map "o" #'delete-other-windows)
 
 ;; ── Textobj keymap ──
 
@@ -248,14 +208,6 @@ e.g. \"helixel-mark-a-%s\"."
                            "helixel-mark-inner-%s")
 
 (set-keymap-parent helixel-textobj-map helixel-textobj-inner-map)
-(define-key helixel-textobj-map "i" helixel-textobj-inner-map)
-(define-key helixel-textobj-map "a" helixel-textobj-outer-map)
-(define-key helixel-textobj-map "h" #'mark-whole-buffer)
-(define-key helixel-textobj-map "s" #'helixel-surround-add)
-(define-key helixel-textobj-map "t" #'helixel-surround-add-tag)
-(define-key helixel-textobj-map "d" #'helixel-surround-delete)
-(define-key helixel-textobj-map "r" #'helixel-surround-replace)
-
 ;; ── [ ] { } prefix keymaps ──
 ;; [ key → outer (a) textobj, outward to opening
 ;; ] key → outer (a) textobj, forward to closing end
@@ -319,86 +271,14 @@ e.g. \"helixel-next-%s-end\"."
 ;; ── State keymaps ──
 
 ;; helixel-normal-map
-(define-key helixel-normal-map "@" #'helixel-repeat-chain-start)
-(define-key helixel-normal-map "." #'helixel-repeat-edit)
-(define-key helixel-normal-map "," #'helixel-repeat-last-motion)
-
-(define-key helixel-normal-map "c" #'helixel-change)
-(define-key helixel-normal-map "C" #'helixel-change-noyank)
-(define-key helixel-normal-map "d" #'helixel-kill)
-(define-key helixel-normal-map "D" #'helixel-delete)
-(define-key helixel-normal-map "y" #'helixel-kill-ring-save)
-(define-key helixel-normal-map "S" #'helixel-swap)
-(define-key helixel-normal-map "r" #'helixel-replace)
-(define-key helixel-normal-map "R" #'helixel-replace-char)
-(define-key helixel-normal-map [remap yank-pop] #'helixel-yank-pop)
-(define-key helixel-normal-map "p" #'helixel-yank)
-(define-key helixel-normal-map "P" #'helixel-yank-before)
-(define-key helixel-normal-map "\"" #'helixel-select-register)
-(define-key helixel-normal-map "x" #'helixel-select-line)
-(define-key helixel-normal-map "X" #'helixel-select-line-up)
-(define-key helixel-normal-map "v" #'helixel-begin-selection)
-(define-key helixel-normal-map "\C-v" #'helixel-select-rectangle)
-(define-key helixel-normal-map "u" #'undo)
-(define-key helixel-normal-map "U" #'undo-redo)
-(define-key helixel-normal-map "o" #'helixel-insert-newline)
-(define-key helixel-normal-map "O" #'helixel-insert-prevline)
-(define-key helixel-normal-map "<" #'helixel-indent-left)
-(define-key helixel-normal-map ">" #'helixel-indent-right)
-(define-key helixel-normal-map "~" #'helixel-toggle-case)
-(define-key helixel-normal-map "!" #'helixel-shell-command)
-(define-key helixel-normal-map "i" #'helixel-insert)
-(define-key helixel-normal-map "I" #'helixel-insert-beginning-line)
-(define-key helixel-normal-map "a" #'helixel-insert-after)
-(define-key helixel-normal-map "A" #'helixel-insert-after-end-line)
-(define-key helixel-normal-map ":" #'helixel-execute-command)
-(define-key helixel-normal-map [escape] #'helixel-normal-escape)
-(define-key helixel-normal-map [delete] #'ignore)
-(define-key helixel-normal-map [backspace] #'helixel-delete-backward-char)
-(define-key helixel-normal-map [C-backspace] #'helixel-delete-backward-word)
-(define-key helixel-normal-map [M-backspace] #'helixel-delete-backward-word)
-(define-key helixel-normal-map "h" #'helixel-backward-char)
-(define-key helixel-normal-map "l" #'helixel-forward-char)
-(define-key helixel-normal-map "j" #'helixel-next-line)
-(define-key helixel-normal-map "J" #'helixel-join-lines)
-(define-key helixel-normal-map "k" #'helixel-previous-line)
-(define-key helixel-normal-map "G" #'helixel-goto-line)
-(define-key helixel-normal-map "%" #'helixel-jump-to-match)
-(define-key helixel-normal-map ";" #'helixel-action-cycle)
-(define-key helixel-normal-map (kbd "C-;") #'helixel-action-cycle-jump)
-(define-key helixel-normal-map "\C-o" #'helixel-jump-backward)
-(define-key helixel-normal-map "\C-i" #'helixel-jump-forward)
-(define-key helixel-normal-map "\C-f" #'helixel-scroll-up-command)
-(define-key helixel-normal-map "\C-b" #'helixel-scroll-down-command)
 ;; Digit arguments via C-u prefix
 (dotimes (i 10)
   (define-key helixel-normal-map (number-to-string i)
               (format "\C-u%d" i)))
-(define-key helixel-normal-map "-" 'negative-argument)
-(define-key helixel-normal-map "=" #'indent-for-tab-command)
 ;; Word movement
-(define-key helixel-normal-map "w" #'helixel-forward-word-start)
-(define-key helixel-normal-map "W" #'helixel-forward-WORD-start)
-(define-key helixel-normal-map "e" #'helixel-forward-word-end)
-(define-key helixel-normal-map "E" #'helixel-forward-WORD-end)
-(define-key helixel-normal-map "b" #'helixel-backward-word-start)
-(define-key helixel-normal-map "B" #'helixel-backward-WORD)
 ;; Paragraph / Sentence / Function movement
-(define-key helixel-normal-map "}" #'helixel-forward-paragraph-start)
-(define-key helixel-normal-map "{" #'helixel-backward-paragraph-start)
 ;; Unimpaired — [ ] { } as textobj prefix keymaps
-(define-key helixel-normal-map "]" helixel-right-map)
-(define-key helixel-normal-map "[" helixel-left-map)
-(define-key helixel-normal-map "}" helixel-inner-right-map)
-(define-key helixel-normal-map "{" helixel-inner-left-map)
 ;; Prefix maps
-(define-key helixel-normal-map "m" helixel-textobj-map)
-
-(define-key helixel-normal-map "g" helixel-goto-map)
-(define-key helixel-normal-map "z"    helixel-view-map)
-(define-key helixel-normal-map " "    helixel-space-map)
-(define-key helixel-normal-map "\C-w" helixel-window-map)
-
 ;; M-s prefix: incremental multi-cursor commands
 (defvar-keymap helixel-mc-map
   :doc "Keymap for helixel multi-cursor `s' prefix.
@@ -421,57 +301,38 @@ used selection management lives here under `s'."
   ";"   #'helixel-collapse-selection ; like Helix `;'
   ","   #'helixel-mc-clear-all       ;`,' = remove fakes
   "v"   #'helixel-mc-restore-cursors ; like Helix gv
-  "k"   #'helixel-mc-keep-matching   ; like Helix `K'
+  "k"   #'helixel-mc-keep-matching   ; like Helix K
   "K"   #'helixel-mc-remove-matching ; like Helix `M-K'
   "-"   #'helixel-mc-merge           ; like Helix `M--'
   "&"   #'helixel-mc-align           ; like Helix `&'
   "_"   #'helixel-mc-trim            ; like Helix `_'
-  "S"   #'helixel-mc-split-on-regex) ; like Helix `S'
+  "S"   #'helixel-mc-split-on-regex) ; like Helix S
 
-(define-key helixel-normal-map "s" helixel-mc-map)
-(define-key helixel-goto-map   "v" #'helixel-mc-restore-cursors)
 ;; Top-level Helix-style rotation: typically pressed repeatedly
 ;; to cycle through cursors.
-(define-key helixel-normal-map "K"    #'helixel-mc-keep-matching)
-(define-key helixel-normal-map "\M-k" #'helixel-mc-remove-matching)
-(define-key helixel-normal-map "&"    #'helixel-mc-align)
-(define-key helixel-normal-map "_"    #'helixel-mc-trim)
-(define-key helixel-normal-map "\M--" #'helixel-mc-merge)
-(define-key helixel-normal-map "C"    #'helixel-mc-add-cursor-here)
-(define-key helixel-normal-map "\M-c" #'helixel-mc-add-cursor-here-up)
-(define-key helixel-normal-map "("    #'helixel-mc-rotate-primary-backward)
-(define-key helixel-normal-map ")"    #'helixel-mc-rotate-primary-forward)
-(define-key helixel-normal-map "\M-," #'helixel-mc-remove-primary)  ; Helix A-,
-(define-key helixel-normal-map "\M-(" #'helixel-mc-rotate-content-backward)
-(define-key helixel-normal-map "\M-)" #'helixel-mc-rotate-content-forward)
-
-
+  ; Helix A-,
 ;; helixel-visual-map (inherits normal-map)
 (set-keymap-parent helixel-visual-map helixel-normal-map)
-(define-key helixel-visual-map "v"    #'helixel-visual-exit)
-(define-key helixel-visual-map "o"    #'helixel-visual-exchange-point-and-mark)
-(define-key helixel-visual-map [escape] #'helixel-visual-exit)
-(define-key helixel-normal-map "\M-;" #'helixel-visual-exchange-point-and-mark)
-
 ;; helixel-motion-map stays empty (full t, user adds bindings)
 
 ;; helixel-insert-map
-(define-key helixel-insert-map [escape] #'helixel-insert-exit)
-
 ;; ── State → keymap alist ──
 
-(setq helixel-state-map-alist
-      `((insert . ,helixel-insert-map)
-        (normal . ,helixel-normal-map)
-        (visual . ,helixel-visual-map)
-        (motion . ,helixel-motion-map)
-        (textobj . ,helixel-textobj-map)
-        (textobj-inner . ,helixel-textobj-inner-map)
-        (textobj-outer . ,helixel-textobj-outer-map)
-        (view . ,helixel-view-map)
-        (goto . ,helixel-goto-map)
-        (window . ,helixel-window-map)
-        (space . ,helixel-space-map)))
+(defun helixel-keymap--init-alist ()
+  "Set `helixel-state-map-alist' for all known states."
+  (setq helixel-state-map-alist
+        `((insert . ,helixel-insert-map)
+          (normal . ,helixel-normal-map)
+          (visual . ,helixel-visual-map)
+          (motion . ,helixel-motion-map)
+          (textobj . ,helixel-textobj-map)
+          (textobj-inner . ,helixel-textobj-inner-map)
+          (textobj-outer . ,helixel-textobj-outer-map)
+          (view . ,helixel-view-map)
+          (goto . ,helixel-goto-map)
+          (window . ,helixel-window-map)
+          (space . ,helixel-space-map))))
+(helixel-keymap--init-alist)
 
 ;; ── Colon commands ──
 
@@ -571,7 +432,6 @@ Example with multiple callbacks:
 
 ;; ── Search & find-char keybindings ──
 
-
 (helixel-define-key 'normal "/"    #'helixel-search-forward)
 (helixel-define-key 'normal "?"    #'helixel-search-backward)
 (helixel-define-key 'normal "*"    #'helixel-search-at-point-next)
@@ -614,9 +474,149 @@ Example with multiple callbacks:
 (helixel-define-key 'textobj-outer "+" #'helixel-mark-a-plus
                     'org-mode)
 
+(defun helixel-keymap--init-hooks ()
+  "Wire state-change hooks for helixel-keymap."
+  (add-hook 'helixel-state-change-hook #'helixel--refresh-overriding-maps)
+  (add-hook 'helixel-state-change-hook #'helixel--refresh-textobj-overrides))
+;; helixel-keymap--init-hooks registered via `helixel--register-mode-hooks'
+;; in helixel.el.
 
-(add-hook 'helixel-state-change-hook #'helixel--refresh-overriding-maps)
-(add-hook 'helixel-state-change-hook #'helixel--refresh-textobj-overrides)
+(defun helixel-keymap--define-bindings ()
+  "Define all key bindings for helixel keymaps."
+  (define-key helixel-goto-map "l" #'helixel-go-end-line)
+  (define-key helixel-goto-map "h" #'helixel-go-beginning-line)
+  (define-key helixel-goto-map "s" #'helixel-go-first-nonwhitespace)
+  (define-key helixel-goto-map "g" #'helixel-go-beginning-buffer)
+  (define-key helixel-goto-map "e" #'helixel-go-end-buffer)
+  (define-key helixel-goto-map "j" #'helixel-next-line)
+  (define-key helixel-goto-map "k" #'helixel-previous-line)
+  (define-key helixel-goto-map "r" #'xref-find-references)
+  (define-key helixel-goto-map "d" #'xref-find-definitions)
+  (define-key helixel-goto-map "y" #'eglot-find-typeDefinition)
+  (define-key helixel-goto-map "i" #'eglot-find-implementation)
+  (define-key helixel-goto-map "u" #'helixel-downcase)
+  (define-key helixel-goto-map "U" #'helixel-upcase)
+  (define-key helixel-goto-map "c" #'helixel-comment-toggle)
+  (define-key helixel-goto-map "q" #'helixel-fill)
+  (define-key helixel-goto-map "." #'helixel-repeat-edit-pick)
+  (define-key helixel-goto-map "|" #'move-to-column)
+  (define-key helixel-goto-map ":" #'goto-char)
+  (define-key helixel-goto-map ";" #'goto-line)
+  (define-key helixel-view-map "z" #'recenter-top-bottom)
+  (define-key helixel-space-map "f" #'project-find-file)
+  (define-key helixel-space-map "b" #'project-switch-to-buffer)
+  (define-key helixel-space-map "j" #'project-switch-project)
+  (define-key helixel-space-map "/" #'project-find-regexp)
+  (define-key helixel-space-map "a" #'eglot-code-action-quickfix)
+  (define-key helixel-space-map "r" #'eglot-rename)
+  (define-key helixel-space-map "d" #'flymake-show-buffer-diagnostics)
+  (define-key helixel-window-map "h" #'windmove-left)
+  (define-key helixel-window-map "l" #'windmove-right)
+  (define-key helixel-window-map "j" #'windmove-down)
+  (define-key helixel-window-map "k" #'windmove-up)
+  (define-key helixel-window-map "w" #'other-window)
+  (define-key helixel-window-map "v" #'split-window-right)
+  (define-key helixel-window-map "s" #'split-window-below)
+  (define-key helixel-window-map "q" #'delete-window)
+  (define-key helixel-window-map "o" #'delete-other-windows)
+  (define-key helixel-textobj-map "i" helixel-textobj-inner-map)
+  (define-key helixel-textobj-map "a" helixel-textobj-outer-map)
+  (define-key helixel-textobj-map "h" #'mark-whole-buffer)
+  (define-key helixel-textobj-map "s" #'helixel-surround-add)
+  (define-key helixel-textobj-map "t" #'helixel-surround-add-tag)
+  (define-key helixel-textobj-map "d" #'helixel-surround-delete)
+  (define-key helixel-textobj-map "r" #'helixel-surround-replace)
+  (define-key helixel-normal-map "@" #'helixel-repeat-chain-start)
+  (define-key helixel-normal-map "." #'helixel-repeat-edit)
+  (define-key helixel-normal-map "," #'helixel-repeat-last-motion)
+  (define-key helixel-normal-map "c" #'helixel-change)
+  (define-key helixel-normal-map "C" #'helixel-change-noyank)
+  (define-key helixel-normal-map "d" #'helixel-kill)
+  (define-key helixel-normal-map "D" #'helixel-delete)
+  (define-key helixel-normal-map "y" #'helixel-kill-ring-save)
+  (define-key helixel-normal-map "S" #'helixel-swap)
+  (define-key helixel-normal-map "r" #'helixel-replace)
+  (define-key helixel-normal-map "R" #'helixel-replace-char)
+  (define-key helixel-normal-map [remap yank-pop] #'helixel-yank-pop)
+  (define-key helixel-normal-map "p" #'helixel-yank)
+  (define-key helixel-normal-map "P" #'helixel-yank-before)
+  (define-key helixel-normal-map "\"" #'helixel-select-register)
+  (define-key helixel-normal-map "x" #'helixel-select-line)
+  (define-key helixel-normal-map "X" #'helixel-select-line-up)
+  (define-key helixel-normal-map "v" #'helixel-begin-selection)
+  (define-key helixel-normal-map "\C-v" #'helixel-select-rectangle)
+  (define-key helixel-normal-map "u" #'undo)
+  (define-key helixel-normal-map "U" #'undo-redo)
+  (define-key helixel-normal-map "o" #'helixel-insert-newline)
+  (define-key helixel-normal-map "O" #'helixel-insert-prevline)
+  (define-key helixel-normal-map "<" #'helixel-indent-left)
+  (define-key helixel-normal-map ">" #'helixel-indent-right)
+  (define-key helixel-normal-map "~" #'helixel-toggle-case)
+  (define-key helixel-normal-map "!" #'helixel-shell-command)
+  (define-key helixel-normal-map "i" #'helixel-insert)
+  (define-key helixel-normal-map "I" #'helixel-insert-beginning-line)
+  (define-key helixel-normal-map "a" #'helixel-insert-after)
+  (define-key helixel-normal-map "A" #'helixel-insert-after-end-line)
+  (define-key helixel-normal-map ":" #'helixel-execute-command)
+  (define-key helixel-normal-map [escape] #'helixel-normal-escape)
+  (define-key helixel-normal-map [delete] #'ignore)
+  (define-key helixel-normal-map [backspace] #'helixel-delete-backward-char)
+  (define-key helixel-normal-map [C-backspace] #'helixel-delete-backward-word)
+  (define-key helixel-normal-map [M-backspace] #'helixel-delete-backward-word)
+  (define-key helixel-normal-map "h" #'helixel-backward-char)
+  (define-key helixel-normal-map "l" #'helixel-forward-char)
+  (define-key helixel-normal-map "j" #'helixel-next-line)
+  (define-key helixel-normal-map "J" #'helixel-join-lines)
+  (define-key helixel-normal-map "k" #'helixel-previous-line)
+  (define-key helixel-normal-map "G" #'helixel-goto-line)
+  (define-key helixel-normal-map "%" #'helixel-jump-to-match)
+  (define-key helixel-normal-map ";" #'helixel-action-cycle)
+  (define-key helixel-normal-map (kbd "C-;") #'helixel-action-cycle-jump)
+  (define-key helixel-normal-map "\C-o" #'helixel-jump-backward)
+  (define-key helixel-normal-map "\C-i" #'helixel-jump-forward)
+  (define-key helixel-normal-map "\C-f" #'helixel-scroll-up-command)
+  (define-key helixel-normal-map "\C-b" #'helixel-scroll-down-command)
+  (define-key helixel-normal-map "-" 'negative-argument)
+  (define-key helixel-normal-map "=" #'indent-for-tab-command)
+  (define-key helixel-normal-map "w" #'helixel-forward-word-start)
+  (define-key helixel-normal-map "W" #'helixel-forward-WORD-start)
+  (define-key helixel-normal-map "e" #'helixel-forward-word-end)
+  (define-key helixel-normal-map "E" #'helixel-forward-WORD-end)
+  (define-key helixel-normal-map "b" #'helixel-backward-word-start)
+  (define-key helixel-normal-map "B" #'helixel-backward-WORD)
+  (define-key helixel-normal-map "}" #'helixel-forward-paragraph-start)
+  (define-key helixel-normal-map "{" #'helixel-backward-paragraph-start)
+  (define-key helixel-normal-map "]" helixel-right-map)
+  (define-key helixel-normal-map "[" helixel-left-map)
+  (define-key helixel-normal-map "}" helixel-inner-right-map)
+  (define-key helixel-normal-map "{" helixel-inner-left-map)
+  (define-key helixel-normal-map "m" helixel-textobj-map)
+  (define-key helixel-normal-map "g" helixel-goto-map)
+  (define-key helixel-normal-map "z"    helixel-view-map)
+  (define-key helixel-normal-map " "    helixel-space-map)
+  (define-key helixel-normal-map "\C-w" helixel-window-map)
+  (define-key helixel-normal-map "s" helixel-mc-map)
+  (define-key helixel-goto-map   "v" #'helixel-mc-restore-cursors)
+  (define-key helixel-normal-map "K"    #'helixel-mc-keep-matching)
+  (define-key helixel-normal-map "\M-k" #'helixel-mc-remove-matching)
+  (define-key helixel-normal-map "&"    #'helixel-mc-align)
+  (define-key helixel-normal-map "_"    #'helixel-mc-trim)
+  (define-key helixel-normal-map "\M--" #'helixel-mc-merge)
+  (define-key helixel-normal-map "C"    #'helixel-mc-add-cursor-here)
+  (define-key helixel-normal-map "\M-c" #'helixel-mc-add-cursor-here-up)
+  (define-key helixel-normal-map "("    #'helixel-mc-rotate-primary-backward)
+  (define-key helixel-normal-map ")"    #'helixel-mc-rotate-primary-forward)
+  (define-key helixel-normal-map "\M-," #'helixel-mc-remove-primary)
+  (define-key helixel-normal-map "\M-(" #'helixel-mc-rotate-content-backward)
+  (define-key helixel-normal-map "\M-)" #'helixel-mc-rotate-content-forward)
+  (define-key helixel-visual-map "v"    #'helixel-visual-exit)
+  (define-key helixel-visual-map "o"
+    #'helixel-visual-exchange-point-and-mark)
+  (define-key helixel-visual-map [escape] #'helixel-visual-exit)
+  (define-key helixel-normal-map "\M-;"
+    #'helixel-visual-exchange-point-and-mark)
+  (define-key helixel-insert-map [escape] #'helixel-insert-exit))
+(helixel-keymap--define-bindings)
 
 (provide 'helixel-keymap)
 ;;; helixel-keymap.el ends here

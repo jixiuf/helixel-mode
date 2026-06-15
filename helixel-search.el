@@ -5,6 +5,7 @@
 ;; Author: jixiuf
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -45,7 +46,7 @@
 ;; Groups and customs
 
 (defgroup helixel-search nil
-  "Search and find-char for helixel-mode."
+  "Search and find-char for `helixel-mode'."
   :group 'helixel)
 
 (defcustom helixel-search-repeat-categories '(search find-char)
@@ -624,8 +625,8 @@ at the appropriate offset within the match for insert-text ops."
         (when (helixel-search--skip-current-match
                pat dir (helixel-sel-search-entry-kind ctx))
           (when (or (= (point) pre-skip-pos)
-                    (and (eq dir 'forward) (= (point) (point-max)))
-                    (and (eq dir 'backward) (= (point) (point-min))))
+                    (and (eq dir 'forward) (eobp))
+                    (and (eq dir 'backward) (bobp)))
             (user-error "No more matches for %s" pat)))
         (helixel-search--backward-unstick dir)
         (condition-case nil
@@ -1116,8 +1117,11 @@ using advance+apply without recursion."
 
 ;; ── Hook registrations ──
 
-(add-hook 'helixel-mode-on-hook #'helixel-search-setup)
-(add-hook 'helixel-mode-off-hook #'helixel-search-teardown)
+(defun helixel-search--init ()
+  "Wire search lifecycle hooks."
+  (add-hook 'helixel-mode-on-hook #'helixel-search-setup)
+  (add-hook 'helixel-mode-off-hook #'helixel-search-teardown))
+(helixel-search--init)
 
 (provide 'helixel-search)
 ;;; helixel-search.el ends here

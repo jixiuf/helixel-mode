@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -42,6 +43,13 @@
 (require 'cl-lib)
 (require 'helixel-core)
 (require 'helixel-ring)            ; helixel-action-commit
+
+;; Emacs 29 compatibility: `hash-table-values' is new in Emacs 30.
+(defun helixel--hash-table-values (table)
+  "Return a list of values in hash TABLE."
+  (let (values)
+    (maphash (lambda (_k v) (push v values)) table)
+    (nreverse values)))
 
 (defvar helixel-multi-cursor-mode)        ; forward decl — defined below
 (defvar helixel--current-state)           ; from `helixel-state'
@@ -304,7 +312,7 @@ Iterates the `helixel-mc--cursors-by-id' hash table values."
                    (let ((cs (overlay-get ov 'helixel-pc-state)))
                      (and cs (helixel-pcs-point cs)
                           (marker-position (helixel-pcs-point cs))))))
-            (hash-table-values helixel-mc--cursors-by-id)))))
+            (helixel--hash-table-values helixel-mc--cursors-by-id)))))
     (if sort
         (sort cursors
               (lambda (a b)
@@ -550,7 +558,7 @@ Clears the ID-lookup hash table."
   (interactive)
   (run-hooks 'helixel-mc-before-clear-hook)
   (when helixel-mc--cursors-by-id
-    (dolist (ov (hash-table-values helixel-mc--cursors-by-id))
+    (dolist (ov (helixel--hash-table-values helixel-mc--cursors-by-id))
       (helixel-mc-delete-fake-cursor ov))
     (clrhash helixel-mc--cursors-by-id))
   (when helixel-multi-cursor-mode
@@ -632,7 +640,7 @@ fake cursors to match.  Auto-toggles `helixel-multi-cursor-mode'."
                      (m (cdr pos)))
                  (set-marker (helixel-pcs-point cs) p)
                  (set-marker (helixel-pcs-mark cs) (or m p))
-                 (setf (helixel-pcs-mark-active cs) (not (null m)))
+                 (setf (helixel-pcs-mark-active cs) m)
                  (helixel-mc--paint-cursor-overlay ov p)
                  (helixel-mc--update-fake-region ov))
              ;; New fake — create with the same ID.
@@ -647,7 +655,7 @@ fake cursors to match.  Auto-toggles `helixel-multi-cursor-mode'."
              (cs (helixel-pcs-clone)))
         (set-marker (helixel-pcs-point cs) p)
         (set-marker (helixel-pcs-mark cs) (or m p))
-        (setf (helixel-pcs-mark-active cs) (not (null m)))
+        (setf (helixel-pcs-mark-active cs) m)
         (setf (helixel-pcs-registers-alist cs) nil)
         (overlay-put ov 'helixel-mc-cursor t)
         (overlay-put ov 'helixel-mc-id id)

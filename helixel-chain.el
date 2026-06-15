@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -168,8 +169,6 @@ code path for tx-list accumulation."
         (push entry (helixel-chain-session-tx-list
                      helixel--chain-session))))))
 
-(add-hook 'helixel-action-commit-hook #'helixel--chain-push-entry)
-
 ;; ── Entry-kind propagation hook ──
 
 (defvar helixel-chain-insert-entry-functions nil
@@ -197,9 +196,6 @@ No-op when no chain is active or the init-ctx is not a search/line sel."
           (helixel-sel-update-ctx
            (helixel-chain-session-init-ctx helixel--chain-session)
            :entry-kind entry-kind))))
-
-(add-hook 'helixel-chain-insert-entry-functions
-          #'helixel--chain-propagate-entry-kind)
 
 ;; ── Runner helpers ──
 

@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -46,7 +47,7 @@ a textobj selection to be in place (e.g. pending surround ops).")
 ;; ============================================================================
 
 (defvar helixel-restriction-stack nil
-  "List of previous restrictions for helixel-with-restriction macro.")
+  "List of previous restrictions for `helixel-with-restriction' macro.")
 
 (defcustom helixel-cjk-word-separating-categories
   '(;; Kanji
@@ -197,13 +198,13 @@ non-whitespace non-word characters '[^[:word:]\\n\\r\\t\\f ]', or
 an empty line matching ^$."
   (helixel-forward-nearest
    count
-   #'(lambda (&optional cnt)
+   (lambda (&optional cnt)
        (let ((word-separating-categories helixel-cjk-word-separating-categories)
              (word-combining-categories helixel-cjk-word-combining-categories)
              (pnt (point)))
          (forward-word cnt)
          (if (= pnt (point)) cnt 0)))
-   #'(lambda (&optional cnt)
+   (lambda (&optional cnt)
        (helixel-forward-chars "^[:word:]\n\r\t\f " cnt))
    #'helixel--forward-empty-line))
 (put 'helixel-word 'forward-op #'helixel--forward-word)
@@ -216,7 +217,7 @@ forward) or at the first character of the WORD (if backward).  A
 WORD is a sequence of non-whitespace characters
 '[^\\n\\r\\t\\f ]', or an empty line matching ^$."
   (helixel-forward-nearest count
-                           #'(lambda (&optional cnt)
+                           (lambda (&optional cnt)
                                (helixel-forward-chars "^\n\r\t\f " cnt))
                            #'helixel--forward-empty-line))
 (put 'helixel-WORD 'forward-op #'helixel--forward-WORD)
@@ -443,8 +444,8 @@ selection."
       (setq count (if (> count 0) (1- count) (1+ count))))
     (goto-char (if (< count 0) beg end))
     (helixel-forward-nearest count
-                             #'(lambda (cnt) (forward-thing thing cnt))
-                             #'(lambda (cnt)
+                             (lambda (cnt) (forward-thing thing cnt))
+                             (lambda (cnt)
                                  (helixel-forward-not-thing thing cnt)))
     (cons (if (>= count 0) beg (point))
           (if (< count 0) end (point)))))
@@ -572,9 +573,9 @@ is a sequence of characters not in the word, symbol or whitespace
 syntax classes."
   (helixel-forward-nearest
    count
-   #'(lambda (&optional cnt)
+   (lambda (&optional cnt)
        (helixel-forward-syntax "^w_->" cnt))
-   #'(lambda (&optional cnt)
+   (lambda (&optional cnt)
        (let ((pnt (point)))
          (forward-symbol cnt)
          (if (= pnt (point)) cnt 0)))
@@ -738,7 +739,7 @@ the count so `.' repeats the full chain of textobj selections."
 ;; Visual-state / region helpers (used by mark-* commands)
 ;; ============================================================================
 
-(defun helixel--use-region-p()
+(defun helixel--use-region-p ()
   "Return non-nil when in visual state and the region is active."
   (and (use-region-p)
        helixel-textobj-visual-state-p-function

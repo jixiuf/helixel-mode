@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -208,7 +209,7 @@ TARGETS and LAST-KEY are the current accumulator values."
         (when (<= pt before)
           (deactivate-mark)
           (goto-char (max re (1+ before)))
-          (when (>= (point) (point-max))
+          (when (eobp)
             (throw 'walk-advance-iter-done nil)))
         ;; Skip no-progress, whitespace-only, or overlapping targets.
         (unless (or (and (eq pt before) (not have-range))

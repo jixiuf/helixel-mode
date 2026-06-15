@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -297,8 +298,7 @@ cross-referencing ring entries."
                              :group-start-point
                              (copy-marker start-pt)))))))))
 
-(add-hook 'helixel-action-commit-hook
-          #'helixel--on-action-commit-group-span)
+;; Action-commit hook deferred to `helixel-ring--init' (see end of file).
 
 ;; ── Live-event helpers ──
 
@@ -1030,6 +1030,13 @@ Adds :before advice to record position before SYMBOL runs."
           (message "At newest")))
     (message "At newest")))
 
+
+(defun helixel-ring--init ()
+  "Wire ring internals (load-time — `;' command needs this always)."
+  (add-hook 'helixel-action-commit-hook
+            #'helixel--on-action-commit-group-span))
+;; helixel-ring--init registered via `helixel--register-mode-hooks'
+;; in helixel.el.
 
 (provide 'helixel-ring)
 ;;; helixel-ring.el ends here

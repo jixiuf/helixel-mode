@@ -25,3 +25,5 @@ jobs:
     - uses: actions/checkout@v4
     - name: Run tests
       run: make
+    - name: Run melpazoid
+      run: make melpazoid

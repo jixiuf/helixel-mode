@@ -794,7 +794,7 @@ Auto-populated by `helixel-define-mark-pair' and
 
 Surround uses all entry types valid in the current mode
 \(see `helixel--surround-pairs-active').
-`helixel-jump-to-match' (% / M-.) only considers :pair entries
+`helixel-jump-to-match' (% / ,) only considers :pair entries
 from `helixel--surround-pairs-active'.")
 
 

@@ -321,7 +321,7 @@ e.g. \"helixel-next-%s-end\"."
 ;; helixel-normal-map
 (define-key helixel-normal-map "q" #'helixel-repeat-chain-start)
 (define-key helixel-normal-map "." #'helixel-repeat-edit)
-(define-key helixel-normal-map "," #'helixel-repeat-selection)
+(define-key helixel-normal-map "," #'helixel-repeat-last-motion)
 
 (define-key helixel-normal-map "c" #'helixel-change)
 (define-key helixel-normal-map "C" #'helixel-change-noyank)
@@ -582,8 +582,7 @@ Example with multiple callbacks:
 (helixel-define-key 'normal "T"    #'helixel-find-prev-till-char)
 (helixel-define-key 'normal "n"    #'helixel-search-repeat-next)
 (helixel-define-key 'normal "N"    #'helixel-search-repeat-reverse)
-(helixel-define-key 'normal "\M-." #'helixel-repeat-last-motion)
-(helixel-define-key 'normal "'"    #'helixel-repeat-last-motion)
+(helixel-define-key 'normal "\M-." #'helixel-repeat-selection)
 
 ;; ── Org-mode emphasis marker text objects (~ = _ / * +) ──
 ;; These are quote-style text objects that only activate in org-mode

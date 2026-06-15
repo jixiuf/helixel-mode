@@ -424,8 +424,8 @@ Uses `helixel--repeat-line-pass' for proper cursor advance."
 ;; `,' session.  See `helixel-search-advance-*' in `helixel-replay.el'.
 
 (defvar-local helixel--repeat-preview-pos nil
-  "Marker for the `,' preview position, consumed by `.'.
-Set by `,' (`helixel-repeat-selection') at the preview position;
+  "Marker for the `M-.' preview position, consumed by `.'.
+Set by `M-.' (`helixel-repeat-selection') at the preview position;
 consumed by `.' (`helixel-repeat-edit') when point is still there.
 
 Positional handoff replaces the old boolean flag +
@@ -568,10 +568,10 @@ All iterations are amalgamated into a single undo step."
         (setq helixel--current-state saved-state))))))
 
 ;; ---------------------------------------------------------------------------
-;; Repeat Selection (bound to `,`)
+;; Repeat Selection (bound to `M-.`)
 
 (defun helixel-repeat-selection (&optional raw-prefix)
-  "Repeat the last selection without applying any edit (bound to `,`).
+  "Repeat the last selection without applying any edit (bound to `M-.`).
 Mirrors the advance behaviour of `.` without executing the operator.
 
 Prefix RAW-PREFIX semantics (same as `.`):

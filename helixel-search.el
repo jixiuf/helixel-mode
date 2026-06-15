@@ -270,8 +270,9 @@ is not committed by the next command."
         (setq helixel--active-search
               (make-helixel-active-search
                :category 'search :pattern isearch-string :dir dir))
-        ;; Record for M-. repeat: store category+pattern+dir
-        ;; so M-. can replay search via `helixel-search--isearch-repeat'.
+        ;; Record for motion repeat (bound to `,'):
+        ;; store category+pattern+dir so `,' can replay search
+        ;; via `helixel-search--isearch-repeat'.
         (helixel--record-last-motion nil
           :category 'search :pattern isearch-string :dir dir)
         (helixel-search--set-sel-ctx)
@@ -535,8 +536,8 @@ DOC is the docstring."
      (let ((helixel--current-command ',name)
            (this-command ',name))
        (helixel--tracking-open 'find-char ',type)
-       ;; Record this as the last motion for M-. repeat.
-       ;; Stash char/type/dir so M-. replays self-contained
+       ;; Record this as the last motion for `,' repeat.
+       ;; Stash char/type/dir so `,' replays self-contained
        ;; without consulting `helixel--active-search'.
        (let ((sym-dir (if (> ,dir 0) 'forward 'backward)))
          (helixel--record-last-motion ',name
@@ -662,7 +663,7 @@ the full f x n n sequence.  Extends region back to origin when
 
 (defun helixel-search--repeat-find-char (&optional char type dir)
   "Repeat the last find-char.
-When CHAR, TYPE and DIR are given (from \=`M-.'), use them directly.
+When CHAR, TYPE and DIR are given (from \=`,'), use them directly.
 Otherwise (from \=`n') read from `helixel--active-search'.
 Passes CHAR/TYPE/DIR explicitly to `helixel-search--find-char-core'
 so no temp dynamic binding of `helixel--active-search' is needed.

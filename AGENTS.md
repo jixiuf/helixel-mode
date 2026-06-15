@@ -9,7 +9,7 @@
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
 | `helixel-insert-record.el` | Insert-mode recording.  Phase 4.4: segment-based capture (after-change-functions per command) — each insert-mode command becomes either `(:keys VEC)` (no buffer change — motion, etc.) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replays text segments verbatim without re-running `post-self-insert-hook' so `electric-pair-mode' / completion-preview / snippet expansion don't double-insert.  Replay helper `helixel--execute-keys' accepts both segment lists and legacy raw key vectors. |
 
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`,`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Phase 4.4 — chain accumulates a list of `helixel-tx' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:tx-list' payload.  Replay iterates the list and `helixel-tx-replay`s each entry.  No more kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
@@ -145,7 +145,7 @@ Notes:
 (cl-defstruct helixel-action op sel payload runner pre-replay-fn mark-region
                display category subcat timestamp buffer by-command)
 ```
-A SINGLE struct serving both replay (`.`, `,`, chain, mc) and history
+A SINGLE struct serving both replay (`.`, `M-.`, chain, mc) and history
 (`;`, C-o/C-i).  Previously TWO structs (helixel-tx + helixel-action)
 merged in v5.  Slots op/sel/payload/runner/preposition are nil for
 pure movement/search/state events (~40B per entry negligible).
@@ -225,7 +225,7 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel--record-action op &rest extra)  ; stores tx + commits event
 (helixel-tx-replay tx)             ; calls :preposition (if any), then :runner on tx
 (helixel-repeat-edit &optional prefix) ; bound to .
-(helixel-repeat-selection &optional prefix) ; bound to ,
+(helixel-repeat-selection &optional prefix) ; bound to M-.
 (helixel--build-strategy edit &optional reverse-p) → strategy struct
 
 ;; ── Chain ──
@@ -292,7 +292,7 @@ these side effects in tests, call the underlying function directly instead.
 Search hooks invalidate `match-data`. Use `(region-beginning)` / `(region-end)` instead.
 
 ### insert-text runner must NOT deactivate-mark
-Selection is recreated before execute. `deactivate-mark` destroys it → invisible after `.`/`,`.
+Selection is recreated before execute. `deactivate-mark` destroys it → invisible after `.`/`M-.`.
 
 ### helixel--recreate-line: use region-beginning/region-end
 After `helixel-select-line`, point is on the LAST selected line. `line-beginning-position` targets the wrong line for count≥2.
@@ -356,7 +356,7 @@ CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use r
 - `:moves-point-p` boolean on ops: t = op moves point itself, suppress auto-advance (kill, change, join-lines); nil = op leaves point alone (insert, replace, paste, indent, surround, ...).
 - Insert replay: `pre-command-hook` captures `this-single-command-keys` (key-based replay) with `:text` fallback. No `:commands` layer. No `start-kbd-macro` used.
 - Chain and non-chain share the same strategy architecture. Chain has a custom `:strategy-builder` in the op registry.
-- `helixel-repeat-selection` (`,`) uses the same strategy + preview path.
+- `helixel-repeat-selection` (`M-.`) uses the same strategy + preview path.
 - Kind-specific all-buffer/all-dir logic lives in `helixel-repeat.el` via `:all-buffer-fn`/`:all-dir-fn` in the kind registry.
 - `helixel--advance-search-last-pos` and `helixel--advance-search-edge-seen` are reset per `helixel-repeat-edit` / `helixel-repeat-selection` call.
 

@@ -605,7 +605,7 @@ Slots:
 ;; ── Last-Motion Struct ──
 ;;
 ;; Each completed motion (pair/textobj movement, find-char, search, %)
-;; records a `helixel--last-motion' struct so `'' and `M-.' can replay
+;; records a `helixel--last-motion' struct so `,' can replay
 ;; it self-contained without consulting global state.
 
 (cl-defstruct (helixel--last-motion (:copier nil))
@@ -634,7 +634,7 @@ Slots:
 (defcustom helixel-motion-repeat-categories
   '((movement . pair) (movement . match) (movement . paragraph)
     (movement . sentence) (movement . function) search find-char)
-  "Motion categories that \=`M-.' and \=`'' can repeat.
+  "Motion categories that \=`,' can repeat.
 Each element is either a plain category symbol (matches all
 subcats) or a cons (CATEGORY . SUBCAT) for precise matching —
 the same format as `helixel-action-cycle-categories'.
@@ -654,7 +654,7 @@ Each element of CHECKLIST is a plain symbol (matches any subcat
 under that category) or a cons (C . S) (matches the specific
 subcat S of category C).
 
-Used by \=`;' cycling visibility, \=`M-.' motion-repeat filtering,
+Used by \=`;' cycling visibility, \=`,' motion-repeat filtering,
 and semicolon mark-thing selection.  They share the
 same (CAT . SUBCAT) or CAT pattern for precise category+subcat
 matching."

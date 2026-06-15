@@ -60,10 +60,10 @@ See ~M-x customize-group RET helixel RET~ for all 26 options.
 | ~;~                    | Action cycle: first press selects the full span, subsequent presses cycle older events |
 | ~C-;~                  | Jump cycle: push mark to original pre-motion cursor position, cycle events          |
 | ~C-o~ ~C-i~           | Jump to older / newer position (global, cross-buffer)            |
-| ~M-.~  ~'~            | Repeat last motion (f, t, %, [, ], {, })                        |
+| ~,~                       | Repeat last motion (f, t, %, [, ], {, })                        |
 | ~n~ ~N~               | Repeat / reverse direction repeat (~C-u n~ pick from history)   |
 | ~.~                    | Repeat last edit. Prefixes: ~3.~ = 3 times; ~0.~ = all remaining; ~C-u .~ = entire buffer; ~C-u - 3 .~ = 3 times reversed. Works for all selection kinds (line, search, movement w/e/b, textobj, find-char). ~M-x helixel-repeat-edit-pick~ chooses from the per-buffer ring. |
-| ~,~                    | Repeat last selection without editing (same prefix behavior as ~.~). |
+| ~M-.~                    | Repeat last selection without editing (same prefix behavior as ~.~). |
 | ~g.~                  | Repeat by picking from history                                   |
 | ~i~ ~a~ ~I~ ~A~ ~o~ ~O~ | Enter insert mode                                             |
 | ~v~                    | Enter visual mode                                                |
@@ -548,19 +548,19 @@ Add major-mode-specific block surround pairs via
 The first element of each entry is the key character pressed after
 ~m s~.  The second is ~(OPEN-STRING . CLOSE-STRING)~.
 
-*** Dot-Repeat (~.~) and Repeat-Selection (~,~)
+*** Dot-Repeat (~.~) and Repeat-Selection (~M-.~)
 
 After an edit, ~.~ repeats the edit at the next target.
-~,~ repeats the selection only (preview, no edit) — same prefixes.
+~M-.~ repeats the selection only (preview, no edit) — same prefixes.
 
 | Prefix          | Behavior                                                         |
 |-----------------|------------------------------------------------------------------|
-| ~.~ ~,~         | Repeat once in stored direction                                  |
-| ~3.~ ~3,~       | Repeat 3 times in stored direction                               |
-| ~0.~ ~0,~       | Repeat all remaining targets in stored direction                 |
-| ~C-u .~ ~C-u ,~ | Repeat all targets, entire buffer (point-min → forward)          |
-| ~-.~ ~-,~       | *Permanently* reverse direction, then 1 repeat                   |
-| ~-3.~ ~-3,~     | *Permanently* reverse direction, then 3 repeats                  |
+| ~.~ ~M-.~         | Repeat once in stored direction                                  |
+| ~3.~ ~3 M-.~    | Repeat 3 times in stored direction                               |
+| ~0.~ ~0 M-.~    | Repeat all remaining targets in stored direction                 |
+| ~C-u .~ ~C-u M-.~ | Repeat all targets, entire buffer (point-min → forward)        |
+| ~-.~ ~- M-.~    | *Permanently* reverse direction, then 1 repeat                   |
+| ~-3.~ ~-3 M-.~  | *Permanently* reverse direction, then 3 repeats                  |
 | ~C-u - 3 .~     | 3 times in opposite direction (one-time, C-u)                    |
 
 - ~0.~/~0,~ stop silently when no more targets are found.
@@ -657,7 +657,7 @@ and vanilla Emacs commands are captured.
 |-------|------------------------------------------------------------------------------|
 | ~q~   | Start chain recording (snapshots selection context, starts tx recording)     |
 | ~ESC~ | End chain, create repeatable compound transaction                            |n| ~.~   | Advance to next target and replay the recorded sequence                      |
-| ~,~   | Preview the next target without editing                                      |n| ~C-g~ | Cancel chain (discard recording)                                            |
+| ~M-.~   | Preview the next target without editing                                      |n| ~C-g~ | Cancel chain (discard recording)                                            |
 
 *How it works:*
 
@@ -772,8 +772,8 @@ share a session; different types start new ones.
 | textobj-quote     | =textobj-quote=       | ~mi"~ ~ma"~ ~mi'~ ~ma'~ ~mi`~ ~ma`~             |
 | textobj-tag       | =textobj-tag=         | ~mit~ ~mat~                                     |
 | search            | =search=              | ~/~ ~?~ ~*~ ~#~ then ~n~/~N~                    |
-| find-char         | =find-char=           | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~M-.~              |
-| movement          | =pair= =match=        | ~%~ ~[~p ~]~p then ~M-.~                        |
+| find-char         | =find-char=           | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~,~              |
+| movement          | =pair= =match=        | ~%~ ~[~p ~]~p then ~,~                        |
 | edit-paste        | =edit-paste-after=    | ~p~ ~P~ — ~;~ re-selects pasted text             |
 | edit-replace      | =edit-replace=        | ~r~ — ~;~ re-selects replaced text               |
 
@@ -856,31 +856,31 @@ their start position via advice.  To register your own commands:
   (setq helixel-jump-cycle-categories '(search find-char edit goto))
 #+end_src
 
-*** Motion Repeat (~M-.~ / ~'~)
+*** Motion Repeat (~,~)
 
-~M-.~ (and ~'~ — same command) repeats the most recent motion
+~,~ repeats the most recent motion
 self-contained from its recording — it does not depend on =helixel--active-search=
 or the current region.  Supported motion types:
 
 | Kind            | Subcat                         | Example                                       |
 |-----------------+--------------------------------+-----------------------------------------------|
-| find-char       | =next= / =till=                | ~f x~ → ~M-.~ finds next x (like ~n~)         |
-| movement        | =pair=                         | ~]~ → ~M-.~ skip past next paren boundary     |
-| movement        | =match=                        | ~%~ → ~M-.~ expand one nesting level outward  |
-| movement        | =paragraph= / =sentence= / =function= | ~}~ → ~M-.~ skip past next boundary    |
-| search          | —                              | ~/foo~ → ~M-.~ find next match (like ~n~)     |
+| find-char       | =next= / =till=                | ~f x~ → ~,~ finds next x (like ~n~)         |
+| movement        | =pair=                         | ~]~ → ~,~ skip past next paren boundary     |
+| movement        | =match=                        | ~%~ → ~,~ expand one nesting level outward  |
+| movement        | =paragraph= / =sentence= / =function= | ~}~ → ~,~ skip past next boundary    |
+| search          | —                              | ~/foo~ → ~,~ find next match (like ~n~)     |
 
-**** Layer-by-layer outward (~%~ + ~M-.~)
+**** Layer-by-layer outward (~%~ + ~,~)
 
-Inside a nested pair, ~%~ jumps to the matching delimiter.  ~M-.~ then moves
+Inside a nested pair, ~%~ jumps to the matching delimiter.  ~,~ then moves
 one level outward to the enclosing pair:
 
 #+begin_example
   (a (b (c)))
         ↑
   %     → jump to ) after (c)
-  M-.   → outward to ) after (b)
-  M-.   → outward to ) after (a)
+  ,   → outward to ) after (b)
+  ,   → outward to ) after (a)
   ;; ; now marks the outermost (a ...) pair
 #+end_example
 
@@ -893,41 +893,41 @@ This works through mixed bracket types (~( ] }~) and across block delimiters
     (message x))
   #+end_src
   ;; % inside (message x) → jump to matching )
-  ;; M-. → outward to enclosing (let ...)
-  ;; M-. → outward to #+begin_src
+  ;; , → outward to enclosing (let ...)
+  ;; , → outward to #+begin_src
 #+end_example
 
-**** find-char: ~M-.~ vs ~n~
+**** find-char: ~,~ vs ~n~
 
-Both ~n~ and ~M-.~ repeat the last find-char, but they differ in one key way:
-~M-.~ reads from a self-contained snapshot taken at record time, so it survives
+Both ~n~ and ~,~ repeat the last find-char, but they differ in one key way:
+~,~ reads from a self-contained snapshot taken at record time, so it survives
 across an intervening search (~/~).  ~n~ consults =helixel--active-search= and
 will switch to repeating the search instead.
 
 #+begin_example
-  f x        find x — recorded for M-.
+  f x        find x — recorded for ,
   /pattern   active-search now points to search, not find-char
-  M-.        still finds the next x (from snapshot)
+  ,        still finds the next x (from snapshot)
   n          repeats /pattern (from active-search)
 #+end_example
 
 **** For pair motions (~]~ ~[~ ~}~ ~{~)
 
-~M-.~ uses the stored delimiter bounds to skip past the current pair entirely
-before re-invoking the original command.  This means consecutive ~M-.~ presses
+~,~ uses the stored delimiter bounds to skip past the current pair entirely
+before re-invoking the original command.  This means consecutive ~,~ presses
 walk through consecutive pairs rather than re-executing on the same one:
 
 #+begin_example
   (a) (b) (c)
   ]     → after ) of (a)
-  M-.   → after ) of (b)
-  M-.   → after ) of (c)
+  ,   → after ) of (b)
+  ,   → after ) of (c)
 #+end_example
 
 **** Configuration
 
 #+begin_src elisp
-  ;; Categories and subcats that M-. and ' can repeat.
+  ;; Categories and subcats that , can repeat.
   ;; Format: (CATEGORY . SUBCAT) or just CATEGORY.
   ;; A plain symbol matches all subcats under that category;
   ;; a cons matches only the specified subcat.

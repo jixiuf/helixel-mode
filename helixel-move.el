@@ -661,7 +661,7 @@ Outward candidates are collected from four sources:
   4. tag delimiter (XML/HTML)
 
 The candidate closest to the original position wins, so
-\=`M-.' naturally expands layer-by-layer from innermost to
+\=`,' naturally expands layer-by-layer from innermost to
 outermost, whether the enclosing structure is a bracket pair or
 a fenced block."
   (let* ((backward-p (eq dir :backward))

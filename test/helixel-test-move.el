@@ -1821,10 +1821,10 @@ On a single-char symbol at eob, w selects it."
     (helixel-forward-word-start)
     (should (null (helixel--sel-type)))))
 
-;; ── M-. motion-repeat tests ──
+;; ── , motion-repeat tests ──
 
 (ert-deftest helixel-test-motion-repeat-pair ()
-  "M-. tracks and re-invokes pair delimiter motion (])."
+  ", tracks and re-invokes pair delimiter motion (])."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "x (a) (b) (c)")
@@ -1840,7 +1840,7 @@ On a single-char symbol at eob, w selects it."
                 'helixel-next-paren-end))))
 
 (ert-deftest helixel-test-motion-repeat-match ()
-  "M-. direction is recorded: forward/backward based on %% direction."
+  ", direction is recorded: forward/backward based on %% direction."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a (b) c)")
@@ -1855,7 +1855,7 @@ On a single-char symbol at eob, w selects it."
                 'backward))))
 
 (ert-deftest helixel-test-motion-repeat-match-semicolon ()
-  "M-. outward then ; selects a region."
+  ", outward then ; selects a region."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
@@ -1865,7 +1865,7 @@ On a single-char symbol at eob, w selects it."
           (helixel--action-pos nil))
       (goto-char 8)  ;; on (inner
       (helixel-jump-to-match)  ;; forward % → after )inner
-      (helixel-repeat-last-motion)  ;; M-. outward → )outer
+      (helixel-repeat-last-motion)  ;; , outward → )outer
       (let ((last-command 'helixel-repeat-last-motion))
         (helixel-action-cycle))
       (should (region-active-p))
@@ -1951,7 +1951,7 @@ On a single-char symbol at eob, w selects it."
     (should (= (point) 4))))
 
 (ert-deftest helixel-test-M-dot-outward-nested ()
-  "M-. goes one level outward to the parent pair."
+  ", goes one level outward to the parent pair."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
@@ -1960,12 +1960,12 @@ On a single-char symbol at eob, w selects it."
     (helixel-backward-match)
     ;; Goes outward to (outer at pos 1.
     (should (= (point) 1))
-    ;; Second M-. — no parent.
+    ;; Second , — no parent.
     (helixel-backward-match)
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-motion-M-dot-after-backward-percent ()
-  "M-. after backward % goes outward to parent pair."
+  ", after backward % goes outward to parent pair."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
@@ -1977,15 +1977,15 @@ On a single-char symbol at eob, w selects it."
     ;; Should land on (inner at pos 8 after core jump from ).
     (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
                 'backward))
-    ;; M-. backward → outward to parent: (outer at pos 1.
+    ;; , backward → outward to parent: (outer at pos 1.
     (helixel-repeat-last-motion)
     (should (= (point) 1))
-    ;; M-. again — no parent, stays.
+    ;; , again — no parent, stays.
     (helixel-repeat-last-motion)
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-motion-M-dot-match-maintains-direction ()
-  "M-. after forward % dispatches correctly and goes outward."
+  ", after forward % dispatches correctly and goes outward."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
@@ -1995,12 +1995,12 @@ On a single-char symbol at eob, w selects it."
     ;; Forward % from ( → jumps to )inner.
     (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
                 'forward))
-    ;; M-. forward → outward to parent )outer at pos 15.
+    ;; , forward → outward to parent )outer at pos 15.
     (helixel-repeat-last-motion)
     (should (= (point) 15))))
 
 (ert-deftest helixel-test-motion-M-dot-match-semicolon ()
-  "M-. outward then ; selects a region."
+  ", outward then ; selects a region."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
@@ -2010,7 +2010,7 @@ On a single-char symbol at eob, w selects it."
           (helixel--action-pos nil))
       (goto-char 8)  ;; on (inner
       (helixel-jump-to-match)  ;; forward → after )inner
-      (helixel-repeat-last-motion)  ;; M-. forward → )outer
+      (helixel-repeat-last-motion)  ;; , forward → )outer
       (let ((last-command 'helixel-repeat-last-motion))
         (helixel-action-cycle))
       (should (region-active-p))
@@ -2018,7 +2018,7 @@ On a single-char symbol at eob, w selects it."
       (should (> (region-end) (region-beginning))))))
 
 (ert-deftest helixel-test-motion-repeat-with-count ()
-  "M-. replays motion with original prefix count."
+  ", replays motion with original prefix count."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "a\n\nb\n\nc\n\nd\n")
@@ -2032,7 +2032,7 @@ On a single-char symbol at eob, w selects it."
     (should (eq (helixel--last-motion-prefix-arg helixel--last-motion-cmd) 2))))
 
 (ert-deftest helixel-test-motion-repeat-paragraph ()
-  "M-. repeats last paragraph-end motion (]p)."
+  ", repeats last paragraph-end motion (]p)."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "para1\n\npara2\n\npara3\n")
@@ -2045,7 +2045,7 @@ On a single-char symbol at eob, w selects it."
       (should (> (point) first-pos)))))
 
 (ert-deftest helixel-test-motion-empty-repeat ()
-  "M-. with no prior motion signals user-error."
+  ", with no prior motion signals user-error."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "hello world")
@@ -2057,7 +2057,7 @@ On a single-char symbol at eob, w selects it."
                     :type 'user-error))))
 
 (ert-deftest helixel-test-motion-word-not-tracked ()
-  "M-. does NOT repeat word motions (w)."
+  ", does NOT repeat word motions (w)."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "hello world foo")
@@ -2070,7 +2070,7 @@ On a single-char symbol at eob, w selects it."
       (should-not (helixel--last-motion-p helixel--last-motion-cmd)))))
 
 (ert-deftest helixel-test-motion-semicolon-consistency ()
-  "[( M-. ; selects the same span as [( [( ;."
+  "[( , ; selects the same span as [( [( ;."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "((char (hello)))")
@@ -2107,8 +2107,8 @@ On a single-char symbol at eob, w selects it."
                        "(char (hello))")))))
 
 (ert-deftest helixel-test-motion-find-char-survives-search ()
-  "M-. replays f x even after /pattern changed active-search.
-This is the design property: M-. reads from self-contained
+  ", replays f x even after /pattern changed active-search.
+This is the design property: , reads from self-contained
 `helixel--last-motion-cmd' struct, never from `helixel--active-search',
 so changing the active-search category cannot break motion repeat."
   (with-temp-buffer
@@ -2125,7 +2125,7 @@ so changing the active-search category cannot break motion repeat."
           (make-helixel-active-search
            :category 'search :pattern "f" :dir 'forward))
     (should (eq (helixel-search--safe-category) 'search))
-    ;; M-. — should replay f x from struct, NOT from active-search.
+    ;; , — should replay f x from struct, NOT from active-search.
     (helixel-repeat-last-motion)
     (should (= (point) 7))   ;; after second x
     ;; Verify struct still has find-char data.
@@ -2157,7 +2157,7 @@ Movement subcats store category=movement with the specific subcat."
                 nil))))
 
 (ert-deftest helixel-test-motion-repeat-search ()
-  "M-. repeats a search recorded in `helixel--last-motion-cmd'.
+  ", repeats a search recorded in `helixel--last-motion-cmd'.
 Simulates search by directly recording a search entry; real search
 recording is tested via integration tests."
   (with-temp-buffer
@@ -2172,14 +2172,14 @@ recording is tested via integration tests."
     ;; Should have found first "foo" and be at match-end.
     (should (= (point) 8))
     (should (region-active-p))
-    ;; M-. again — next match.
+    ;; , again — next match.
     (helixel-repeat-last-motion)
     (should (= (point) 16))))
 
-;; ── M-. boundary skip tests ──
+;; ── , boundary skip tests ──
 
 (ert-deftest helixel-test-motion-skip-pair-forward ()
-  "M-. repeats ] past consecutive paren boundaries."
+  ", repeats ] past consecutive paren boundaries."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a) (b) (c)")
@@ -2187,14 +2187,14 @@ recording is tested via integration tests."
     (goto-char 1)
     (helixel-next-paren-end)
     (should (= (point) 4))   ;; after ) of (a)
-    ;; M-. should skip to next paren, not stay on (a)
+    ;; , should skip to next paren, not stay on (a)
     (helixel-repeat-last-motion)
     (should (= (point) 8))   ;; after ) of (b)
     (helixel-repeat-last-motion)
     (should (= (point) 12)))) ;; after ) of (c), end of buffer
 
 (ert-deftest helixel-test-motion-skip-pair-backward ()
-  "M-. repeats [ past consecutive paren boundaries."
+  ", repeats [ past consecutive paren boundaries."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a) (b) (c)")
@@ -2208,7 +2208,7 @@ recording is tested via integration tests."
     (should (= (point) 1)))) ;; at ( of (a)
 
 (ert-deftest helixel-test-motion-skip-inner-pair-forward ()
-  "M-. repeats } past consecutive inner paren boundaries."
+  ", repeats } past consecutive inner paren boundaries."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a x) (b y) (c z)")
@@ -2221,7 +2221,7 @@ recording is tested via integration tests."
       (should (> (point) p1))))) ;; moved further
 
 (ert-deftest helixel-test-motion-skip-inner-pair-backward ()
-  "M-. repeats { past consecutive inner paren boundaries."
+  ", repeats { past consecutive inner paren boundaries."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a) (b) (c)")
@@ -2233,7 +2233,7 @@ recording is tested via integration tests."
       (should (< (point) p1))))) ;; moved backward
 
 (ert-deftest helixel-test-motion-skip-paragraph-forward ()
-  "M-. repeats ]p past consecutive paragraph boundaries."
+  ", repeats ]p past consecutive paragraph boundaries."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "para1\n\npara2\n\npara3\n")
@@ -2242,16 +2242,16 @@ recording is tested via integration tests."
     (helixel-forward-paragraph-end)
     (let ((first-pos (point)))
       (should (> first-pos 1))
-      ;; First M-. should advance exactly one paragraph, not two.
+      ;; First , should advance exactly one paragraph, not two.
       (helixel-repeat-last-motion)
       (should (> (point) first-pos))
-      ;; Second M-. should still advance (not already at last para).
+      ;; Second , should still advance (not already at last para).
       (let ((second-pos (point)))
         (helixel-repeat-last-motion)
         (should (> (point) second-pos))))))
 
 (ert-deftest helixel-test-motion-skip-paragraph-backward ()
-  "M-. repeats [p past consecutive paragraph boundaries backward."
+  ", repeats [p past consecutive paragraph boundaries backward."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "para1\n\npara2\n\npara3\n")
@@ -2260,16 +2260,16 @@ recording is tested via integration tests."
     (helixel-backward-paragraph-start)
     (let ((first-pos (point)))
       (should (< first-pos (point-max)))
-      ;; First M-. should go back exactly one paragraph, not two.
+      ;; First , should go back exactly one paragraph, not two.
       (helixel-repeat-last-motion)
       (should (< (point) first-pos))
-      ;; Second M-. should still advance (not already at first para).
+      ;; Second , should still advance (not already at first para).
       (let ((second-pos (point)))
         (helixel-repeat-last-motion)
         (should (< (point) second-pos))))))
 
 (ert-deftest helixel-test-motion-skip-word-not-recorded ()
-  "M-. cannot repeat word motion (w) — not in repeat categories."
+  ", cannot repeat word motion (w) — not in repeat categories."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "hello world foo")
@@ -2315,7 +2315,7 @@ recording is tested via integration tests."
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-M-dot-deeply-nested ()
-  "M-. works through 3 levels of nesting."
+  ", works through 3 levels of nesting."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a (b (c)))")
@@ -2324,34 +2324,34 @@ recording is tested via integration tests."
     (helixel-jump-to-match)  ;; % from inside → backward reposition
     ;; → goes to (c at pos 7
     (should (= (point) 7))
-    ;; M-. outward → (b at pos 4
+    ;; , outward → (b at pos 4
     (helixel-repeat-last-motion)
     (should (= (point) 4))
-    ;; M-. outward → (a at pos 1
+    ;; , outward → (a at pos 1
     (helixel-repeat-last-motion)
     (should (= (point) 1))
-    ;; M-. outward — no parent
+    ;; , outward — no parent
     (helixel-repeat-last-motion)
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-M-dot-from-inside-pair ()
-  "M-. from inside a pair goes outward to parent."
+  ", from inside a pair goes outward to parent."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
     (deactivate-mark)
     (goto-char 10)  ;; inside inner, not on delimiter
-    ;; Record a motion first so M-. has something to repeat.
-    ;; Simulate % then test M-. directly.
+    ;; Record a motion first so , has something to repeat.
+    ;; Simulate % then test , directly.
     (helixel-jump-to-match)  ;; goes backward to (inner at 8
     (should (= (point) 8))
     (helixel-jump-to-match)  ;; on (inner → forward % → after )inner
-    ;; M-. forward → outward to )outer at pos 15.
+    ;; , forward → outward to )outer at pos 15.
     (helixel-repeat-last-motion)
     (should (= (point) 15))))
 
 (ert-deftest helixel-test-M-dot-at-bob ()
-  "M-. at beginning of buffer does nothing."
+  ", at beginning of buffer does nothing."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(hello)")
@@ -2359,7 +2359,7 @@ recording is tested via integration tests."
     (goto-char 1)  ;; on (
     (helixel-jump-to-match)  ;; forward % → after )
     (goto-char 1)  ;; back to (
-    ;; M-. outward from outermost pair — no parent
+    ;; , outward from outermost pair — no parent
     (let ((helixel--last-motion-cmd
            (make-helixel--last-motion
             :category 'movement :subcat 'match
@@ -2370,7 +2370,7 @@ recording is tested via integration tests."
       (should (= (point) 1)))))
 
 (ert-deftest helixel-test-percent-then-percent-then-M-dot ()
-  "Two % presses then M-. outward."
+  "Two % presses then , outward."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
@@ -2380,12 +2380,12 @@ recording is tested via integration tests."
     (should (= (point) 15))
     (helixel-jump-to-match)  ;; % again → back to (inner opener
     (should (= (point) 8))
-    ;; M-. outward — no enclosing pair at top level.
+    ;; , outward — no enclosing pair at top level.
     (helixel-repeat-last-motion)
     (should (>= (point) 1))))
 
 (ert-deftest helixel-test-semicolon-after-multiple-M-dot ()
-  "; after % + M-. + M-. marks the outermost pair."
+  "; after % + , + , marks the outermost pair."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a (b (c)))")
@@ -2396,9 +2396,9 @@ recording is tested via integration tests."
       (goto-char 8)  ;; on c inside (c)
       (helixel-jump-to-match)  ;; → backward to (c at pos 7
       (should (= (point) 7))
-      (helixel-repeat-last-motion)  ;; M-. → (b at pos 4
+      (helixel-repeat-last-motion)  ;; , → (b at pos 4
       (should (= (point) 4))
-      (helixel-repeat-last-motion)  ;; M-. → (a at pos 1
+      (helixel-repeat-last-motion)  ;; , → (a at pos 1
       (should (= (point) 1))
       ;; ; should select a region
       (let ((last-command 'helixel-repeat-last-motion))
@@ -2420,7 +2420,7 @@ recording is tested via integration tests."
     ;; So on-or-after-delim-p → core → jumps to ( at pos 4.
     (should (= (point) 4))))
 
-;;; ── % + M-. outward navigation for tags and blocks ──
+;;; ── % + , outward navigation for tags and blocks ──
 
 (ert-deftest helixel-test-percent-inside-tag ()
   "% inside a tag (right after >) jumps to the matching closing tag.
@@ -2460,23 +2460,23 @@ is not a close char, so we enter the backward-reposition path."
     (should (= (point) 14))))
 
 (ert-deftest helixel-test-M-dot-after-percent-on-tag ()
-  "M-. after % on a tag goes outward to parent tag's closer."
+  ", after % on a tag goes outward to parent tag's closer."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "<outer><inner>hi</inner></outer>")
     (deactivate-mark)
     (goto-char 8)  ;; on < of <inner>
     (helixel-jump-to-match)  ;; % → jumps after </inner>
-    ;; M-. forward → outward to after </outer> at pos 33.
+    ;; , forward → outward to after </outer> at pos 33.
     (helixel-repeat-last-motion)
     (should (= (point) 33))))
 
-;;; ── M-. + % comprehensive coverage: tag, block, regex, cross-type ──
+;;; ── , + % comprehensive coverage: tag, block, regex, cross-type ──
 
 ;; ── Counter-based block (different begin/end) ──
 
 (ert-deftest helixel-test-M-dot-after-percent-on-block ()
-  "M-. after % on a block delimiter outward to parent block.
+  ", after % on a block delimiter outward to parent block.
 Uses counter-based (different begin/end) fence patterns
 registered via `helixel-block-textobj-alist'."
   (with-temp-buffer
@@ -2496,14 +2496,14 @@ registered via `helixel-block-textobj-alist'."
         (helixel-jump-to-match)  ;; % → jumps to matching close
         (should (> (point) start-pos))
         (let ((pos-after-pct (point)))
-          ;; M-. → outward to parent block's close
+          ;; , → outward to parent block's close
           (helixel-repeat-last-motion)
           (should (> (point) pos-after-pct)))))))
 
 ;; ── Tag outward navigation ──
 
 (ert-deftest helixel-test-M-dot-tag-outward ()
-  "M-. after % on a tag goes outward to parent tag."
+  ", after % on a tag goes outward to parent tag."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "<a><b>hi</b></a>")
@@ -2513,12 +2513,12 @@ registered via `helixel-block-textobj-alist'."
     (helixel-jump-to-match)  ;; % → jumps after </b>
     (let ((b-close (point)))
       (should (> b-close 10))
-      ;; M-. outward → after </a>
+      ;; , outward → after </a>
       (helixel-repeat-last-motion)
       (should (> (point) b-close)))))
 
 (ert-deftest helixel-test-M-dot-tag-outward-from-content ()
-  "M-. after % from inside tag content outward to parent."
+  ", after % from inside tag content outward to parent."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "<a><b>text</b></a>")
@@ -2531,7 +2531,7 @@ registered via `helixel-block-textobj-alist'."
     (helixel-jump-to-match)  ;; forward % → after </b>
     (let ((b-close (point)))
       (should (> b-close 10))
-      ;; M-. outward → after </a>
+      ;; , outward → after </a>
       (helixel-repeat-last-motion)
       (should (> (point) b-close)))))
 
@@ -2565,7 +2565,7 @@ registered via `helixel-block-textobj-alist'."
     (should (> (point) 20))))
 
 (ert-deftest helixel-test-M-dot-named-block-outward ()
-  "M-. after % inside an org block outward using cross-type fallback.
+  ", after % inside an org block outward using cross-type fallback.
 Tests that cross-type outward fallback finds the enclosing named block."
   (with-temp-buffer
     (org-mode)
@@ -2579,7 +2579,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
       (helixel-jump-to-match)  ;; % from ( → matching )
       (let ((paren-close (point)))
         (should (> paren-close paren-pos))
-        ;; M-. outward → cross-type fallback to #+begin_src
+        ;; , outward → cross-type fallback to #+begin_src
         (helixel-repeat-last-motion)
         (should (not (= (point) paren-close)))))))
 
@@ -2605,7 +2605,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
 ;; ── Regex textobj ──
 
 (ert-deftest helixel-test-M-dot-regex-textobj-outward ()
-  "M-. after % on a regex-defined text object outward to parent."
+  ", after % on a regex-defined text object outward to parent."
   (with-temp-buffer
     (fundamental-mode)
     (transient-mark-mode 1)
@@ -2620,13 +2620,13 @@ Tests that cross-type outward fallback finds the enclosing named block."
       (helixel-jump-to-match)  ;; % → inner close >>>
       (let ((inner-close (point)))
         (should (> inner-close 1))
-        (helixel-repeat-last-motion)  ;; M-. → outward to outer >>>
+        (helixel-repeat-last-motion)  ;; , → outward to outer >>>
         (should (> (point) inner-close))))))
 
 ;; ── Cross-type outward: pair → block ──
 
 (ert-deftest helixel-test-M-dot-cross-type-pair-to-block ()
-  "M-. after % on a pair inside a block outward to the block."
+  ", after % on a pair inside a block outward to the block."
   (with-temp-buffer
     (org-mode)
     (transient-mark-mode 1)
@@ -2641,13 +2641,13 @@ Tests that cross-type outward fallback finds the enclosing named block."
       (helixel-jump-to-match)  ;; % from ( → jumps to matching )
       (let ((paren-close (point)))
         (should (> paren-close paren-open))
-        ;; M-. outward from ) → should go to #+begin_src
+        ;; , outward from ) → should go to #+begin_src
         (helixel-repeat-last-motion)
         ;; moved outward past the enclosing pair
         (should (not (= (point) paren-close)))))))
 
 (ert-deftest helixel-test-M-dot-cross-type-pair-to-tag ()
-  "M-. after % on a pair inside a tag outward to the tag."
+  ", after % on a pair inside a tag outward to the tag."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "<div>(hello)</div>")
@@ -2656,14 +2656,14 @@ Tests that cross-type outward fallback finds the enclosing named block."
     (helixel-jump-to-match)  ;; % from ( → jumps to matching )
     (let ((paren-close (point)))
       (should (> paren-close 6))
-      ;; M-. outward from ) → should go to </div> or past it
+      ;; , outward from ) → should go to </div> or past it
       (helixel-repeat-last-motion)
       (should (not (= (point) paren-close))))))
 
-;; ── Repeated M-. across 3 levels ──
+;; ── Repeated , across 3 levels ──
 
 (ert-deftest helixel-test-M-dot-repeated-outward ()
-  "Repeated M-. presses navigate through multiple nesting levels."
+  "Repeated , presses navigate through multiple nesting levels."
   (with-temp-buffer
     (fundamental-mode)
     (transient-mark-mode 1)
@@ -2680,16 +2680,16 @@ Tests that cross-type outward fallback finds the enclosing named block."
         (helixel-jump-to-match)  ;; % → matching close
         (should (> (point) start))
         (let ((p1 (point)))
-          (helixel-repeat-last-motion)  ;; M-. → parent close
+          (helixel-repeat-last-motion)  ;; , → parent close
           (should (> (point) p1))
           (let ((p2 (point)))
-            (helixel-repeat-last-motion)  ;; M-. → grandparent close
+            (helixel-repeat-last-motion)  ;; , → grandparent close
             (should (> (point) p2))))))))
 
 ;; ── Outermost-noop ──
 
 (ert-deftest helixel-test-M-dot-outermost-noop ()
-  "M-. at the outermost level does not move or errors gracefully."
+  ", at the outermost level does not move or errors gracefully."
   (with-temp-buffer
     (fundamental-mode)
     (transient-mark-mode 1)
@@ -2703,7 +2703,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
       (helixel-jump-to-match)  ;; % → matching |>
       (let ((p (point)))
         (should (> p 1))
-        ;; M-. outward — outermost, no parent
+        ;; , outward — outermost, no parent
         (condition-case nil
             (helixel-repeat-last-motion)
           (user-error nil))
@@ -2882,24 +2882,24 @@ Tests that cross-type outward fallback finds the enclosing named block."
       (helixel-jump-to-match)
       (should (= (point) pt-before)))))
 
-;;; ── M-. edge cases ──
+;;; ── , edge cases ──
 
 (ert-deftest helixel-test-M-dot-no-delimiter-fallback ()
-  "M-. works after syntax-table-only % (no stored delimiter)."
+  ", works after syntax-table-only % (no stored delimiter)."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(outer (inner))")
     (deactivate-mark)
     ;; % records the matched delimiter in helixel--last-motion-cmd's
-    ;; EXTRA; M-. reads it back for outward navigation.
+    ;; EXTRA; , reads it back for outward navigation.
     (goto-char 8)  ;; on ( of (inner)
     (helixel-jump-to-match)  ;; forward % → after )inner
-    ;; M-. forward → outward to )outer at pos 15.
+    ;; , forward → outward to )outer at pos 15.
     (helixel-repeat-last-motion)
     (should (= (point) 15))))
 
 (ert-deftest helixel-test-M-dot-multiple-levels-mixed ()
-  "M-. works through bracket + brace nesting."
+  ", works through bracket + brace nesting."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "{a (b [c])}")
@@ -2907,13 +2907,13 @@ Tests that cross-type outward fallback finds the enclosing named block."
     (goto-char 8)  ;; inside [c]
     (helixel-jump-to-match)  ;; % → backward to [
     (should (= (point) 7))
-    ;; M-. outward → ( opener
+    ;; , outward → ( opener
     (helixel-repeat-last-motion)
     (should (= (point) 4))
-    ;; M-. outward → { opener
+    ;; , outward → { opener
     (helixel-repeat-last-motion)
     (should (= (point) 1))
-    ;; M-. — no parent
+    ;; , — no parent
     (helixel-repeat-last-motion)
     (should (= (point) 1))))
 
@@ -2950,10 +2950,10 @@ Tests that cross-type outward fallback finds the enclosing named block."
 
 ;;; helixel-test-move.el ends here
 
-;;; ── Layer-by-layer outward: M-. closest-enclosing-wins ──
+;;; ── Layer-by-layer outward: , closest-enclosing-wins ──
 
 (ert-deftest helixel-test-M-dot-layer-pair-then-block ()
-  "M-. from inside pair expands pair->parent->block."
+  ", from inside pair expands pair->parent->block."
   (with-temp-buffer
     (org-mode)
     (transient-mark-mode 1)
@@ -2972,7 +2972,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-M-dot-block-not-stolen-by-orphan-brace ()
-  "M-. inside block with orphaned { finds the block."
+  ", inside block with orphaned { finds the block."
   (with-temp-buffer
     (org-mode)
     (transient-mark-mode 1)
@@ -2987,7 +2987,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
     (should (looking-at "#\\+begin_src"))))
 
 (ert-deftest helixel-test-M-dot-syntax-propertize-org-gt ()
-  "M-. from pair with >=29.1 finds block not >."
+  ", from pair with >=29.1 finds block not >."
   (with-temp-buffer
     (org-mode)
     (transient-mark-mode 1)
@@ -3021,7 +3021,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
         (should (not (= (point) inner-close)))))))
 
 (ert-deftest helixel-test-M-dot-mixed-bracket-block-priority ()
-  "M-. from pair inside block: parent pair before block."
+  ", from pair inside block: parent pair before block."
   (with-temp-buffer
     (org-mode)
     (transient-mark-mode 1)
@@ -3038,7 +3038,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-M-dot-tag-priority-over-pair ()
-  "M-. from pair inside tag moves outward past the pair."
+  ", from pair inside tag moves outward past the pair."
   (with-temp-buffer
     (fundamental-mode)
     (transient-mark-mode 1)
@@ -3052,7 +3052,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
       (should (not (= (point) paren-close))))))
 
 (ert-deftest helixel-test-M-dot-raw-up-list-then-block ()
-  "M-. uses raw up-list for consecutive parens, fallback to block."
+  ", uses raw up-list for consecutive parens, fallback to block."
   (with-temp-buffer
     (org-mode)
     (transient-mark-mode 1)
@@ -3071,7 +3071,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-M-dot-no-block-in-plain-mode ()
-  "M-. in fundamental-mode with only bracket pairs still works."
+  ", in fundamental-mode with only bracket pairs still works."
   (with-temp-buffer
     (fundamental-mode)
     (transient-mark-mode 1)

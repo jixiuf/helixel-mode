@@ -319,7 +319,7 @@ e.g. \"helixel-next-%s-end\"."
 ;; ── State keymaps ──
 
 ;; helixel-normal-map
-(define-key helixel-normal-map "q" #'helixel-repeat-chain-start)
+(define-key helixel-normal-map "@" #'helixel-repeat-chain-start)
 (define-key helixel-normal-map "." #'helixel-repeat-edit)
 (define-key helixel-normal-map "," #'helixel-repeat-last-motion)
 

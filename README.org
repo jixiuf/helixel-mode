@@ -648,14 +648,14 @@ Prefixes:
 
 *** Chain Recording (~.~ Advance)
 
-~q~ starts recording, ~ESC~ finishes and creates a repeatable
+~@~ starts recording, ~ESC~ finishes and creates a repeatable
 compound transaction.  ~.~ advances to the next target and replays
 the entire sequence.  Both helixel commands (movement, edit, state)
 and vanilla Emacs commands are captured.
 
 | Key   | Action                                                                       |
 |-------|------------------------------------------------------------------------------|
-| ~q~   | Start chain recording (snapshots selection context, starts tx recording)     |
+| ~@~   | Start chain recording (snapshots selection context, starts tx recording)     |
 | ~ESC~ | End chain, create repeatable compound transaction                            |n| ~.~   | Advance to next target and replay the recorded sequence                      |
 | ~M-.~   | Preview the next target without editing                                      |n| ~C-g~ | Cancel chain (discard recording)                                            |
 
@@ -663,7 +663,7 @@ and vanilla Emacs commands are captured.
 
 1. Select a target (line with ~x~, search match with ~/~) — this
    establishes the /advance context/.
-2. Press ~q~ — starts recording, snapshots the selection.
+2. Press ~@~ — starts recording, snapshots the selection.
 3. Perform any editing operations — all commands (helixel and vanilla
    Emacs) are captured as replayable entries in chronological order.
 4. Press ~ESC~ — stops recording, creates a chain transaction.
@@ -716,7 +716,7 @@ and ~.~ replays in-place.
 
 #+begin_example
   x             select line (advance by line)
-  q             start chain
+  @             start chain
   vbb           select 2 words backward (v enters visual, bb extends)
   d             kill
   ESC           end chain
@@ -724,14 +724,14 @@ and ~.~ replays in-place.
   .             next line, repeat again
 
   /foo<RET>     search for "foo" (advance by search match)
-  q             start chain
+  @             start chain
   cbar<ESC>     change to "bar" (selection from search)
   ESC           end chain
   .             next "foo" match: change to "bar"
   .             next "foo" match, repeat
 
   f x           find-char to next "x"
-  q             start chain
+  @             start chain
   d             delete up to "x"
   ESC           end chain
   .             next "x" match: delete up to it
@@ -1031,9 +1031,9 @@ Delete until a character at every cursor:
   # search foo → spawn → find-char 'x' at each → delete span
 #+end_example
 
-Chain on N cursors (~q~)(maybe mc don't need q):
+Chain on N cursors (~@~):
 #+begin_example
-  /TODO<RET> ss q miw c BUG <ESC> A ! <ESC> ESC
+  /TODO<RET> ss @ miw c BUG <ESC> A ! <ESC> ESC
   # spawn at TODO → start chain → change to BUG → append ! → end chain
   # (applied at each TODO in one undo step)
 #+end_example
@@ -1085,11 +1085,11 @@ Caveats:
 - ~C-o~ / ~C-i~ (jump backward/forward) are real-only — the global
   cross-buffer jump log is not polluted by fake commits.
 
-**Integration with ~.~ and ~q~ chain:**
+**Integration with ~.~ and ~@~ chain:**
 
 - ~.~ replays each cursor's own last edit independently — the dispatcher
   restores the cursor's snapshotted state before invocation.
-- ~q ... ESC~ while multi-cursor is active: the resulting chain
+- ~@ ... ESC~ while multi-cursor is active: the resulting chain
   transaction is broadcast to every fake cursor and immediately applied
   once at each position (one undo step).
 - ~ESC~ in normal state: if chaining → finish chain; else if cursors

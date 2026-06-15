@@ -18,7 +18,7 @@
 ;;; Commentary:
 
 ;; Wires the multi-cursor model into helixel-mode's repeat (`.'),
-;; chain (`q' ... ESC) and insert subsystems.
+;; chain (`@' ... ESC) and insert subsystems.
 ;;
 ;; Strategy:
 ;;   * insert mode             — `self-insert-command' is whitelisted,

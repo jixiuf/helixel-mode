@@ -230,7 +230,7 @@ pure movement/search/state events (~40B per entry negligible).
 
 ;; ── Chain ──
 (helixel-repeat-chain-start/end/cancel)  ; interactive commands
-;;   q = start, ESC = end (normal map), C-g = cancel
+;;   @ = start, ESC = end (normal map), C-g = cancel
 
 ;; ── Multi-cursor (`s' prefix + top-level) ──
 (helixel-mc-toggle)              ; s s  toggle (spawn from sel / clear)
@@ -340,13 +340,13 @@ from commands run AFTER spawn.  `helixel--global-jump-log-push' is a
 no-op during fake dispatch to avoid polluting the shared jump log.
 C-o / C-i remain real-only.
 
-### Multi-cursor + `.` / `q` integration
+### Multi-cursor + `.` / `@` integration
 `helixel-repeat-edit' is whitelisted ON for multi-cursors: each
 cursor's snapshotted `helixel--last-tx' is replayed at its own
 position.  `helixel-repeat-chain-end' commits a chain action whose
 `by-command' stamp is `helixel-repeat-chain-end'; mc-integrate's
 `action-commit-hook' handler detects this and broadcasts the new
-chain tx to every fake cursor — so `q ... ESC' on N cursors gives N
+chain tx to every fake cursor — so `@ ... ESC' on N cursors gives N
 parallel chain applications, all in one undo step.
 
 ### ctx-lint keys

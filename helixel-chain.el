@@ -17,7 +17,7 @@
 
 ;;; Commentary:
 ;;
-;; Compound dot-repeat: `q' starts a chain, ESC ends it, `C-g'
+;; Compound dot-repeat: `@' starts a chain, ESC ends it, `C-g'
 ;; cancels.  Chain recording captures the LIST of helixel-action
 ;; values produced by the commands run during the chain.  Replay
 ;; iterates the list and replays each entry in chronological order.
@@ -392,12 +392,12 @@ helixel commands, and directly in `post-command-hook' for vanilla
 commands).  Call `helixel-repeat-chain-end' to finish or
 `helixel-repeat-chain-cancel' to discard.
 
-Flushes any deferred live action (e.g. from `x' before `q') so
+Flushes any deferred live action (e.g. from `x' before `@') so
 that pre-chain commands don't leak into the tx-list."
   (interactive)
   (when (or (helixel--chain-active-p) executing-kbd-macro)
     (user-error "Already chaining or macro replay in progress"))
-  ;; Flush any deferred live action (e.g. from `x' before `q')
+  ;; Flush any deferred live action (e.g. from `x' before `@')
   ;; so it commits to the ring BEFORE the chain hook is active,
   ;; preventing pre-chain selections from leaking into the tx-list.
   (helixel-action-commit)

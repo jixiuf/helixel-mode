@@ -1527,10 +1527,9 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
       (helixel-mc-create-fake-cursor 5)
       (helixel-mc-create-fake-cursor 9)
       (helixel-mc-apply-last-action)
-      ;; Insert at each cursor; real cursor is also processed via
-      ;; broadcast? apply-last-edit only runs on FAKE cursors.
-      ;; Result: "AAA\nXAAA\nXAAA\n" (one X per fake cursor).
-      (should (string= "AAA\nXAAA\nXAAA\n" (buffer-string)))
+      ;; Insert at real cursor (pos 1) AND every fake cursor (pos 5, 9).
+      ;; Result: "XAAA\nXAAA\nXAAA\n" (one X at each of 3 cursors).
+      (should (string= "XAAA\nXAAA\nXAAA\n" (buffer-string)))
       (helixel-mc-clear-all))))
 
 ;; ── Cursor-vars: kill-ring isolation ──

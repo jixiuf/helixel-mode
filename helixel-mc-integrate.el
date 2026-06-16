@@ -158,17 +158,26 @@ Called from `helixel-mode-off-hook'."
 
 ;;;###autoload
 (defun helixel-mc-apply-last-action ()
-  "Apply `helixel--last-action' once at every fake cursor.
+  "Apply `helixel--last-action' once at the real cursor and every fake cursor.
 Useful when you spawned cursors AFTER an edit and want to retro-
 fit it onto the new positions.  Acts on the real cursor's
-`helixel--last-action' so cursors all replay the SAME edit."
+`helixel--last-action' so all cursors replay the SAME edit.
+Signals `user-error' when there are no fake cursors."
   (interactive)
   (unless (helixel-mc-any-p)
     (user-error "No fake cursors"))
   (unless helixel--last-action
     (user-error "No edit to apply"))
   (helixel-mc--broadcast-last-event)
-  (helixel-mc--apply-chain-once))
+  ;; Apply at real cursor AND every fake, wrapped in one undo step.
+  (helixel-mc--with-undo-step
+    (helixel-with-replay-as 'dot
+      (helixel-action-replay helixel--last-action))
+    (helixel-with-replay-as 'mc-batch
+      (let ((tx helixel--last-action))
+        (helixel-mc-with-each-cursor
+          (helixel-with-replay-as 'dot
+            (helixel-action-replay tx)))))))
 
 ;; Mark these helpers as real-cursor-only for safety.
 (helixel-mc-mark-all-for-real-cursor-only

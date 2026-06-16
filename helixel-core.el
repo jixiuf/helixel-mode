@@ -1328,7 +1328,12 @@ treated as a pure positioner (movement commands at fake cursors)."
 (defun helixel--region-type ()
   "Return current selection type, or nil.
 Validates that the region actually matches the sel type.
-Supports `line', `rect' and `textobj'."
+Supports `line', `rect' and `textobj'.
+
+When `helixel--sel-type' does not indicate a specific type
+\(e.g. after visual-mode movement commands like `j'/`k' that
+replace a rect/line sel with a movement sel), falls back to
+direct detection of `rectangle-mark-mode'."
   (when (region-active-p)
     (cond
      ((eq (helixel--sel-type) 'rect)
@@ -1340,7 +1345,12 @@ Supports `line', `rect' and `textobj'."
                    (save-excursion (goto-char end) (or (eolp) (eobp))))
           'line)))
      ((eq (helixel--sel-type) 'textobj)
-      'textobj))))
+      'textobj)
+     ;; Fallback: when `rectangle-mark-mode' is active, treat as rect
+     ;; even if the pending-sel was replaced by a movement kind.
+     ;; This preserves correct d/y/c dispatch after visual-mode
+     ;; motion commands (j/k/h/l) extended a rect selection.
+     ((bound-and-true-p rectangle-mark-mode) 'rect))))
 
 ;; ----------------------------------------------------------------------
 ;; Part 7b — helixel-sel deep copy (used by tx deep-copy)

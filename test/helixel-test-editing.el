@@ -2143,4 +2143,25 @@ The bounds search may fail, but the clearing runs first."
       (error nil))
     (should (null helixel--pending-sel))))
 
+;;; Line selection extension with j/k preserves sel-type
+
+(ert-deftest helixel-test-line-j-k-extend-preserves-sel-type ()
+  "After x j k, sel-type remains line (not char).
+Basic motion commands (j/k) in visual line mode preserve
+the line selection type so operators dispatch correctly."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (call-interactively #'helixel-select-line)
+    (should (eq (helixel--sel-type) 'line))
+    (setq last-command 'helixel-select-line)
+    (call-interactively #'helixel-next-line)
+    (should (eq (helixel--sel-type) 'line))
+    (setq last-command 'helixel-next-line)
+    (call-interactively #'helixel-next-line)
+    (should (eq (helixel--sel-type) 'line))
+    (setq last-command 'helixel-next-line)
+    (call-interactively #'helixel-previous-line)
+    (should (eq (helixel--sel-type) 'line))))
+
 ;;; helixel-test-edit.el ends here

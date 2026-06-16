@@ -378,4 +378,92 @@ At bol, moves past first char so rect starts at column 1."
     (helixel-insert-exit)
     (should-not (helixel--rect-replay-get)))
 )
+;;; Rect after movement extension: d/y/c dispatch
+
+(ert-deftest helixel-test-rect-j-d-uses-rect-delete ()
+  "After C-v C-v d, rect is deleted via delete-rectangle (not delete-region).
+Rect is extended by pressing C-v again."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (let ((kill-ring nil))
+      (helixel-enter-normal-state)
+      (goto-char 4)  ;; col 3 on line 1 (on space after ABC)
+      (call-interactively #'helixel-select-rectangle)
+      (should rectangle-mark-mode)
+      (should (eq (helixel--sel-type) 'rect))
+      ;; Extend rect with C-v (second press)
+      (setq last-command 'helixel-select-rectangle
+            this-command 'helixel-select-rectangle)
+      (call-interactively #'helixel-select-rectangle)
+      (should rectangle-mark-mode)
+      (should (eq (helixel--sel-type) 'rect))
+      ;; Kill should delete rect: first 3 cols of first 2 lines
+      (helixel-kill)
+      (should (helixel--rect-wise-kill-p (car kill-ring)))
+      (should (string= (buffer-string) " line1\n line2\nGHI line3"))
+      (should-not rectangle-mark-mode))))
+
+(ert-deftest helixel-test-rect-j-y-uses-rect-copy ()
+  "After C-v C-v y, rect is copied as rect (not char)."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (let ((kill-ring nil))
+      (helixel-enter-normal-state)
+      (goto-char 4)  ;; col 3 on line 1
+      (call-interactively #'helixel-select-rectangle)
+      ;; Extend rect with C-v (second press)
+      (setq last-command 'helixel-select-rectangle
+            this-command 'helixel-select-rectangle)
+      (call-interactively #'helixel-select-rectangle)
+      (should (eq (helixel--sel-type) 'rect))
+      (helixel-kill-ring-save)
+      (should (helixel--rect-wise-kill-p (car kill-ring)))
+      (should (string= (buffer-string) "ABC line1\nDEF line2\nGHI line3"))
+      (should-not rectangle-mark-mode))))
+
+(ert-deftest helixel-test-rect-j-c-uses-rect-change ()
+  "After C-v C-v c, rect is deleted and change replays correctly."
+  (helixel-test-with-buffer "ABC line1\nDEF line2\nGHI line3"
+    (helixel-enter-normal-state)
+    (goto-char 4)  ;; col 3 on line 1
+    (call-interactively #'helixel-select-rectangle)
+    ;; Extend rect with C-v (second press)
+    (setq last-command 'helixel-select-rectangle
+          this-command 'helixel-select-rectangle)
+    (call-interactively #'helixel-select-rectangle)
+    (should (eq (helixel--sel-type) 'rect))
+    (helixel-change)
+    (insert "XXX")
+    (helixel-insert-exit)
+    (should (string= (buffer-string) "XXX line1\nXXX line2\nGHI line3"))))
+
+(ert-deftest helixel-test-rect-j-k-extend-preserves-sel-type ()
+  "After C-v, j/k do NOT clear sel-type in visual rect mode.
+Basic motion commands preserve the selection type so operators
+can dispatch correctly.  (General motions deactivate the mark
+for line selections but preserve rect via rectangle-mark-mode.)"
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5"
+    (helixel-enter-normal-state)
+    (call-interactively #'helixel-select-rectangle)
+    (should (eq (helixel--sel-type) 'rect))
+    (setq last-command 'helixel-select-rectangle)
+    (call-interactively #'helixel-next-line)
+    (should (eq (helixel--sel-type) 'rect))
+    (setq last-command 'helixel-next-line)
+    (call-interactively #'helixel-next-line)
+    (should (eq (helixel--sel-type) 'rect))
+    (setq last-command 'helixel-next-line)
+    (call-interactively #'helixel-previous-line)
+    (should (eq (helixel--sel-type) 'rect))))
+
+(ert-deftest helixel-test-rect-w-converts-to-char ()
+  "After C-v w, sel-type becomes nil (char) not rect.
+Word movements in visual rect mode convert to char selection."
+  (helixel-test-with-buffer "hello world\nfoo bar"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (call-interactively #'helixel-select-rectangle)
+    (should (eq (helixel--sel-type) 'rect))
+    (setq last-command 'helixel-select-rectangle)
+    (call-interactively #'helixel-forward-word-start)
+    (should (null (helixel--sel-type)))))
+
 ;;; helixel-test-rect.el ends here

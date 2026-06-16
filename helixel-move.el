@@ -77,7 +77,11 @@ the action carries no tx with a runner)."
        ;; Clear any stale pending-sel so pure motion commands
        ;; (j, gh, etc.) don't inherit a selection from a prior
        ;; edit (e.g. insert-selection-end from insert-exit).
-       (setq helixel--pending-sel nil)
+       ;; In visual mode, the pending-sel carries the current
+       ;; selection type (rect/line) that operators (d/y/c)
+       ;; depend on — never clear it there.
+       (unless (eq helixel--current-state 'visual)
+         (setq helixel--pending-sel nil))
        (call-interactively #',builtin))))
 
 (defmacro helixel-define-movements (&rest specs)
@@ -1254,7 +1258,16 @@ advance functions to avoid double-moving."
 Creates/updates a `helixel-sel' struct of kind `movement' whenever
 a region is active - from visual mode or `normal-mode' movements that
 created a selection (e.g. w, e, b).
-No-op during dot-repeat replay, or when no region is active."
+No-op during dot-repeat replay, or when no region is active.
+
+When `helixel--pending-sel' holds a non-movement kind (rect/line/
+textobj), this function is a no-op — the selection type is preserved
+for operators (d/y/c).  Such pending-sels only appear in visual mode
+after `helixel-select-rectangle' or `helixel-select-line' followed by
+basic motion commands (j/k) that are defined via
+`helixel-define-movement' (which preserves the sel in visual mode).
+Word-movement commands (helixel--with-movement-surround) clear
+non-movement sels, so nil is the only ctx possible there."
   (when (and (not (helixel-replaying-p))
              (use-region-p))
     (let* ((ctx helixel--pending-sel)
@@ -1270,9 +1283,6 @@ No-op during dot-repeat replay, or when no region is active."
              (helixel-sel-update-ctx ctx :moves
                                      (cons entry moves))))))
        ;; Create: first movement that made a region.
-       ;; INVARIANT: a non-movement ctx is impossible here -
-       ;; `helixel--with-movement-surround' clears stale
-       ;; line/rect/textobj sel before this function runs.
        ((null ctx)
         (helixel--sel-push
          (helixel-sel-create 'movement

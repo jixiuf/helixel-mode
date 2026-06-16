@@ -103,11 +103,19 @@ depgraph:
 # Runs the MELPA package linter (https://github.com/riscy/melpazoid)
 # against the local checkout.  Clones melpazoid into XDG_CACHE_HOME on
 # first run (one-time ~5s cost).
+# Auto-generated helixel-mode-autoloads.el / -pkg.el are temporarily
+# moved out of the way so melpazoid skips them, then restored.
 melpazoid:
 	@if [ ! -d "$(MELPAZOID_DIR)" ]; then \
 		git clone https://github.com/riscy/melpazoid.git "$(MELPAZOID_DIR)"; \
 	fi
-	RECIPE='(helixel :fetcher github :repo "jixiuf/helixel-mode")' \
+	@for f in helixel-mode-autoloads.el helixel-mode-pkg.el; do \
+	   [ -f "$$f" ] && mv "$$f" "$$f.tmp"; \
+	 done; \
+	 trap 'for f in helixel-mode-autoloads.el.tmp helixel-mode-pkg.el.tmp; do \
+	          [ -f "$$f" ] && mv "$$f" "$${f%.tmp}"; \
+	        done' EXIT; \
+	 RECIPE='(helixel :fetcher github :repo "jixiuf/helixel-mode")' \
 		LOCAL_REPO=$(CURDIR) \
 		make -C "$(MELPAZOID_DIR)"
 

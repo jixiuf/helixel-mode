@@ -214,11 +214,13 @@ Binds `search-invisible' and `isearch-invisible' to `helixel-invisible'."
 ;; This ensures `.` repeat uses the same search behavior as
 ;; the original / ? search, including case folding and hidden chars.
 
-(defun helixel-search--search (pattern dir &optional bound noerror)
+(cl-defun helixel-search--search (pattern dir
+                                  &optional bound noerror (regexp t))
   "Search for PATTERN in DIR using isearch-compatible settings.
 DIR is \=`forward' or \=`backward'.
 BOUND limits the search range (nil = whole buffer).
-Pattern is searched as a regexp (isearch-regexp = t).
+REGEXP controls `isearch-regexp' (t = regexp, nil = literal).
+When REGEXP is omitted, defaults to t.
 Signals \=`search-failed' when not found (NOERROR is nil).
 Returns the match position (point moves to \=`match-end').
 
@@ -226,7 +228,7 @@ Returns the match position (point moves to \=`match-end').
 we bridge that via `helixel--search-filter-loop'."
   (helixel--with-invisible-search
     (let ((isearch-string pattern)
-          (isearch-regexp t)
+          (isearch-regexp regexp)
           (isearch-forward (eq dir 'forward)))
       (if helixel-invisible
           (isearch-search-string pattern bound noerror)
@@ -243,7 +245,9 @@ we bridge that via `helixel--search-filter-loop'."
   "Store the current search in `helixel--pending-sel'.
 Increments :n-count each time (0 for initial search, 1 for first n,
 2 for second n, etc.) so . advance skips the correct number of
-matches to match the original n count."
+matches to match the original n count.
+Also stores :regexp from `helixel--active-search' so \\=`,' and \\=`.'
+respect the \\=`M-r' toggle."
   (when-let* ((s helixel--active-search)
               (pat (helixel-search--safe-pattern))
               (dir (helixel-search--current-dir)))
@@ -251,9 +255,11 @@ matches to match the original n count."
     (let* ((prev-n (plist-get (helixel-sel-ctx
                                helixel--pending-sel)
                               :n-count))
-           (n-count (if prev-n (1+ prev-n) 0)))
+           (n-count (if prev-n (1+ prev-n) 0))
+           (regexp (helixel-active-search--regexp s)))
       (helixel--push-selection
-       'search `(:pattern ,pat :dir ,dir :n-count ,n-count)))))
+       'search `(:pattern ,pat :dir ,dir :n-count ,n-count
+                 :regexp ,regexp)))))
 
 (defun helixel-search--done-hook ()
   "Hook called at the end of isearch to mark the match.
@@ -270,19 +276,22 @@ is not committed by the next command."
                  (max isearch-other-end (point)))))
         (setq helixel--active-search
               (make-helixel-active-search
-               :category 'search :pattern isearch-string :dir dir))
+               :category 'search :pattern isearch-string
+               :dir dir :regexp isearch-regexp))
         ;; Record for motion repeat (bound to `,'):
-        ;; store category+pattern+dir so `,' can replay search
+        ;; store category+pattern+dir+regexp so `,' can replay search
         ;; via `helixel-search--isearch-repeat'.
         (helixel--record-last-motion nil
-          :category 'search :pattern isearch-string :dir dir)
+          :category 'search :pattern isearch-string
+          :dir dir :regexp isearch-regexp)
         (helixel-search--set-sel-ctx)
-        ;; Stash pattern + dir in the payload and attach a runner so
-        ;; the unified mc dispatcher can replay this search at every
-        ;; fake cursor without re-entering isearch mode.
+        ;; Stash pattern + dir + regexp in the payload and attach a
+        ;; runner so the unified mc dispatcher can replay this search
+        ;; at every fake cursor without re-entering isearch mode.
         (when helixel--live-action
           (setf (helixel-action-payload helixel--live-action)
-                (list :pattern isearch-string :dir dir))
+                (list :pattern isearch-string :dir dir
+                      :regexp isearch-regexp))
           (setf (helixel-action-runner helixel--live-action)
                 #'helixel-search--mc-runner))
         (helixel-action-commit))
@@ -297,17 +306,18 @@ is not committed by the next command."
   "Replay a search TX at a fake cursor position.
 Used as the :runner attached to search actions so the unified
 mc dispatcher can replay searches at every fake cursor.
-Reads :pattern and :dir from TX's payload, calls
+Reads :pattern, :dir, and :regexp from TX's payload, calls
 `helixel-search--search', and activates a region around the
 match.  For forward search point ends at `match-end'; for backward
 search point ends at `match-beginning' (matching isearch behavior)."
   (let* ((pat (helixel-action-payload-get tx :pattern))
          (d (helixel-action-dir tx))
+         (regexp (helixel-action-payload-get tx :regexp))
          (forwardp (eq d 'forward)))
     (setq helixel--active-search
           (make-helixel-active-search
-           :category 'search :pattern pat :dir d))
-    (helixel-search--search pat d)
+           :category 'search :pattern pat :dir d :regexp regexp))
+    (helixel-search--search pat d nil nil regexp)
     (if forwardp
         (progn
           (push-mark (match-beginning 0) t t)
@@ -407,7 +417,9 @@ If there is a single-line region, use it; otherwise use the symbol at point."
 
 (defun helixel-search--isearch-repeat (dir)
   "Repeat isearch in direction DIR (>0 forward, <0 backward).
-Reads pattern from `helixel--active-search'."
+Reads pattern and regexp flag from `helixel--active-search'.
+Respects the \\=`M-r' toggle by reading the stored :regexp value
+instead of hardcoding `isearch-regexp' to t."
   (helixel--with-invisible-search
     (let ((inhibit-redisplay t)
           (isearch-wrap-pause 'no-ding)
@@ -415,7 +427,8 @@ Reads pattern from `helixel--active-search'."
           (had-region (region-active-p)))
       (when-let* ((pat (helixel-search--safe-pattern)))
         (setq isearch-string pat
-              isearch-regexp t
+              isearch-regexp (helixel-active-search--regexp
+                              helixel--active-search)
               isearch-forward (eq (helixel-search--current-dir) 'forward)))
       (if (< dir 0)
           (isearch-repeat-backward (- dir))
@@ -563,9 +576,10 @@ DOC is the docstring."
 
 ;; ── Search re-creation helpers ──
 
-(defun helixel-search--skip-current-match (pat dir entry-kind)
+(defun helixel-search--skip-current-match (pat dir entry-kind &optional regexp)
   "Skip past the current match of PAT if point is inside one.
 DIR is `forward' or `backward'.  Only operates when ENTRY-KIND is non-nil.
+REGEXP controls `isearch-regexp', forwarded to `helixel-search--search'.
 Returns t if a skip was performed, nil otherwise."
   (when entry-kind
     (when (or (looking-at pat)
@@ -573,7 +587,7 @@ Returns t if a skip was performed, nil otherwise."
                 (save-excursion
                   (condition-case nil
                       (progn
-                        (helixel-search--search pat 'backward)
+                        (helixel-search--search pat 'backward nil nil regexp)
                         (>= orig-pt (match-beginning 0)))
                     (search-failed nil)))))
       (if (eq dir 'backward)
@@ -612,9 +626,11 @@ Finds the next match, activates the region on it.
 If `(helixel-search-advance-done-p)' is t, skips the internal search
 \(the advance function already positioned point and set `match-data').
 If CTX has :entry-kind (insert or append), positions the cursor
-at the appropriate offset within the match for insert-text ops."
+at the appropriate offset within the match for insert-text ops.
+Uses :regexp from CTX to respect the \\=`M-r' toggle."
   (let* ((pat (helixel-sel-search-pattern ctx))
          (dir (helixel-sel-search-dir ctx))
+         (regexp (helixel-sel-search-regexp ctx))
          (pre-skip-pos (point)))
     (unless pat
       (user-error "No search pattern to repeat"))
@@ -623,18 +639,19 @@ at the appropriate offset within the match for insert-text ops."
           (helixel-search-advance-done-set nil)
         ;; Internal search — only run when advance wasn't already done.
         (when (helixel-search--skip-current-match
-               pat dir (helixel-sel-search-entry-kind ctx))
+               pat dir (helixel-sel-search-entry-kind ctx)
+               regexp)
           (when (or (= (point) pre-skip-pos)
                     (and (eq dir 'forward) (eobp))
                     (and (eq dir 'backward) (bobp)))
             (user-error "No more matches for %s" pat)))
         (helixel-search--backward-unstick dir)
         (condition-case nil
-            (helixel-search--search pat dir)
+            (helixel-search--search pat dir nil nil regexp)
           (search-failed
            (user-error "Search pattern not found: %s" pat))))
       (helixel-search--advance-n-count
-       ctx (lambda () (helixel-search--search pat dir)))
+       ctx (lambda () (helixel-search--search pat dir nil nil regexp)))
       (push-mark (match-beginning 0) t t)
       (goto-char (match-end 0)))
     (when-let* ((entry-kind (helixel-sel-search-entry-kind ctx)))
@@ -711,12 +728,14 @@ Never consults the global `helixel--active-search'."
 (defun helixel--repeat-search-motion (rec)
   "Replay a search (/) motion from REC.
 Creates a temporary `helixel--active-search' from the stored
-pattern and direction, then calls `helixel-search--isearch-repeat'."
+pattern, direction, and regexp flag, then calls
+`helixel-search--isearch-repeat'."
   (let ((helixel--active-search
          (make-helixel-active-search
           :category 'search
           :pattern (helixel--last-motion-pattern rec)
-          :dir (helixel--last-motion-dir rec))))
+          :dir (helixel--last-motion-dir rec)
+          :regexp (helixel--last-motion-regexp rec))))
     (helixel-search--isearch-repeat
      (if (eq (helixel--last-motion-dir rec) 'forward) 1 -1))))
 
@@ -844,22 +863,25 @@ and appears correctly in `C-u n' history and \=`;\=' cycling."
          (helixel-search--find-char-core use-dir)))
        ('search
         (let* ((sel (helixel-action-sel event))
-               (pattern (and sel (helixel-sel-search-pattern sel)))
+               (pattern (or (and sel (helixel-sel-search-pattern sel))
+                            (helixel-action-payload-get event :pattern)))
+               (regexp (or (and sel (helixel-sel-search-regexp sel))
+                           (helixel-action-payload-get event :regexp)
+                           t))
                (had-region (region-active-p))
                (isearch-success nil)
                (isearch-other-end nil))
-          (unless pattern
-            (setq pattern (helixel-action-payload-get event :pattern)))
           ;; Set up search state and sel BEFORE commit.
           (setq helixel--active-search
                 (make-helixel-active-search
-                 :category 'search :pattern pattern :dir use-dir))
+                 :category 'search :pattern pattern :dir use-dir
+                 :regexp regexp))
           (helixel-search--set-sel-ctx)
           (helixel--tracking-open cat (helixel-action-subcat event))
           (helixel-action-commit)
           ;; Now execute the actual search.
           (condition-case nil
-              (helixel-search--search pattern use-dir)
+              (helixel-search--search pattern use-dir nil nil regexp)
             (search-failed (message "Search failed: %s" pattern)))
           (setq isearch-success (and (match-beginning 0) t))
           (when isearch-success
@@ -973,19 +995,20 @@ a search context), fall back to recreating the selection in-place."
             (progn (helixel-sel-call-recreate sel) t)
           (error nil))
       (let* ((dir (helixel-sel-search-dir sel))
-             (entry-kind (helixel-sel-search-entry-kind sel)))
-    (helixel-search--skip-current-match pat dir entry-kind)
+             (entry-kind (helixel-sel-search-entry-kind sel))
+             (regexp (helixel-sel-search-regexp sel)))
+    (helixel-search--skip-current-match pat dir entry-kind regexp)
     (unless entry-kind
       (helixel-search--backward-unstick dir))
     (condition-case nil
         (progn
-          (helixel-search--search pat dir)
-          (helixel-search--guard-repeat-advance pat dir)
+          (helixel-search--search pat dir nil nil regexp)
+          (helixel-search--guard-repeat-advance pat dir regexp)
           (helixel-search-advance-done-set t)
           (helixel-search-advance-last-pos-set (match-beginning 0))
           (helixel-search--advance-n-count
            (helixel-sel-ctx sel)
-           (lambda () (helixel-search--search pat dir)))
+           (lambda () (helixel-search--search pat dir nil nil regexp)))
           (helixel--with-span (helixel-sel-ctx sel)
             (helixel--recreate-selection sel))
           t)
@@ -998,10 +1021,11 @@ Signals `search-failed' at buffer edge."
       (if (eobp) (signal 'search-failed nil) (forward-char 1))
     (if (bobp) (signal 'search-failed nil) (forward-char -1))))
 
-(defun helixel-search--guard-repeat-advance (pat dir)
+(defun helixel-search--guard-repeat-advance (pat dir &optional regexp)
   "Guard against zero-width / repeated-match infinite loops.
 Signals `search-failed' on deadlock; advances past zero-width repeats.
-PAT and DIR are the current search pattern and direction."
+PAT and DIR are the current search pattern and direction.
+REGEXP controls `isearch-regexp', forwarded to `helixel-search--search'."
   (let ((m-beg (match-beginning 0))
         (m-end (match-end 0)))
     ;; Zero-width pattern at buffer edge: allow first match only.
@@ -1017,24 +1041,26 @@ PAT and DIR are the current search pattern and direction."
           ;; Zero-width: step over and re-search.
           (progn
             (helixel-search--advance-past-zero-width dir)
-            (helixel-search--search pat dir))
+            (helixel-search--search pat dir nil nil regexp))
         ;; Non-zero-width repeated match — true deadlock.
         (signal 'search-failed nil)))))
 
 (defun helixel--allbuffer-search-insert (tx sel start-pos dir)
   "Insert TX payload text at every SEL match from START-POS in DIR.
-For `insert-search-offset' and `insert-selection-*' entry-kinds."
+For `insert-search-offset' and `insert-selection-*' entry-kinds.
+Uses :regexp from SEL to respect the \\=`M-r' toggle."
   (save-excursion
     (goto-char start-pos)
     (let* ((pat (helixel-sel-search-pattern sel))
            (entry-kind (helixel-sel-search-entry-kind sel))
+           (regexp (helixel-sel-search-regexp sel))
            (txt (or (helixel-action-payload-get tx :inserted-text)
                     (helixel-action-payload-get tx :text)
                     ""))
            (last-pos nil)
            (cnt 0))
       (catch 'done
-        (while (helixel-search--search pat dir nil 'noerror)
+        (while (helixel-search--search pat dir nil 'noerror regexp)
           (let ((mpos (match-beginning 0)))
             (when (equal mpos last-pos)
               (setq cnt (1- cnt))
@@ -1091,7 +1117,7 @@ using advance+apply without recursion."
 
 (helixel-register-kind search
   :ctx-schema '(:required (:pattern :dir)
-                :optional (:entry-kind :n-count :cursor-offset))
+                :optional (:entry-kind :n-count :cursor-offset :regexp))
   :recreate #'helixel--recreate-search
   :advance  #'helixel--repeat-advance-search
   :all-buffer-fn #'helixel--all-buffer-search

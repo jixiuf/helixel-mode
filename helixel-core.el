@@ -275,6 +275,14 @@ dot-repeat replay (only the final target is selected).")
   "Return :entry-kind (insert or append) from search ctx, or nil.")
 (helixel--def-sel-accessor helixel-sel-search-cursor-offset :cursor-offset nil
   "Return :cursor-offset (integer) from search ctx, or nil.")
+(defsubst helixel-sel-search-regexp (obj)
+  "Return :regexp from search ctx (t = regexp, nil = literal).
+When the :regexp key is absent from the ctx, defaults to t.
+OBJ is a `helixel-sel' struct or raw ctx plist."
+  (let ((ctx (helixel-sel--ctx-ensure obj)))
+    (if (plist-member ctx :regexp)
+        (plist-get ctx :regexp)
+      t)))
 
 ;;;; find-char
 (helixel--def-sel-accessor helixel-sel-find-char-dir :dir 'forward
@@ -595,13 +603,16 @@ Slots:
   DIR       — \='forward or \='backward (mutable — N flips it)
   TYPE      — \='next or \='till (find-char only)
   CHAR      — character (find-char only)
-  ENTRY-KIND — \='insert, \='append, or nil"
+  ENTRY-KIND — \='insert, \='append, or nil
+  REGEXP     — non-nil when regexp-based (t by default,
+              nil after \\=`M-r' toggle)"
   (category nil :read-only t)
   (pattern  nil :read-only t)
   dir
   (type    nil :read-only t)
   (char    nil :read-only t)
-  entry-kind)
+  entry-kind
+  (regexp  t :read-only t))
 
 ;; ── Last-Motion Struct ──
 ;;
@@ -621,6 +632,7 @@ Slots:
   TYPE        — (find-char) 'next or 'till.
   PATTERN     — (search) the regexp string.
   ENTRY-KIND  — (search) 'insert, 'append, or nil.
+  REGEXP      — (search) non-nil when search is regexp-based.
   DELIM-OPEN  — (pair) opener character.
   DELIM-CLOSE — (pair) closer character.
   DELIM-TYPE  — (pair) :pair, :tag, or :regex.
@@ -629,6 +641,7 @@ Slots:
   LAST-MATCH-DELIMITER — (match) delimiter plist from % jump."
   category subcat dir command prefix-arg
   char type pattern entry-kind
+  (regexp t)
   delim-open delim-close delim-type delim-inner-p delim-forward-p
   last-match-delimiter)
 

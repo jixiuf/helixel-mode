@@ -707,4 +707,231 @@ when the event's sel has no pattern in its ctx (fallback path)."
       (should (eq search-invisible t)))))
 
 
+
+;;; Regexp-toggle (M-r) tests — verify literal/regexp mode flows
+;;; through all storage layers and repeat paths.
+
+;; ── helixel-search--search literal mode ──
+
+(ert-deftest helixel-test-search-literal-search ()
+  "helixel-search--search with regexp=nil matches literal text only.
+Regexp meta-characters like . should NOT match when regexp is nil."
+  (helixel-test-with-buffer "hello. world"
+    (goto-char 1)
+    ;; Literal: "hello." (with dot) should NOT match "helloX"
+    (should (helixel-search--search "hello." 'forward nil nil nil))
+    (should (= (match-beginning 0) 1))
+    (should (= (match-end 0) 7))
+    ;; Now test that . matches literally (only actual period)
+    (goto-char 1)
+    (should (helixel-search--search ". w" 'forward nil nil nil))
+    (should (= (match-beginning 0) 6))
+    ;; Regexp mode (default): . matches any char
+    (goto-char 1)
+    (should (helixel-search--search "o. w" 'forward nil nil t))
+    (should (= (match-beginning 0) 5))))
+
+(ert-deftest helixel-test-search-literal-search-backward ()
+  "helixel-search--search with regexp=nil backwards matches literal."
+  (helixel-test-with-buffer "hello. world"
+    (goto-char (point-max))
+    (should (helixel-search--search "hello." 'backward nil nil nil))
+    (should (= (match-beginning 0) 1))))
+
+;; ── done-hook captures isearch-regexp ──
+
+(ert-deftest helixel-test-search-literal-done-hook ()
+  "helixel-search--done-hook captures isearch-regexp=nil.
+Verifies the flag flows into active-search, motion record, sel ctx,
+and action payload."
+  (let (helixel--action-ring helixel--live-action helixel--action-pos
+        (helixel--active-search nil)
+        (helixel--last-motion-cmd nil))
+    (helixel-test-with-buffer "hello world hello"
+      (goto-char 1)
+      (re-search-forward "hello")
+      (let ((helixel-search--had-region nil)
+            (isearch-success t)
+            (isearch-string "hello")
+            (isearch-regexp nil)  ;; M-r toggled: literal mode
+            (isearch-forward t)
+            (isearch-other-end (copy-marker (match-beginning 0))))
+        (helixel--tracking-open 'search 'search)
+        (helixel-search--done-hook))
+      ;; active-search stores regexp
+      (should-not (helixel-active-search--regexp helixel--active-search))
+      ;; motion record stores regexp
+      (should-not (helixel--last-motion-regexp helixel--last-motion-cmd))
+      ;; sel ctx stores :regexp nil
+      (let ((sel helixel--pending-sel))
+        (should sel)
+        (should-not (helixel-sel-search-regexp sel)))
+      ;; action payload stores :regexp nil
+      (let ((entry (car helixel--action-ring)))
+        (should entry)
+        (should-not (helixel-action-payload-get entry :regexp))))))
+
+(ert-deftest helixel-test-search-regexp-done-hook ()
+  "helixel-search--done-hook captures isearch-regexp=t.
+Complements the literal test above — verifies the regexp-flag path."
+  (let (helixel--action-ring helixel--live-action helixel--action-pos
+        (helixel--active-search nil)
+        (helixel--last-motion-cmd nil))
+    (helixel-test-with-buffer "hello world hello"
+      (goto-char 1)
+      (re-search-forward "hello")
+      (let ((helixel-search--had-region nil)
+            (isearch-success t)
+            (isearch-string "hello")
+            (isearch-regexp t)  ;; normal regexp mode
+            (isearch-forward t)
+            (isearch-other-end (copy-marker (match-beginning 0))))
+        (helixel--tracking-open 'search 'search)
+        (helixel-search--done-hook))
+      (should (helixel-active-search--regexp helixel--active-search))
+      (should (helixel--last-motion-regexp helixel--last-motion-cmd))
+      (let ((sel helixel--pending-sel))
+        (should sel)
+        (should (helixel-sel-search-regexp sel)))
+      (let ((entry (car helixel--action-ring)))
+        (should entry)
+        (should (helixel-action-payload-get entry :regexp))))))
+
+;; ── sel-regexp accessor correctness ──
+
+(ert-deftest helixel-test-search-sel-regexp-absent ()
+  "helixel-sel-search-regexp returns t when :regexp absent from ctx."
+  (let ((sel (helixel-sel-create 'search '(:pattern "x" :dir forward))))
+    (should (eq (helixel-sel-search-regexp sel) t))))
+
+(ert-deftest helixel-test-search-sel-regexp-present-nil ()
+  "helixel-sel-search-regexp returns nil when :regexp present as nil.
+Verifies plist-member awareness — absent vs present-nil are distinct."
+  (let ((sel (helixel-sel-create 'search
+               '(:pattern "x" :dir forward :regexp nil))))
+    (should (eq (helixel-sel-search-regexp sel) nil)))
+  ;; Also test via raw ctx plist
+  (should (eq (helixel-sel-search-regexp '(:pattern "x" :regexp nil)) nil)))
+
+;; ── n/N repeat respects regexp flag ──
+
+(ert-deftest helixel-test-search-literal-n-repeat ()
+  "n repeat uses isearch-regexp from active-search (literal mode)."
+  (helixel-test-with-buffer "hello. world hello. again"
+    ;; Set up active-search with literal-mode pattern "hello."
+    ;; The . should match a literal period, not any char.
+    (let ((helixel--active-search
+           (make-helixel-active-search
+            :category 'search :pattern "hello." :dir 'forward :regexp nil)))
+      (goto-char 1)
+      ;; Simulate what n does: set up isearch and repeat
+      (let ((isearch-string "hello.")
+            (isearch-regexp (helixel-active-search--regexp helixel--active-search))
+            (isearch-forward t)
+            (isearch-success nil)
+            (isearch-other-end nil)
+            (isearch-wrap-pause 'no-ding)
+            (inhibit-redisplay t))
+        ;; Should find literal "hello." (period) not "helloX"
+        (condition-case nil
+            (progn
+              (isearch-repeat-forward 1)
+              (should (= (point) 7)))
+          (search-failed
+           (ert-fail "n repeat in literal mode should find 'hello.'")))
+        (should (string= (match-string 0) "hello."))))))
+
+(ert-deftest helixel-test-search-regexp-n-repeat ()
+  "n repeat uses isearch-regexp=t from active-search (regexp mode)."
+  (helixel-test-with-buffer "hellox world helloy again"
+    (let ((helixel--active-search
+           (make-helixel-active-search
+            :category 'search :pattern "hello." :dir 'forward :regexp t)))
+      (goto-char 1)
+      (let ((isearch-string "hello.")
+            (isearch-regexp t)
+            (isearch-forward t)
+            (isearch-success nil)
+            (isearch-other-end nil)
+            (isearch-wrap-pause 'no-ding)
+            (inhibit-redisplay t))
+        ;; Should find "hellox" (dot matches any char)
+        (condition-case nil
+            (progn
+              (isearch-repeat-forward 1)
+              (should (= (point) 7)))
+          (search-failed
+           (ert-fail "n repeat in regexp mode should find 'hellox'")))
+        (should (string= (match-string 0) "hellox"))))))
+
+;; ── . dot-repeat respects regexp flag ──
+
+(ert-deftest helixel-test-search-literal-recreate ()
+  "helixel--recreate-search with :regexp nil uses literal matching."
+  (helixel-test-with-buffer "hello. world hello. again"
+    (goto-char 1)
+    ;; Recreate with literal mode — should find "hello." at position 1
+    (helixel--recreate-search
+     '(:pattern "hello." :dir forward :regexp nil))
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 7))
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "hello."))))
+
+;; ── mc runner respects regexp flag ──
+
+(ert-deftest helixel-test-search-mc-runner-literal ()
+  "helixel-search--mc-runner with :regexp nil in payload uses literal search."
+  (helixel-test-with-buffer "hello. world"
+    (goto-char 1)
+    (let ((tx (helixel-action-create nil nil
+                :pattern "hello." :dir 'forward :regexp nil)))
+      (helixel-search--mc-runner tx)
+      (should (= (region-beginning) 1))
+      (should (= (region-end) 7))
+      (should (string= (buffer-substring 1 7) "hello."))
+      ;; Verify active-search carries regexp nil
+      (should-not (helixel-active-search--regexp helixel--active-search)))))
+
+(ert-deftest helixel-test-search-mc-runner-regexp ()
+  "helixel-search--mc-runner with :regexp t in payload uses regexp search."
+  (helixel-test-with-buffer "hellox world"
+    (goto-char 1)
+    (let ((tx (helixel-action-create nil nil
+                :pattern "hello." :dir 'forward :regexp t)))
+      (helixel-search--mc-runner tx)
+      (should (= (region-beginning) 1))
+      (should (= (region-end) 7))
+      (should (string= (buffer-substring 1 7) "hellox"))
+      (should (helixel-active-search--regexp helixel--active-search)))))
+
+;; ── active-search struct default ──
+
+(ert-deftest helixel-test-search-active-search-regexp-default ()
+  "helixel-active-search regexp slot defaults to t."
+  (let ((s (make-helixel-active-search :category 'search :pattern "x")))
+    (should (eq (helixel-active-search--regexp s) t))))
+
+;; ── history-execute inherits regexp ──
+
+(ert-deftest helixel-test-search-history-execute-literal ()
+  "C-u n selecting a literal-mode search replays with isearch-regexp=nil."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--action-pos nil))
+    (helixel-test-with-buffer "hello. world"
+      ;; Push a literal-mode search into history
+      (helixel--tracking-open 'search 'search)
+      (setf (helixel-action-sel helixel--live-action)
+            (helixel-sel-create 'search
+              '(:pattern "hello." :dir forward :regexp nil)))
+      (setf (helixel-action-payload helixel--live-action)
+            (list :pattern "hello." :dir 'forward :regexp nil))
+      (helixel-action-commit)
+      ;; Execute from history directly (bypass completing-read)
+      (let ((event (car helixel--action-ring)))
+        (helixel-search--history-execute event 'forward))
+      (should (= (point) 7))
+      (should (string= (buffer-substring (region-beginning) (region-end))
+                       "hello.")))))
+
 ;;; helixel-test-search.el ends here

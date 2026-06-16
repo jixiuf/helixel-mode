@@ -33,7 +33,7 @@ and the jump list (`C-o` / `C-i`).
 | `:dir` | symbol | Direction for `n`/`N` repeat: `forward`, `backward` |
 | `:params` | list | Function parameter list, e.g. `(&optional count)` |
 | `:clear-highlights` | boolean | Clear search highlights before executing. Default `t` for `:category movement`, `nil` otherwise. |
-| `:tx-runner` | function `(TX) -> nil` | Replay-time pre-hook.  Stored as the `:preposition` slot on the live action; `helixel-action-replay` calls it BEFORE the main runner (at the real cursor on `.`-repeat, at fake cursors during mc dispatch, etc.).  For movement commands (no body record-action), the preposition is the entire replay payload — the action has nil op so `.` ignores it, but mc still replays at fakes.  For insert-entry commands, the prepos survives the later insert-text tx via payload preservation in `helixel--record-action`. |
+| `:preposition` | function `(TX) -> nil` | Replay-time pre-hook.  Stored as the `:preposition` slot on the live action; `helixel-action-replay` calls it BEFORE the main runner (at the real cursor on `.`-repeat, at fake cursors during mc dispatch, etc.).  For movement commands (no body record-action), the preposition is the entire replay payload — the action has nil op so `.` ignores it, but mc still replays at fakes.  For insert-entry commands, the prepos survives the later insert-text tx via payload preservation in `helixel--record-action`. |
 
 ### Auto-Injected Behavior
 

@@ -45,7 +45,7 @@
 ;; ── Insert-entry prepositioner helpers ──
 ;;
 ;; Each insert-entry command (`helixel-insert' / `-after' / `-bol' /
-;; `-eol' / `-newline' / `-prevline') declares a `:tx-runner' that
+;; `-eol' / `-newline' / `-prevline') declares a `:preposition' that
 ;; just calls one of these helpers.  The multi-cursor dispatcher
 ;; invokes the runner at every fake cursor through the unified
 ;; `helixel-action-replay' path — each helper runs in the fake's
@@ -227,7 +227,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert
     (:category state :subcat insert
-     :tx-runner (lambda (_tx) (helixel-mc--prepos-region-begin)))
+     :preposition (lambda (_tx) (helixel-mc--prepos-region-begin)))
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -258,8 +258,8 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                       (buffer-substring
                        helixel--change-track-marker (point))))))
     (unless executing-kbd-macro
-      (when helixel--last-tx
-        (let ((tx helixel--last-tx))
+      (when helixel--last-action
+        (let ((tx helixel--last-action))
           ;; Store keys as primary replay mechanism
           (when (and keys (> (length keys) 0))
             (setq tx (helixel-action-with-payload tx :keys keys)))
@@ -284,7 +284,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-after
     (:category state :subcat insert
-     :tx-runner (lambda (_tx) (helixel-mc--prepos-region-end)))
+     :preposition (lambda (_tx) (helixel-mc--prepos-region-end)))
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -311,7 +311,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-beginning-line
     (:category state :subcat insert
-     :tx-runner (lambda (_tx) (helixel-mc--prepos-bol)))
+     :preposition (lambda (_tx) (helixel-mc--prepos-bol)))
   (beginning-of-line)
    (helixel--sel-push
         (helixel-sel-create 'insert-beginning-line nil))
@@ -319,7 +319,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-after-end-line
     (:category state :subcat insert
-     :tx-runner (lambda (_tx) (helixel-mc--prepos-eol)))
+     :preposition (lambda (_tx) (helixel-mc--prepos-eol)))
   (end-of-line)
    (helixel--sel-push
         (helixel-sel-create 'insert-end-line nil))
@@ -327,7 +327,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-newline
     (:category state :subcat insert
-     :tx-runner (lambda (_tx) (helixel-mc--prepos-newline-after)))
+     :preposition (lambda (_tx) (helixel-mc--prepos-newline-after)))
   (helixel--record-action 'insert-text)
   (helixel--clear-data)
   (end-of-line)
@@ -336,7 +336,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-prevline
     (:category state :subcat insert
-     :tx-runner (lambda (_tx) (helixel-mc--prepos-newline-before)))
+     :preposition (lambda (_tx) (helixel-mc--prepos-newline-before)))
   (helixel--record-action 'insert-text)
   (helixel--clear-data)
   (beginning-of-line)
@@ -827,7 +827,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
     (unless (use-region-p)
       ;; Consecutive (same op): reuse selection, indent 1 level,
       ;; amalgamate multiplier into the last event.
-      (when-let* ((tx helixel--last-tx)
+      (when-let* ((tx helixel--last-action)
                   (sel (helixel-action-sel tx))
                   ((eq (helixel-action-op tx) op)))
         (when-let* ((m (car (helixel-action-mark-region tx)))

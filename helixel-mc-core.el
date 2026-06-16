@@ -59,7 +59,7 @@
 ;; so the byte compiler doesn't flag them when this file is built
 ;; before those modules are loaded.
 (defvar helixel--pending-sel)             ; from `helixel-core'
-(defvar helixel--last-tx)             ; from `helixel-core'
+(defvar helixel--last-action)             ; from `helixel-core'
 (defvar helixel--yank-register-source)    ; from `helixel-core' (mc per-cursor)
 (defvar helixel--current-register)        ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
@@ -160,7 +160,7 @@ so on — broadcasts at one cursor never leak into another."
   kill-ring-yank-pointer ; sublist of kill-ring
   mark-ring              ; list of markers
   pending-sel            ; `helixel-sel' or nil  (helixel--pending-sel)
-  last-action            ; `helixel-action'      (helixel--last-tx)
+  last-action            ; `helixel-action'      (helixel--last-action)
   yank-register-source   ; swap-source plist     (helixel--yank-register-source)
   registers-alist        ; list (copy of register-alist)
   active-search          ; `helixel-active-search' (helixel--active-search)
@@ -182,7 +182,7 @@ independent of any later movement of point / mark."
    :kill-ring-yank-pointer    kill-ring-yank-pointer
    :mark-ring                 mark-ring
    :pending-sel               helixel--pending-sel
-   :last-action               helixel--last-tx
+   :last-action               helixel--last-action
    :yank-register-source      helixel--yank-register-source
    :registers-alist            (copy-tree register-alist)
    :active-search             helixel--active-search
@@ -203,7 +203,7 @@ Moves point and the `mark-marker' to CS's positions, sets
         kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer cs)
         mark-ring              (helixel-pcs-mark-ring cs)
         helixel--pending-sel   (helixel-pcs-pending-sel cs)
-        helixel--last-tx   (helixel-pcs-last-action cs)
+        helixel--last-action   (helixel-pcs-last-action cs)
         helixel--yank-register-source (helixel-pcs-yank-register-source cs)
         ;; Swap register-alist for per-cursor register isolation.
         ;; The real cursor's alist is preserved by the outer
@@ -236,7 +236,7 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-kill-ring-yank-pointer cs) kill-ring-yank-pointer
         (helixel-pcs-mark-ring cs)              mark-ring
         (helixel-pcs-pending-sel cs)            helixel--pending-sel
-        (helixel-pcs-last-action cs)            helixel--last-tx
+        (helixel-pcs-last-action cs)            helixel--last-action
         (helixel-pcs-yank-register-source cs)   helixel--yank-register-source
         (helixel-pcs-registers-alist cs)         (copy-tree register-alist)
         (helixel-pcs-active-search cs)          helixel--active-search
@@ -951,7 +951,7 @@ state (kill-ring, event-ring, last-action, …)."
                kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer ,cs)
                mark-ring              (helixel-pcs-mark-ring ,cs)
                helixel--pending-sel   (helixel-pcs-pending-sel ,cs)
-               helixel--last-tx   (helixel-pcs-last-action ,cs)
+               helixel--last-action   (helixel-pcs-last-action ,cs)
                helixel--yank-register-source
                  (helixel-pcs-yank-register-source ,cs)
                register-alist
@@ -1336,7 +1336,7 @@ deactivated when the last one is removed."
    helixel-enter-motion-state
    ;; Insert-entry commands themselves remain real-only — except
    ;; they're now broadcast via the unified dispatcher.  Each
-   ;; insert-entry command declares a prepos via `:tx-runner' on its
+   ;; insert-entry command declares a prepos via `:preposition' on its
    ;; `helixel-define-command' form; it lands as a `:preposition'
    ;; payload on the tx and runs at every fake during replay.  So
    ;; they MUST be whitelisted (multiple-cursors property = t).

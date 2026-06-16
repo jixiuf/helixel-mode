@@ -28,7 +28,7 @@
 ;;                               dispatcher.  Nothing else to do.
 ;;   * dot-repeat (`.')        — whitelisted ON: each cursor runs
 ;;                               `helixel-repeat-edit' with its own
-;;                               snapshotted `helixel--last-tx'.
+;;                               snapshotted `helixel--last-action'.
 ;;   * repeat-selection (`,')  — same.
 ;;   * chain end               — `:after' advice: if any fake cursors,
 ;;                               propagate the newly built chain
@@ -46,7 +46,7 @@
 (require 'helixel-repeat)
 (require 'helixel-chain)
 
-(defvar helixel--last-tx)
+(defvar helixel--last-action)
 ;; defined in helixel-last-edit.el (loaded transitively via
 ;; helixel-mc-core → ...; explicit defvar here keeps byte-compile happy).
 
@@ -79,9 +79,9 @@ the override path — mc dispatches the same edit at each fake."
   (ignore raw-prefix)
   (when (and (bound-and-true-p helixel-multi-cursor-mode)
              (helixel-mc-any-p)
-             helixel--last-tx)
+             helixel--last-action)
     (helixel-with-replay-as 'dot
-      (helixel-action-replay helixel--last-tx))
+      (helixel-action-replay helixel--last-action))
     t))
 
 ;; Install via `helixel-multi-cursor-mode' toggle — no top-level
@@ -95,25 +95,25 @@ the override path — mc dispatches the same edit at each fake."
  '(helixel-repeat-edit
    helixel-repeat-selection))
 
-;; ── Chain end: broadcast the new chain tx ──
+;; ── Chain end: broadcast the new chain action ──
 
 (defun helixel-mc--broadcast-last-event ()
-  "Snapshot `helixel--last-tx' into every fake cursor's overlay.
+  "Snapshot `helixel--last-action' into every fake cursor's overlay.
 Call after building a new chain transaction so subsequent `.' at
 each fake cursor replays the chain (not the pre-chain edit)."
   (dolist (ov (helixel-mc-all-cursors))
     (setf (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state))
-          helixel--last-tx)))
+          helixel--last-action)))
 
 (defun helixel-mc--apply-chain-once ()
-  "Execute `helixel--last-tx' once at every fake cursor.
-Assumes the current `helixel--last-tx' is a chain transaction
+  "Execute `helixel--last-action' once at every fake cursor.
+Assumes the current `helixel--last-action' is a chain transaction
 \(or any replayable edit).  Wraps the batch in one undo step
 via `helixel-mc--undo-step-begin' / `helixel-mc--undo-step-end-cb'."
-  (when (and helixel-multi-cursor-mode helixel--last-tx)
+  (when (and helixel-multi-cursor-mode helixel--last-action)
     (helixel-mc--with-undo-step
       (helixel-with-replay-as 'mc-batch
-        (let ((tx helixel--last-tx))
+        (let ((tx helixel--last-action))
           (helixel-mc-with-each-cursor
             (helixel-with-replay-as 'dot
               (helixel-action-replay tx))))))))
@@ -136,7 +136,7 @@ applied every keystroke at every fake cursor live."
 ;; ── Insert-state per-cursor pre-positioning ──
 ;;
 ;; The helixel-insert / -after / -beginning-line / -after-end-line /
-;; -newline / -prevline commands each declare a `:tx-runner' in their
+;; -newline / -prevline commands each declare a `:preposition' in their
 ;; `helixel-define-command' form (see helixel-editing.el).  The runner
 ;; calls one of the `helixel-mc--prepos-*' helpers; the unified mc
 ;; dispatcher invokes it at every fake cursor via the standard
@@ -158,14 +158,14 @@ Called from `helixel-mode-off-hook'."
 
 ;;;###autoload
 (defun helixel-mc-apply-last-action ()
-  "Apply `helixel--last-tx' once at every fake cursor.
+  "Apply `helixel--last-action' once at every fake cursor.
 Useful when you spawned cursors AFTER an edit and want to retro-
 fit it onto the new positions.  Acts on the real cursor's
-`helixel--last-tx' so cursors all replay the SAME edit."
+`helixel--last-action' so cursors all replay the SAME edit."
   (interactive)
   (unless (helixel-mc-any-p)
     (user-error "No fake cursors"))
-  (unless helixel--last-tx
+  (unless helixel--last-action
     (user-error "No edit to apply"))
   (helixel-mc--broadcast-last-event)
   (helixel-mc--apply-chain-once))

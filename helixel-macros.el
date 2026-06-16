@@ -74,7 +74,7 @@ METADATA is a plist:
                         indirection.  Useful for compile-time-known
                         data (pair delimiters) or nil (the body can
                         `setq' `helixel--motion-extra' at runtime).
-  :tx-runner FN — optional unary function (TX) to attach to the live
+  :preposition FN — optional unary function (TX) to attach to the live
                    action's tx as a `:preposition' slot.
                    Used to make the command's effect replayable at
                    multi-cursors and other replay sites: FN is called
@@ -84,8 +84,8 @@ METADATA is a plist:
                    creates the insert-text tx (preserved by
                    `helixel--record-action').
                    When omitted, no preposition is attached.
-                   Invariant: at most one :tx-runner per command.
-                   A second :tx-runner silently overwrites the first
+                   Invariant: at most one :preposition per command.
+                   A second :preposition silently overwrites the first
                    (the payload plist holds a single :preposition).
 
 For :category movement:
@@ -109,11 +109,11 @@ BODY is the command's business logic."
          (rest-body (if has-interactive (cdr body) body))
          (params (plist-get metadata :params))
          (motion-extra-form (plist-get metadata :motion-extra))
-         (tx-runner (plist-get metadata :tx-runner))
+         (preposition-fn (plist-get metadata :preposition))
          (track-visual
           (when (eq cat 'movement)
             `((helixel--track-visual-move ',name))))
-         (attach-tx tx-runner))
+         (attach-preposition preposition-fn))
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
@@ -129,19 +129,19 @@ BODY is the command's business logic."
          ;; Attach BEFORE the body so eager record-action commits keep
          ;; the prepos fn on the committed ring entry.
          ;; `record-action' preserves :preposition across recording.
-         ,@(when attach-tx
+         ,@(when attach-preposition
              `((unless (helixel-replaying-p)
                  (when helixel--live-action
                    ;; Single-write invariant: cl-assert no sibling
-                   ;; :tx-runner has set this slot already.
+                   ;; :preposition has set this slot already.
                    (cl-assert
                     (null (helixel-action-preposition
                            helixel--live-action))
                     nil
-                    "helixel: preposition already set (multiple :tx-runner?)")
+                    "helixel: preposition already set (multiple :preposition?)")
                    (setf (helixel-action-preposition
                           helixel--live-action)
-                         ,tx-runner)))))
+                         ,preposition-fn)))))
          ;; ── Highlight clearing ──
          ,@(when clear '((helixel--clear-highlights)))
          ;; ── Body + motion tracking + visual tracking ──

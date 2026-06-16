@@ -105,7 +105,7 @@
 (ert-deftest helixel-test-cycle-live-action-set-preserves-mark-region ()
   "live-action-set does not overwrite a deliberately-set mark-region."
   (let ((helixel--live-action nil)
-        (helixel--last-tx nil)
+        (helixel--last-action nil)
         (helixel--action-ring nil))
     (unwind-protect
         (helixel-test-with-buffer "hello world"

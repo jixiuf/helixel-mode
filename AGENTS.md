@@ -4,11 +4,11 @@
 
 | File | Role |
 |------|------|
-| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-action`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
 | `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
-| `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:tx-list' payload.  Replay iterates the list and `helixel-action-replay`s each entry.  No more kmacro / keystroke capture. |
+| `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload.  Replay iterates the list and `helixel-action-replay`s each entry.  No more kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
@@ -50,7 +50,7 @@
 | `test/helixel-test-jump.el` | Jump navigation + all-buffer/all-dir repeat tests |
 | `test/helixel-test-mc.el` | Multi-cursor: create/clear, whitelist, with-each-cursor isolation, dispatch insert, spawn-from-line, edit-lines, add-cursor-here, mark-next-like-this, apply-last-edit, kill-ring isolation.  Undo: marker injection, number filtering, noop step, capture/restore roundtrip, restore creates cursors, delete undo, insert undo, full cycle, mark-active capture, ID persistence, independent steps, callback roundtrip |
 | `test/helixel-test-chain-invariant.el` | Chain subsystem invariants (lifecycle flag, chain-control exclusion, runnerless tx exclusion, marker release) |
-| `test/helixel-test-repeat-invariant.el` | Repeat subsystem invariants (replay context, buffer-local last-tx, tx-replay immutability, pre-replay order, cleanup on error) |
+| `test/helixel-test-repeat-invariant.el` | Repeat subsystem invariants (replay context, buffer-local last-action, tx-replay immutability, pre-replay order, cleanup on error) |
 | `test/helixel-test-ring-invariant.el` | Ring + jump-log invariants (dedup, cap, marker release, commit-hook contract, by-command fallback, jump-log lightweight) |
 
 ## Deps (one-way, compile-time — actual `require` graph)
@@ -105,7 +105,7 @@ Notes:
 - `helixel--replace-region` lives in `helixel-editing.el`.
 - `helixel--delete-selection` lives in `helixel-editing.el`.
 - `helixel--swap-source-type` lives in `helixel-core.el`.
-- `helixel--last-tx` lives in `helixel-core.el` (buffer-local).
+- `helixel--last-action` lives in `helixel-core.el` (buffer-local).
   Every module that requires `helixel-core` can read/write the most recent transaction.
 - `declare-function` counts are minimal and only for third-party packages:
   - `helixel-keymap.el`: 7 (flymake, eglot)
@@ -134,7 +134,7 @@ Notes:
 ;;   insert-selection-*  :cursor-offset
 ;;   insert-search-offset :offset
 
-### helixel-action / helixel-tx (unified replay + history event, v5 merge)
+### helixel-action / helixel-action (unified replay + history event, v5 merge)
 
 ```elisp
 (cl-defstruct helixel-action op sel payload runner preposition mark-region
@@ -183,7 +183,7 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel-action-runner tx)
 (helixel-action-mark-region tx)
 (helixel-action-display tx)
-(helixel-action-preposition tx) ;; preposition function set via :tx-runner
+(helixel-action-preposition tx) ;; preposition function set via :preposition
 (helixel-action-with-payload tx k v) → new action with payload entry added
 (helixel-action--copy action)              → deep copy
 
@@ -272,7 +272,7 @@ these side effects in tests, call the underlying function directly instead.
 - First line must be a complete sentence
 - Function args must appear in docstring (uppercase)
 
-### helixel--last-tx is buffer-local
+### helixel--last-action is buffer-local
 `. ` replays the last edit from the current buffer only.
 
 ### helixel-action-create keyword handling
@@ -332,7 +332,7 @@ C-o / C-i remain real-only.
 
 ### Multi-cursor + `.` / `@` integration
 `helixel-repeat-edit' is whitelisted ON for multi-cursors: each
-cursor's snapshotted `helixel--last-tx' is replayed at its own
+cursor's snapshotted `helixel--last-action' is replayed at its own
 position.  `helixel-repeat-chain-end' commits a chain action whose
 `by-command' stamp is `helixel-repeat-chain-end'; mc-integrate's
 `action-commit-hook' handler detects this and broadcasts the new
@@ -409,7 +409,7 @@ the undo-step management replaces it entirely.
 ### `preposition` slot (v5, was `:pre-replay-fn`)
 
 `helixel-action-preposition` is a first-class slot set by
-`helixel-define-command's `:tx-runner` clause.  It is called BEFORE
+`helixel-define-command's `:preposition` clause.  It is called BEFORE
 the main runner in `helixel-action-replay`.  Single-write invariant
 enforced by `cl-assert`.  No inheriting logic between events —
 `helixel--live-action-set` preserves the existing preposition

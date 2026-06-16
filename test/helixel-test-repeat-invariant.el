@@ -36,7 +36,7 @@ Resets last-tx and pending sel before BODY."
      (transient-mark-mode 1)
      (insert ,content)
      (goto-char (point-min))
-     (setq helixel--last-tx nil)
+     (setq helixel--last-action nil)
      (setq helixel--pending-sel nil)
      (setq helixel--repeat-permanent-flip nil)
      ,@body))
@@ -55,7 +55,7 @@ This is what prevents `.' from recording itself."
 ;; ── INV-REPEAT-2: last-tx is buffer-local ──
 
 (ert-deftest helixel-test-inv-repeat-last-tx-is-buffer-local ()
-  "INV: `helixel--last-tx' is buffer-local; setting in one buffer
+  "INV: `helixel--last-action' is buffer-local; setting in one buffer
 does not bleed into another."
   (let* ((b1 (generate-new-buffer " *inv-repeat-b1*"))
          (b2 (generate-new-buffer " *inv-repeat-b2*"))
@@ -64,13 +64,13 @@ does not bleed into another."
     (unwind-protect
         (progn
           (with-current-buffer b1
-            (setq helixel--last-tx tx-1))
+            (setq helixel--last-action tx-1))
           (with-current-buffer b2
-            (setq helixel--last-tx tx-2))
+            (setq helixel--last-action tx-2))
           (with-current-buffer b1
-            (should (eq helixel--last-tx tx-1)))
+            (should (eq helixel--last-action tx-1)))
           (with-current-buffer b2
-            (should (eq helixel--last-tx tx-2))))
+            (should (eq helixel--last-action tx-2))))
       (kill-buffer b1)
       (kill-buffer b2))))
 
@@ -84,13 +84,13 @@ Otherwise `.' twice in a row would produce different second results."
            (tx (make-helixel-action
                 :op 'change
                 :runner (lambda (_tx) (cl-incf calls)))))
-      (setq helixel--last-tx tx)
+      (setq helixel--last-action tx)
       (helixel-action-replay tx)
       (helixel-action-replay tx)
       (helixel-action-replay tx)
       (should (eq calls 3))
       ;; tx is the same object, unchanged.
-      (should (eq helixel--last-tx tx))
+      (should (eq helixel--last-action tx))
       (should (eq (helixel-action-op tx) 'change)))))
 
 ;; ── INV-REPEAT-4: preposition runs before runner ──

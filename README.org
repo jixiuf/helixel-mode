@@ -943,7 +943,7 @@ and helixel state — any whitelisted command (movement, edit, insert,
 textobj…) runs at every cursor through a =post-command-hook=
 dispatcher, with all dispatches amalgamated into a single undo step.
 
-**Spawning cursors** (~s s~ pulls the current selection):
+**** Spawning cursors (~s s~ pulls the current selection):
 
 | Selection kind           | Cursor layout                                |
 |--------------------------+----------------------------------------------|
@@ -953,26 +953,26 @@ dispatcher, with all dispatches amalgamated into a single undo step.
 | find-char (~f~ ~t~ …)    | one cursor per occurrence                    |
 | movement (~w~ ~e~ ~b~ …) | one cursor per advance step                  |
 
-**~s~ prefix** — cursor management:
+**** ~s~ prefix — cursor management:
 
-| Key           | Action                                                               |
-|---------------+----------------------------------------------------------------------|
-| ~s s~         | Toggle (spawn from last selection / clear)                           |
-| ~s ,~         | Clear all fake cursors (Helix ~,~ — keep primary only)               |
-| ~s a~ / ~s A~ | Add a fake cursor at point, move real to next / previous line        |
-| ~s x~         | Per-line cursors: line-mode → full-line REGION on each line          |
-|               | (Helix ~Alt-s~); char-mode → POINT at current column on each line    |
-| ~s n~ / ~s p~ | Add cursor at next / previous occurrence of region text              |
-| ~s N~ / ~s P~ | Skip next / previous match without adding a cursor                   |
-| ~s u~ / ~s U~ | Unmark next / previous fake cursor                                   |
-| ~s .~         | Apply =helixel--last-event= at every fake cursor                     |
-| ~s k~ / ~s K~ | Keep / remove cursors whose region matches a regex (Helix ~K~ ~M-K~) |
-| ~s S~         | Split each selection on regex (Helix ~S~)                            |
-| ~s -~         | Merge all cursors into one big region (Helix ~M--~)                  |
-| ~s &~         | Column-align cursors by padding with spaces (Helix ~&~)              |
-| ~s _~         | Trim leading / trailing whitespace from each region (Helix ~_~)      |
+| Key          | Action                                                               |
+|--------------+----------------------------------------------------------------------|
+| ~ss~         | Toggle (spawn from last selection / clear)                           |
+| ~s,~         | Clear all fake cursors (Helix ~,~ — keep primary only)               |
+| ~sa~ / ~sA~  | Add a fake cursor at point, move real to next / previous line        |
+| ~sx~         | Per-line cursors: line-mode → full-line REGION on each line          |
+|              | (Helix ~Alt-s~); char-mode → POINT at current column on each line    |
+| ~sn~ / ~sp~  | Add cursor at next / previous occurrence of region text              |
+| ~sN~ / ~s P~ | Skip next / previous match without adding a cursor                   |
+| ~su~ / ~sU~  | Unmark next / previous fake cursor                                   |
+| ~s.~         | Apply =helixel--last-event= at every fake cursor                     |
+| ~sk~ / ~sK~  | Keep / remove cursors whose region matches a regex (Helix ~K~ ~M-K~) |
+| ~sS~         | Split each selection on regex (Helix ~S~)                            |
+| ~s-~         | Merge all cursors into one big region (Helix ~M--~)                  |
+| ~s&~         | Column-align cursors by padding with spaces (Helix ~&~)              |
+| ~s_~         | Trim leading / trailing whitespace from each region (Helix ~_~)      |
 
-**Top-level rotation keys** (rapid-repeat, Helix-style):
+**** Top-level rotation keys (rapid-repeat, Helix-style):
 
 | Key           | Action                                               |
 |---------------+------------------------------------------------------|
@@ -981,7 +981,7 @@ dispatcher, with all dispatches amalgamated into a single undo step.
 | ~M-(~ / ~M-)~ | Rotate selection /content/ backward / forward        |
 | ~g v~         | Restore last cursor layout (history stack, depth 16) |
 
-**~s .~ — Apply last edit to all cursors**
+**** ~s .~ — Apply last edit to all cursors
 
 =helixel-mc-apply-last-edit= replays =helixel--last-event= (the most
 recent edit you performed on the real cursor) at *every* fake cursor.
@@ -1030,7 +1030,7 @@ Chain on N cursors (~@~):
   # (applied at each TODO in one undo step)
 #+end_example
 
-**~;~ (action cycle) with multi-cursor**
+**** ~;~ (action cycle) with multi-cursor
 
 Each fake cursor owns its own =helixel--action-ring=, =--live-event=,
 and =--action-pos=.  When ~;~ broadcasts, every cursor
@@ -1077,7 +1077,7 @@ Caveats:
 - ~C-o~ / ~C-i~ (jump backward/forward) are real-only — the global
   cross-buffer jump log is not polluted by fake commits.
 
-**Integration with ~.~ and ~@~ chain:**
+**** Integration with ~.~ and ~@~ chain:
 
 - ~.~ replays each cursor's own last edit independently — the dispatcher
   restores the cursor's snapshotted state before invocation.
@@ -1088,7 +1088,7 @@ Caveats:
   visible → clear them; else =keyboard-quit=.
 - ~C-g~ always clears fake cursors before propagating.
 
-**Whitelist** — =(get CMD 'multiple-cursors)= controls dispatch:
+**** Whitelist — =(get CMD 'multiple-cursors)= controls dispatch:
 
 #+begin_src elisp
   (helixel-mc-mark-all-for-multi-cursors '(my-edit-cmd))

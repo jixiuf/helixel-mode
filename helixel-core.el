@@ -32,7 +32,7 @@
 ;;   Part 2 — Delimiter Protocol   : delimiter plist accessors
 ;;   Part 3 — Kind Registry        : centralised kind protocol
 ;;   Part 4 — helixel-action      : unified event struct
-;;   Part 5 — Transaction helpers  : make-tx, copy-tx, tx-display, etc.
+;;   Part 5 — Helpers              : create, copy, display, etc.
 ;;   Part 6 — Operator Registry    : hash-table based op registration
 ;;   Part 7 — Swap-source type     : helper for editing and swap modules
 
@@ -909,7 +909,7 @@ Replay slots (used by `.'/`,'/chain/mc):
   RUNNER        — function (EVENT) → nil, executes the edit at
                   replay time.  nil for non-replayable events.
   PREPOSITION — optional function (EVENT) → nil, called BEFORE
-                  RUNNER at replay time.  Used by `:tx-runner' clauses
+                  RUNNER at replay time.  Used by `:preposition' clauses
                   on insert-entry commands (mc fake positioning).
                   Single-write invariant: at most one per command.
   MARK-REGION   — cons (START . END) of two markers; the position
@@ -1380,14 +1380,14 @@ track-visual-move) so the copy is fully independent."
 
 
 ;; ----------------------------------------------------------------------
-;; Part 8 — Most-recent-tx pointer (single source of truth)
+;; Part 8 — Most-recent-action pointer (single source of truth)
 ;; ----------------------------------------------------------------------
 ;;
-;; `helixel--last-tx' is the pointer that `.` (dot-repeat) and `,'
+;; `helixel--last-action' is the pointer that `.` (dot-repeat) and `,'
 ;; (selection-repeat) consume.  Buffer-local — dot-repeat is scoped
 ;; to the current buffer.
 
-(defvar-local helixel--last-tx nil
+(defvar-local helixel--last-action nil
   "Pointer to the most recent committed `helixel-action' in this buffer.
 Consumed by `.' and `,' for repeat.  Buffer-local.")
 
@@ -1412,17 +1412,17 @@ Use for plain `defun' helixel commands that don't go through
          (this-command ',name))
      ,@body))
 
-(defun helixel--update-last-event (new-tx)
-  "Update the payload of `helixel--last-tx' from NEW-TX.
+(defun helixel--update-last-event (new-action)
+  "Update the payload of `helixel--last-action' from NEW-ACTION.
 
 Only the payload plist is copied; the op, sel, runner, mark-region
-of the existing `helixel--last-tx' are left untouched.  Used by
+of the existing `helixel--last-action' are left untouched.  Used by
 operator commands that need to inject replay metadata (e.g.
-`:keys', `:replacement') into the most recent tx after it was
+`:keys', `:replacement') into the most recent action after it was
 already committed."
-  (when (and helixel--last-tx (helixel-action-p helixel--last-tx))
-    (setf (helixel-action-payload helixel--last-tx)
-          (helixel-action-payload new-tx))))
+  (when (and helixel--last-action (helixel-action-p helixel--last-action))
+    (setf (helixel-action-payload helixel--last-action)
+          (helixel-action-payload new-action))))
 
 
 ;; ----------------------------------------------------------------------

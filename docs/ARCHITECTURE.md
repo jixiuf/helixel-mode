@@ -21,9 +21,9 @@
 | Struct | Role | Mutable? |
 |--------|------|----------|
 | `helixel-sel` | Selection descriptor (kind + ctx + recreate closure) | Immutable (copy on update) |
-| `helixel-action` | Unified struct for replay AND history (op + sel + payload + runner + display + category + subcat + by-command + preposition + mark-region + timestamp + buffer) | `helixel--last-tx` is the latest action, mutable cell; ring entries are immutable after commit |
+| `helixel-action` | Unified struct for replay AND history (op + sel + payload + runner + display + category + subcat + by-command + preposition + mark-region + timestamp + buffer) | `helixel--last-action` is the latest action, mutable cell; ring entries are immutable after commit |
 
-v5 merged the previously separate `helixel-tx` (replay) and `helixel-action`
+v5 merged the previously separate `helixel-action` (replay) and `helixel-action`
 (history) into a single 12-slot struct.  All accessors (`helixel-action-op`,
 `helixel-action-sel`, `helixel-action-payload-get`, `helixel-action-runner`,
 `helixel-action-preposition`) operate on the unified struct.
@@ -72,7 +72,7 @@ Both store `helixel-action` structs. The jump-log stores a subset of ring events
 
 ```
 Editing command
-  → helixel--record-action (creates an event tx, stores as helixel--last-tx)
+  → helixel--record-action (creates an event tx, stores as helixel--last-action)
   → helixel-action-commit
     → stamp :by-command
     → push to helixel--action-ring (dedup, cap)
@@ -83,7 +83,7 @@ Editing command
 `helixel-action-commit-hook` is an abnormal hook called with the
 committed entry.  It is the sole integration point for cross-cutting
 observers — chain (`helixel-chain.el`) hooks into it to append the
-committed tx onto the chain session's `:tx-list`.  Adding new
+committed tx onto the chain session's `:action-list`.  Adding new
 observers should not require touching ring or commit code.
 
 ### Dedup
@@ -140,7 +140,7 @@ helixel-repeat-edit
 1. Pop pending sel via `helixel--sel-pop`
 2. Look up runner from op registry
 3. Create action via `helixel-action-create`
-4. Store as `helixel--last-tx`
+4. Store as `helixel--last-action`
 5. Commit event via `helixel-action-commit`
 
 ### Insert Recording (Phase 4.4)
@@ -207,14 +207,14 @@ list-of-txs rather than a kmacro recorder.
    `helixel-action-commit`; if the action's tx has a runner AND the
    by-command is not in the chain-control set
    (chain-start / -end / -cancel / normal-escape), the tx is appended
-   to `helixel-chain-session-tx-list`.
+   to `helixel-chain-session-action-list`.
 3. `helixel-repeat-chain-end` — finalize: merge init-ctx into a
-   chain tx with op=`chain`, payload `:tx-list LIST`; runner
-   iterates LIST and replays each sub-tx; broadcast to fake cursors
+   chain tx with op=`chain`, payload `:action-list LIST`; runner
+   iterates LIST and replays each sub-action; broadcast to fake cursors
    via `helixel-chain-recorded-functions`.
 4. `.` replays via custom `:strategy-builder` registered for `chain`:
    - Advance: kind's `advance-fn`
-   - Apply: `helixel--repeat-chain-runner` iterates `:tx-list`
+   - Apply: `helixel--repeat-chain-runner` iterates `:action-list`
 
 ### Why list-of-txs (vs kmacro)
 
@@ -324,7 +324,7 @@ helixel-core (cl-lib only; includes replay context + named registers)
 | Variable | Location | Purpose |
 |----------|----------|---------|
 | `helixel--pending-sel` | `helixel-core.el` | Pending selection descriptor |
-| `helixel--last-tx` | `helixel-core.el` | Most recent edit transaction |
+| `helixel--last-action` | `helixel-core.el` | Most recent edit transaction |
 | `helixel--live-action` | `helixel-ring.el` | Current in-progress event |
 | `helixel--active-search` | `helixel-search.el` | Active search direction+pattern |
 
@@ -336,8 +336,8 @@ helixel-core (cl-lib only; includes replay context + named registers)
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions
-- For dot-repeat tests: build action with `helixel-action-create` and set `helixel--last-tx`
-- For chain tests: use `helixel-chain--make-test-tx` helper
+- For dot-repeat tests: build action with `helixel-action-create` and set `helixel--last-action`
+- For chain tests: use `helixel-chain--make-test-action` helper
 - Max 12s timeout per test run; zero hangs expected
 
 ---
@@ -352,7 +352,7 @@ User presses `.`
   │
   ▼
 helixel-repeat.el:helixel-repeat-edit
-  ├── Resolves helixel--last-tx (per-buffer)
+  ├── Resolves helixel--last-action (per-buffer)
   ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
   │
   ▼
@@ -386,7 +386,7 @@ Key invariants:
 - The `helixel-replay` struct tracks the current replay context
   (origin: `dot` / `comma` / `chain` / `insert` / `mc-fake` / `mc-batch`);
   `helixel-replaying-p` gates all record/commit side effects.
-- `helixel--last-tx` IS buffer-local (`defvar-local`).  `.' replays
+- `helixel--last-action` IS buffer-local (`defvar-local`).  `.' replays
   the last edit in the current buffer only.
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.
@@ -434,12 +434,12 @@ These alternatives were proposed during architectural review and
 explicitly rejected.  Documented so future contributors do not
 re-litigate them without new evidence.
 
-### 1. Merge `helixel-tx` into `helixel-action` — **EXECUTED in v5**
+### 1. Merge two structs into `helixel-action` — **EXECUTED in v5**
 
 Originally REJECTED (see below for historical context).  Re-evaluated
 and executed in v5 (PR 1 of the v5 refactor series).  The unified
 struct `helixel-action` (12 slots) serves both replay and history.
-Net result: ~100 LOC deleted, `--ensure-tx` eliminated.
+Net result: ~100 LOC deleted, `--ensure-action` eliminated.
 
 **Original rejection rationale (archived):**
 
@@ -447,15 +447,15 @@ Net result: ~100 LOC deleted, `--ensure-tx` eliminated.
 > callsites operate in ONE domain.  Polymorphic accessors are a BRIDGE
 > at ~67 sites, not a tax at every call site.  The re-evaluation in v5
 > found the bridge tax > the conceptual clarity benefit, especially
-> with `--ensure-tx` as a hidden mutator (Watch List #1).
+> with `--ensure-action` as a hidden mutator (Watch List #1).
 
-Deleted: 4 polymorphic accessors, 4 gv-setters, `--ensure-tx`,
-`helixel-tx` type.  ~150 callsites renamed
+Deleted: 4 polymorphic accessors, 4 gv-setters, `--ensure-action`,
+`helixel-action` type.  ~150 callsites renamed
 from `tx-*` to `action-*`.
 
 ### 2. Context-aware runners `(lambda (tx &optional context) ...)` — REJECTED
 
-Proposal: replace the dual-tx (`tx` + `mc-tx`) model with a single
+Proposal: replace the dual-action (`tx` + `mc-action`) model with a single
 runner that branches internally on a `:real` / `:fake` context
 parameter.
 
@@ -514,7 +514,7 @@ special path in `record-action`.
 
 **Original rejection rationale (archived):**
 
-> no command currently attaches more than one `:tx-runner'.
+> no command currently attaches more than one `:preposition'.
 > Generalizing is a 5-line change when actually needed, so
 > pre-solving has negative value.
 
@@ -581,7 +581,7 @@ mc-core's minimal-deps invariant), `insert-record.el' → `repeat.el'
 
 Resolved items from previous Watch List:
 
-1. ~~`helixel-action--ensure-tx`~~ — RESOLVED in v5 (merged tx/action).
+1. ~~`helixel-action--ensure-action`~~ — RESOLVED in v5 (merged action).
 2. ~~Third `eval-after-load`~~ — RESOLVED in v5 (PR 2: moved to `helixel-shims.el`).
 3. ~~`helixel-mc-integrate.el` size~~ — RESOLVED in v5 (PR 2: completion-preview extracted, now ~350 LOC).
 

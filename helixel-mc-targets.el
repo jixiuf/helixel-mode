@@ -27,7 +27,7 @@
 ;;   helixel-mc--make-target        — (point . mark) marker pair
 ;;   helixel-mc--free-targets
 ;;   helixel-mc--realize-targets    — install targets as cursors
-;;   helixel-mc--make-dummy-tx      — minimal event for advance fns
+;;   helixel-mc--make-dummy-action      — minimal event for advance fns
 ;;   helixel-mc--walk-advance       — fallback for unregistered kinds
 ;;   helixel-mc-spawn-from-sel      — generic dispatcher (kind → fn)
 ;;   helixel-mc-spawn-from-line / -from-rect / -from-find-char
@@ -51,7 +51,7 @@
 ;; Special vars from helixel-repeat / helixel-search — must be `defvar'
 ;; so the `let' binding below is treated as dynamic, not lexical.
 (defvar helixel--pending-sel)
-(defvar helixel--last-tx)
+(defvar helixel--last-action)
 (defvar helixel--live-action)
 (defvar helixel--active-search)
 (defvar helixel--action-ring)
@@ -137,7 +137,7 @@ Returns count of fake cursors created."
 
 ;; ── Advance-walk fallback ──
 
-(defun helixel-mc--make-dummy-tx (sel)
+(defun helixel-mc--make-dummy-action (sel)
   "Build a minimal `helixel-action' carrying SEL for advance fns."
   (let ((m (point-marker)))
     (make-helixel-action
@@ -154,11 +154,11 @@ next iteration lands on a fresh target.  Bounded by
 `helixel-mc-max-cursors' to avoid runaways.
 
 Fully isolates helixel's event / selection / tracking globals so
-the walk does NOT pollute `helixel--last-tx',
+the walk does NOT pollute `helixel--last-action',
 `helixel--pending-sel', `helixel--live-action' or
 `helixel--sel-type'.  Without this, textobj advance
 functions (which internally re-run the textobj command and
-capture `this-command') would clobber `helixel--last-tx'
+capture `this-command') would clobber `helixel--last-action'
 with a sel whose `:command' is the outer mc command (e.g.
 `helixel-mc-toggle' with an accumulated `:count' equal to the
 number of walk iterations), breaking dot-repeat at fake cursors."
@@ -174,11 +174,11 @@ number of walk iterations), breaking dot-repeat at fake cursors."
         (helixel-with-replay-as 'dot
             (deactivate-mark)
             (goto-char (point-min))
-            (let ((tx (helixel-mc--make-dummy-tx sel)))
+            (let ((dummy (helixel-mc--make-dummy-action sel)))
         (catch 'done
           (while (< (length targets) limit)
             (if-let* ((result (helixel-mc--walk-advance-iter
-                               tx advance-fn targets last-key)))
+                               dummy advance-fn targets last-key)))
                 (setq last-key (cdr result)
                       targets (car result))
               (throw 'done nil)))))))

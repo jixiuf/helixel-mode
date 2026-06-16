@@ -65,10 +65,10 @@ after BODY to keep ert clean."
     (helixel-repeat-chain-end)
     (should-not (helixel--chain-active-p))))
 
-;; ── INV-CHAIN-2: chain-control commands never enter tx-list ──
+;; ── INV-CHAIN-2: chain-control commands never enter action-list ──
 
 (ert-deftest helixel-test-inv-chain-control-cmds-excluded ()
-  "INV: actions stamped with chain-control by-command stay out of tx-list."
+  "INV: actions stamped with chain-control by-command stay out of action-list."
   (helixel-chain-inv-with-buffer "abc\n"
     (helixel-repeat-chain-start)
     ;; Synthesise an action that LOOKS like chain-end committing.
@@ -80,7 +80,7 @@ after BODY to keep ert clean."
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
       (helixel--chain-push-entry entry)
-      (should (null (helixel-chain-session-tx-list
+      (should (null (helixel-chain-session-action-list
                      helixel--chain-session))))
     ;; Now a real edit action should be appended.
     (let* ((entry (make-helixel-action
@@ -91,7 +91,7 @@ after BODY to keep ert clean."
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
       (helixel--chain-push-entry entry)
-      (should (equal (length (helixel-chain-session-tx-list
+      (should (equal (length (helixel-chain-session-action-list
                               helixel--chain-session))
                      1)))
     (helixel-repeat-chain-cancel)))
@@ -111,7 +111,7 @@ are now captured for chain replay via `call-interactively'."
                    :mark-region (cons (point-marker)
                                       (copy-marker (point) t)))))
       (helixel--chain-push-entry entry)
-      (should (equal (length (helixel-chain-session-tx-list
+      (should (equal (length (helixel-chain-session-action-list
                               helixel--chain-session))
                      1)))
     (helixel-repeat-chain-cancel)))

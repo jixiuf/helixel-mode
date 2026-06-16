@@ -152,7 +152,7 @@ Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
   "The currently in-progress `helixel-action'.
 Set at command start, committed to ring when complete.")
 
-;; `helixel--last-tx' is defined in helixel-core.el.
+;; `helixel--last-action' is defined in helixel-core.el.
 ;; It is available transitively through the require chain.
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
@@ -205,7 +205,7 @@ action.")
 Deep-copies the event (marker + sel) so ring entries are independent.
 Deduplicates against the ring front — same (op sel payload) skips push.
 Also mirrors to `helixel--global-jump-log'.
-Sets `helixel--last-tx' to the committed entry.
+Sets `helixel--last-action' to the committed entry.
 Returns the committed entry or nil."
   (when helixel--live-action
     ;; Sync pending-sel into the live-event so movement/search
@@ -233,14 +233,14 @@ Returns the committed entry or nil."
                     entry (car helixel--action-ring)))
         (push entry helixel--action-ring)
         (helixel-action--ring-cap))
-      ;; `helixel--last-tx' tracks the most recent EDIT for `.' replay.
+      ;; `helixel--last-action' tracks the most recent EDIT for `.' replay.
       ;; Movement txs (op = nil, runner-only) participate in mc dispatch
-      ;; but must NOT advance last-tx — that would shadow the prior
+      ;; but must NOT advance last-action — that would shadow the prior
       ;; edit and break dot-repeat semantics.  The op-presence check
       ;; distinguishes real edits (kill, change, insert-text, …) from
       ;; mc-replay movement shims.
       (when-let* (((helixel-action-op entry)))
-        (setq helixel--last-tx entry))
+        (setq helixel--last-action entry))
       (helixel--global-jump-log-push entry)
       (setq helixel--live-action nil)
       (run-hook-with-args 'helixel-action-commit-hook entry)
@@ -325,7 +325,7 @@ TX is a `helixel-action' carrying replay data (op/sel/payload/runner
 or equivalent.  No-op if no live action or TX isn't an action.
 
 Preserves any existing `preposition' on the live action unless TX
-provides its own (used by insert-entry commands whose `:tx-runner'
+provides its own (used by insert-entry commands whose `:preposition'
 attaches a prepos function before `record-action' runs)."
   (when (and helixel--live-action (helixel-action-p tx))
     (let ((existing-pre (helixel-action-preposition helixel--live-action))

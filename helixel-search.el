@@ -1101,16 +1101,16 @@ using advance+apply without recursion."
       (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
              (forced-dir (if reverse-p 'backward 'forward))
              (forced-sel (helixel-sel-update-ctx sel :dir forced-dir))
-             (forced-tx (helixel-action-copy edit)))
-        (setf (helixel-action-sel forced-tx) forced-sel)
-        (when-let* ((m (car (helixel-action-mark-region forced-tx))))
+             (forced-action (helixel-action-copy edit)))
+        (setf (helixel-action-sel forced-action) forced-sel)
+        (when-let* ((m (car (helixel-action-mark-region forced-action))))
           (goto-char (marker-position m)))
         (save-excursion
           (goto-char (if reverse-p (point-max) (point-min)))
           (let ((cnt 0))
-            (while (helixel--repeat-advance forced-tx forced-tx)
+            (while (helixel--repeat-advance forced-action forced-action)
               (cl-incf cnt)
-              (helixel-action-replay forced-tx))
+              (helixel-action-replay forced-action))
             (helixel--repeat-echo cnt)))))))
 
 ;; ── Kind registrations ──

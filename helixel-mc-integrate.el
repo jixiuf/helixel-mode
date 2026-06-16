@@ -141,11 +141,6 @@ applied every keystroke at every fake cursor live."
 ;; calls one of the `helixel-mc--prepos-*' helpers; the unified mc
 ;; dispatcher invokes it at every fake cursor via the standard
 ;; fresh-action replay path.
-;;
-;; Phase 4.4 follow-up: the helpers themselves now live in
-;; `helixel-editing.el' alongside the commands that reference them —
-;; this eliminates the cross-module forward `declare-function' that
-;; used to be required here.  Nothing left to define in this section.
 
 ;; ── Lifecycle: ensure mc cleans up with helixel-mode ──
 

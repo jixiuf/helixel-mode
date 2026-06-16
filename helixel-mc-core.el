@@ -131,8 +131,7 @@ Nil disables the check."
 ;; Each fake cursor owns a `helixel-pc-state' struct that captures
 ;; the full set of variables the dispatcher snapshots/restores around
 ;; the per-fake body.  The struct lives on the overlay under one
-;; property (`helixel-pc-state') — replacing what used to be 11 separate
-;; `overlay-put' calls per snapshot.
+;; property (`helixel-pc-state').
 ;;
 ;; Real cursor uses the SAME struct via `helixel-pcs-clone' /
 ;; `-restore' in `helixel-mc--save-main-state'.  One type, one place.
@@ -733,12 +732,7 @@ without going through the pre/`post-command-hook' dispatch path
 Keyword options:
   POLICY — `all' or `real' (default `all').  When `real', CMD
      runs only at the real cursor (sets `multiple-cursors'
-     property to nil).  Any other value sets the property to t.
-
-The legacy `:substitute' and `:prepos' arms (Phase 4.3 cleanup) are
-gone — commands now produce a `helixel-tx' (or store a
-`:preposition' slot via `helixel-define-command's `:tx-runner'
-clause) which the unified dispatcher replays at every fake cursor."
+     property to nil).  Any other value sets the property to t."
   (declare (indent 1))
   (let ((real-only (eq policy 'real)))
     `(progn
@@ -902,10 +896,6 @@ Distinct from the 0-arg hook function `helixel-mc--undo-step-finish'."
         buffer-undo-list))
 
 ;; ── Dispatch loop ──
-;;
-;; The legacy `helixel-mc-executing-command-for-fake-cursor' flag
-;; was replaced by the `mc-fake' origin of the `helixel-replay'
-;; context.  Check via `helixel-replay-in-fake-p'.
 
 (defun helixel-mc--call-interactively (command)
   "Run COMMAND interactively (skipping `ignore').
@@ -1070,7 +1060,7 @@ Used as a fallback in `helixel-mc--fresh-action-from-real' when
 isearch).  Set to nil after each dispatch to avoid stale reuse.")
 
 (defun helixel-mc--fresh-action-from-real ()
-  "Return the `helixel-tx' committed by `this-command' at real, or nil.
+  "Return the `helixel-action' committed by `this-command' at real, or nil.
 Looks at the front of `helixel--action-ring' — the most recent committed
 action.  Returns its `tx' if and only if:
   - the action carries a `tx',
@@ -1103,15 +1093,6 @@ first, then runner if any."
 ;; `helixel-mc-dispatch-in-progress-p' covers both.
 
 ;; ── Unified fake-cursor dispatch ──
-;;
-;; Phase 4.3 collapsed four dispatch strategies (fresh-edit replay,
-;; substitute-alist, call-interactively fallback, prepos pre-broadcast)
-;; into one.  Every helixel command produces a `helixel-tx' (either
-;; via `:tx-runner' on the `helixel-define-command' macro, or via the
-;; op-registry `:runner' attached by `helixel--record-action').  The
-;; dispatcher now does ONE thing: replay the freshly-committed tx at
-;; every fake.  No substitute-alist, no prepos symbol property, no
-;; call-interactively fallback.
 
 (defmacro helixel-mc--replay-at-one-fake (fresh-runnable cmd cursor dead)
   "Replay FRESH-RUNNABLE (or run CMD) at fake CURSOR.

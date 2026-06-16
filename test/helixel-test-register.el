@@ -269,8 +269,7 @@
         (goto-char 1)
         (push-mark (point) t t)
         (goto-char 6)
-        (let ((helixel--inhibit-repeat-record t))
-          (helixel-change))
+        (helixel-change)
         ;; Register is consumed after the kill part
         (should (null helixel--current-register))
         (should (string= (helixel-register-get ?a) "hello"))

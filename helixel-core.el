@@ -896,13 +896,6 @@ then simply does not flip."
 ;; Pure movement / search / state events leave OP/SEL/PAYLOAD/RUNNER
 ;; nil; replay events leave CATEGORY/SUBCAT/TIMESTAMP/BUFFER nil when
 ;; constructed via `helixel-action-create' standalone.
-;;
-;; History (pre-v5): the codebase had TWO structs — `helixel-tx' (7
-;; slots) wrapped by `helixel-action' (8 slots, one of which was
-;; `:tx').  The split required 4 polymorphic accessors and a hidden
-;; `helixel-action--ensure-tx' mutator.  Merging removes ~100 LOC of
-;; bridge code; the 5 nil slots on pure-movement events cost ~40B per
-;; entry × ring cap = ~2KB / buffer (negligible).  See plan-v5.md.
 
 (cl-defstruct (helixel-action (:conc-name helixel-action-)
                               (:copier helixel-action--shallow-copy))
@@ -1437,10 +1430,7 @@ already committed."
 ;; ----------------------------------------------------------------------
 ;;
 ;; Tiny utility shared by insert-mode recording
-;; (`helixel-repeat.el').  Chain recording used to share
-;; this with insert-record but Phase 4.4 replaced chain's
-;; keystroke capture with tx-list accumulation — only the
-;; per-keystroke insert recorder still needs `keyrec-capture'.
+;; (`helixel-repeat.el').
 
 (defsubst helixel-keyrec-capture ()
   "Return the current single-command key sequence for hook capture.
@@ -1514,7 +1504,7 @@ if no further visible entry exists in that direction."
              return i)))
 
 
-;; ── Replay context (formerly helixel-replay.el) ──
+;; ── Replay context ──
 
 (cl-defstruct (helixel-replay (:conc-name helixel-replay--))
   "Replay-time context.  Bound dynamically via `helixel-with-replay'.
@@ -1607,7 +1597,7 @@ form to evaluate."
        (progn ,@body)
      (helixel-with-replay ,origin ,@body)))
 
-;; ── Named registers (formerly helixel-register.el) ──
+;; ── Named registers ──
 
 (defcustom helixel-register-backends
   '((?\" . kill-ring)

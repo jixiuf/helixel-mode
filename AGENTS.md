@@ -7,8 +7,8 @@
 | `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-tx`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and legacy raw key vectors. |
-| `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Phase 4.4 — chain accumulates a list of `helixel-tx' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:tx-list' payload.  Replay iterates the list and `helixel-tx-replay`s each entry.  No more kmacro / keystroke capture. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
+| `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:tx-list' payload.  Replay iterates the list and `helixel-action-replay`s each entry.  No more kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
@@ -103,7 +103,7 @@ helixel-core (cl-lib only, zero helixel deps)
 Notes:
 - **Zero circular deps.** `swap→editing` is one-way (editing does NOT require swap).
 - `helixel--replace-region` lives in `helixel-editing.el`.
-- `helixel--delete-selection` lives in `helixel-editing.el` (moved from state.el in Phase 5).
+- `helixel--delete-selection` lives in `helixel-editing.el`.
 - `helixel--swap-source-type` lives in `helixel-core.el`.
 - `helixel--last-tx` lives in `helixel-core.el` (buffer-local).
   Every module that requires `helixel-core` can read/write the most recent transaction.
@@ -137,19 +137,15 @@ Notes:
 ### helixel-action / helixel-tx (unified replay + history event, v5 merge)
 
 ```elisp
-(cl-defstruct helixel-action op sel payload runner pre-replay-fn mark-region
+(cl-defstruct helixel-action op sel payload runner preposition mark-region
                display category subcat timestamp buffer by-command)
 ```
 A SINGLE struct serving both replay (`.`, `M-.`, chain, mc) and history
-(`;`, C-o/C-i).  Previously TWO structs (helixel-tx + helixel-action)
-merged in v5.  Slots op/sel/payload/runner/preposition are nil for
+(`;`, C-o/C-i).  Slots op/sel/payload/runner/preposition are nil for
 pure movement/search/state events (~40B per entry negligible).
 
-- `helixel-tx-*' and `helixel-tx-create' are zero-cost `defalias'
-  backward-compat aliases.
-- `helixel-tx-create' constructs an `helixel-action' directly.
+- `helixel-action-create' constructs an `helixel-action' directly.
 - `helixel-action--copy' performs deep copies for ring storage.
-- `:(pre-replay-fn' is DEPRECATED; use `:preposition' instead.)
 
 ### helixel-repeat-strategy (dot-repeat strategy, lives in `helixel-repeat.el`)
 ```elisp
@@ -178,17 +174,16 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel--sel-pop)                  → sel|nil  ; edit cmds pop
 
 ;; ── Transaction ──
-(helixel-tx-create op sel &rest kv) → struct  ;; returns helixel-action
+(helixel-action-create op sel &rest kv) → struct  ;; returns helixel-action
   ;; Special kv: :runner fn, :display str|fn — rest becomes :payload
-  ;; Common payload keys: :keys, :text, :char, :pre-replay-fn (DEPRECATED)
-  ;; DEPRECATED: use :preposition for preposition functions.
+  ;; Common payload keys: :keys, :text, :char
 (helixel-action-op tx)
 (helixel-action-sel tx)
 (helixel-action-payload tx)
 (helixel-action-runner tx)
 (helixel-action-mark-region tx)
 (helixel-action-display tx)
-(helixel-action-preposition tx) ;; was pre-replay-fn, renamed in v5
+(helixel-action-preposition tx) ;; preposition function set via :tx-runner
 (helixel-action-with-payload tx k v) → new action with payload entry added
 (helixel-action--copy action)              → deep copy
 
@@ -217,8 +212,8 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel--op-strategy-builder op) → fn|nil
 
 ;; ── Repeat ──
-(helixel--record-action op &rest extra)  ; stores tx + commits event
-(helixel-tx-replay tx)             ; calls :preposition (if any), then :runner on tx
+(helixel--record-action op &rest extra)  ; stores action + commits event
+(helixel-action-replay action)           ; calls :preposition (if any), then :runner on action
 (helixel-repeat-edit &optional prefix) ; bound to .
 (helixel-repeat-selection &optional prefix) ; bound to M-.
 (helixel--build-strategy edit &optional reverse-p) → strategy struct
@@ -280,8 +275,8 @@ these side effects in tests, call the underlying function directly instead.
 ### helixel--last-tx is buffer-local
 `. ` replays the last edit from the current buffer only.
 
-### helixel-tx-create keyword handling
-`helixel-tx-create` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel-action-copy` + `setf`.
+### helixel-action-create keyword handling
+`helixel-action-create` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel-action-copy` + `setf`.
 
 ### Never trust match-data in helixel-insert / helixel-insert-after
 Search hooks invalidate `match-data`. Use `(region-beginning)` / `(region-end)` instead.
@@ -372,7 +367,7 @@ raw ctx plist (for use inside recreate closures).  They are the
 preferred way to read ctx fields.
 
   helixel--action-payload-* removed in favor of payload accessors.
-  See `helixel-tx-char`, `helixel-tx-type`, `helixel-tx-dir` for
+  See `helixel-action-char`, `helixel-action-type`, `helixel-action-dir` for
   shared-payload-key convenience accessors (find-char, replace-char,
   surround).
 
@@ -415,7 +410,7 @@ the undo-step management replaces it entirely.
 
 `helixel-action-preposition` is a first-class slot set by
 `helixel-define-command's `:tx-runner` clause.  It is called BEFORE
-the main runner in `helixel-tx-replay`.  Single-write invariant
+the main runner in `helixel-action-replay`.  Single-write invariant
 enforced by `cl-assert`.  No inheriting logic between events —
 `helixel--live-action-set` preserves the existing preposition
 unless the tx provides its own.

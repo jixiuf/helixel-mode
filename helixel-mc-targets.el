@@ -138,7 +138,7 @@ Returns count of fake cursors created."
 ;; ── Advance-walk fallback ──
 
 (defun helixel-mc--make-dummy-tx (sel)
-  "Build a minimal `helixel-tx' carrying SEL for advance fns."
+  "Build a minimal `helixel-action' carrying SEL for advance fns."
   (let ((m (point-marker)))
     (make-helixel-action
      :sel sel :op nil :payload nil

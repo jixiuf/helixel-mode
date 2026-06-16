@@ -181,7 +181,7 @@ Installs pre/post-command hooks + an after-change hook."
 ;; ── Replay ──
 
 (defsubst helixel--repeat-get-keys (tx)
-  "Return the :keys payload from TX (segment list OR legacy key vector)."
+  "Return the :keys payload from TX (segment list or raw key vector)."
   (helixel-action-payload-get tx :keys))
 
 (defun helixel--execute-keys (keys-or-segments)
@@ -191,7 +191,7 @@ Accepted shapes:
   * Segment list: each element is (:keys VEC) or
     (:text STR :delete-before N :offset O).  Produced by
     `helixel--insert-finish'.
-  * Raw key vector / string: legacy / hand-built payloads.  Replayed
+  * Raw key vector / string: hand-built payloads.  Replayed
     char-by-char with `post-self-insert-hook' firing so
     `electric-pair-mode' works.
 
@@ -342,7 +342,7 @@ return EDIT unchanged."
 
 (defun helixel--repeat-advance (edit effective)
   "Advance point to next replay target for EDIT.  Return non-nil on success.
-EDIT is the original `helixel-tx' (used for op classification);
+EDIT is the original `helixel-action' (used for op classification);
 EFFECTIVE is the direction-flipped tx whose sel drives the actual
 recreate.
 
@@ -707,15 +707,12 @@ Uses `run-hook-with-args-until-success'.
 Set by mc-integrate to override `.' when fake cursors exist, so `.'
 applies the last edit once at each cursor's current position without
 advancing.")
-(make-obsolete-variable 'helixel-repeat-edit-function
-                        'helixel-repeat-edit-override-functions
-                        "helixel 5.0")
 
 (defun helixel-repeat-edit (&optional raw-prefix)
   "Repeat the last editing operation at point (bound to `.`).
 
 RAW-PREFIX is the raw prefix argument.  Delegates to
-`helixel-repeat-edit-function' first; falls back to
+`helixel-repeat-edit-override-functions' first; falls back to
 `helixel--repeat-edit-default' if that hook is unset or returns nil."
   (interactive "P")
   (unless (run-hook-with-args-until-success

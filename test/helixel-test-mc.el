@@ -502,8 +502,7 @@ the real cursor's event."
     ;; to a single execute-edit at each cursor's point.
     (helixel-action-replay helixel--last-tx)
     (helixel-mc-with-each-cursor
-      (let ((helixel--inhibit-repeat-record t))
-        (helixel-action-replay helixel--last-tx)))
+      (helixel-action-replay helixel--last-tx))
     ;; Each cursor inserted an X at its position.
     (should (string-match-p "X" (buffer-string)))
     (should (>= (length (split-string (buffer-string) "X")) 4))

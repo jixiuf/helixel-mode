@@ -2038,10 +2038,9 @@ After `-1 .' a plain `.` continues in the flipped direction."
       (should helixel--repeat-permanent-flip)
       ;; Plain `.` continues backward — nothing left to change
       ;; (A was already changed), so it should error silently.
-      (let ((helixel--inhibit-repeat-record t))
-        (condition-case nil
+      (condition-case nil
             (helixel-repeat-edit)
-          (error nil)))
+          (error nil))
       ;; Buffer unchanged
       (should (string= (buffer-string) "XXX A XXX B hello C")))))
 
@@ -2184,8 +2183,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--live-action nil
           helixel--pending-sel nil
           helixel--action-pos nil
-          helixel--inhibit-repeat-record nil
-          helixel--inhibit-action-track nil
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
@@ -2221,8 +2218,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--live-action nil
           helixel--pending-sel nil
           helixel--action-pos nil
-          helixel--inhibit-repeat-record nil
-          helixel--inhibit-action-track nil
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
@@ -2273,8 +2268,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
           helixel--pending-sel nil helixel--action-pos nil
-          helixel--inhibit-repeat-record nil
-          helixel--inhibit-action-track nil
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
@@ -2310,8 +2303,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
           helixel--pending-sel nil helixel--action-pos nil
-          helixel--inhibit-repeat-record nil
-          helixel--inhibit-action-track nil
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil
@@ -2443,8 +2434,6 @@ the selection on each word."
           helixel--live-action nil
           helixel--pending-sel nil
           helixel--action-pos nil
-          helixel--inhibit-repeat-record nil
-          helixel--inhibit-action-track nil
           helixel--search-advance-done nil
           helixel--advance-search-last-pos nil
           helixel--advance-search-edge-seen nil

@@ -42,7 +42,6 @@
      (helixel--switch-state 'normal)
      (setq helixel--chain-session nil)
      (setq helixel--pending-sel nil)
-     (setq helixel--inhibit-action-track nil)
      (setq helixel--repeat-permanent-flip nil)
      (unwind-protect
          (progn ,@body)
@@ -52,7 +51,6 @@
            (ignore-errors (set-marker (car b) nil))
            (ignore-errors (set-marker (cdr b) nil))))
        (setq helixel--chain-session nil)
-       (setq helixel--inhibit-action-track nil)
        (remove-hook 'post-command-hook #'helixel--chain-post-cmd-hook t)
        (ignore-errors (helixel-normal-state -1)))))
 
@@ -204,7 +202,6 @@ tests in this section."
                   '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (should (string-match-p "aborted"
                               (helixel-repeat-edit))))))
 
@@ -215,7 +212,6 @@ tests in this section."
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       ;; Should not error: the last line is a valid target
       (helixel-repeat-edit)
       (should t))))
@@ -228,7 +224,6 @@ tests in this section."
                   '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (should-error (helixel-repeat-selection)))))
 
 (ert-deftest helixel-test-chain-dot-skip-match ()
@@ -239,7 +234,6 @@ tests in this section."
                   '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t)
            (helixel--repeat-preview-pos nil))
       (helixel-repeat-selection)
       ;; After ;, point should be at the second "foo" match-beginning
@@ -252,7 +246,6 @@ tests in this section."
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-chain--make-test-tx ctx))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t)
            (helixel--repeat-preview-pos nil))
       (helixel-repeat-selection)
       ;; Comma advances past blank line to next non-blank target
@@ -265,7 +258,6 @@ tests in this section."
     (let* ((ctx (helixel-sel-create 'movement '(:moves ((forward-word . 1)))))
             (tx (helixel-chain--make-test-tx ctx))
             (helixel--last-tx tx)
-            (helixel--inhibit-action-track t))
       ;; No advance data → should not error
       (helixel-repeat-edit))))
 
@@ -290,7 +282,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
       (should (= 3 helixel-chain--test-ctr)))))
 
@@ -306,7 +297,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
       (should (= 3 helixel-chain--test-ctr)))))
 
@@ -323,7 +313,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-edit -3)
       (should (= 3 helixel-chain--test-ctr)))))
 
@@ -338,7 +327,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
       ;; 3 lines, first already processed → 2 remaining
       (should (= 2 helixel-chain--test-ctr)))))
@@ -354,7 +342,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
       (should (= 3 helixel-chain--test-ctr)))))
 
@@ -370,7 +357,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-edit -2)
       (should (= 2 helixel-chain--test-ctr)))))
 
@@ -391,7 +377,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-selection 0)
       ;; After 0, : point should be at last match's match-end
       (should (>= (point) 16)))))   ;; end of "foo z\n"
@@ -408,7 +393,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-selection -3)
       ;; -3, reverse: each advance skips current and goes backward
       ;; "foo d" (19) → "foo c" (13) → "foo b" (7) → "foo a" (1)
@@ -425,7 +409,6 @@ tests in this section."
                  :display "chain"
                  :tx-list (list (helixel-action-create 'noop nil :runner #'ignore))))
            (helixel--last-tx tx)
-           (helixel--inhibit-action-track t))
       (helixel-repeat-selection '(4))
       ;; C-u , previews all → ends at eol of last line
       (should (= (line-number-at-pos) 3)))))   ;; last content line

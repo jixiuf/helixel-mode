@@ -90,6 +90,21 @@ Set to nil to always use the group-start event."
   :type '(repeat (choice symbol (cons symbol symbol)))
   :group 'helixel)
 
+(defcustom helixel-semicolon-mark-thing
+  '(movement textobj search find-char edit)
+  "List controlling when the first `;' marks the full thing.
+Each element is either a category symbol (matches all subcats)
+or a cons (CATEGORY . SUBCAT) for precise matching.
+The first `;' selects the full thing (word, pair, etc.) instead of
+starting the action cycle.  The next `;' does the normal cycle.
+
+Examples:
+  \='(movement textobj)              -> all movement + textobj subcats
+  \='((movement . pair) textobj)     -> only pair movements + all textobj
+Set to nil to disable entirely."
+  :type '(repeat (choice symbol (cons symbol symbol)))
+  :group 'helixel)
+
 (defcustom helixel-action-ring-max 50
   "Maximum number of events stored in `helixel--action-ring'."
   :type 'integer
@@ -577,6 +592,14 @@ Consults `helixel-action-cycle-newest-for-mark'."
    (helixel-action-subcat event)
    helixel-action-cycle-newest-for-mark))
 
+(defun helixel--semicolon-mark-thing-p (event)
+  "Return non-nil if mark-thing should fire for EVENT.
+Consults `helixel-semicolon-mark-thing'."
+  (helixel--category-match-p
+   (helixel-action-category event)
+   (helixel-action-subcat event)
+   helixel-semicolon-mark-thing))
+
 ;; ----------------------------------------------------------------------
 ;; State variables
 ;; ----------------------------------------------------------------------
@@ -657,13 +680,13 @@ to session-start, matching `;''s behaviour."
       (helixel--sel-push sel))
     sel))
 
-(defun helixel-action--cycle-mark-region (_event mr first-call)
+(defun helixel-action--cycle-mark-region (event mr first-call)
   "Mark the region during `;' cycling using mark-region MR from EVENT.
 MR is a cons (START . END) of two markers.
-If FIRST-CALL is non-nil, MR is non-degenerate, and
-`helixel--cycle-mark-thing-p' returns non-nil, activate a real
-region pointing at the far edge from point (mark-thing) and
-return t (did-mark).
+If FIRST-CALL is non-nil, MR is non-degenerate,
+`helixel--cycle-mark-thing-p' returns non-nil, and EVENT matches
+`helixel-semicolon-mark-thing', activate a real region pointing at
+the far edge from point (mark-thing) and return t (did-mark).
 Otherwise just push the mark to the begin marker and return nil.
 
 When `helixel--cycle-mark-thing-p' returns nil (from `C-;'), the
@@ -672,6 +695,7 @@ mark-thing path is skipped entirely — every call is non-mark-thing."
          (b (marker-position (cdr mr)))
          (degenerate (= a b)))
     (if (and (helixel--cycle-mark-thing-p)
+             (helixel--semicolon-mark-thing-p event)
              first-call
              (not degenerate))
         (let ((p (point)))

@@ -677,8 +677,7 @@ a fenced block."
                       helixel--last-motion-cmd))))
          (search-pos
           (save-excursion
-            (unless d
-              (helixel--step-off-delimiter))
+            (helixel--step-off-delimiter)
             (point)))
          target)
     ;; Stored delimiter (from %) always wins.
@@ -836,20 +835,29 @@ MOTION is a `helixel--last-motion' struct."
           ('pair
            (when-let* ((dir)
                        (d (helixel--rebuild-delimiter motion)))
-             (condition-case _err
-                 (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
-                               (helixel-delimiter-bounds-flat d)))
-                   (if (eq dir 'forward)
-                       (progn (goto-char ce)
-                              (skip-chars-forward " \t\n\r"))
-                     (goto-char (max (point-min) (1- ob)))
-                     (skip-chars-backward " \t\n\r")))
-               (error
-                ;; Bounds lookup failed (e.g. no enclosing pair) -
-                ;; move one char in dir as minimal skip.
-                (if (eq dir 'forward)
-                    (forward-char)
-                  (backward-char))))))
+             ;; When point sits on the opening delimiter,
+             ;; the finder skips PAST it to the parent's opener.
+             ;; Step inside so \=`helixel-delimiter-bounds-flat'
+             ;; finds THIS pair, not the parent.
+             ;; Use the delimiter's own :adjust-for-jump plus
+             ;; \=`helixel--step-off-delimiter' as fallback.
+             ;; Save start position; restore on error so
+             ;; a failing , doesn't make the cursor jitter.
+             (let ((start (point)))
+               (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
+                 (funcall adj))
+               (helixel--step-off-delimiter)
+               (condition-case _err
+                   (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                                 (helixel-delimiter-bounds-flat d)))
+                     (if (eq dir 'forward)
+                         (progn (goto-char ce)
+                                (skip-chars-forward " \t\n\r"))
+                       (goto-char (max (point-min) (1- ob)))
+                       (skip-chars-backward " \t\n\r")))
+                 (error
+                  ;; Bounds failed — restore point; don't jitter.
+                  (goto-char start))))))
           ('match nil)              ; handled by forward/backward-match
           ((or 'paragraph 'sentence 'function)
            (when dir
@@ -897,13 +905,20 @@ select the full span of the enclosing pair."
 (defun helixel--repeat-movement-motion (rec)
   "Replay a general movement motion from REC.
 Skips past the current boundary via `helixel--motion-skip-past'
-then re-invokes the original command with the recorded prefix arg."
-  (let ((cmd (helixel--last-motion-command rec)))
+then re-invokes the original command with the recorded prefix arg.
+On user-error restores point to before skip-past so a failing
+\=`,`\=' doesn't leave the cursor stranded."
+  (let* ((cmd (helixel--last-motion-command rec))
+         (orig (point)))
     (helixel--motion-skip-past rec)
     (unless (commandp cmd)
       (user-error "No motion command to repeat"))
     (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
-      (call-interactively cmd))))
+      (condition-case err
+          (call-interactively cmd)
+        (user-error
+         (goto-char orig)
+         (user-error (cadr err)))))))
 
 ;; Register: specific (movement match) before general (movement nil).
 ;; `push' adds to the front; the lookup scans sequentially, so the

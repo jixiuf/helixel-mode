@@ -1893,7 +1893,7 @@ On a single-char symbol at eob, w selects it."
                    (marker-position (car mr))))))))
 
 (ert-deftest helixel-test-motion-repeat-match-semicolon-outer-pair ()
-  "; after , selects the enclosing pair, not the inner one."
+  "; after , selects the enclosing pair one level outward, not two."
   (with-temp-buffer
     (transient-mark-mode 1)
     (insert "(a (b (c)))")
@@ -1902,16 +1902,16 @@ On a single-char symbol at eob, w selects it."
           (helixel--live-action nil)
           (helixel--action-pos nil))
       (goto-char 9)  ;; on ) of (c)
-      (helixel-jump-to-match)   ;; backward %% → (c opener
-      (helixel-repeat-last-motion)  ;; , outward
+      (helixel-jump-to-match)   ;; backward %% → (c opener at pos 7
+      (helixel-repeat-last-motion)  ;; , outward → (b opener at pos 4
       (let ((last-command 'helixel-repeat-last-motion))
         (helixel-action-cycle))
       ;; ; after , must activate a region
       (should (region-active-p))
-      ;; The region must include the outermost opener (pos 1).
-      (should (= (region-beginning) 1))
-      ;; Must span at least to after the inner pair.
-      (should (> (region-end) 9)))))
+      ;; Region covers the (b (c)) pair — the enclosing pair.
+      (should (= (region-beginning) 4))
+      ;; Must span to the closing of (b (c)).
+      (should (= (region-end) 11)))))
 
 (ert-deftest helixel-test-jump-to-match-nopair-backward ()
   "% from non-delim moves to nearest pair char backward and stops."
@@ -2248,6 +2248,57 @@ recording is tested via integration tests."
     (should (= (point) 5))  ;; at ( of (b)
     (helixel-repeat-last-motion)
     (should (= (point) 1)))) ;; at ( of (a)
+
+(ert-deftest helixel-test-motion-skip-pair-nested-from-opener ()
+  ", after [ lands on opener steps one level, not two."
+  ;; Regression: when [( leaves point on the opening delimiter,
+  ;; , must skip past the current pair (not the parent).
+  ;; Without the fix, helixel-delimiter-bounds-flat would
+  ;; jump past the current opener to the parent opener,
+  ;; so , would skip two nesting levels instead of one.
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (goto-char 8)  ;; inside (c), on 'c'
+    (helixel-outer-paren)
+    ;; First [( lands on the opener of the enclosing (c) pair.
+    (should (= (point) 7))  ;; at ( of (c)
+    ;; , must go one level outward to (b opener.
+    (helixel-repeat-last-motion)
+    (should (= (point) 4))  ;; at ( of (b
+    ;; Another , goes to (a opener.
+    (helixel-repeat-last-motion)
+    (should (= (point) 1))  ;; at ( of (a
+    ;; At outermost level: call-interactively propagates the
+    ;; user-error from helixel-outer-paren because there is
+    ;; no enclosing pair.
+    (should-error (helixel-repeat-last-motion)
+                  :type 'user-error)))
+
+(ert-deftest helixel-test-motion-skip-block-nested-from-opener ()
+  ", after [c lands on block opener steps one level, not two."
+  ;; Regression: when [c leaves point on the block opener line,
+  ;; , must skip past the current block (not the parent).
+  ;; Covers all three opener types:
+  ;;   - string openers (blocks in org-mode)
+  ;;   - character openers (paren fallback in plain buffer)
+  ;;   - nil openers (block fallback to parens)
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (delay-mode-hooks (org-mode))
+    (insert "#+begin_quote\nouter\n#+begin_src elisp\ninner\n#+end_src\nmore\n#+end_quote\n")
+    (deactivate-mark)
+    (goto-char 35)  ;; inside inner src block
+    (helixel-outer-block)
+    ;; First [c lands on the inner block opener.
+    (should (= (point) 21))  ;; at #+begin_src
+    ;; , must go one level outward to outer block opener.
+    (helixel-repeat-last-motion)
+    (should (= (point) 1))   ;; at #+begin_quote
+    ;; At outermost level: no enclosing block.
+    (should-error (helixel-repeat-last-motion)
+                  :type 'user-error)))
 
 (ert-deftest helixel-test-motion-skip-inner-pair-forward ()
   ", repeats } past consecutive inner paren boundaries."

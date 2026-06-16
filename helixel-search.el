@@ -516,7 +516,19 @@ Signals `search-failed' if no visible match is found."
       (helixel-search--set-dir sym-dir)
       (setq helixel--active-search
             (make-helixel-active-search
-             :category 'find-char :type type :char char :dir sym-dir)))))
+             :category 'find-char :type type :char char :dir sym-dir))
+      (helixel-search--echo-repeat-hint))))
+
+(defun helixel-search--echo-repeat-hint ()
+  "Echo a hint showing which key repeats the last find-char.
+Uses `substitute-command-keys' to dynamically look up the
+current keybinding for `helixel-search-repeat-next' and
+`helixel-search-repeat-reverse'."
+  (message "%s repeat, %s reverse direction and repeat"
+           (substitute-command-keys
+            "\\[helixel-search-repeat-next] or \\[helixel-repeat-last-motion]")
+           (substitute-command-keys
+            "\\[helixel-search-repeat-reverse]")))
 
 (defun helixel-search--find-char-core (&optional dir char type)
   "Execute find-char in direction DIR.

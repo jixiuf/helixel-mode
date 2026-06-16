@@ -67,7 +67,8 @@ Set to nil to disable entirely."
   :type '(repeat (choice symbol (cons symbol symbol)))
   :group 'helixel)
 
-(defcustom helixel-action-cycle-newest-for-mark '(edit)
+(defcustom helixel-action-cycle-newest-for-mark
+  '(edit (movement . pair) (movement . match))
   "Categories whose first \\=';\\=' marking uses the newest event's mark-region.
 
 For categories listed here, the first \\=';\\=' in a multi-event group
@@ -709,30 +710,43 @@ Thin orchestrator after step 15 — work split into
          (multi-event-p (not (= newest-pos gpos)))
          (sel-event (if multi-event-p (nth newest-pos ring) event))
          (first-call (null helixel--action-pos))
+         (use-newest (and multi-event-p
+                          (helixel-action--newest-for-mark-p event)))
          ;; If the category is configured to use the newest event's
          ;; mark-region (see `helixel-action-cycle-newest-for-mark'),
          ;; and there are multiple events in the group, use sel-event
          ;; so ; marks the most recent bounds (e.g. last paste).
          ;; Otherwise keep the group-start for span-from-start.
-         (mark-event
-          (if (and multi-event-p
-                   (helixel-action--newest-for-mark-p event))
-              sel-event
-            event))
+         (mark-event (if use-newest sel-event event))
          ;; When multiple events exist in a group, the newest event
          ;; carries pre-computed payload entries (set at commit time
          ;; by `helixel--on-action-commit-group-span'):
          ;;   :group-span-mr  — bounding box of the entire group
          ;;   :group-start-point — original cursor before 1st motion
-         ;; For single events, fall back to the event's own mark-region.
-         ;; Both ; and C-; read from sel-event's payload — no need to
-         ;; cross-reference ring entries.
-         (mr (let ((raw-mr
-                    (if multi-event-p
-                        (or (plist-get (helixel-action-payload sel-event)
-                                       :group-span-mr)
-                            (helixel-action-mark-region mark-event))
-                      (helixel-action-mark-region mark-event))))
+         ;; For newest-for-mark categories, the first ; press uses the
+         ;; event's own mark-region (e.g. last paste, outermost pair).
+         ;; For other categories, :group-span-mr gives the full span.
+         (mr
+          (let* ((own-mr (helixel-action-mark-region mark-event))
+                 (own-mr (and own-mr
+                              (not (= (marker-position (car own-mr))
+                                      (marker-position (cdr own-mr))))
+                              own-mr))
+                 (group-mr (plist-get (helixel-action-payload sel-event)
+                                      :group-span-mr))
+                 (raw-mr
+                  (if multi-event-p
+                      (if use-newest
+                          (or own-mr group-mr
+                              (let ((fallback (helixel-action-mark-region
+                                               event)))
+                                (and fallback
+                                     (not (= (marker-position (car fallback))
+                                             (marker-position (cdr fallback))))
+                                     fallback)))
+                        (or group-mr
+                            (helixel-action-mark-region mark-event)))
+                    (helixel-action-mark-region mark-event))))
                (if (helixel--cycle-mark-thing-p)
                    raw-mr
                  (cons (or (plist-get (helixel-action-payload sel-event)
@@ -743,10 +757,7 @@ Thin orchestrator after step 15 — work split into
     ;; action-pos to newest-pos so the next ; walks within the
     ;; same group (marking the full span) before going older.
     (setq helixel--action-pos
-          (if (and multi-event-p
-                   (helixel-action--newest-for-mark-p event))
-              newest-pos
-            gpos))
+          (if use-newest newest-pos gpos))
     (let ((did-mark (helixel-action--cycle-mark-region
                      mark-event mr first-call)))
       (helixel-action--push-sel-from-event sel-event)

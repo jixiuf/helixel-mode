@@ -878,12 +878,21 @@ MOTION is a `helixel--last-motion' struct."
 (defun helixel--repeat-match-motion (rec)
   "Replay a match (%) outward motion from REC.
 Uses the stored delimiter from the original % jump for precise
-outward navigation via `helixel--up-list-once'."
+outward navigation via `helixel--up-list-once'.
+
+Opens tracking before the jump so `helixel--up-list-once' can
+set `:mark-region' on the live action and the committed event
+appears in the action ring.  This makes \=`;\=' after \=`,'
+select the full span of the enclosing pair."
   (let* ((dir (helixel--last-motion-dir rec))
          (delim (helixel--last-motion-last-match-delimiter rec))
          (outward (if (eq dir 'forward) :forward :backward)))
-    (unless (helixel--up-list-once outward delim)
-      (message "No enclosing bracket"))))
+    (helixel--tracking-open 'movement 'match)
+    (unwind-protect
+        (unless (helixel--up-list-once outward delim)
+          (message "No enclosing bracket"))
+      (unless (helixel-replaying-p)
+        (helixel-action-commit)))))
 
 (defun helixel--repeat-movement-motion (rec)
   "Replay a general movement motion from REC.

@@ -888,6 +888,52 @@ This works through mixed bracket types (~( ] }~) and across block delimiters
   ;; , → outward to enclosing (let ...)
   ;; , → outward to #+begin_src
 #+end_example
+***** ~,~ with ~;~
+
+Every motion repeated by ~,~ records its own entry in the action ring,
+complete with span bounds (=:mark-region=).  Pressing ~;~ after ~,~
+selects the full span that was just traversed — exactly like pressing
+~;~ after the original motion.
+
+*Layer-by-layer pair selection* (~%~ + ~,~ + ~;~):
+
+After ~%~ jumps to the matching delimiter, ~,~ expands outward one
+nesting level.  Each ~,~ press records the enclosing pair's bounds, so
+you can inspect any level:
+
+#+begin_example
+  (a (b (c)))
+        ↑
+  %     → jump to ) after (c)
+  ,   → outward to ) after (b)
+  ;     → select (b (c))
+  ,   → outward to ) after (a)
+  ;     → select (a (b (c)))
+#+end_example
+
+*Pair-boundary ~;~ after ~,~* (~]~ / ~[~):
+
+#+begin_example
+  (a) (b) (c)
+  ]     → after ) of (a)
+  ,   → after ) of (b)
+  ;     → select (b)
+  ,   → after ) of (c)
+  ;     → select (c)
+#+end_example
+
+*Find-char ~;~ after ~,~* (~f~ / ~t~):
+
+#+begin_example
+  hello world
+  fx    → jump to x in "world"
+  ,   → find next x
+  ;     → select the span from origin to latest x match
+#+end_example
+
+In every case, the ~;~ command reads the most recent event's span
+bounds and activates a region covering the full traversed distance.
+Subsequent ~;~ presses cycle through older events as usual.
 
 **** find-char: ~,~ vs ~n~
 

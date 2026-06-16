@@ -1871,6 +1871,48 @@ On a single-char symbol at eob, w selects it."
       (should (region-active-p))
       (should (> (region-end) (region-beginning))))))
 
+(ert-deftest helixel-test-motion-repeat-match-commits-event ()
+  ", after % commits an event to the ring."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (let ((helixel--action-ring nil)
+          (helixel--live-action nil)
+          (helixel--action-pos nil))
+      (goto-char 9)  ;; on ) of (c)
+      (helixel-jump-to-match)   ;; backward %% → (c opener at 7
+      (helixel-repeat-last-motion)  ;; , outward
+      ;; The , call must commit at least 2 events (%% + ,).
+      (should (>= (length helixel--action-ring) 2))
+      ;; The newest event (from ,) must have a non-degenerate mr.
+      (let ((mr (helixel-action-mark-region
+                 (car helixel--action-ring))))
+        (should mr)
+        (should (> (marker-position (cdr mr))
+                   (marker-position (car mr))))))))
+
+(ert-deftest helixel-test-motion-repeat-match-semicolon-outer-pair ()
+  "; after , selects the enclosing pair, not the inner one."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (let ((helixel--action-ring nil)
+          (helixel--live-action nil)
+          (helixel--action-pos nil))
+      (goto-char 9)  ;; on ) of (c)
+      (helixel-jump-to-match)   ;; backward %% → (c opener
+      (helixel-repeat-last-motion)  ;; , outward
+      (let ((last-command 'helixel-repeat-last-motion))
+        (helixel-action-cycle))
+      ;; ; after , must activate a region
+      (should (region-active-p))
+      ;; The region must include the outermost opener (pos 1).
+      (should (= (region-beginning) 1))
+      ;; Must span at least to after the inner pair.
+      (should (> (region-end) 9)))))
+
 (ert-deftest helixel-test-jump-to-match-nopair-backward ()
   "% from non-delim moves to nearest pair char backward and stops."
   (with-temp-buffer

@@ -294,7 +294,8 @@ is not committed by the next command."
                       :regexp isearch-regexp))
           (setf (helixel-action-runner helixel--live-action)
                 #'helixel-search--mc-runner))
-        (helixel-action-commit))
+        (helixel-action-commit)
+        (helixel-search--echo-repeat-hint))
     ;; Cancelled — discard the tracking-open shell so the next
     ;; command's tracking-open does not commit a stale entry.
     (when (and helixel--live-action
@@ -520,7 +521,7 @@ Signals `search-failed' if no visible match is found."
       (helixel-search--echo-repeat-hint))))
 
 (defun helixel-search--echo-repeat-hint ()
-  "Echo a hint showing which key repeats the last find-char.
+  "Echo a hint showing which key repeats the last search/find-char.
 Uses `substitute-command-keys' to dynamically look up the
 current keybinding for `helixel-search-repeat-next' and
 `helixel-search-repeat-reverse'."

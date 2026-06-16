@@ -33,7 +33,7 @@ and the jump list (`C-o` / `C-i`).
 | `:dir` | symbol | Direction for `n`/`N` repeat: `forward`, `backward` |
 | `:params` | list | Function parameter list, e.g. `(&optional count)` |
 | `:clear-highlights` | boolean | Clear search highlights before executing. Default `t` for `:category movement`, `nil` otherwise. |
-| `:tx-runner` | function `(TX) -> nil` | Replay-time pre-hook.  Stored as a `:pre-replay-fn` payload entry on the live action's tx; `helixel-tx-replay` calls it BEFORE the main runner (at the real cursor on `.`-repeat, at fake cursors during mc dispatch, etc.).  For movement commands (no body record-action), the pre-replay-fn is the entire replay payload — the tx has nil op so `.` ignores it, but mc still replays at fakes.  For insert-entry commands, the prepos survives the later insert-text tx via payload preservation in `helixel--record-action`. |
+| `:tx-runner` | function `(TX) -> nil` | Replay-time pre-hook.  Stored as the `:preposition` slot on the live action; `helixel-action-replay` calls it BEFORE the main runner (at the real cursor on `.`-repeat, at fake cursors during mc dispatch, etc.).  For movement commands (no body record-action), the preposition is the entire replay payload — the action has nil op so `.` ignores it, but mc still replays at fakes.  For insert-entry commands, the prepos survives the later insert-text tx via payload preservation in `helixel--record-action`. |
 
 ### Auto-Injected Behavior
 
@@ -142,18 +142,18 @@ replay it.  This is a data-only registration — no command is defined.
 ```elisp
 (helixel-register-op replace-char :moves-point-p nil
   :display (lambda (tx)
-             (let ((c (helixel-tx-char tx)))
+             (let ((c (helixel-action-char tx)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
-            (helixel-replace-char (helixel-tx-char tx))))
+            (helixel-replace-char (helixel-action-char tx))))
 ```
 
 Prefer the convenience accessors in `helixel-core.el`
-(`helixel-tx-char` / `helixel-tx-type` / `helixel-tx-dir` for
+(`helixel-action-char` / `helixel-action-type` / `helixel-action-dir` for
 find-char + replace-char + surround; `helixel-sel-field` for
-ctx-key lookups; `helixel-action-payload-get' for arbitrary payload
+ctx-key lookups; `helixel-action-payload-get` for arbitrary payload
 keys) over raw `plist-get` on the payload — the accessors document
-intent and stay consistent with the `helixel-sel-{kind}-{key}'
+intent and stay consistent with the `helixel-sel-{kind}-{key}`
 family.
 
 **No corresponding interactive command:**
@@ -177,10 +177,10 @@ family.
 ```elisp
 (helixel-register-op surround-add
   :display (lambda (tx)
-             (let ((c (helixel-tx-char tx)))
+             (let ((c (helixel-action-char tx)))
                (if c (format "ms[%c]" c) "ms")))
   :runner (lambda (tx)
-            (when-let* ((char (helixel-tx-char tx))
+            (when-let* ((char (helixel-action-char tx))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (car pair) (cdr pair)))))
 ```

@@ -90,9 +90,9 @@ Always transition to a truthy value.
 (message "REGION: active=%S beg=%d end=%d"
          (use-region-p) (region-beginning) (region-end))
 
-;; What's in the edit transaction?
-(message "TX: op=%S sel=%S payload=%S"
-         (helixel-edit-op tx) (helixel-edit-sel tx) (helixel-edit-payload tx))
+;; What's in the action?
+(message "ACTION: op=%S sel=%S char=%S"
+         (helixel-action-op tx) (helixel-action-sel tx) (helixel-action-char tx))
 ```
 
 ## Debugging the Recording Path (insert-mode)

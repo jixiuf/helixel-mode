@@ -26,64 +26,64 @@ Or manually:
   (require 'helixel)
   (helixel-mode)
 #+end_src
+You may try helixel by running:
+#+begin_src sh
+make run
+# or
+emacs -Q -L . -l helixel.el --eval '(helixel-mode)'
+#+end_src
 
 Requires Emacs >= 29.1.
 
 ** Quick Setup
 
-The three settings most users change:
+Some settings most users change:
 
 #+begin_src elisp
-  ;; Cursor: bar in insert, box in normal (default)
-  (setq helixel-mode-cursor-color "#ff8f00")
-
   ;; Enable PCRE-style regexp in search (/ and ?) via pcre2el
+  ;; You need install the optional pcre2el
   (setq helixel-search-pcre t)
-
-  ;; Add mode-specific keybindings
-  (helixel-define-key 'normal "SPC f" #'find-file)
 #+end_src
 
-See ~M-x customize-group RET helixel RET~ for all 26 options.
+See ~M-x customize-group RET helixel RET~ for all options.
 
 ** Usage
 
-| Key                     | Action                                                                                                                                                                                                                                                                        |
-|-------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| ~h~ ~j~ ~k~ ~l~         | Move                                                                                                                                                                                                                                                                          |
-| ~w~ ~b~ ~e~             | Word forward / back / end                                                                                                                                                                                                                                                     |
-| ~W~ ~B~ ~E~             | WORD forward / back / end                                                                                                                                                                                                                                                     |
-| ~f~ ~t~ ~F~ ~T~         | Find char                                                                                                                                                                                                                                                                     |
-| ~m i~ ~m a~             | Text objects (word, symbol, sentence, paragraph, pairs, quotes, tags)                                                                                                                                                                                                         |
-| ~m s~ ~m t~             | Surround add / add tag                                                                                                                                                                                                                                                        |
-| ~m d~ ~m r~             | Surround delete / replace                                                                                                                                                                                                                                                     |
-| ~;~                     | Action cycle: first press selects the full span, subsequent presses cycle older events                                                                                                                                                                                        |
-| ~C-;~                   | Jump cycle: push mark to original pre-motion cursor position, cycle events                                                                                                                                                                                                    |
-| ~C-o~ ~C-i~             | Jump to older / newer position (global, cross-buffer)                                                                                                                                                                                                                         |
-| ~,~                     | Repeat last motion (f, t, %, [, ], {, })                                                                                                                                                                                                                                      |
-| ~n~ ~N~                 | Repeat / reverse direction repeat (~C-u n~ pick from history)                                                                                                                                                                                                                 |
-| ~.~                     | Repeat last edit. Prefixes: ~3.~ = 3 times; ~0.~ = all remaining; ~C-u .~ = entire buffer; ~C-u - 3 .~ = 3 times reversed. Works for all selection kinds (line, search, movement w/e/b, textobj, find-char). ~M-x helixel-repeat-edit-pick~ chooses from the per-buffer ring. |
-| ~M-.~                   | Repeat last selection without editing (same prefix behavior as ~.~).                                                                                                                                                                                                          |
-| ~g.~                    | Repeat by picking from history                                                                                                                                                                                                                                                |
-| ~i~ ~a~ ~I~ ~A~ ~o~ ~O~ | Enter insert mode                                                                                                                                                                                                                                                             |
-| ~v~                     | Enter visual mode                                                                                                                                                                                                                                                             |
-| ~d~ ~c~ ~y~ ~r~ ~R~     | Edit: delete, change, copy, replace, replace-char                                                                                                                                                                                                                             |
-| ~S~                     | Swap regions (see [[Swap]])                                                                                                                                                                                                                                                       |
-| ~p~ ~P~                 | Paste after / before; pasted text tracked for ~;~ / ~C-;~ re-select                                                                                                                                                                                                           |
-| ~<~ ~>~                 | Indent left / right                                                                                                                                                                                                                                                           |
-| ~u~ ~U~                 | Undo / redo                                                                                                                                                                                                                                                                   |
-| ~x~                     | Select current line                                                                                                                                                                                                                                                           |
-| ~g~                     | Goto prefix                                                                                                                                                                                                                                                                   |
-| ~SPC~                   | Space prefix (LSP / project)                                                                                                                                                                                                                                                  |
-| ~C-w~                   | Window prefix                                                                                                                                                                                                                                                                 |
-| ~m~                     | Text-object prefix (~mi~ inner, ~ma~ outer, ~mh~ whole buffer, surround ~ms~/~mt~/~md~/~mr~)                                                                                                                                                                                  |
-| ~[~ / ~]~ / ~{~ / ~}~   | Pair & structure movement prefixes (see below)                                                                                                                                                                                                                                |
-| ~s~                     | Multi-cursor prefix                                                                                                                                                                                                                                                           |
-| ~;~                     | Action cycle (mark-thing) — see [[Action cycle / Jump cycle]]                                                                                                                                                                                                                     |
-| ~C-;~                   | Jump cycle (original position) — see [[Action cycle / Jump cycle]]                                                                                                                                                                                                                |
-| ~%~                     | Jump to matching bracket                                                                                                                                                                                                                                                      |
-| ~:~                     | ex commands                                                                                                                                                                                                                                                                   |
-| ~ESC~                   | Normal mode                                                                                                                                                                                                                                                                   |
+| Key                     | Action                                                                                                                                                                                                       |
+|-------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ~h~ ~j~ ~k~ ~l~         | Move                                                                                                                                                                                                         |
+| ~w~ ~b~ ~e~             | Word forward / back / end                                                                                                                                                                                    |
+| ~W~ ~B~ ~E~             | WORD forward / back / end                                                                                                                                                                                    |
+| ~x~                     | Select current line                                                                                                                                                                                          |
+| ~.~                     | Repeat last edit. Prefixes: ~3.~ = 3 times; ~0.~ = all remaining; ~C-u .~ = entire buffer; ~C-u - 3 .~ = 3 times reversed. Works for all selection kinds (line, search, movement w/e/b, textobj, find-char). |
+| ~M-.~                   | Repeat last selection without editing (same prefix behavior as ~.~), this is a preview of ~.~                                                                                                                |
+| ~g.~                    | Repeat by picking from history                                                                                                                                                                               |
+| ~i~ ~a~ ~I~ ~A~ ~o~ ~O~ | Enter insert mode                                                                                                                                                                                            |
+| ~v~                     | Enter visual mode                                                                                                                                                                                            |
+| ~d~ ~c~ ~y~ ~r~ ~R~     | Edit: delete, change, copy, replace, replace-char                                                                                                                                                            |
+| ~S~                     | Swap regions (see [[#swap][Swap]])                                                                                                                                                                                      |
+| ~p~ ~P~                 | Paste after / before; pasted text tracked for ~;~ / ~C-;~ re-select                                                                                                                                          |
+| ~<~ ~>~                 | Indent left / right:  you can repeat next lines by ~.~ :x4> ....                                                                                                                                             |
+| ~u~ ~U~                 | Undo / redo                                                                                                                                                                                                  |
+| ~f~ ~t~ ~F~ ~T~         | Find char                                                                                                                                                                                                    |
+| ~/~ ~?~                 | Search by regexp(toggle regexp by M-r)                                                                                                                                                                       |
+| ~n~ ~N~                 | Repeat (support repeat of search and find char) / reverse direction repeat (~C-u n~ pick from history)                                                                                                   |
+| ~,~                     | Repeat last motion (f, t, /, ?, %, [, ], {, })                                                                                                                                                               |
+| ~;~                     | Action cycle (mark-thing) — see [[#action-cycle--and-jump-cycle-c-][Action cycle / Jump cycle]]                                                                                                                                                    |
+| ~C-;~                   | Jump cycle (original position) — see [[#action-cycle--and-jump-cycle-c-][Action cycle / Jump cycle]]                                                                                                                                               |
+| ~C-o~ ~C-i~             | Jump to older / newer position (global, cross-buffer)                                                                                                                                                        |
+| ~%~                     | Jump to matching bracket , try ~,~ and ~;~ after ~%~                                                                                                                                                         |
+| ~:~                     | ex commands                                                                                                                                                                                                  |
+| ~ESC~                   | Normal mode                                                                                                                                                                                                  |
+| ~g~                     | Goto prefix                                                                                                                                                                                                  |
+| ~SPC~                   | Space prefix (LSP / project)                                                                                                                                                                                 |
+| ~C-w~                   | Window prefix                                                                                                                                                                                                |
+| ~m~                     | Text-object prefix (~mi~ inner, ~ma~ outer, ~mh~ whole buffer, surround ~ms~/~mt~/~md~/~mr~)                                                                                                                 |
+| ~mi~ ~ma~               | Text objects (word, symbol, sentence, paragraph, pairs, quotes, tags)                                                                                                                                        |
+| ~ms~ ~mt~               | Surround add / add tag                                                                                                                                                                                       |
+| ~md~ ~mr~               | Surround delete / replace                                                                                                                                                                                    |
+| ~[~ / ~]~ / ~{~ / ~}~   | Pair & structure movement prefixes (see below)                                                                                                                                                               |
+| ~s~                     | Multi-cursor prefix                                                                                                                                                                                          |
 
 *** States
 
@@ -93,13 +93,161 @@ See ~M-x customize-group RET helixel RET~ for all 26 options.
 | insert | Text input             |
 | visual | Selection mode         |
 | motion | Read-only navigation   |
+*** Action cycle (~;~) and Jump cycle (~C-;~)
+
+~;~ and ~C-;~ navigate the event history ring (=helixel--action-ring=).
+Both commands visit the same events but differ in what they mark:
+
+- ~;~ (action cycle): The first press after a movement *selects the full
+  span* (mark-thing) — the region from the far edge of the thing to point.
+  Subsequent presses cycle to older events, pushing mark to the event start.
+- ~C-;~ (jump cycle): *Every press pushes mark to the original pre-motion
+  cursor position* (start-point).  It never selects the full span.
+  Subsequent presses cycle to older events.
+
+Both commands share the same grouping logic: consecutive movements of the
+same kind (e.g. ~ww~) form a group, and the cycle shows the group-start.
+They maintain independent cycle positions, so pressing ~;~ a few times
+does not affect where ~C-;~ will start.
+
+| Key                 | Behavior                                                              |
+|---------------------+-----------------------------------------------------------------------|
+| ~;~                 | Set mark to start of current session (push live → ring, show ring[0]) |
+| ~;~ again           | Set mark to older session start                                       |
+| ~;~ again           | Set mark further back ...                                             |
+| ~C-u ;~             | Set mark to newer session start                                       |
+| ~C-u ;~ (at newest) | Restore live session mark                                             |
+
+After ~p~ / ~P~ / ~r~ / ~M-y~, the pasted or replaced text bounds are
+stored in the event's =:mark-region=.  The first ~;~ after a paste or
+replace jumps back to the edit spot and marks the full span of the
+pasted/replaced text, just like after a word or pair movement.
+Subsequent ~;~ presses cycle through older session starts as usual.
+Note: the default =helixel-action-cycle-categories= includes only the
+paste/replace/yank-pop edit subcats; kill, change and others are
+excluded by default (add = (edit . kill)= etc. to include them).
+
+*Session types* (pressing ~;~ sets mark to independent start positions):
+
+| Category          | Session type          | Keys                                            |
+|-------------------+-----------------------+-------------------------------------------------|
+| char              | =movement-char=       | ~h~ ~l~                                         |
+| line              | =movement-line=       | ~j~ ~k~                                         |
+| word              | =movement-word=       | ~w~ ~e~ ~b~                                     |
+| WORD              | =movement-WORD=       | ~W~ ~E~ ~B~                                     |
+| symbol            | =movement-symbol=     | (unbound)                                       |
+| goto              | =movement-goto=       | ~g~ prefix, ~G~                                 |
+| scroll            | =movement-scroll=     | ~C-f~ ~C-b~                                     |
+| line select       | =movement-lineselect= | ~x~ ~X~                                         |
+| textobj-word      | =textobj-word=        | ~miw~ ~maw~                                     |
+| textobj-WORD      | =textobj-WORD=        | ~miW~ ~maW~                                     |
+| textobj-symbol    | =textobj-symbol=      | ~mio~ ~mao~                                     |
+| textobj-sentence  | =textobj-sentence=    | ~mis~ ~mas~                                     |
+| textobj-paragraph | =textobj-paragraph=   | ~mip~ ~map~                                     |
+| textobj-pair      | =textobj-pair=        | ~mi(~ ~ma(~ ~mi[~ ~ma[~ ~mi{~ ~ma{~ ~mi<~ ~ma<~ |
+| textobj-quote     | =textobj-quote=       | ~mi"~ ~ma"~ ~mi'~ ~ma'~ ~mi`~ ~ma`~             |
+| textobj-tag       | =textobj-tag=         | ~mit~ ~mat~                                     |
+| search            | =search=              | ~/~ ~?~ ~*~ ~#~ then ~n~/~N~                    |
+| find-char         | =find-char=           | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~,~                |
+| movement          | =pair= =match=        | ~%~ ~[~p ~]~p then ~,~                          |
+| edit-paste        | =edit-paste-after=    | ~p~ ~P~ — ~;~ re-selects pasted text            |
+| edit-replace      | =edit-replace=        | ~r~ — ~;~ re-selects replaced text              |
+
+~C-g~ cancels the current session — the next command starts a fresh session
+even if the type matches. The cancelled session is preserved in the ring for
+~;~ to jump back to.
+
+*Example 1* — Buffer ="hello world"=, cursor at =hel|lo= (position 4):
+- Press ~ww~ — two word-forward movements, point lands at buffer end.
+- Press ~;~ — selects the full span: ="hello world"= (1..12).
+- Press ~C-;~ instead — selects ="lo world"= (4..12), from the original
+  cursor position to the end of the last word.
+
+*Example 2*:
+
+#+begin_example
+  w w         move forward two words
+  ;           mark start of this w w session
+
+  j j         move down two lines
+  ;           mark start of j j (NOT the w w start!)
+  ;           again: mark start of w w
+  C-u ;       back to j j mark
+
+  f x         find char "x"
+  n           next "x"
+  n           next "x"
+  ;           mark start of this find session
+
+  ;           again: older session ...
+
+  w w         move two words (same session, shared start position)
+  C-g         cancel session — next command starts fresh
+  w           new session, new start position
+  ;           mark start of this new w
+  ;           again: mark start of the old w w
+#+end_example
+
+Both ~;~ and ~C-;~ accept a ~C-u~ prefix to go forward (newer) instead
+of backward.
+
+*** Jump Navigation (~C-o~ / ~C-i~)
+
+~C-o~ jumps to older positions in the global jump list, ~C-i~ jumps to newer
+ones.  Unlike ~;~ which only sets the *mark*, jump commands *move point* and
+support *cross-buffer* navigation.
+
+Every action recorded for ~;~ (movement, search, find-char, textobj, edit) is
+also recorded in the jump list.  The same session types and group-skipping
+logic apply.
+
+| Key               | Behavior                                                           |
+|-------------------+--------------------------------------------------------------------|
+| ~C-o~             | Jump to the previous (older) position, switching buffers if needed |
+| ~C-i~             | Jump to the next (newer) position                                  |
+| ~C-o~ (at oldest) | "At oldest" — no more positions                                    |
+| ~C-i~ (at newest) | "At newest" — no more positions                                    |
+
+Cross-buffer: when a jump takes you to a different buffer, a return point is
+automatically recorded so ~C-i~ brings you back.
+
+**** Registering jump commands
+
+External commands like =xref-find-definitions= (~g d~) automatically register
+their start position via advice.  To register your own commands:
+
+#+begin_src elisp
+  ;; Method 1: one line — adds :before advice
+  (helixel-define-jump-command 'my-goto-command)
+
+  ;; Method 2: call from inside your command body
+  (defun my-command ()
+    (interactive)
+    (helixel-register-jump 'goto 'my-cmd)
+    ...)
+#+end_src
+
+**** Configuration
+
+#+begin_src elisp
+  ;; Max entries in the global jump list (default 100)
+  (setq helixel-jump-log-max 200)
+
+  ;; Categories that are recorded (default: all)
+  (setq helixel-jump-categories '(movement search find-char edit goto))
+
+  ;; Categories visible during C-o / C-i cycling (default: same as above)
+  ;; Narrow this to exclude basic movements for a tighter jumplist:
+  (setq helixel-jump-cycle-categories '(search find-char edit goto))
+#+end_src
+
 
 *** Text Objects
 
 ~m i~ (inner) and ~m a~ (a / around) select text objects.  Supports
 word (~w~), WORD (~W~), symbol (~o~), sentence (~s~), paragraph (~p~),
 pairs (~(~ ~[~ ~{~ ~<~), quotes (~"~ ~'~ ~`~), tags (~t~),
-function (~f~), and block (~c~).
+function (~f~), and code block (~c~).
 
 *Region-aware selection* — in normal mode when a region is already
 active, the first press selects the text object *within the highlighted
@@ -139,22 +287,26 @@ Define a new thing-based text object (e.g. Go package names
 like =github.com/foo/bar=):
 
 #+begin_src elisp
-  (require 'thingatpt)
+(require 'thingatpt)
 
-  ;; 1. Define the character set for the thing
-  (define-thing-chars gopkg "-/[:alnum:]_.@:*")
+;; 1. Define the character set for the thing
+(define-thing-chars gopkg "-/[:alnum:]_.@:*")
 
-  ;; 2. Set forward-op so forward-thing knows how to move
-  (put 'gopkg 'forward-op
-       (lambda (&optional count)
-         (helixel-forward-chars "-/[:alnum:]_.@:*" count)))
+;; 2. Set forward-op so forward-thing knows how to move
+(put 'gopkg 'forward-op
+     (lambda (&optional count)
+       (helixel-forward-chars "-/[:alnum:]_.@:*" count)))
 
-  ;; 3. Define inner / a text-object commands
-  (helixel-define-mark-object "gopkg" 'gopkg "gopkg" 'gopkg t)
+;; 3. Define inner / a text-object commands
+(helixel-define-mark-object "gopkg" 'gopkg "gopkg" 'gopkg t)
 
-  ;; 4. Bind to a key (replaces the default paragraph binding)
-  (define-key helixel-textobj-inner-map "p" #'helixel-mark-inner-gopkg)
-  (define-key helixel-textobj-outer-map "p" #'helixel-mark-a-gopkg)
+;; 4. Bind to a key (replaces the default paragraph binding)
+(helixel-define-key 'textobj-inner "y"    #'helixel-mark-inner-gopkg)
+(helixel-define-key 'textobj-outer "y"    #'helixel-mark-a-gopkg)
+;; or only for go-mode
+(helixel-define-key 'textobj-inner "y"    #'helixel-mark-inner-gopkg 'go-mode)
+(helixel-define-key 'textobj-outer "y"    #'helixel-mark-a-gopkg 'go-mode)
+
 #+end_src
 
 ~mi p~ now selects the inner Go package path at point;
@@ -166,32 +318,25 @@ Define text objects delimited by arbitrary regexp patterns — useful for
 org blocks, markdown fences, LaTeX environments, etc.:
 
 #+begin_src elisp
-  ;; Org mode #+begin_src / #+end_src blocks (match by name group)
-  (helixel-define-regex-textobj org-block
-    "^#\\+begin_\\([^ \n\r]+\\)[^\n]*"
-    "^#\\+end_\\([^ \n\r]+\\)[^\n]*" 1 'block)
+;; Org mode #+begin_src / #+end_src blocks (match by name group)
+(helixel-define-regex-textobj org-block
+  "^#\\+begin_\\([^ \n\r]+\\)[^\n]*"
+  "^#\\+end_\\([^ \n\r]+\\)[^\n]*" 1 'block)
 
-  ;; Global binding (all modes)
-  (define-key helixel-textobj-inner-map "o" #'helixel-mark-inner-org-block)
-  (define-key helixel-textobj-outer-map "o" #'helixel-mark-a-org-block)
+;; Or mode-specific (org-mode only):
+(helixel-define-key 'textobj-inner "o"    #'helixel-mark-inner-org-block 'org-mode)
+(helixel-define-key 'textobj-outer "o"    #'helixel-mark-a-org-block 'org-mode)
 
-  ;; Or mode-specific (org-mode only):
-  (helixel-define-key 'textobj-inner "o"
-    #'helixel-mark-inner-org-block 'org-mode)
-  (helixel-define-key 'textobj-outer "o"
-    #'helixel-mark-a-org-block 'org-mode)
+;; Markdown ``` fences (counter-based: name-group nil)
+(helixel-define-regex-textobj md-fence  "^```[^\n]*$" "^```[ \t]*$" nil 'block)
+(helixel-define-key 'textobj-inner "o"    #'helixel-mark-inner-md-fence)
+(helixel-define-key 'textobj-outer "o"    #'helixel-mark-a-md-fence)
 
-  ;; Markdown ``` fences (counter-based: name-group nil)
-  (helixel-define-regex-textobj md-fence
-    "^```[^\n]*$" "^```[ \t]*$" nil 'block)
-  (define-key helixel-textobj-inner-map "`" #'helixel-mark-inner-md-fence)
-  (define-key helixel-textobj-outer-map "`" #'helixel-mark-a-md-fence)
-
-  ;; LaTeX \\begin{env} / \\end{env} (capture group 1 = environment name)
-  (helixel-define-regex-textobj latex-env
-    "\\\\begin{\\([^}]+\\)}" "\\\\end{\\([^}]+\\)}" 1 'block)
-  (define-key helixel-textobj-inner-map "e" #'helixel-mark-inner-latex-env)
-  (define-key helixel-textobj-outer-map "e" #'helixel-mark-a-latex-env)
+;; LaTeX \\begin{env} / \\end{env} (capture group 1 = environment name)
+(helixel-define-regex-textobj latex-env
+  "\\\\begin{\\([^}]+\\)}" "\\\\end{\\([^}]+\\)}" 1 'block)
+(define-key helixel-textobj-inner-map "e" #'helixel-mark-inner-latex-env)
+(define-key helixel-textobj-outer-map "e" #'helixel-mark-a-latex-env)
 #+end_src
 
 Arguments: ~(NAME BEGIN-RE END-RE &optional NAME-GROUP SUBCAT)~.
@@ -203,7 +348,7 @@ Arguments: ~(NAME BEGIN-RE END-RE &optional NAME-GROUP SUBCAT)~.
 
 *** Tree-sitter Text Objects
 
-Requires [[https://github.com/meain/evil-textobj-tree-sitter][evil-textobj-tree-sitter]]
+Requires [[https://github.com/meain/evil-textobj-tree-sitter][evil-textobj-tree-sitter]] (it does NOT depends on evil-mode)
 as a soft dependency.  If installed, you can define syntax-aware text objects
 (function, class, loop, conditional, parameter, comment, etc.):
 
@@ -299,43 +444,6 @@ Structure sub-keys (also on ~[~ / ~]~):
   |           | paste      | p P                      |
   |           | replace    | r                        |
   |           | yank-pop   | M-y                      |
-
-** Action cycle (~;~) and Jump cycle (~C-;~)
-
-~;~ and ~C-;~ navigate the event history ring (=helixel--action-ring=).
-Both commands visit the same events but differ in what they mark:
-
-- ~;~ (action cycle): The first press after a movement *selects the full
-  span* (mark-thing) — the region from the far edge of the thing to point.
-  Subsequent presses cycle to older events, pushing mark to the event start.
-- ~C-;~ (jump cycle): *Every press pushes mark to the original pre-motion
-  cursor position* (start-point).  It never selects the full span.
-  Subsequent presses cycle to older events.
-
-Both commands share the same grouping logic: consecutive movements of the
-same kind (e.g. ~ww~) form a group, and the cycle shows the group-start.
-They maintain independent cycle positions, so pressing ~;~ a few times
-does not affect where ~C-;~ will start.
-
-After ~p~ / ~P~ / ~r~ / ~M-y~, the pasted or replaced text bounds are
-stored in the event's =:mark-region=.  The first ~;~ after a paste or
-replace jumps back to the edit spot and marks the full span of the
-pasted/replaced text, just like after a word or pair movement.
-Subsequent ~;~ presses cycle through older session starts as usual.
-Note: the default =helixel-action-cycle-categories= includes only the
-paste/replace/yank-pop edit subcats; kill, change and others are
-excluded by default (add = (edit . kill)= etc. to include them).
-
-*Example:* Buffer ="hello world"=, cursor at =hel|lo= (position 4).
-- Press ~ww~ — two word-forward movements, point lands at buffer end.
-- Press ~;~ — selects the full span: ="hello world"= (1..12).
-- Press ~C-;~ instead — selects ="lo world"= (4..12), from the original
-  cursor position to the end of the last word.
-
-Both ~;~ and ~C-;~ accept a ~C-u~ prefix to go forward (newer) instead
-of backward.
-
-- ~%~ — jump to matching bracket/paren/quote/tag/block.
 
 *** Search & Repeat
 
@@ -739,125 +847,6 @@ and ~.~ replays in-place.
   ESC           end chain
   .             next "x" match: delete up to it
 #+end_example
-
-*** Session Mark (~;~)
-
-~;~ sets the mark at where a movement sequence started. Point stays
-in place — the region shows where you came from. Same-type movements
-share a session; different types start new ones.
-
-| Key                 | Behavior                                                              |
-|---------------------+-----------------------------------------------------------------------|
-| ~;~                 | Set mark to start of current session (push live → ring, show ring[0]) |
-| ~;~ again           | Set mark to older session start                                       |
-| ~;~ again           | Set mark further back ...                                             |
-| ~C-u ;~             | Set mark to newer session start                                       |
-| ~C-u ;~ (at newest) | Restore live session mark                                             |
-
-*Session types* (pressing ~;~ sets mark to independent start positions):
-
-| Category          | Session type          | Keys                                            |
-|-------------------+-----------------------+-------------------------------------------------|
-| char              | =movement-char=       | ~h~ ~l~                                         |
-| line              | =movement-line=       | ~j~ ~k~                                         |
-| word              | =movement-word=       | ~w~ ~e~ ~b~                                     |
-| WORD              | =movement-WORD=       | ~W~ ~E~ ~B~                                     |
-| symbol            | =movement-symbol=     | (unbound)                                       |
-| goto              | =movement-goto=       | ~g~ prefix, ~G~                                 |
-| scroll            | =movement-scroll=     | ~C-f~ ~C-b~                                     |
-| line select       | =movement-lineselect= | ~x~ ~X~                                         |
-| textobj-word      | =textobj-word=        | ~miw~ ~maw~                                     |
-| textobj-WORD      | =textobj-WORD=        | ~miW~ ~maW~                                     |
-| textobj-symbol    | =textobj-symbol=      | ~mio~ ~mao~                                     |
-| textobj-sentence  | =textobj-sentence=    | ~mis~ ~mas~                                     |
-| textobj-paragraph | =textobj-paragraph=   | ~mip~ ~map~                                     |
-| textobj-pair      | =textobj-pair=        | ~mi(~ ~ma(~ ~mi[~ ~ma[~ ~mi{~ ~ma{~ ~mi<~ ~ma<~ |
-| textobj-quote     | =textobj-quote=       | ~mi"~ ~ma"~ ~mi'~ ~ma'~ ~mi`~ ~ma`~             |
-| textobj-tag       | =textobj-tag=         | ~mit~ ~mat~                                     |
-| search            | =search=              | ~/~ ~?~ ~*~ ~#~ then ~n~/~N~                    |
-| find-char         | =find-char=           | ~f~ ~F~ ~t~ ~T~ then ~n~/~N~/~,~                |
-| movement          | =pair= =match=        | ~%~ ~[~p ~]~p then ~,~                          |
-| edit-paste        | =edit-paste-after=    | ~p~ ~P~ — ~;~ re-selects pasted text            |
-| edit-replace      | =edit-replace=        | ~r~ — ~;~ re-selects replaced text              |
-
-~C-g~ cancels the current session — the next command starts a fresh session
-even if the type matches. The cancelled session is preserved in the ring for
-~;~ to jump back to.
-
-Examples:
-
-#+begin_example
-  w w         move forward two words
-  ;           mark start of this w w session
-
-  j j         move down two lines
-  ;           mark start of j j (NOT the w w start!)
-  ;           again: mark start of w w
-  C-u ;       back to j j mark
-
-  f x         find char "x"
-  n           next "x"
-  n           next "x"
-  ;           mark start of this find session
-
-  ;           again: older session ...
-
-  w w         move two words (same session, shared start position)
-  C-g         cancel session — next command starts fresh
-  w           new session, new start position
-  ;           mark start of this new w
-  ;           again: mark start of the old w w
-#+end_example
-
-*** Jump Navigation (~C-o~ / ~C-i~)
-
-~C-o~ jumps to older positions in the global jump list, ~C-i~ jumps to newer
-ones.  Unlike ~;~ which only sets the mark, jump commands *move point* and
-support *cross-buffer* navigation.
-
-Every action recorded for ~;~ (movement, search, find-char, textobj, edit) is
-also recorded in the jump list.  The same session types and group-skipping
-logic apply.
-
-| Key               | Behavior                                                           |
-|-------------------+--------------------------------------------------------------------|
-| ~C-o~             | Jump to the previous (older) position, switching buffers if needed |
-| ~C-i~             | Jump to the next (newer) position                                  |
-| ~C-o~ (at oldest) | "At oldest" — no more positions                                    |
-| ~C-i~ (at newest) | "At newest" — no more positions                                    |
-
-Cross-buffer: when a jump takes you to a different buffer, a return point is
-automatically recorded so ~C-i~ brings you back.
-
-**** Registering jump commands
-
-External commands like =xref-find-definitions= (~g d~) automatically register
-their start position via advice.  To register your own commands:
-
-#+begin_src elisp
-  ;; Method 1: one line — adds :before advice
-  (helixel-define-jump-command 'my-goto-command)
-
-  ;; Method 2: call from inside your command body
-  (defun my-command ()
-    (interactive)
-    (helixel-register-jump 'goto 'my-cmd)
-    ...)
-#+end_src
-
-**** Configuration
-
-#+begin_src elisp
-  ;; Max entries in the global jump list (default 100)
-  (setq helixel-jump-list-max 200)
-
-  ;; Categories that are recorded (default: all)
-  (setq helixel-jump-categories '(movement search find-char edit goto))
-
-  ;; Categories visible during C-o / C-i cycling (default: same as above)
-  ;; Narrow this to exclude basic movements for a tighter jumplist:
-  (setq helixel-jump-cycle-categories '(search find-char edit goto))
-#+end_src
 
 *** Motion Repeat (~,~)
 

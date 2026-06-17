@@ -306,6 +306,7 @@ is not committed by the next command."
     ;; command's tracking-open does not commit a stale entry.
     (when (and helixel--live-action
                (eq (helixel-action-category helixel--live-action) 'search))
+      (helixel-action--release-markers helixel--live-action)
       (setq helixel--live-action nil)))
   (helixel-search--handle-done helixel-search--had-region))
 
@@ -587,6 +588,7 @@ DOC is the docstring."
          (when (and helixel--live-action
                     (eq (helixel-action-category helixel--live-action)
                         'find-char))
+           (helixel-action--release-markers helixel--live-action)
            (setq helixel--live-action nil))))))
 
 (helixel--def-find-char helixel-find-next-char next 1

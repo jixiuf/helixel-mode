@@ -108,6 +108,12 @@ Example:
 (helixel-define-movement helixel-go-first-nonwhitespace
   back-to-indentation goto)
 (helixel-define-movement helixel-go-end-buffer end-of-buffer goto)
+
+;; Reverse-command registrations for \\=`-,' direction flip.
+(helixel-register-motion-reverse 'helixel-backward-char 'helixel-forward-char)
+(helixel-register-motion-reverse 'helixel-forward-char 'helixel-backward-char)
+(helixel-register-motion-reverse 'helixel-next-line 'helixel-previous-line)
+(helixel-register-motion-reverse 'helixel-previous-line 'helixel-next-line)
 (helixel-define-movement helixel-scroll-up-command scroll-up-command scroll
                          :clear-highlights nil)
 (helixel-define-movement helixel-scroll-down-command scroll-down-command scroll
@@ -162,12 +168,15 @@ automatically, so this macro only does `push-mark' + activate."
 ;; :a, helixel-backward-symbol-end uses :inner - preserved verbatim
 ;; from the original definitions).
 
-(defmacro helixel--def-thing-move (name subcat thing fwd-fn sign side)
+(defmacro helixel--def-thing-move (name subcat thing fwd-fn sign side
+                                        &optional reverse-cmd)
   "Define a thing-movement command.
 NAME is the command symbol; SUBCAT the :subcat tag; THING the
 thing category (`helixel-word' / -WORD / -symbol);
 FWD-FN is one of `forward-beginning' / `forward-end' (interned
-relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner."
+relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner.
+Optional REVERSE-CMD is the opposite-direction command for
+\=`-,' permanent flip support."
   (let* ((fn (intern (format "helixel--%s" fwd-fn)))
          (skip-fn (if (> sign 0)
                       'helixel--skip-newline-forward
@@ -176,43 +185,58 @@ relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner."
          ;; Multi-line things like paragraph/sentence/function naturally
          ;; span lines and should not have newlines skipped.
          (single-line-p (memq thing helixel--single-line-things)))
-    `(helixel-define-command ,name
-         (:category movement :subcat ,subcat
-          :params (&optional count))
-       (interactive "p")
-       ;; Skip past a newline before capturing the motion origin,
-       ;; so \n is not treated as a separate word.
-       ,@(when single-line-p `((,skip-fn)))
-       (helixel--with-movement-surround
-        (,fn ',thing (* ,sign (or count 1))))
-       (helixel--set-mark-region ',thing ,side))))
+    `(progn
+       (helixel-define-command ,name
+           (:category movement :subcat ,subcat
+            :params (&optional count))
+         (interactive "p")
+         ;; Skip past a newline before capturing the motion origin,
+         ;; so \n is not treated as a separate word.
+         ,@(when single-line-p `((,skip-fn)))
+         (helixel--with-movement-surround
+          (,fn ',thing (* ,sign (or count 1))))
+         (helixel--set-mark-region ',thing ,side))
+       ,@(when reverse-cmd
+           `((helixel-register-motion-reverse ',name ',reverse-cmd))))))
 
 (helixel--def-thing-move helixel-forward-word-start
-                         word helixel-word forward-beginning  1 :a)
+                         word helixel-word forward-beginning  1 :a
+                         helixel-backward-word-start)
 (helixel--def-thing-move helixel-forward-word-end
-                         word helixel-word forward-end        1 :inner)
+                         word helixel-word forward-end        1 :inner
+                         helixel-backward-word-end)
 (helixel--def-thing-move helixel-backward-word-start
-                         word helixel-word forward-beginning -1 :inner)
+                         word helixel-word forward-beginning -1 :inner
+                         helixel-forward-word-start)
 (helixel--def-thing-move helixel-backward-word-end
-                         word helixel-word forward-end       -1 :a)
+                         word helixel-word forward-end       -1 :a
+                         helixel-forward-word-end)
 
 (helixel--def-thing-move helixel-forward-WORD-start
-                         WORD helixel-WORD forward-beginning  1 :a)
+                         WORD helixel-WORD forward-beginning  1 :a
+                         helixel-backward-WORD)
 (helixel--def-thing-move helixel-forward-WORD-end
-                         WORD helixel-WORD forward-end        1 :inner)
+                         WORD helixel-WORD forward-end        1 :inner
+                         helixel-backward-WORD-end)
 (helixel--def-thing-move helixel-backward-WORD
-                         WORD helixel-WORD forward-beginning -1 :a)
+                         WORD helixel-WORD forward-beginning -1 :a
+                         helixel-forward-WORD-start)
 (helixel--def-thing-move helixel-backward-WORD-end
-                         WORD helixel-WORD forward-end       -1 :inner)
+                         WORD helixel-WORD forward-end       -1 :inner
+                         helixel-forward-WORD-end)
 
 (helixel--def-thing-move helixel-forward-symbol-start
-                         symbol helixel-symbol forward-beginning  1 :a)
+                         symbol helixel-symbol forward-beginning  1 :a
+                         helixel-backward-symbol-start)
 (helixel--def-thing-move helixel-forward-symbol-end
-                         symbol helixel-symbol forward-end        1 :inner)
+                         symbol helixel-symbol forward-end        1 :inner
+                         helixel-backward-symbol-end)
 (helixel--def-thing-move helixel-backward-symbol-start
-                         symbol helixel-symbol forward-beginning -1 :a)
+                         symbol helixel-symbol forward-beginning -1 :a
+                         helixel-forward-symbol-start)
 (helixel--def-thing-move helixel-backward-symbol-end
-                         symbol helixel-symbol forward-end       -1 :inner)
+                         symbol helixel-symbol forward-end       -1 :inner
+                         helixel-forward-symbol-end)
 
 (defmacro helixel--define-delimiter-movement (name outer-p forward-p
                                                    factory &rest factory-args)
@@ -222,9 +246,6 @@ FORWARD-P non-nil → forward-to-end (] }), nil → outward-to-open ([ {).
 FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
   (declare (indent defun))
   (let ((inner-p (not outer-p))
-        (bounds-fn (if forward-p
-                       'helixel--generic-bounds-next
-                     'helixel--generic-bounds-at))
         (delim-open (car factory-args))
         (delim-close (cadr factory-args))
         ;; Determine delimiter type from factory name.
@@ -232,26 +253,63 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
          (cl-case factory
            (helixel--make-pair-delimiter 'pair)
            (helixel--make-tag-delimiter 'tag)
-           (helixel--make-block-delimiter 'regex))))
-    `(helixel-define-command ,name
+           (helixel--make-block-delimiter 'regex)))
+        ;; Reverse command: inner↔inner, outer↔outer; forward↔backward.
+        ;; The caller DOES NOT pass reverse-cmd explicitly — we derive it
+        ;; by convention: command names swap "outer"/"next-*-end" and
+        ;; "inner-outer"/"inner-next-*-end".
+        (reverse-name
+         (let ((n (symbol-name name)))
+           (intern
+            (cond
+             ((string-match "\\`helixel-outer-\\(.*\\)\\'" n)
+              (concat "helixel-next-" (match-string 1 n) "-end"))
+             ((string-match "\\`helixel-next-\\(.*\\)-end\\'" n)
+              (concat "helixel-outer-" (match-string 1 n)))
+             ((string-match "\\`helixel-inner-outer-\\(.*\\)\\'" n)
+              (concat "helixel-inner-next-" (match-string 1 n) "-end"))
+             ((string-match "\\`helixel-inner-next-\\(.*\\)-end\\'" n)
+              (concat "helixel-inner-outer-" (match-string 1 n)))
+             (t (error "Cannot derive reverse for %s" name)))))))
+    `(progn
+       (helixel-define-command ,name
            (:category movement :subcat pair :clear-highlights nil
+            :params (&optional count)
             :motion-extra (list :delim-open ,delim-open
                                 :delim-close ,delim-close
                                 :delim-type ',delim-type
                                 :delim-inner-p ,inner-p
                                 :delim-forward-p ,forward-p))
-         (interactive)
-         (when (and helixel--pending-sel
-                    (not (eq (helixel-sel-kind helixel--pending-sel)
-                             'movement)))
-           (setq helixel--pending-sel nil))
-         (deactivate-mark)
-         (let* ((d (,factory ,@factory-args))
-                (b (,bounds-fn d ,inner-p)))
-           (when b
-             (helixel--set-mark-region b)
-             (let ((pos (if ,forward-p (cdr b) (car b))))
-               (goto-char pos)))))))
+         (interactive "p")
+         (let* ((n (abs (or count 1)))
+                (flipped (< (or count 1) 0))
+                (eff-forward-p (if flipped (not ,forward-p) ,forward-p))
+                (eff-inner-p ,inner-p)
+                (eff-bounds-fn (if eff-forward-p
+                                   'helixel--generic-bounds-next
+                                 'helixel--generic-bounds-at))
+                (eff-motion-extra (list :delim-open ,delim-open
+                                        :delim-close ,delim-close
+                                        :delim-type ',delim-type
+                                        :delim-inner-p eff-inner-p
+                                        :delim-forward-p eff-forward-p)))
+           (when (and helixel--pending-sel
+                      (not (eq (helixel-sel-kind helixel--pending-sel)
+                               'movement)))
+             (setq helixel--pending-sel nil))
+           (deactivate-mark)
+           ;; Override the motion-extra recorded by
+           ;; helixel-define-command with our flipped version
+           ;; so \\=`,' and \\=`;' see the actual direction used.
+           (setq helixel--motion-extra eff-motion-extra)
+           (dotimes (_ n)
+             (let* ((d (,factory ,@factory-args))
+                    (b (funcall eff-bounds-fn d eff-inner-p)))
+               (when b
+                 (helixel--set-mark-region b)
+                 (let ((pos (if eff-forward-p (cdr b) (car b))))
+                   (goto-char pos)))))))
+       (helixel-register-motion-reverse ',name ',reverse-name))))
 
 ;; ── Pair delimiters (parens, brackets, braces, angle, quotes) ──
 
@@ -347,31 +405,43 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
 ;; All twelve commands here use :side :a (verbatim from originals).
 
 (helixel--def-thing-move helixel-forward-paragraph-start
-                         paragraph helixel-paragraph forward-beginning  1 :a)
+                         paragraph helixel-paragraph forward-beginning  1 :a
+                         helixel-backward-paragraph-start)
 (helixel--def-thing-move helixel-backward-paragraph-start
-                         paragraph helixel-paragraph forward-beginning -1 :a)
+                         paragraph helixel-paragraph forward-beginning -1 :a
+                         helixel-forward-paragraph-start)
 (helixel--def-thing-move helixel-forward-paragraph-end
-                         paragraph helixel-paragraph forward-end        1 :a)
+                         paragraph helixel-paragraph forward-end        1 :a
+                         helixel-backward-paragraph-end)
 (helixel--def-thing-move helixel-backward-paragraph-end
-                         paragraph helixel-paragraph forward-end       -1 :a)
+                         paragraph helixel-paragraph forward-end       -1 :a
+                         helixel-forward-paragraph-end)
 
 (helixel--def-thing-move helixel-forward-sentence-end
-                         sentence helixel-sentence forward-end          1 :a)
+                         sentence helixel-sentence forward-end          1 :a
+                         helixel-backward-sentence-end)
 (helixel--def-thing-move helixel-backward-sentence-start
-                         sentence helixel-sentence forward-beginning   -1 :a)
+                         sentence helixel-sentence forward-beginning   -1 :a
+                         helixel-forward-sentence-start)
 (helixel--def-thing-move helixel-forward-sentence-start
-                         sentence helixel-sentence forward-beginning    1 :a)
+                         sentence helixel-sentence forward-beginning    1 :a
+                         helixel-backward-sentence-start)
 (helixel--def-thing-move helixel-backward-sentence-end
-                         sentence helixel-sentence forward-end         -1 :a)
+                         sentence helixel-sentence forward-end         -1 :a
+                         helixel-forward-sentence-end)
 
 (helixel--def-thing-move helixel-forward-function-end
-                         function helixel-function forward-end          1 :a)
+                         function helixel-function forward-end          1 :a
+                         helixel-backward-function-end)
 (helixel--def-thing-move helixel-backward-function-start
-                         function helixel-function forward-beginning   -1 :a)
+                         function helixel-function forward-beginning   -1 :a
+                         helixel-forward-function-start)
 (helixel--def-thing-move helixel-forward-function-start
-                         function helixel-function forward-beginning    1 :a)
+                         function helixel-function forward-beginning    1 :a
+                         helixel-backward-function-start)
 (helixel--def-thing-move helixel-backward-function-end
-                         function helixel-function forward-end         -1 :a)
+                         function helixel-function forward-end         -1 :a
+                         helixel-forward-function-end)
 
 (defun helixel--jump-target-for-delimiter (d orig &optional no-close-backoff
                                                 mark-thing)
@@ -909,13 +979,16 @@ then re-invokes the original command with the recorded prefix arg.
 On user-error restores point to before skip-past so a failing
 \=`,`\=' doesn't leave the cursor stranded."
   (let* ((cmd (helixel--last-motion-command rec))
-         (orig (point)))
+         (orig (point))
+         (effective-cmd (if helixel--motion-permanent-flip
+                            (or (helixel--motion-reverse-lookup cmd) cmd)
+                          cmd)))
     (helixel--motion-skip-past rec)
-    (unless (commandp cmd)
+    (unless (commandp effective-cmd)
       (user-error "No motion command to repeat"))
     (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
       (condition-case err
-          (call-interactively cmd)
+          (call-interactively effective-cmd)
         (user-error
          (goto-char orig)
          (user-error (cadr err)))))))

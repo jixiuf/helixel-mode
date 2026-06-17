@@ -669,6 +669,11 @@ Set by eligible movement commands (pair, match, paragraph,
 sentence, function subcats) and find-char / search commands.
 Read by `helixel-repeat-last-motion' and its accessors.")
 
+(defvar-local helixel--motion-permanent-flip nil
+  "When non-nil, \=`,`\=' repeats the last motion in reversed direction.
+Toggled by \=`-,'.  Reset on each new motion recording.
+Analogous to `helixel--repeat-permanent-flip' for \=`.\='.")
+
 (defun helixel--record-last-motion (cmd &rest extra-kv)
   "Record CMD as the last motion, with EXTRA-KV as keyword arguments.
 
@@ -677,7 +682,10 @@ EXTRA-KV accepts: :category :subcat :dir :char :type :pattern
 :delim-forward-p :last-match-delimiter.
 
 Respects `helixel-motion-repeat-categories': when :category and
-:subcat don't match, recording is silently skipped."
+:subcat don't match, recording is silently skipped.
+
+Resets `helixel--motion-permanent-flip' so a fresh motion starts
+with its recorded direction."
   (let ((cat (plist-get extra-kv :category))
         (sub (plist-get extra-kv :subcat)))
     (when (or (not cat)
@@ -686,7 +694,9 @@ Respects `helixel-motion-repeat-categories': when :category and
       (setq helixel--last-motion-cmd
             (apply #'make-helixel--last-motion
                    :command cmd :prefix-arg current-prefix-arg
-                   extra-kv)))))
+                   extra-kv))
+      ;; New motion resets the permanent direction flip.
+      (setq helixel--motion-permanent-flip nil))))
 
 (defun helixel--record-movement-motion
     (cmd subcat origin &optional motion-extra)
@@ -744,6 +754,32 @@ because `push' adds later registrations to the front."
                                 (eq (cdr key) sub)))
                    (cdr entry))))
              helixel--motion-repeater-alist)))
+
+;; ── Motion Reverse-Command Registry ──
+;;
+;; When \=`-,', permanently flips the direction, the movement
+;; motion repeater looks up the reverse command here instead of
+;; calling the original recorded command.  Only movement commands
+;; need this — search, find-char, and match repeater functions
+;; already read direction from the struct.
+
+(defvar helixel--motion-reverse-alist nil
+  "Alist mapping movement-command → reverse-command.
+Populated automatically by `helixel-define-movement',
+`helixel--def-thing-move', and `helixel--define-delimiter-movement'.
+
+When \=`-,', flips `helixel--motion-permanent-flip' and the
+`helixel--repeat-movement-motion' repeater consults this alist
+to call the reverse command instead of the original.")
+
+(defun helixel-register-motion-reverse (cmd reverse-cmd)
+  "Register REVERSE-CMD as the direction-flipped counterpart of CMD.
+Both are command symbols.  Called by movement definition macros."
+  (push (cons cmd reverse-cmd) helixel--motion-reverse-alist))
+
+(defun helixel--motion-reverse-lookup (cmd)
+  "Return the reverse command for CMD, or nil if not registered."
+  (cdr (assq cmd helixel--motion-reverse-alist)))
 
 ;; ── Unified delimiter-char query ──
 ;; All delimiter-char enumeration uses this single function.

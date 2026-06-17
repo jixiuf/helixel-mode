@@ -559,26 +559,31 @@ Otherwise read from `helixel--active-search'."
 
 (defmacro helixel--def-find-char (name type dir doc)
   "Define a find-char command NAME with TYPE (`next' or `till') and DIR.
+DIR is the base direction (+1 forward, -1 backward).
+A negative COUNT flips the direction (\\=`-f x' = find backward,
+\\=`-3f x' = find 3rd backward).
 DOC is the docstring."
-  `(defun ,name (char)
+  `(defun ,name (char &optional count)
      ,doc
-     (interactive "c")
+     (interactive "c\np")
      ;; Bind `helixel--current-command' / `this-command' so the action
      ;; committed by `helixel-action-commit' carries the correct
      ;; `by-command' stamp for unified mc dispatch.
      (let ((helixel--current-command ',name)
-           (this-command ',name))
+           (this-command ',name)
+           (n (abs (or count 1)))
+           (effective-dir (* ,dir (if (and count (< count 0)) -1 1))))
        (helixel--tracking-open 'find-char ',type)
        ;; Record this as the last motion for `,' repeat.
        ;; Stash char/type/dir so `,' replays self-contained
        ;; without consulting `helixel--active-search'.
-       (let ((sym-dir (if (> ,dir 0) 'forward 'backward)))
+       (let ((sym-dir (if (> effective-dir 0) 'forward 'backward)))
          (helixel--record-last-motion ',name
            :category 'find-char :char char :type ',type :dir sym-dir))
-       ;; unwind-protect: on error (e.g. char not found), discard the
-       ;; stale live-action so the next command does not commit a shell.
+       ;; unwind-protect: on error, discard the stale live-action.
        (unwind-protect
-           (helixel-search--find-char-exec char ',type ,dir)
+           (dotimes (_ n)
+             (helixel-search--find-char-exec char ',type effective-dir))
          (when (and helixel--live-action
                     (eq (helixel-action-category helixel--live-action)
                         'find-char))
@@ -716,31 +721,74 @@ Updates n-count in the pending sel so \=`.' repeats the full sequence."
     ;; Track n-count so . repeats the full n sequence.
     (helixel-search--find-char-set-sel char type dir)))
 
-(defun helixel-repeat-last-motion ()
+(defun helixel-repeat-last-motion (&optional raw-prefix)
   "Repeat the last motion (f, t, /, ?, \\=`%', \\=`[', \\=`]', \\=`{', \\=`}').
 Reads self-contained replay data from `helixel--last-motion-cmd'.
 The stored category+subcat is checked against
 `helixel-motion-repeat-categories' via `helixel--category-match-p'.
 Dispatches via `helixel--motion-repeater-alist' — extend by
 calling `helixel-register-motion-repeater'.
-Never consults the global `helixel--active-search'."
-  (interactive)
-  (let ((rec helixel--last-motion-cmd))
-    (unless (and rec
-                 (helixel--category-match-p
-                  (helixel--last-motion-category rec)
-                  (helixel--last-motion-subcat rec)
-                  helixel-motion-repeat-categories))
-      (if rec
-          (user-error
-           "Last motion `%s' is not in `helixel-motion-repeat-categories'"
-           (or (helixel--last-motion-subcat rec)
-               (helixel--last-motion-category rec)))
-        (user-error "No motion to repeat")))
+Never consults the global `helixel--active-search'.
+
+Prefix RAW-PREFIX semantics:
+  \\=`-,'    — permanently flip direction (like \\=`N' for search)
+  Subsequent \\=`,' repeats in the flipped direction.
+  \\=`-,' again flips back.
+  \\=`-3,'  — repeat 3 times in flipped direction.
+  \\=`3,'   — repeat 3 times in stored direction.
+
+Direction flip works for search, find-char, match, and movement
+categories.  Movement commands use the reverse-command registry
+\(`helixel--motion-reverse-alist') to call the opposite command."
+  (interactive "P")
+  (let ((rec helixel--last-motion-cmd)
+        (flip-p (or (eq raw-prefix '-)
+                    (and (integerp raw-prefix)
+                         (< raw-prefix 0))))
+        (repeat-n (cond ((not raw-prefix) 1)
+                        ((eq raw-prefix '-) 1)
+                        ((integerp raw-prefix) (abs raw-prefix))
+                        (t 1))))
+    (unless rec
+      (user-error "No motion to repeat"))
+    (unless (helixel--category-match-p
+             (helixel--last-motion-category rec)
+             (helixel--last-motion-subcat rec)
+             helixel-motion-repeat-categories)
+      (user-error
+       "Last motion `%s' is not in `helixel-motion-repeat-categories'"
+       (or (helixel--last-motion-subcat rec)
+           (helixel--last-motion-category rec))))
+    ;; Permanently flip direction on \\=`-,' (like \\=`-.' for edit repeat).
+    (when flip-p
+      (helixel--motion-flip-dir rec))
     (if-let* ((fn (helixel--lookup-motion-repeater rec)))
-        (funcall fn rec)
+        (dotimes (_ repeat-n)
+          (funcall fn rec))
       (user-error "No repeater registered for category `%s'"
                   (helixel--last-motion-category rec)))))
+
+;; ── Motion direction flip (for \\=`-,' permanent flip) ──
+
+(defun helixel--motion-flip-dir (rec)
+  "Toggle `helixel--motion-permanent-flip' and flip :dir in REC.
+REC is a `helixel--last-motion' struct — modified in-place.
+Also flips subcat-specific direction slots (:delim-forward-p for
+pair motions, :delim-inner-p flips when both are set).
+Called by `helixel-repeat-last-motion' on \\=`-,' prefix."
+  (setq helixel--motion-permanent-flip
+        (not helixel--motion-permanent-flip))
+  (let ((subcat (helixel--last-motion-subcat rec)))
+    (setf (helixel--last-motion-dir rec)
+          (if (eq (helixel--last-motion-dir rec) 'forward)
+              'backward 'forward))
+    ;; For pair motions, also flip the forward/backward flag
+    ;; so the motion-skip-past and rebuild-delimiter helpers
+    ;; see the correct direction.
+    (when (eq subcat 'pair)
+      (let ((fwd (helixel--last-motion-delim-forward-p rec)))
+        (when (memq fwd '(t nil))
+          (setf (helixel--last-motion-delim-forward-p rec) (not fwd)))))))
 
 ;; Motion repeaters registered via `helixel-register-motion-repeater'
 

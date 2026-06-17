@@ -736,7 +736,9 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (call-interactively #'helixel-forward-paragraph-start)
     ;; Paragraph motion should move to the next paragraph across \n\n
     (should (>= (point) 10))
-    (should (>= (- (region-end) (region-beginning)) 9))))
+    ;; Paragraph is in helixel-thing-move-no-select-things by default,
+    ;; so no visual selection is created.
+    (should (not (use-region-p)))))
 
 (ert-deftest helixel-test-sentence-not-affected-by-newline-skip ()
   "Test that sentence motion still works normally across lines."
@@ -749,7 +751,8 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (call-interactively #'helixel-forward-sentence-end)
     ;; Sentence end should find the end of a sentence (moved past 1st)
     (should (> (point) 7))
-    (should (> (- (region-end) (region-beginning)) 7))))
+    ;; Sentence is in helixel-thing-move-no-select-things by default.
+    (should (not (use-region-p)))))
 
 (ert-deftest helixel-test-function-not-affected-by-newline-skip ()
   "Test that function movement still spans multiple lines."
@@ -763,7 +766,8 @@ When a WORD ends at end of line, stop at end of word (exclude newline)."
     (call-interactively #'helixel-forward-function-end)
     ;; Function end should move point forward from start of defun
     (should (> (point) 1))
-    (should (> (- (region-end) (region-beginning)) 1))))
+    ;; Function is in helixel-thing-move-no-select-things by default.
+    (should (not (use-region-p)))))
 
 ;;; Operator-pending (dw) integration test
 

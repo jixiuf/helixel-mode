@@ -48,6 +48,22 @@ Line-crossing trim and newline-skip logic in
 \=`helixel--def-thing-move' only apply to these things.
 Multi-line things (paragraph, sentence, function) are unaffected.")
 
+(defcustom helixel-thing-move-no-select-things
+  '(helixel-paragraph helixel-sentence helixel-function)
+  "Thing symbols for which \=`helixel--def-thing-move' skips visual selection.
+When a thing is in this list, movement commands just move point
+without creating a visual selection (region) around the movement.
+Commands for things listed here just move point without activating
+the mark.  The mark-region for \=`\;\=' action cycle is still recorded.
+
+Valid thing symbols:
+  helixel-word, helixel-WORD, helixel-symbol,
+  helixel-paragraph, helixel-sentence, helixel-function.
+
+Set to nil to always create a selection (original behavior)."
+  :type '(repeat symbol)
+  :group 'helixel)
+
 ;; ----------------------------------------------------------------------
 ;; helixel-sel: Selection Descriptor
 ;; ----------------------------------------------------------------------

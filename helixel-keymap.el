@@ -586,8 +586,6 @@ Example with multiple callbacks:
   (define-key helixel-normal-map "E" #'helixel-forward-WORD-end)
   (define-key helixel-normal-map "b" #'helixel-backward-word-start)
   (define-key helixel-normal-map "B" #'helixel-backward-WORD)
-  (define-key helixel-normal-map "}" #'helixel-forward-paragraph-start)
-  (define-key helixel-normal-map "{" #'helixel-backward-paragraph-start)
   (define-key helixel-normal-map "]" helixel-right-map)
   (define-key helixel-normal-map "[" helixel-left-map)
   (define-key helixel-normal-map "}" helixel-inner-right-map)

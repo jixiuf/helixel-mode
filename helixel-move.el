@@ -193,8 +193,18 @@ Optional REVERSE-CMD is the opposite-direction command for
          ;; Skip past a newline before capturing the motion origin,
          ;; so \n is not treated as a separate word.
          ,@(when single-line-p `((,skip-fn)))
-         (helixel--with-movement-surround
-          (,fn ',thing (* ,sign (or count 1))))
+         (if (memq ',thing helixel-thing-move-no-select-things)
+             (progn
+               ;; Clean up stale state (same as with-movement-surround)
+               ;; but skip the visual selection (push-mark + activate).
+               (when (and helixel--pending-sel
+                          (not (eq (helixel-sel-kind helixel--pending-sel)
+                                   'movement)))
+                 (setq helixel--pending-sel nil))
+               (setq helixel--sel-type-override nil)
+               (,fn ',thing (* ,sign (or count 1))))
+           (helixel--with-movement-surround
+            (,fn ',thing (* ,sign (or count 1)))))
          (helixel--set-mark-region ',thing ,side))
        ,@(when reverse-cmd
            `((helixel-register-motion-reverse ',name ',reverse-cmd))))))

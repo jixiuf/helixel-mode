@@ -1054,9 +1054,9 @@ Ensures TEXT ends with a newline."
     (propertize s 'yank-handler '(helixel--yank-handler-line-wise nil t))))
 
 (defun helixel--kill-type-p (handler &optional text)
-  "Return non-nil if TEXT (default: top of kill ring) uses yank-handler HANDLER.
-HANDLER is a symbol, the yank-handler function name.
-TEXT is an optional string; when nil, looks up the current kill-ring entry."
+  "Return non-nil if TEXT (default: top of `kill-ring')
+uses yank-handler HANDLER.
+HANDLER is a symbol; TEXT looks up the current `kill-ring' entry."
   (when-let* ((s (or text
                      (and helixel--current-register
                           (helixel--current-kill 0 t))

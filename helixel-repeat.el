@@ -361,7 +361,7 @@ Dispatch:
      ((and (eq op 'chain) (null advance-fn)) t)
      ;; Op moves point itself, or kind has no advance: just recreate.
      ((or (not advance-fn) (helixel--op-moves-point-p op))
-      (condition-case nil
+      (helixel--with-debug-log repeat-advance-recreate
           (progn (helixel-sel-call-recreate (helixel-action-sel effective))
                  t)
         (error nil)))

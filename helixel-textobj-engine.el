@@ -830,7 +830,7 @@ Signals errors when no more targets exist."
               (cnt (helixel-sel-textobj-count ctx)))
     (helixel--with-span ctx
       (unless (region-active-p)
-        (condition-case nil
+        (helixel--with-debug-log textobj-recreate-position
             (save-excursion
               (funcall command 1)
               (when (and (use-region-p)
@@ -861,7 +861,7 @@ The strategy skips the separate `recreate-selection' call for inline
 advance functions to avoid double-moving."
   (let ((sel (helixel-action-sel tx)))
     (when sel
-      (condition-case nil
+      (helixel--with-debug-log repeat-advance-textobj
           (progn (helixel--recreate-selection sel) t)
         (error nil)))))
 

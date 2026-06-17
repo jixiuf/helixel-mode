@@ -87,7 +87,7 @@ symbol/word-boundary markers automatically inserted by \\=`*' / \\=`#'
 and other search-at-point commands)."
   (if (and (fboundp 'rxt-pcre-to-elisp)
            (not (helixel-search--has-elisp-boundary pattern)))
-      (condition-case nil
+      (helixel--with-debug-log search-compile-pcre
           (rxt-pcre-to-elisp pattern)
         (error pattern))
     pattern))
@@ -611,7 +611,7 @@ Returns t if a skip was performed, nil otherwise."
     (when (or (looking-at pat)
               (let ((orig-pt (point)))
                 (save-excursion
-                  (condition-case nil
+                  (helixel--with-debug-log search-entry-prep
                       (progn
                         (helixel-search--search pat 'backward nil nil regexp)
                         (>= orig-pt (match-beginning 0)))
@@ -629,7 +629,7 @@ SEARCH-FN is a zero-arg function called once per extra match.
 Stops silently on `search-failed'."
   (when-let* ((n (plist-get ctx :n-count))
               ((> n 0)))
-    (condition-case nil
+    (helixel--with-debug-log search-advance-n-count
         (dotimes (_ n)
           (funcall search-fn))
       (search-failed nil))))
@@ -699,7 +699,7 @@ the full f x n n sequence.  Extends region back to origin when
      (helixel--with-span ctx
       (helixel-search--find-char-core dir)
       (when (> n 0)
-        (condition-case nil
+        (helixel--with-debug-log search-find-char-n
             (dotimes (_ n)
               (helixel-search--find-char-core dir))
           (search-failed nil))))
@@ -1060,7 +1060,7 @@ a search context), fall back to recreating the selection in-place."
     (if (not pat)
         ;; Not a search-initiated insert — just recreate the
         ;; selection at point and return t (in-place repeat).
-        (condition-case nil
+        (helixel--with-debug-log search-advance-non-search
             (progn (helixel-sel-call-recreate sel) t)
           (error nil))
       (let* ((dir (helixel-sel-search-dir sel))
@@ -1069,7 +1069,7 @@ a search context), fall back to recreating the selection in-place."
     (helixel-search--skip-current-match pat dir entry-kind regexp)
     (unless entry-kind
       (helixel-search--backward-unstick dir))
-    (condition-case nil
+    (helixel--with-debug-log search-advance-core
         (progn
           (helixel-search--search pat dir nil nil regexp)
           (helixel-search--guard-repeat-advance pat dir regexp)

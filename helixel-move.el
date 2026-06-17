@@ -464,7 +464,7 @@ live event's \=:mark-region for `\;' marking."
   (save-excursion
     (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
       (funcall adj))
-    (condition-case nil
+    (helixel--with-debug-log jump-to-match-core
         (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
                       (helixel-delimiter-bounds-flat d no-close-backoff)))
           (when mark-thing
@@ -479,7 +479,7 @@ Returns a cons (TARGET . (OB . CE)) on success, or nil.
 CHAR-A and CHAR-B are as in `helixel-jump-to-match'.
 ORIG is the original point before jumping."
   (save-excursion
-    (condition-case nil
+    (helixel--with-debug-log jump-syntax-table
         (let ((match-end
                (progn
                  (cond
@@ -497,7 +497,7 @@ ORIG is the original point before jumping."
                    (signal 'scan-error nil)))
                  (point))))
           (goto-char match-end)
-          (condition-case nil
+          (helixel--with-debug-log jump-syntax-table-backward-list
               (backward-list 1)
             (error nil))
           (let ((b (if (>= match-end (point)) (point) match-end))
@@ -775,7 +775,7 @@ a fenced block."
                    (goto-char search-pos)
                    (helixel--up-raw backward-p)))
             (block
-             (ignore-errors
+             (helixel--with-debug-log up-multi-block
                (let ((helixel--block-no-bracket-fallback t)
                      (block-d (helixel--make-block-delimiter)))
                  (save-excursion
@@ -785,7 +785,7 @@ a fenced block."
                      (when-let* ((tgt (if backward-p ob ce)))
                        (cons (abs (- tgt orig)) tgt)))))))
             (tag
-             (ignore-errors
+             (helixel--with-debug-log up-multi-tag
                (let ((tag-d (helixel--make-tag-delimiter)))
                  (save-excursion
                    (goto-char search-pos)
@@ -840,7 +840,7 @@ Returns nil if forward lands at eob (no parent)."
   (let* ((open (helixel-delimiter-open d))
          (close (helixel-delimiter-close d))
          forward-sexp-function)
-    (condition-case nil
+    (helixel--with-debug-log up-via-syntax
         (with-syntax-table (copy-syntax-table (syntax-table))
           (modify-syntax-entry open (format "(%c" close))
           (modify-syntax-entry close (format ")%c" open))
@@ -872,7 +872,7 @@ BACKWARD-P controls direction."
                   (helixel-delimiter-bounds-flat d)))
       (if (> ob (point-min))
           (progn (goto-char (1- ob))
-                 (condition-case nil
+                 (helixel--with-debug-log up-via-bounds-nth
                      (nth 3 (helixel-delimiter-bounds-flat d))
                    (error ce)))
         ce))))
@@ -881,7 +881,7 @@ BACKWARD-P controls direction."
   "Raw `up-list' fallback - two levels outward in BACKWARD-P direction.
 If BACKWARD-P is non-nil, move backward; otherwise forward.
 Returns point on success, nil when no parent pair exists."
-  (condition-case nil
+  (helixel--with-debug-log up-raw
       (progn
         (up-list (if backward-p -1 1))
         (unless (if backward-p (bobp) (eobp))
@@ -1318,7 +1318,7 @@ The strategy skips the separate `recreate-selection' call for inline
 advance functions to avoid double-moving."
   (let ((sel (helixel-action-sel tx)))
     (when sel
-      (condition-case nil
+      (helixel--with-debug-log repeat-advance-movement
           (progn (helixel--recreate-selection sel) t)
         (error nil)))))
 

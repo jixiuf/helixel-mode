@@ -368,7 +368,7 @@ Step 2 — Vanilla capture:
         :by-command this-command
         :op nil :runner nil :sel nil
         :payload (list :prefix current-prefix-arg
-                       :keys (ignore-errors
+                       :keys (helixel--with-debug-log chain-vanilla-keys
                                (copy-sequence
                                 (this-single-command-keys))))
         :mark-region (let ((pm (point-marker)))

@@ -1012,7 +1012,7 @@ On a single-char symbol at eob, w selects it."
     (helixel-find-next-char ?b)
     (should (eql (point) 8))       ; after second b
     (helixel-search-repeat-reverse)
-    (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
+    (should (eq (helixel--last-motion-dir helixel--active-search) 'backward))
     (should (< (point) 8))))
 
 ;;; Pair delimiter movement tests — [ ] { } prefixes
@@ -2164,7 +2164,7 @@ so changing the active-search category cannot break motion repeat."
     ;; Simulate / pattern — overwrite active-search to search category
     ;; (same effect as a real search, but avoids interactive isearch).
     (setq helixel--active-search
-          (make-helixel-active-search
+          (make-helixel--last-motion
            :category 'search :pattern "f" :dir 'forward))
     (should (eq (helixel-search--safe-category) 'search))
     ;; , — should replay f x from struct, NOT from active-search.

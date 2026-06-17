@@ -4018,8 +4018,8 @@ is set so `n'/`N' works."
       (let* ((cs (overlay-get ov 'helixel-pc-state))
              (as (helixel-pcs-active-search cs)))
         (should as)
-        (should (eq 'search (helixel-active-search--category as)))
-        (should (equal "world" (helixel-active-search--pattern as)))))
+        (should (eq 'search (helixel--last-motion-category as)))
+        (should (equal "world" (helixel--last-motion-pattern as)))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-search-replay-backward-orientation ()

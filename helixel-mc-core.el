@@ -163,7 +163,7 @@ so on — broadcasts at one cursor never leak into another."
   last-action            ; `helixel-action'      (helixel--last-action)
   yank-register-source   ; swap-source plist     (helixel--yank-register-source)
   registers-alist        ; list (copy of register-alist)
-  active-search          ; `helixel-active-search' (helixel--active-search)
+  active-search          ; `helixel--last-motion'  (helixel--active-search)
   event-ring             ; list of `helixel-action' (helixel--action-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
   action-pos             ; integer | nil         (helixel--action-pos)

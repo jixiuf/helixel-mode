@@ -331,7 +331,7 @@
   "Test from-history for search sets category, subcat, marker on live event."
   (let ((helixel--action-ring nil) (helixel--live-action nil)
         (helixel--active-search
-         (make-helixel-active-search :category 'search :pattern "test" :dir 'forward)))
+         (make-helixel--last-motion :category 'search :pattern "test" :dir 'forward)))
     (helixel-test-with-buffer "a test b"
       (goto-char 3)
       ;; Push a search event to ring so history can find it

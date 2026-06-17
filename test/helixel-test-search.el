@@ -100,10 +100,10 @@ exact-case 'Hello' still matches 'Hello'."
         (helixel--tracking-open 'search 'search)
         (helixel-search--done-hook))
       ;; Verify repeat state
-      (should (eq (helixel-active-search--category helixel--active-search) 'search))
-      (should (string= (helixel-active-search--pattern helixel--active-search)
+      (should (eq (helixel--last-motion-category helixel--active-search) 'search))
+      (should (string= (helixel--last-motion-pattern helixel--active-search)
                        "hello"))
-      (should (eq (helixel-active-search--dir helixel--active-search) 'forward))
+      (should (eq (helixel--last-motion-dir helixel--active-search) 'forward))
       ;; Verify selection context for . repeat
       (let ((sel helixel--pending-sel))
         (should sel)
@@ -132,10 +132,10 @@ exact-case 'Hello' still matches 'Hello'."
         (helixel--tracking-open 'search 'search)
         (helixel-search--done-hook))
       ;; Verify repeat preserves case-sensitive pattern
-      (should (eq (helixel-active-search--category helixel--active-search) 'search))
-      (should (string= (helixel-active-search--pattern helixel--active-search)
+      (should (eq (helixel--last-motion-category helixel--active-search) 'search))
+      (should (string= (helixel--last-motion-pattern helixel--active-search)
                        "Hello"))
-      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
+      (should (eq (helixel--last-motion-dir helixel--active-search) 'backward))
       ;; Verify selection context
       (let ((sel helixel--pending-sel))
         (should sel)
@@ -159,10 +159,10 @@ exact-case 'Hello' still matches 'Hello'."
       ;; Simulate a prior search so N has a pattern to repeat.
       (setq isearch-string "hello" isearch-regexp nil)
       (setq helixel--active-search
-            (make-helixel-active-search
+            (make-helixel--last-motion
              :category 'search :pattern "hello" :dir 'forward))
       (helixel-search-repeat-reverse)
-      (should (eq (or (helixel-active-search--dir helixel--active-search) 'forward) 'backward))
+      (should (eq (or (helixel--last-motion-dir helixel--active-search) 'forward) 'backward))
       (should (= (point) mk))
       (should (= (mark) pt)))))
 
@@ -237,7 +237,7 @@ exact-case 'Hello' still matches 'Hello'."
 (ert-deftest helixel-test-search-repeat-next-case-sensitive ()
   "n after case-sensitive search (?Hello) respects case."
   (helixel-test-with-buffer "hello Hello hello"
-    (setq helixel--active-search (make-helixel-active-search :category 'search :pattern "Hello" :dir 'forward))
+    (setq helixel--active-search (make-helixel--last-motion :category 'search :pattern "Hello" :dir 'forward))
     (helixel-search--set-dir 'backward)
     ;; Simulate isearch state for a case-sensitive backward search
     (let ((isearch-string "Hello")
@@ -259,7 +259,7 @@ exact-case 'Hello' still matches 'Hello'."
 (ert-deftest helixel-test-search-repeat-next-case-fold-insensitive ()
   "n after case-insensitive search (?hello) matches any case."
   (helixel-test-with-buffer "foo Hello bar HELLO baz"
-    (setq helixel--active-search (make-helixel-active-search :category 'search :pattern "hello" :dir 'forward))
+    (setq helixel--active-search (make-helixel--last-motion :category 'search :pattern "hello" :dir 'forward))
     (helixel-search--set-dir 'backward)
     ;; Simulate isearch state for case-insensitive backward search
     (let ((isearch-string "hello")
@@ -291,7 +291,7 @@ exact-case 'Hello' still matches 'Hello'."
         (helixel--tracking-open 'find-char 'next)
         (setf (helixel-action-sel helixel--live-action) sel)
         (helixel-action-commit))
-      (setq helixel--active-search (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'forward))
+      (setq helixel--active-search (make-helixel--last-motion :category 'find-char :type 'next :char ?b :dir 'forward))
       (cl-letf (((symbol-function 'completing-read)
                  (lambda (_prompt _collection &rest _)
                    (helixel-action-display-format (car helixel--action-ring))))
@@ -313,7 +313,7 @@ exact-case 'Hello' still matches 'Hello'."
     (should (= (length helixel--action-ring) 1))
     (setq last-command 'helixel-forward-char this-command 'helixel-search-repeat-next)
     (helixel-search-repeat-next)
-    (should (helixel-active-search--type helixel--active-search))))
+    (should (helixel--last-motion-type helixel--active-search))))
 
 ;;; History collection and display
 
@@ -419,7 +419,7 @@ For find-char events, the stored direction comes from
 `helixel--active-search', not the sel's :dir."
   (let ((helixel--action-ring nil) (helixel--live-action nil)
         (helixel--active-search
-         (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'backward)))
+         (make-helixel--last-motion :category 'find-char :type 'next :char ?b :dir 'backward)))
     (helixel-test-with-buffer "axb axb axb"
       (goto-char 8)
       (let ((sel (helixel-sel-create 'find-char
@@ -432,7 +432,7 @@ For find-char events, the stored direction comes from
                    (helixel-action-display-format (car helixel--action-ring)))))
         (helixel-search-repeat-next t))
       ;; C-u n: use-dir = stored-dir = backward, from pos 8 → 7
-      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
+      (should (eq (helixel--last-motion-dir helixel--active-search) 'backward))
       (should (eql (point) 7)))))
 
 (ert-deftest helixel-test-search-from-history-search-entry ()
@@ -459,7 +459,7 @@ For find-char events, the stored direction comes from
   "C-u N with a forward find-char entry toggles direction to backward."
   (let ((helixel--action-ring nil) (helixel--live-action nil)
         (helixel--active-search
-         (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'forward)))
+         (make-helixel--last-motion :category 'find-char :type 'next :char ?b :dir 'forward)))
     (helixel-test-with-buffer "axb axb axb"
       (goto-char 8)
       (let ((sel (helixel-sel-create 'find-char
@@ -472,7 +472,7 @@ For find-char events, the stored direction comes from
                    (helixel-action-display-format (car helixel--action-ring)))))
         (helixel-search-repeat-reverse t))
       ;; C-u N: forwardp=nil → toggles stored dir (forward→backward)
-      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
+      (should (eq (helixel--last-motion-dir helixel--active-search) 'backward))
       (should (eql (point) 7)))))
 
 (ert-deftest helixel-test-search-repeat-reverse-from-history-search ()
@@ -491,13 +491,13 @@ For find-char events, the stored direction comes from
                    (helixel-action-display-format (car helixel--action-ring)))))
         (helixel-search-repeat-reverse t))
       ;; Direction toggled to backward, from pos 20 backward → first hello
-      (should (eq (helixel-active-search--dir helixel--active-search) 'backward))
+      (should (eq (helixel--last-motion-dir helixel--active-search) 'backward))
       (should (<= (point) 10)))))
 
 (ert-deftest helixel-test-search-from-history-no-direction-flip ()
   "C-u n does NOT flip the active-search direction."
   (let ((helixel--action-ring nil) (helixel--live-action nil)
-        (helixel--active-search (make-helixel-active-search :category 'find-char :type 'next :char ?b :dir 'forward)))
+        (helixel--active-search (make-helixel--last-motion :category 'find-char :type 'next :char ?b :dir 'forward)))
     (helixel-test-with-buffer "axb axb axb"
       (let ((sel (helixel-sel-create 'find-char
                    '(:char ?b :type next :dir forward :inline-advance t))))
@@ -509,7 +509,7 @@ For find-char events, the stored direction comes from
                    (helixel-action-display-format (car helixel--action-ring)))))
         (helixel-search-repeat-next t))
       ;; C-u n uses stored direction, does NOT flip
-      (should (eq (helixel-active-search--dir helixel--active-search) 'forward)))))
+      (should (eq (helixel--last-motion-dir helixel--active-search) 'forward)))))
 
 (ert-deftest helixel-test-search-repeat-no-push ()
   "n/N for search do not push entries with :subcat repeat into the ring.
@@ -517,7 +517,7 @@ When isearch-repeat is used (search, not find-char), the live event
 is committed by action-start but gets category search/subcat repeat.
 This test verifies no stray search wrappers accumulate."
   (let ((helixel--action-ring nil) (helixel--live-action nil)
-        (helixel--active-search (make-helixel-active-search :category 'search :pattern "hello" :dir 'forward))
+        (helixel--active-search (make-helixel--last-motion :category 'search :pattern "hello" :dir 'forward))
         (helixel--action-pos nil))
     (helixel-test-with-buffer "hello world hello"
       ;; Simulate isearch state for search-repeat-next
@@ -642,7 +642,7 @@ when the event's sel has no pattern in its ctx (fallback path)."
          (make-helixel-action :category 'find-char :subcat 'next))
         (helixel--action-ring nil)
         (helixel--active-search
-         (make-helixel-active-search :category 'find-char
+         (make-helixel--last-motion :category 'find-char
                                      :type 'next :char ?z
                                      :dir 'forward)))
     (helixel-test-with-buffer "axb"
@@ -759,7 +759,7 @@ and action payload."
         (helixel--tracking-open 'search 'search)
         (helixel-search--done-hook))
       ;; active-search stores regexp
-      (should-not (helixel-active-search--regexp helixel--active-search))
+      (should-not (helixel--last-motion-regexp helixel--active-search))
       ;; motion record stores regexp
       (should-not (helixel--last-motion-regexp helixel--last-motion-cmd))
       ;; sel ctx stores :regexp nil
@@ -788,7 +788,7 @@ Complements the literal test above — verifies the regexp-flag path."
             (isearch-other-end (copy-marker (match-beginning 0))))
         (helixel--tracking-open 'search 'search)
         (helixel-search--done-hook))
-      (should (helixel-active-search--regexp helixel--active-search))
+      (should (helixel--last-motion-regexp helixel--active-search))
       (should (helixel--last-motion-regexp helixel--last-motion-cmd))
       (let ((sel helixel--pending-sel))
         (should sel)
@@ -821,12 +821,12 @@ Verifies plist-member awareness — absent vs present-nil are distinct."
     ;; Set up active-search with literal-mode pattern "hello."
     ;; The . should match a literal period, not any char.
     (let ((helixel--active-search
-           (make-helixel-active-search
+           (make-helixel--last-motion
             :category 'search :pattern "hello." :dir 'forward :regexp nil)))
       (goto-char 1)
       ;; Simulate what n does: set up isearch and repeat
       (let ((isearch-string "hello.")
-            (isearch-regexp (helixel-active-search--regexp helixel--active-search))
+            (isearch-regexp (helixel--last-motion-regexp helixel--active-search))
             (isearch-forward t)
             (isearch-success nil)
             (isearch-other-end nil)
@@ -845,7 +845,7 @@ Verifies plist-member awareness — absent vs present-nil are distinct."
   "n repeat uses isearch-regexp=t from active-search (regexp mode)."
   (helixel-test-with-buffer "hellox world helloy again"
     (let ((helixel--active-search
-           (make-helixel-active-search
+           (make-helixel--last-motion
             :category 'search :pattern "hello." :dir 'forward :regexp t)))
       (goto-char 1)
       (let ((isearch-string "hello.")
@@ -891,7 +891,7 @@ Verifies plist-member awareness — absent vs present-nil are distinct."
       (should (= (region-end) 7))
       (should (string= (buffer-substring 1 7) "hello."))
       ;; Verify active-search carries regexp nil
-      (should-not (helixel-active-search--regexp helixel--active-search)))))
+      (should-not (helixel--last-motion-regexp helixel--active-search)))))
 
 (ert-deftest helixel-test-search-mc-runner-regexp ()
   "helixel-search--mc-runner with :regexp t in payload uses regexp search."
@@ -903,14 +903,14 @@ Verifies plist-member awareness — absent vs present-nil are distinct."
       (should (= (region-beginning) 1))
       (should (= (region-end) 7))
       (should (string= (buffer-substring 1 7) "hellox"))
-      (should (helixel-active-search--regexp helixel--active-search)))))
+      (should (helixel--last-motion-regexp helixel--active-search)))))
 
 ;; ── active-search struct default ──
 
 (ert-deftest helixel-test-search-active-search-regexp-default ()
   "helixel-active-search regexp slot defaults to t."
-  (let ((s (make-helixel-active-search :category 'search :pattern "x")))
-    (should (eq (helixel-active-search--regexp s) t))))
+  (let ((s (make-helixel--last-motion :category 'search :pattern "x")))
+    (should (eq (helixel--last-motion-regexp s) t))))
 
 ;; ── history-execute inherits regexp ──
 

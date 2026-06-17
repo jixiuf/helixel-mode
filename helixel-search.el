@@ -136,55 +136,61 @@ Called from `helixel-state-change-hook'."
 ;; snapshots and never store mutable state.
 
 (defvar-local helixel--active-search nil
-  "Active repeat target as a `helixel-active-search' struct.
+  "Active repeat target as a `helixel--last-motion' struct.
 Set by \=/, \=?, \=*, \=#, f, F, t, T.
 Read by n/N commands and `.` / `,` repeat.
 The :dir slot is MUTABLE — N flips it.
 Event-ring entries are immutable snapshots and never store
-mutable state.")
+mutable state.
+
+Holds the same struct type as `helixel--last-motion-cmd' —
+a `helixel--last-motion'.  This variable is only overwritten
+by search/find-char commands, so \=`n'/\=`N' survives intervening
+movements (unlike `helixel--last-motion-cmd' which tracks the
+most recent motion of any category for \=`,`\=').")
 
 (defsubst helixel-search--current-dir ()
   "Return current repeat direction from `helixel--active-search'.
 Defaults to `forward' when the search state has no direction set."
   (if helixel--active-search
-      (helixel-active-search--dir helixel--active-search)
+      (helixel--last-motion-dir helixel--active-search)
     'forward))
 
 (defsubst helixel-search--safe-category ()
   "Return category slot from `helixel--active-search', or nil."
   (and helixel--active-search
-       (helixel-active-search--category helixel--active-search)))
+       (helixel--last-motion-category helixel--active-search)))
 
 (defsubst helixel-search--safe-pattern ()
   "Return pattern slot from `helixel--active-search', or nil."
   (and helixel--active-search
-       (helixel-active-search--pattern helixel--active-search)))
+       (helixel--last-motion-pattern helixel--active-search)))
 
 (defsubst helixel-search--safe-type ()
   "Return type slot from `helixel--active-search', or nil."
   (and helixel--active-search
-       (helixel-active-search--type helixel--active-search)))
+       (helixel--last-motion-type helixel--active-search)))
 
 (defsubst helixel-search--safe-char ()
   "Return char slot from `helixel--active-search', or nil."
   (and helixel--active-search
-       (helixel-active-search--char helixel--active-search)))
+       (helixel--last-motion-char helixel--active-search)))
 
 (defun helixel-search--flip-dir ()
   "Toggle repeat direction in `helixel--active-search'."
   (let ((new (if (eq (helixel-search--current-dir) 'forward)
                  'backward 'forward)))
     (if helixel--active-search
-        (setf (helixel-active-search--dir helixel--active-search) new)
+        (setf (helixel--last-motion-dir helixel--active-search) new)
       (setq helixel--active-search
-            (make-helixel-active-search :dir new)))))
+            (make-helixel--last-motion :dir new)))))
 
 (defun helixel-search--set-dir (dir)
   "Set DIR in `helixel--active-search'."
   (if helixel--active-search
-      (setf (helixel-active-search--dir helixel--active-search) dir)
+      (setf (helixel--last-motion-dir helixel--active-search) dir)
     (setq helixel--active-search
-          (make-helixel-active-search :dir dir))))
+          (make-helixel--last-motion :dir dir))))
 
 
 ;; ---------------------------------------------------------------------------
@@ -256,7 +262,7 @@ respect the \\=`M-r' toggle."
                                helixel--pending-sel)
                               :n-count))
            (n-count (if prev-n (1+ prev-n) 0))
-           (regexp (helixel-active-search--regexp s)))
+           (regexp (helixel--last-motion-regexp s)))
       (helixel--push-selection
        'search `(:pattern ,pat :dir ,dir :n-count ,n-count
                  :regexp ,regexp)))))
@@ -275,7 +281,7 @@ is not committed by the next command."
            (cons (min isearch-other-end (point))
                  (max isearch-other-end (point)))))
         (setq helixel--active-search
-              (make-helixel-active-search
+              (make-helixel--last-motion
                :category 'search :pattern isearch-string
                :dir dir :regexp isearch-regexp))
         ;; Record for motion repeat (bound to `,'):
@@ -316,7 +322,7 @@ search point ends at `match-beginning' (matching isearch behavior)."
          (regexp (helixel-action-payload-get tx :regexp))
          (forwardp (eq d 'forward)))
     (setq helixel--active-search
-          (make-helixel-active-search
+          (make-helixel--last-motion
            :category 'search :pattern pat :dir d :regexp regexp))
     (helixel-search--search pat d nil nil regexp)
     (if forwardp
@@ -428,7 +434,7 @@ instead of hardcoding `isearch-regexp' to t."
           (had-region (region-active-p)))
       (when-let* ((pat (helixel-search--safe-pattern)))
         (setq isearch-string pat
-              isearch-regexp (helixel-active-search--regexp
+              isearch-regexp (helixel--last-motion-regexp
                               helixel--active-search)
               isearch-forward (eq (helixel-search--current-dir) 'forward)))
       (if (< dir 0)
@@ -509,14 +515,14 @@ Signals `search-failed' if no visible match is found."
                       (ty (helixel-action-type tx))
                       (d (helixel-action-dir tx)))
                   (setq helixel--active-search
-                        (make-helixel-active-search
+                        (make-helixel--last-motion
                          :category 'find-char :type ty
                          :char c :dir d))
                   (helixel-search--find-char-core d)))))
       (helixel-action-commit)
       (helixel-search--set-dir sym-dir)
       (setq helixel--active-search
-            (make-helixel-active-search
+            (make-helixel--last-motion
              :category 'find-char :type type :char char :dir sym-dir))
       (helixel-search--echo-repeat-hint))))
 
@@ -744,7 +750,7 @@ Creates a temporary `helixel--active-search' from the stored
 pattern, direction, and regexp flag, then calls
 `helixel-search--isearch-repeat'."
   (let ((helixel--active-search
-         (make-helixel-active-search
+         (make-helixel--last-motion
           :category 'search
           :pattern (helixel--last-motion-pattern rec)
           :dir (helixel--last-motion-dir rec)
@@ -853,7 +859,7 @@ and appears correctly in `C-u n' history and \=`;\=' cycling."
          ;; Set up search state and sel BEFORE commit so the
          ;; committed entry carries its descriptor.
          (setq helixel--active-search
-               (make-helixel-active-search
+               (make-helixel--last-motion
                 :category 'find-char :type type :char char :dir use-dir))
          (helixel-search--find-char-set-sel char type use-dir)
          (helixel--tracking-open cat (helixel-action-subcat event))
@@ -868,7 +874,7 @@ and appears correctly in `C-u n' history and \=`;\=' cycling."
                          (ty (helixel-action-type tx))
                          (d (helixel-action-dir tx)))
                      (setq helixel--active-search
-                           (make-helixel-active-search
+                           (make-helixel--last-motion
                             :category 'find-char :type ty
                             :char c :dir d))
                      (helixel-search--find-char-core d)))))
@@ -886,7 +892,7 @@ and appears correctly in `C-u n' history and \=`;\=' cycling."
                (isearch-other-end nil))
           ;; Set up search state and sel BEFORE commit.
           (setq helixel--active-search
-                (make-helixel-active-search
+                (make-helixel--last-motion
                  :category 'search :pattern pattern :dir use-dir
                  :regexp regexp))
           (helixel-search--set-sel-ctx)

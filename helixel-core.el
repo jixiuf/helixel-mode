@@ -587,38 +587,21 @@ and `helixel--jump-to-match-core' delegate here."
   (<= open close))
 
 
-;; ----------------------------------------------------------------------
-;; Part 2b — Active Search State (mutable, per-buffer)
-;; ----------------------------------------------------------------------
+;; ── Last-Motion Struct (unified motion + search state) ──
 ;;
-;; Defined here (zero deps) so both helixel-search.el and
-;; helixel-repeat.el can access its fields via struct accessors.
-
-(cl-defstruct (helixel-active-search (:conc-name helixel-active-search--)
-                                      (:copier copy-helixel-active-search))
-  "Mutable active search state — set by \=/, \=?, \=*, \=#, f, F, t, T.
-Slots:
-  CATEGORY  — \='search or \='find-char
-  PATTERN   — regexp string (search only)
-  DIR       — \='forward or \='backward (mutable — N flips it)
-  TYPE      — \='next or \='till (find-char only)
-  CHAR      — character (find-char only)
-  ENTRY-KIND — \='insert, \='append, or nil
-  REGEXP     — non-nil when regexp-based (t by default,
-              nil after \\=`M-r' toggle)"
-  (category nil :read-only t)
-  (pattern  nil :read-only t)
-  dir
-  (type    nil :read-only t)
-  (char    nil :read-only t)
-  entry-kind
-  (regexp  t :read-only t))
-
-;; ── Last-Motion Struct ──
+;; The single struct for the last repeatable motion — consumed by both
+;; \=`,' (motion repeat via `helixel-repeat-last-motion') and
+;; \=`n'/\=`N' (search repeat via `helixel-search-repeat-next').
 ;;
-;; Each completed motion (pair/textobj movement, find-char, search, %)
-;; records a `helixel--last-motion' struct so `,' can replay
-;; it self-contained without consulting global state.
+;; Two buffer-local variables hold this struct with different update
+;; policies:
+;;   `helixel--last-motion-cmd' — updated by EVERY motion (for \=`,`\=')
+;;   `helixel--active-search'   — updated only by search/find-char
+;;                                (for \=`n'/\=`N', survives intervening
+;;                                movements)
+;;
+;; Formerly two separate struct types (`helixel-active-search' and
+;; `helixel--last-motion') with identical slots; merged in v5.
 
 (cl-defstruct (helixel--last-motion (:copier nil))
   "Self-contained record of the last repeatable motion.

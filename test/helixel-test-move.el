@@ -1712,6 +1712,26 @@ On a single-char symbol at eob, w selects it."
     (helixel-next-bracket-end)
     (should (= (point) 12)))) ; after third ] = eob
 
+(ert-deftest helixel-test-pair-next-paren-double-nested-eob ()
+  "]) steps one level per press through ((a)) at eob.
+When inner )) are adjacent AND the outer ) is at eob,
+the just-exited check must not suppress climbing —
+cur-bounds IS the same as the inner pair, so we
+need the normal AT-closing climb to advance."
+  ;; Buffer: ((a)) — 1:( 2:( 3:a 4:) 5:) 6:eob
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "((a))")
+    (deactivate-mark)
+    (goto-char 3)   ; on 'a'
+    (helixel-next-paren-end)
+    (should (= (point) 5))  ; after outer ) — ce of inner pair
+    (helixel-next-paren-end)
+    (should (= (point) 6))  ; eob — ce of outer pair
+    ;; One more press: no movement, no error
+    (helixel-next-paren-end)
+    (should (= (point) 6))))
+
 ;;; Pair next-end from outside (not inside any pair)
 
 (ert-deftest helixel-test-pair-next-paren-end-from-outside ()
@@ -2460,6 +2480,25 @@ recording is tested via integration tests."
     (should (= (point) 1))
     ;; At outermost -- , does nothing
     (helixel-repeat-last-motion)
+    (should (= (point) 1))))
+
+(ert-deftest helixel-test-motion-outer-paren-backward-adjacent ()
+  "[ ( steps one level per press through ((a)) at bob.
+Backward opener stepping with adjacent (( — verifies no
+`just-entered' check is needed because ob(parent) < ob(child)
+always."
+  ;; Buffer: ((a)) — 1:( 2:( 3:a 4:) 5:) 6:eob
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "((a))")
+    (deactivate-mark)
+    (goto-char 3)   ; on 'a'
+    (helixel-outer-paren)
+    (should (= (point) 2))  ; inner (
+    (helixel-outer-paren)
+    (should (= (point) 1))  ; outer (
+    ;; At outermost — no-op
+    (helixel-outer-paren)
     (should (= (point) 1))))
 
 (ert-deftest helixel-test-motion-skip-paragraph-forward ()

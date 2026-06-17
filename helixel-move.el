@@ -884,16 +884,13 @@ Returns point on success, nil when no parent pair exists."
 (defun helixel--motion-skip-past (motion)
   "Advance point past the current boundary for MOTION's subcat.
 
-For pair subcat:
-  Rebuilds the delimiter from MOTION's EXTRA and uses
-  `helixel-delimiter-bounds-flat' to find the current pair's
-  bounds (OB OE CB CE), then skips past them:
-  - Forward: goto CE (past the closing delimiter), then
-    \=`skip-chars-forward' whitespace.
-  - Backward: goto (1- OB) (before the opening delimiter), then
-    \=`skip-chars-backward' whitespace.
-  This handles both single-char (parens, brackets) and
-  multi-char (tags, blocks) delimiters correctly.
+For pair subcat (backward only):
+  Forward pair motions land on CE where `bounds-next' handles
+  one-level stepping inherently (AT-closing climb or
+  search-forward for sibling pairs).
+  Backward motions land on the opener; \=`up-list -1' from
+  there jumps to BEFORE the pair.  Step inside, then move to
+  (1- OB) so `bounds-previous' finds the previous pair.
 
 For paragraph/sentence/function: skips past newline/whitespace.
 
@@ -905,34 +902,24 @@ MOTION is a `helixel--last-motion' struct."
           ('pair
            (when-let* ((dir)
                        (d (helixel--rebuild-delimiter motion)))
-             ;; For inner-forward, AT-closing in bounds-next already
-             ;; handles one-level climb.  Advancing to CE would land
-             ;; on the parent's CB (adjacent ))), causing a
-             ;; double-jump on the next repeat.
-             (unless (and (eq dir 'forward)
-                          (helixel--last-motion-delim-inner-p motion))
-               ;; When point sits on the opening delimiter,
-               ;; the finder skips PAST it to the parent's opener.
-               ;; Step inside so \=`helixel-delimiter-bounds-flat'
-               ;; finds THIS pair, not the parent.
-               ;; Use the delimiter's own :adjust-for-jump plus
-               ;; \=`helixel--step-off-delimiter' as fallback.
-               ;; Save start position; restore on error so
-               ;; a failing , doesn't make the cursor jitter.
+             ;; Forward: bounds-next handles one-level step from ce
+             ;; inherently (AT-closing climb or search-forward).
+             ;; Skip-past is redundant and causes double-jumps.
+             ;; Backward: up-list -1 from ON the opener jumps to
+             ;; BEFORE the pair; step inside so bounds-flat finds
+             ;; this pair, then move to (1- ob) so bounds-previous
+             ;; finds the previous pair.
+             (unless (eq dir 'forward)
                (let ((start (point)))
                  (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
                    (funcall adj))
                  (helixel--step-off-delimiter)
                  (condition-case _err
-                     (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
-                                   (helixel-delimiter-bounds-flat d)))
-                       (if (eq dir 'forward)
-                           (progn (goto-char ce)
-                                  (skip-chars-forward " \t\n\r"))
-                         (goto-char (max (point-min) (1- ob)))
-                         (skip-chars-backward " \t\n\r")))
+                     (let ((flat (helixel-delimiter-bounds-flat d)))
+                       (goto-char (max (point-min)
+                                       (1- (nth 0 flat))))
+                       (skip-chars-backward " \t\n\r"))
                    (error
-                    ;; Bounds failed — restore point; don't jitter.
                     (goto-char start)))))))
           ('match nil)              ; handled by forward/backward-match
           ((or 'paragraph 'sentence 'function)

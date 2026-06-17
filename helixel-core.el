@@ -503,21 +503,42 @@ pair's bounds so callers can still move to that closing."
            ;; (non-inner); for inner-p the existing AT-closing logic
            ;; (goto ce + bounds-at with no-close-backoff) works
            ;; correctly, stepping one level per press.
+           ;;
+           ;; We walk backward past consecutive close-chars and for
+           ;; each position call `delimiter-bounds-flat' to check
+           ;; whether orig-pt equals the ce of some inner pair.
+           ;; If the inner pair is DIFFERENT from cur-bounds, we
+           ;; just landed on the parent's cb — suppress the climb
+           ;; and go to the parent's ce instead (one level step).
+           ;; If it's the SAME pair (e.g., ((a)) at eob where both
+           ;; cur-bounds and inner-bounds are the same pair), let
+           ;; the normal AT-closing climb proceed to make progress.
            (just-exited
             (and (not inner-p)
                  (characterp close)
-                 (save-excursion
-                   (goto-char orig-pt)
-                   (catch 'helixel--just-exited
-                     (while (and (> (point) 1)
-                                 (= (char-before) close))
-                       (backward-char)
-                       (let ((bnds (condition-case nil
-                                       (helixel-delimiter-bounds-flat d)
-                                     (error nil))))
-                         (when (and bnds (= orig-pt (nth 3 bnds)))
-                           (throw 'helixel--just-exited t))))
-                     nil)))))
+                 cur-bounds
+                 (let ((cb cur-bounds))
+                   (save-excursion
+                     (goto-char orig-pt)
+                     (catch 'helixel--just-exited
+                       (while (and (> (point) 1)
+                                   (= (char-before) close))
+                         (backward-char)
+                         ;; Save-excursion guards against
+                         ;; `delimiter-bounds-flat' moving point
+                         ;; via side effects, which would break
+                         ;; the while loop's position tracking.
+                         (let ((bnds (save-excursion
+                                       (condition-case nil
+                                           (helixel-delimiter-bounds-flat d)
+                                         (error nil)))))
+                           (when (and bnds
+                                      (= orig-pt (nth 3 bnds))
+                                      (not (equal cb
+                                                  (cons (nth 0 bnds)
+                                                        (nth 3 bnds)))))
+                             (throw 'helixel--just-exited t))))
+                       nil))))))
       ;; Step 1: skip past current enclosing pair (or climb outward
       ;; if already at its closing edge).
       (when cur-bounds
@@ -557,7 +578,15 @@ oe for inner).  If already at the opener, climb outward to the
 parent pair's opener.
 
 Step 2: if not inside any pair, search backward for the first
-opening delimiter and return its bounds."
+opening delimiter and return its bounds.
+
+No `just-entered' check is needed (unlike `-next's `just-exited').
+For backward direction, adjacent open chars like \=`((\=' have
+ob(parent) < ob(child) always, so \=`(<= orig-pt ob)' is never
+true when orig-pt sits at the child opener and bounds-at finds
+the parent pair — the at-opening check correctly stays false.
+For forward, the symmetric issue exists because cb(parent) can
+equal ce(child) when \=`))\=' are adjacent."
   (save-excursion
     (let* ((orig-pt (point))
            (cur-bounds (save-excursion

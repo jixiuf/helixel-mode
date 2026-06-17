@@ -973,7 +973,7 @@ select the full span of the enclosing pair."
         (unless (helixel--up-list-once outward delim)
           (message "No enclosing bracket"))
       (unless (helixel-replaying-p)
-        (helixel-action-commit)))))
+        (helixel--action-commit)))))
 
 (defun helixel--repeat-movement-motion (rec)
   "Replay a general movement motion from REC.

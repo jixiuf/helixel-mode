@@ -386,7 +386,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
         ;; Skip in mc-fake context — the undo amalgamation already
         ;; isolates each fake, and a stale active mark would leak
         ;; as a fake-cursor region overlay after dispatch.
-        (unless (helixel-replay-in-fake-p)
+        (unless (helixel--replay-in-fake-p)
           (push-mark sel-beg t t)))))))
 
 ;; ── Edit-op registry ──
@@ -659,7 +659,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
       ;; Store swap-source.  In mc mode each fake cursor stores to
       ;; its own per-cursor variable; the real cursor stores to the
       ;; global register (for non-mc fallback and cross-buffer use).
-      (if (helixel-replay-in-fake-p)
+      (if (helixel--replay-in-fake-p)
           (setq helixel--yank-register-source swap-source)
         (set-register helixel--yank-register swap-source))
       (when (use-region-p) ;; non-zero-width: store text on kill-ring
@@ -736,7 +736,7 @@ that many times (Vim-like 2p, 3P)."
           ;; For charwise with named register, insert the register
           ;; text count times without consuming the register each time.
           (if (helixel--register-active-p)
-              (let ((text (helixel-register-get helixel--current-register)))
+              (let ((text (helixel--register-get helixel--current-register)))
                 (dotimes (_ count)
                   (if text
                       (insert-for-yank text)
@@ -858,7 +858,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
   (interactive "p")
   (helixel--indent-body 'indent-left count -1))
 
-(helixel-op-set-runner 'indent-left
+(helixel--op-set-runner 'indent-left
      (lambda (tx)
        (let ((helixel--replay-multiplier
               (or (helixel-action-payload-get tx :multiplier) 1)))
@@ -870,7 +870,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
   (interactive "p")
   (helixel--indent-body 'indent-right count 1))
 
-(helixel-op-set-runner 'indent-right
+(helixel--op-set-runner 'indent-right
      (lambda (tx)
        (let ((helixel--replay-multiplier
               (or (helixel-action-payload-get tx :multiplier) 1)))

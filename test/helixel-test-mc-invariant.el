@@ -29,8 +29,8 @@ real cursor's bindings of any registered per-cursor var."
   :tags '(mc invariant)
   (helixel-test-with-buffer "abc\ndef\nghi\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)   ; on 'd'
-    (helixel-mc-create-fake-cursor 9)   ; on 'h'
+    (helixel-mc--create-fake-cursor 5)   ; on 'd'
+    (helixel-mc--create-fake-cursor 9)   ; on 'h'
     (let ((helixel--pending-sel  'REAL-SEL)
           (helixel--last-action   'REAL-EVT)
           (helixel--active-search 'REAL-SEARCH)
@@ -60,8 +60,8 @@ without leaking into other fakes."
   :tags '(mc invariant)
   (helixel-test-with-buffer "abc\ndef\nghi\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     ;; Tag each fake with a distinct value
     (let ((counter 0))
       (helixel-mc-with-each-cursor
@@ -103,9 +103,9 @@ refactor brought it inside the standard snapshot/restore path."
   ;; And the snapshot fn reads it.
   (helixel-test-with-buffer ""
     (setq mark-active t)
-    (should (helixel-pcs-mark-active (helixel-pcs-clone)))
+    (should (helixel-pcs-mark-active (helixel-mc--pcs-clone)))
     (setq mark-active nil)
-    (should-not (helixel-pcs-mark-active (helixel-pcs-clone)))))
+    (should-not (helixel-pcs-mark-active (helixel-mc--pcs-clone)))))
 
 (provide 'helixel-test-mc-invariant)
 ;;; helixel-test-mc-invariant.el ends here

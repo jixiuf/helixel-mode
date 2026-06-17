@@ -107,7 +107,7 @@ Accumulated during the current command; consumed by
   "Pre-command-hook: snapshot key + reset per-command change tracking.
 Skips `helixel-insert-exit'."
   (unless (eq this-command 'helixel-insert-exit)
-    (setq helixel--insert-cmd-keys        (helixel-keyrec-capture)
+    (setq helixel--insert-cmd-keys        (helixel--keyrec-capture)
           helixel--insert-cmd-start-point (point)
           helixel--insert-cmd-events      nil)))
 
@@ -504,7 +504,7 @@ The `helixel-define-command' macro handles this automatically."
       ;; Always set last-action so callers that skip `tracking-open'
       ;; (tests, programmatic use) still have a valid edit to replay.
       (setq helixel--last-action tx)
-      (helixel-action-commit))))
+      (helixel--action-commit))))
 
 
 ;; ---------------------------------------------------------------------------
@@ -837,7 +837,7 @@ The chosen event's edit data becomes the new `helixel--last-action'."
     (let* ((items (cl-loop for e in edit-entries
                            for i from 0
                            collect (cons (format "%3d  %s" i
-                                                 (helixel-action-display-format
+                                                 (helixel--action-display-format
                                                   e))
                                          e)))
            (collection
@@ -859,7 +859,7 @@ The chosen event's edit data becomes the new `helixel--last-action'."
                (apply #'helixel-action-create
                       (helixel-action-op event)
                       (helixel-action-sel event)
-                      :display (helixel-action-display-format event)
+                      :display (helixel--action-display-format event)
                       :runner (helixel-action-runner event)
                       (helixel-action-payload event))))
         (helixel-repeat-edit)))))
@@ -887,7 +887,7 @@ The chosen event's edit data becomes the new `helixel--last-action'."
                 " entries):\n")
         (dolist (ev events)
           (insert (format ";;   %s\n"
-                          (helixel-action-display-format ev))))
+                          (helixel--action-display-format ev))))
         (goto-char (point-min))))
     (display-buffer buf)))
 

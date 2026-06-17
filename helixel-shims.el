@@ -268,7 +268,7 @@ advance point (preview not active / nothing inserted)."
     (apply orig args)
     (when (and helixel-multi-cursor-mode
                (helixel-mc-any-p)
-               (not (helixel-mc-dispatch-in-progress-p))
+               (not (helixel-mc--dispatch-in-progress-p))
                (> (point) start))
       (let ((text (buffer-substring-no-properties start (point))))
         (helixel-mc--with-undo-step

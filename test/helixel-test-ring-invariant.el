@@ -57,11 +57,11 @@
   (helixel-ring-inv-with-buffer "abc\n"
     (setq helixel--live-action
           (helixel-ring-inv--make-event 'movement 'word 1))
-    (helixel-action-commit)
+    (helixel--action-commit)
     (let ((after-first (length helixel--action-ring)))
       (setq helixel--live-action
             (helixel-ring-inv--make-event 'movement 'word 1))
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--action-ring) after-first)))))
 
 ;; ── INV-RING-2: cap respected ──
@@ -73,7 +73,7 @@
       (dotimes (i 25)
         (setq helixel--live-action
               (helixel-ring-inv--make-event 'movement 'word (1+ i)))
-        (helixel-action-commit))
+        (helixel--action-commit))
       (should (<= (length helixel--action-ring) 10)))))
 
 ;; ── INV-RING-3: cap releases markers of evicted entries ──
@@ -85,7 +85,7 @@
           (oldest-marker nil))
       (setq helixel--live-action
             (helixel-ring-inv--make-event 'movement 'word 1))
-      (helixel-action-commit)
+      (helixel--action-commit)
       ;; Capture pointer to the marker of the entry that WILL be evicted.
       (setq oldest-marker
             (car (helixel-action-mark-region (car helixel--action-ring))))
@@ -94,7 +94,7 @@
       (dotimes (i 8)
         (setq helixel--live-action
               (helixel-ring-inv--make-event 'movement 'word (+ 2 i)))
-        (helixel-action-commit))
+        (helixel--action-commit))
       (should (= (length helixel--action-ring) 3))
       ;; Original marker has been nulled (released).
       (should-not (marker-position oldest-marker)))))
@@ -109,7 +109,7 @@
                  (list (lambda (e) (setq received e)))))
         (setq helixel--live-action
               (helixel-ring-inv--make-event 'movement 'word 1))
-        (helixel-action-commit)
+        (helixel--action-commit)
         (should received)
         ;; Received entry is the same as the one now on the ring front.
         (should (eq received (car helixel--action-ring)))))))
@@ -124,7 +124,7 @@
             (helixel-ring-inv--make-event 'movement 'word 1))
       ;; ensure by-command is nil so the fallback path runs
       (setf (helixel-action-by-command helixel--live-action) nil)
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (eq (helixel-action-by-command (car helixel--action-ring))
                   'some-test-command)))))
 
@@ -153,7 +153,7 @@
     (should (helixel-action-start-point helixel--live-action))
     (let ((live-sp (helixel-action-start-point helixel--live-action)))
       (should (markerp live-sp))
-      (helixel-action-commit)
+      (helixel--action-commit)
       (let ((ring-entry (car helixel--action-ring)))
         (should (helixel-action-start-point ring-entry))
         (should (markerp (helixel-action-start-point ring-entry)))
@@ -167,16 +167,16 @@
     (let ((helixel-action-ring-max 2))
       (goto-char 1)
       (helixel--tracking-open 'movement 'word)
-      (helixel-action-commit)
+      (helixel--action-commit)
       (let ((sp1 (helixel-action-start-point (car helixel--action-ring))))
         (should (markerp sp1))
         (should (marker-buffer sp1))
         (goto-char 5)
         (helixel--tracking-open 'movement 'WORD)
-        (helixel-action-commit)
+        (helixel--action-commit)
         (goto-char 9)
         (helixel--tracking-open 'movement 'symbol)
-        (helixel-action-commit)
+        (helixel--action-commit)
         (should (null (marker-buffer sp1)))))))
 
 (provide 'helixel-test-ring-invariant)

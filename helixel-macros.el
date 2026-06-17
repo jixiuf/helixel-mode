@@ -28,7 +28,7 @@
 ;; `helixel-define-operator'     — editing operator (command + op reg)
 ;;
 ;; All macros expand to inline code (zero hooks).  They depend on
-;; `helixel--tracking-open' and `helixel-action-commit' from
+;; `helixel--tracking-open' and `helixel--action-commit' from
 ;; `helixel-ring', and `helixel-register-op' from `helixel-core'.
 
 ;;; Code:
@@ -54,7 +54,7 @@ event in an `unwind-protect' so it always finalises even on error."
      (unwind-protect
          (progn ,@body)
        (unless (helixel-replaying-p)
-         (helixel-action-commit)))))
+         (helixel--action-commit)))))
 
 ;; ── Command definition macro ──
 
@@ -117,7 +117,7 @@ BODY is the command's business logic."
     `(defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
-       ;; ── Tag this command so `helixel-action-commit' can stamp
+       ;; ── Tag this command so `helixel--action-commit' can stamp
        ;; `by-command' on committed edits.  `helixel--current-command'
        ;; is the single source of truth — committed actions use it
        ;; directly; Emacs's command loop already sets `this-command'

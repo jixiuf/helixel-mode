@@ -77,7 +77,7 @@ Otherwise spawn from:
                         (helixel-action-sel helixel--last-action)))))
       (unless sel
         (user-error "No selection to spawn cursors from"))
-      (let ((n (helixel-mc-spawn-from-sel sel)))
+      (let ((n (helixel-mc--spawn-from-sel sel)))
         (message "helixel-mc: %d fake cursor%s spawned"
                  n (if (= n 1) "" "s")))))))
 
@@ -125,7 +125,7 @@ No-op (returns nil) if no suitable target line exists."
                  (= (point) (marker-position
                              (helixel-mc-cursor-point ov))))
                (helixel-mc-all-cursors))
-        (helixel-mc-create-fake-cursor
+        (helixel-mc--create-fake-cursor
          (point) (and had-region mk)))
       ;; Move real to the new target.
       (when had-region (deactivate-mark))
@@ -300,7 +300,7 @@ cursor — so real never moves and never collides with a fake."
     (let* ((tb (marker-position (car target)))
            (te (marker-position (cdr target)))
            (forward-p (>= (point) (mark t))))
-      (helixel-mc-create-fake-cursor
+      (helixel-mc--create-fake-cursor
        (if forward-p te tb)
        (if forward-p tb te)))
     (helixel-mc--free-targets (list target))))
@@ -379,7 +379,7 @@ navigated to, then real moves back to the nearest neighbor
     (helixel-mc--swap-real-and-fake nearest)
     ;; Step 2: delete the fake at the position real just vacated
     ;;   (the former primary position).
-    (helixel-mc-delete-fake-cursor nearest)))
+    (helixel-mc--delete-fake-cursor nearest)))
 
 ;;;###autoload
 (defun helixel-mc-keep-primary ()
@@ -400,7 +400,7 @@ other fake cursor."
                (point)))
           (helixel-mc-all-cursors :sort))))
     (unless cursor (user-error "No fake cursor after point"))
-    (helixel-mc-delete-fake-cursor cursor)))
+    (helixel-mc--delete-fake-cursor cursor)))
 
 ;;;###autoload
 (defun helixel-mc-unmark-previous ()
@@ -413,7 +413,7 @@ other fake cursor."
                (point)))
           (reverse (helixel-mc-all-cursors :sort)))))
     (unless cursor (user-error "No fake cursor before point"))
-    (helixel-mc-delete-fake-cursor cursor)))
+    (helixel-mc--delete-fake-cursor cursor)))
 
 ;; Whitelist: helixel-mc commands themselves run only at real cursor.
 (helixel-mc-mark-all-for-real-cursor-only
@@ -493,7 +493,7 @@ survive).  Errors outside an mc session."
              (helixel-mc-all-cursors)))))
     (dolist (ov (helixel-mc-all-cursors))
       (unless (memq ov survivors)
-        (helixel-mc-delete-fake-cursor ov)))
+        (helixel-mc--delete-fake-cursor ov)))
     (unless real-keep
       (if (null survivors)
           (helixel-mc-clear-all)
@@ -530,7 +530,7 @@ If the resulting set has no fakes left, fully disables mc mode."
   (let ((p (marker-position (helixel-mc-cursor-point ov)))
         (m (marker-position (helixel-mc-cursor-mark ov)))
         (a (helixel-mc-cursor-mark-active ov)))
-    (helixel-mc-delete-fake-cursor ov)
+    (helixel-mc--delete-fake-cursor ov)
     (goto-char p)
     (set-marker (mark-marker) m)
     (setq mark-active a)))
@@ -589,14 +589,14 @@ and OV holds what used to be the real cursor's position and state.
 The fake overlay gets a fresh `helixel-pc-state' (cloned from the
 real cursor's pre-swap state).  OV's old markers are released — no
 caller holds references to them outside the struct on OV itself."
-  (let* ((real-cs (helixel-pcs-clone))         ; snapshot of real
+  (let* ((real-cs (helixel-mc--pcs-clone))         ; snapshot of real
          (fake-cs (overlay-get ov 'helixel-pc-state)))
     ;; Move real cursor onto fake's state.
-    (helixel-pcs-swap-in fake-cs)
+    (helixel-mc--pcs-swap-in fake-cs)
     ;; Store real's old state on the fake overlay (replaces entire struct).
     (overlay-put ov 'helixel-pc-state real-cs)
     ;; Release fake's old markers — no longer referenced.
-    (helixel-pcs-release fake-cs)
+    (helixel-mc--pcs-release fake-cs)
     (helixel-mc--update-fake-region ov)
     (helixel-mc--paint-cursor-overlay
      ov (marker-position (helixel-pcs-point real-cs)))))
@@ -793,7 +793,7 @@ region)."
              (empty-p (= b e))
              (p (if fwd e b))
              (m (if empty-p p (if fwd b e)))
-             (ov (helixel-mc-create-fake-cursor p m)))
+             (ov (helixel-mc--create-fake-cursor p m)))
         (when ov
           (unless empty-p
             (setf (helixel-pcs-mark-active
@@ -1007,7 +1007,7 @@ into history."
         (setq mark-active (and ra (numberp rm) (/= rp rm))))
       (dolist (entry (cdr snap))
         (let* ((p (nth 0 entry)) (m (nth 1 entry)) (a (nth 2 entry))
-               (ov (helixel-mc-create-fake-cursor p (or m p))))
+               (ov (helixel-mc--create-fake-cursor p (or m p))))
           (when ov
             (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state))
                   (and a (numberp m) (/= p m)))

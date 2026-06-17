@@ -56,8 +56,8 @@
   "Test storing and retrieving text in a named register."
   (unwind-protect
       (progn
-        (helixel-register-set ?x "test-text")
-        (should (string= (helixel-register-get ?x) "test-text")))
+        (helixel--register-set ?x "test-text")
+        (should (string= (helixel--register-get ?x) "test-text")))
     ;; Cleanup
     (set-register ?x nil)))
 
@@ -65,8 +65,8 @@
   "Test register preserves yank-handler text properties."
   (unwind-protect
       (let ((text (helixel--linewise-text "hello")))
-        (helixel-register-set ?x text)
-        (let ((retrieved (helixel-register-get ?x)))
+        (helixel--register-set ?x text)
+        (let ((retrieved (helixel--register-get ?x)))
           (should (string= retrieved "hello\n"))
           (should (eq (car-safe (get-text-property 0 'yank-handler retrieved))
                       'helixel--yank-handler-line-wise))))
@@ -78,7 +78,7 @@
       (progn
         (setq helixel--current-register ?x)
         (helixel--kill-new "killed-text")
-        (should (string= (helixel-register-get ?x) "killed-text"))
+        (should (string= (helixel--register-get ?x) "killed-text"))
         (should (eq helixel--current-register ?x)) ; not consumed
         (helixel--register-consume))
     (set-register ?x nil)
@@ -95,7 +95,7 @@
   "Test `helixel--current-kill' reads from named register when active."
   (unwind-protect
       (progn
-        (helixel-register-set ?x "reg-content")
+        (helixel--register-set ?x "reg-content")
         (setq helixel--current-register ?x)
         (should (string= (helixel--current-kill 0 t) "reg-content"))
         (helixel--register-consume))
@@ -107,7 +107,7 @@
   (unwind-protect
       (helixel-test-with-buffer "hello"
         (goto-char 6) ; after "hello"
-        (helixel-register-set ?x "WORLD")
+        (helixel--register-set ?x "WORLD")
         (setq helixel--current-register ?x)
         (helixel--yank)
         (should (string= (buffer-string) "helloWORLD"))
@@ -126,7 +126,7 @@
         (helixel-kill)
         (should (null helixel--current-register)) ; consumed
         (should (string= (buffer-string) "hworld"))
-        (should (string= (helixel-register-get ?a) "ello ")))
+        (should (string= (helixel--register-get ?a) "ello ")))
     (set-register ?a nil)
     (setq helixel--current-register nil)))
 
@@ -154,7 +154,7 @@
         (should (null helixel--current-register))
         ;; One line deleted
         (should (string= (buffer-string) "line2\nline3"))
-        (let ((text (helixel-register-get ?a)))
+        (let ((text (helixel--register-get ?a)))
           (should (string= text "line1\n"))
           (should (eq (car-safe (get-text-property 0 'yank-handler text))
                       'helixel--yank-handler-line-wise))))
@@ -173,7 +173,7 @@
         (should (null helixel--current-register))
         ;; Buffer unchanged
         (should (string= (buffer-string) "hello world"))
-        (should (string= (helixel-register-get ?a) "hello")))
+        (should (string= (helixel--register-get ?a) "hello")))
     (set-register ?a nil)
     (setq helixel--current-register nil)))
 
@@ -185,7 +185,7 @@
         (helixel-select-line)
         (helixel-kill-ring-save)
         (should (null helixel--current-register))
-        (let ((text (helixel-register-get ?a)))
+        (let ((text (helixel--register-get ?a)))
           (should (string= text "line1\n"))
           (should (eq (car-safe (get-text-property 0 'yank-handler text))
                       'helixel--yank-handler-line-wise))))
@@ -197,7 +197,7 @@
   (unwind-protect
       (helixel-test-with-buffer "hello"
         (goto-char 6) ; after "hello"
-        (helixel-register-set ?a "WORLD")
+        (helixel--register-set ?a "WORLD")
         (setq helixel--current-register ?a)
         (helixel-yank)
         (should (null helixel--current-register))
@@ -209,7 +209,7 @@
   "Test \"ap pastes linewise content from register.\"\nFor `helixel-yank' (paste-after), linewise content is inserted on the\nLINE AFTER point's current line (here, after line2)."
   (unwind-protect
       (helixel-test-with-buffer "line1\nline2"
-        (helixel-register-set ?a
+        (helixel--register-set ?a
                               (helixel--linewise-text "INSERTED"))
         (setq helixel--current-register ?a)
         (goto-char 7) ;; start of line2
@@ -224,7 +224,7 @@
   "Test \"aP pastes before from register a."
   (unwind-protect
       (helixel-test-with-buffer "hello"
-        (helixel-register-set ?a "PRE")
+        (helixel--register-set ?a "PRE")
         (setq helixel--current-register ?a)
         (helixel-yank-before)
         (should (null helixel--current-register))
@@ -237,7 +237,7 @@
   "Test \"ar replaces region with register a content."
   (unwind-protect
       (helixel-test-with-buffer "hello world"
-        (helixel-register-set ?a "REPLACED")
+        (helixel--register-set ?a "REPLACED")
         (goto-char 1)
         (push-mark (point) t t)
         (goto-char 6)
@@ -253,7 +253,7 @@
   (let ((helixel-replace-delete-char-p t))
     (unwind-protect
         (helixel-test-with-buffer "hello"
-          (helixel-register-set ?a "X")
+          (helixel--register-set ?a "X")
           (setq helixel--current-register ?a)
           (helixel-replace)
           (should (null helixel--current-register))
@@ -273,7 +273,7 @@
           (helixel-change))
         ;; Register is consumed after the kill part
         (should (null helixel--current-register))
-        (should (string= (helixel-register-get ?a) "hello"))
+        (should (string= (helixel--register-get ?a) "hello"))
         (should (string= (buffer-string) " world")))
     (set-register ?a nil)
     (setq helixel--current-register nil)))
@@ -314,7 +314,7 @@
         (helixel-kill)
         ;; Register consumed, buffer: "hworld"
         (should (null helixel--current-register))
-        (should (string= (helixel-register-get ?a) "ello "))
+        (should (string= (helixel--register-get ?a) "ello "))
         ;; Step 2: press . — select and kill one char
         (goto-char 1)
         (push-mark (point) t t)
@@ -323,7 +323,7 @@
         ;; Kill-ring top should be "h" (the char deleted by .)
         (should (string= (current-kill 0 t) "h"))
         ;; Register a should still have "ello " unchanged
-        (should (string= (helixel-register-get ?a) "ello ")))
+        (should (string= (helixel--register-get ?a) "ello ")))
     (set-register ?a nil)
     (setq helixel--current-register nil)))
 
@@ -344,7 +344,7 @@
         (setq helixel--current-register ?b)
         (helixel-repeat-edit 1)
         ;; Register b should have the char deleted by replay
-        (should (string= (helixel-register-get ?b) "h"))
+        (should (string= (helixel--register-get ?b) "h"))
         (should (null helixel--current-register)))
     (set-register ?a nil)
     (set-register ?b nil)
@@ -358,11 +358,11 @@
         (setq helixel--current-register ?a)
         (helixel-kill)
         ;; Register a has "h"
-        (should (string= (helixel-register-get ?a) "h"))
+        (should (string= (helixel--register-get ?a) "h"))
         ;; Do another operation (no register)
         (helixel-kill)  ; kill "e", goes to kill-ring
         ;; Register a still has "h"
-        (should (string= (helixel-register-get ?a) "h"))
+        (should (string= (helixel--register-get ?a) "h"))
         ;; Now paste from register a
         (goto-char 4) ; after "llo" (remaining: "llo")
         (setq helixel--current-register ?a)
@@ -379,7 +379,7 @@
         (push-mark (point) t t)
         (goto-char 6)
         (helixel-kill-ring-save)  ;; copy "hello"
-        (should (string= (helixel-register-get ?0) "hello")))
+        (should (string= (helixel--register-get ?0) "hello")))
     (set-register ?0 nil)
     (dolist (r '(?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9 ?-))
       (set-register r nil))
@@ -401,8 +401,8 @@
         (goto-char 7)
         (helixel-kill)
         ;; Register 1 = "world" (most recent), Register 2 = "ello "
-        (should (string= (helixel-register-get ?1) "world"))
-        (should (string= (helixel-register-get ?2) "ello ")))
+        (should (string= (helixel--register-get ?1) "world"))
+        (should (string= (helixel--register-get ?2) "ello ")))
     (dolist (r '(?0 ?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9 ?-))
       (set-register r nil))
     (setq helixel--current-register nil)))
@@ -412,9 +412,9 @@
   (unwind-protect
       (helixel-test-with-buffer "hello"
         (helixel-kill) ; delete "h"
-        (should (string= (helixel-register-get ?-) "h"))
+        (should (string= (helixel--register-get ?-) "h"))
         ;; Also goes to register 1 (rotated)
-        (should (string= (helixel-register-get ?1) "h")))
+        (should (string= (helixel--register-get ?1) "h")))
     (dolist (r '(?0 ?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9 ?-))
       (set-register r nil))
     (setq helixel--current-register nil)))
@@ -427,9 +427,9 @@
         (helixel-select-line)
         (helixel-kill)
         ;; Linewise delete has newline, should NOT go to -
-        (should (null (helixel-register-get ?-)))
+        (should (null (helixel--register-get ?-)))
         ;; Does go to register 1
-        (should (string= (helixel-register-get ?1) "line1\n")))
+        (should (string= (helixel--register-get ?1) "line1\n")))
     (dolist (r '(?0 ?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9 ?-))
       (set-register r nil))
     (setq helixel--current-register nil)))
@@ -443,14 +443,14 @@
         (push-mark (point) t t)
         (goto-char 6)
         (helixel-kill-ring-save)
-        (should (string= (helixel-register-get ?0) "first"))
+        (should (string= (helixel--register-get ?0) "first"))
         ;; Delete "second" → register 1, register 0 unchanged
         (goto-char 7)
         (push-mark (point) t t)
         (goto-char 13)
         (helixel-kill)
-        (should (string= (helixel-register-get ?1) "second"))
-        (should (string= (helixel-register-get ?0) "first")))
+        (should (string= (helixel--register-get ?1) "second"))
+        (should (string= (helixel--register-get ?0) "first")))
     (dolist (r '(?0 ?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9 ?-))
       (set-register r nil))
     (setq helixel--current-register nil)))

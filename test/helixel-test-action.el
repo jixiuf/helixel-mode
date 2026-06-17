@@ -264,11 +264,11 @@
       (helixel--tracking-open 'search 'search)
       (setf (helixel-action-payload helixel--live-action)
             '(:pattern "test"))
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--action-ring) 1))
       (cl-letf (((symbol-function 'completing-read)
                  (lambda (_prompt _collection &rest _)
-                   (helixel-action-display-format
+                   (helixel--action-display-format
                     (car helixel--action-ring)))))
         (helixel-search--from-history t))
       ;; from-history commits a new search event to the ring

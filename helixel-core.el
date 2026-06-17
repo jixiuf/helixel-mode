@@ -1199,7 +1199,7 @@ pending markers still track buffer changes and waste CPU."
                 ((markerp sp)))
       (set-marker sp nil))
     ;; Payload may carry group-span markers added by
-    ;; `helixel-action-commit' during group pre-computation.
+    ;; `helixel--action-commit' during group pre-computation.
     (when-let* ((gs (plist-get (helixel-action-payload event)
                                :group-span-mr))
                 ((consp gs)))
@@ -1323,7 +1323,7 @@ should NOT auto-advance; nil means the kind's :advance fn drives
 stepping between targets."
   (plist-get (gethash op helixel--op-registry) :moves-point-p))
 
-(defun helixel-op-set-runner (op runner)
+(defun helixel--op-set-runner (op runner)
   "Override the :runner for OP in the operator registry to RUNNER.
 Preserves existing :display and :moves-point-p."
   (let ((entry (gethash op helixel--op-registry)))
@@ -1564,15 +1564,15 @@ Consumed by `.' and `,' for repeat.  Buffer-local.")
 
 (defvar helixel--current-command nil
   "Symbol of the currently-executing helixel command.
-Bound by `helixel-define-command' (and by `helixel-with-command'
-for manually-defined commands) so that `helixel-action-commit'
+Bound by `helixel-define-command' (and by `helixel--with-command'
+for manually-defined commands) so that `helixel--action-commit'
 can stamp `by-command' on each committed action — enabling the
 multi-cursor dispatcher to detect a fresh edit produced by THIS
 command even when `this-command' isn't set (e.g. in batch tests
 or when called programmatically without going through the
 command loop).")
 
-(defmacro helixel-with-command (name &rest body)
+(defmacro helixel--with-command (name &rest body)
   "Run BODY tagged as if it were inside the command NAME.
 Binds `helixel--current-command' AND overrides `this-command'
 to NAME so committed actions carry the right `by-command' stamp.
@@ -1603,7 +1603,7 @@ already committed."
 ;; Tiny utility shared by insert-mode recording
 ;; (`helixel-repeat.el').
 
-(defsubst helixel-keyrec-capture ()
+(defsubst helixel--keyrec-capture ()
   "Return the current single-command key sequence for hook capture.
 
 A semantic alias for `this-single-command-keys'.  The insert
@@ -1629,7 +1629,7 @@ accumulator inside `pre-command-hook'."
 
 ;; ── Group navigation ──
 
-(defun helixel-gr-group-start (list pos same-group-p)
+(defun helixel--gr-group-start (list pos same-group-p)
   "Return the oldest (largest) index in LIST of the group containing POS.
 SAME-GROUP-P is a predicate of two adjacent entries."
   (let ((len (length list)))
@@ -1639,7 +1639,7 @@ SAME-GROUP-P is a predicate of two adjacent entries."
       (cl-incf pos))
     pos))
 
-(defun helixel-gr-group-newest (list pos same-group-p)
+(defun helixel--gr-group-newest (list pos same-group-p)
   "Return the newest (smallest) index in LIST of the group containing POS.
 SAME-GROUP-P is a predicate of two adjacent entries."
   (let ((i pos))
@@ -1651,20 +1651,20 @@ SAME-GROUP-P is a predicate of two adjacent entries."
 
 ;; ── Visibility queries ──
 
-(defun helixel-gr-visible-index (list pos visible-p)
+(defun helixel--gr-visible-index (list pos visible-p)
   "Return index of first visible entry at or after POS in LIST, or nil.
 VISIBLE-P is a predicate on entries."
   (cl-loop for i from pos below (length list)
            when (funcall visible-p (nth i list))
            return i))
 
-(defun helixel-gr-visible-count (list visible-p)
+(defun helixel--gr-visible-count (list visible-p)
   "Count entries in LIST for which VISIBLE-P returns non-nil."
   (cl-loop for a in list
            when (funcall visible-p a)
            count 1))
 
-(defun helixel-gr-find (list pos direction visible-p)
+(defun helixel--gr-find (list pos direction visible-p)
   "Find next visible entry index from POS in DIRECTION (+1 or -1).
 LIST is the ring, VISIBLE-P the visibility predicate.  Returns nil
 if no further visible entry exists in that direction."
@@ -1703,51 +1703,42 @@ Dynamically bound by `helixel-with-replay'.")
 True only for the `dot' origin (used by `.' / `,' / chain / insert
 replay paths).  Does NOT include `mc-fake' / `mc-batch' origins —
 those wrap normal command execution at fake cursors and should not
-suppress per-fake recording.  Use `helixel-replay-in-fake-p' /
-`helixel-mc-dispatch-in-progress-p' for mc-specific guards."
+suppress per-fake recording.  Use `helixel--replay-in-fake-p' /
+`helixel-mc--dispatch-in-progress-p' for mc-specific guards."
   (and helixel--replay
        (eq (helixel-replay--origin helixel--replay) 'dot)))
 
-(defsubst helixel-replay-in-fake-p ()
+(defsubst helixel--replay-in-fake-p ()
   "Return non-nil when replaying inside a fake cursor body."
   (and helixel--replay
        (eq (helixel-replay--origin helixel--replay) 'mc-fake)))
 
-(defsubst helixel-mc-dispatch-in-progress-p ()
-  "Return non-nil when an mc dispatch is in progress.
-Covers both `mc-batch' (outer broadcast loop) and `mc-fake'
-\(inside one fake cursor's body).  Used by guards that must not
-re-enter the dispatcher."
-  (and helixel--replay
-       (memq (helixel-replay--origin helixel--replay)
-             '(mc-batch mc-fake))))
-
-(defsubst helixel-search-advance-done-p ()
+(defsubst helixel--search-advance-done-p ()
   "Non-nil if `helixel--repeat-advance-search' positioned point this session."
   (and helixel--replay
        (helixel-replay--search-advance-done helixel--replay)))
 
-(defsubst helixel-search-advance-done-set (val)
+(defsubst helixel--search-advance-done-set (val)
   "Set the search-advance-done flag to VAL on the current replay ctx."
   (when helixel--replay
     (setf (helixel-replay--search-advance-done helixel--replay) val)))
 
-(defsubst helixel-search-advance-last-pos ()
+(defsubst helixel--search-advance-last-pos ()
   "Last `match-beginning' processed by `helixel--repeat-advance-search'."
   (and helixel--replay
        (helixel-replay--search-last-pos helixel--replay)))
 
-(defsubst helixel-search-advance-last-pos-set (val)
+(defsubst helixel--search-advance-last-pos-set (val)
   "Set the last-match-position field on the current replay ctx to VAL."
   (when helixel--replay
     (setf (helixel-replay--search-last-pos helixel--replay) val)))
 
-(defsubst helixel-search-advance-edge-seen-p ()
+(defsubst helixel--search-advance-edge-seen-p ()
   "Non-nil if a zero-width buffer-edge match was already processed."
   (and helixel--replay
        (helixel-replay--search-edge-seen helixel--replay)))
 
-(defsubst helixel-search-advance-edge-seen-set (val)
+(defsubst helixel--search-advance-edge-seen-set (val)
   "Set the edge-seen field on the current replay ctx to VAL."
   (when helixel--replay
     (setf (helixel-replay--search-edge-seen helixel--replay) val)))
@@ -1850,20 +1841,20 @@ Press \\[keyboard-quit] to cancel."
       (setq helixel--current-register char)
       (message "\"%c" char))))
 
-(defun helixel-register-backend (char)
+(defun helixel--register-backend (char)
   "Return the storage backend keyword for register CHAR.
 Looks up CHAR in `helixel-register-backends'.  Returns nil when
 CHAR is not in the alist (meaning it uses `register-alist')."
   (cdr (assq char helixel-register-backends)))
 
-(defun helixel-register-get (char)
+(defun helixel--register-get (char)
   "Return text contents of register CHAR, or nil if empty.
 Dispatch is determined by `helixel-register-backends':
 - `kill-ring' → top of `kill-ring'.
 - `clipboard' → system clipboard (CLIPBOARD selection).
 - `primary' → primary selection.
 - nil (unlisted) → Emacs `register-alist' via `get-register'."
-  (cl-case (helixel-register-backend char)
+  (cl-case (helixel--register-backend char)
     (kill-ring (and kill-ring (current-kill 0 t)))
     (clipboard (and (display-graphic-p)
                     (gui-get-selection 'CLIPBOARD)))
@@ -1871,7 +1862,7 @@ Dispatch is determined by `helixel-register-backends':
                     (gui-get-selection 'PRIMARY)))
     (t (get-register char))))
 
-(defun helixel-register-set (char text)
+(defun helixel--register-set (char text)
   "Store TEXT in register CHAR.
 Dispatch is determined by `helixel-register-backends':
 - `kill-ring' → push to `kill-ring' via `kill-new'.
@@ -1879,7 +1870,7 @@ Dispatch is determined by `helixel-register-backends':
 - `primary' → primary selection via `gui-set-selection'.
 - nil (unlisted) → Emacs `register-alist' via `set-register'.
 TEXT is a string preserving any yank-handler properties."
-  (cl-case (helixel-register-backend char)
+  (cl-case (helixel--register-backend char)
     (kill-ring (kill-new text))
     (clipboard (gui-set-selection 'CLIPBOARD text))
     (primary   (gui-set-selection 'PRIMARY text))
@@ -1902,7 +1893,7 @@ after all cursors have run."
     (unless (bound-and-true-p helixel-multi-cursor-mode)
       (setq helixel--current-register nil))))
 
-(defun helixel-register-rotate-delete (text)
+(defun helixel--register-rotate-delete (text)
   "Rotate numbered delete registers and store TEXT in the first slot.
 Uses `helixel-register-numbered-delete-start' and
 `helixel-register-numbered-delete-count' to define the range.
@@ -1933,11 +1924,11 @@ Does NOT clear the register -- callers should call
   (kill-new text)
   (if (eq kind :copy)
       (set-register helixel-register-yank-char text)
-    (helixel-register-rotate-delete text)
+    (helixel--register-rotate-delete text)
     (when (and text (not (string-match-p "\n" text)))
       (set-register helixel-register-small-delete-char text)))
   (when (helixel--register-active-p)
-    (helixel-register-set helixel--current-register text)))
+    (helixel--register-set helixel--current-register text)))
 
 (defun helixel--current-kill (n &optional no-move)
   "Like `current-kill', but reads from named register when active.
@@ -1946,7 +1937,7 @@ NO-MOVE is passed to `current-kill' as DO-NOT-MOVE when using `kill-ring'.
 Returns the text or nil.  Does NOT alter the `kill-ring' yanking-point
 when reading from a register."
   (if (helixel--register-active-p)
-      (or (helixel-register-get helixel--current-register)
+      (or (helixel--register-get helixel--current-register)
           (current-kill 0 t))
     (current-kill n no-move)))
 
@@ -1954,7 +1945,7 @@ when reading from a register."
   "Like `yank', but reads from named register when active.
 ARG is passed through to `yank' when using the `kill-ring'."
   (if (helixel--register-active-p)
-      (let ((text (helixel-register-get helixel--current-register)))
+      (let ((text (helixel--register-get helixel--current-register)))
         (if text
             (insert-for-yank text)
           (message "Register \"%c is empty" helixel--current-register)))

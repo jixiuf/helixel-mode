@@ -294,7 +294,7 @@ D is the tag delimiter plist used to locate the tags."
 (defun helixel-surround-add ()
   "Surround the active selection with a delimiter pair."
   (interactive)
-  (helixel-with-command helixel-surround-add
+  (helixel--with-command helixel-surround-add
     (unless (use-region-p)
       (user-error "No active selection to surround"))
     (let* ((char (read-char (helixel--surround-prompt "surround add:")))
@@ -317,7 +317,7 @@ D is the tag delimiter plist used to locate the tags."
 (defun helixel-surround-add-tag ()
   "Surround the active selection with an XML tag."
   (interactive)
-  (helixel-with-command helixel-surround-add-tag
+  (helixel--with-command helixel-surround-add-tag
     (unless (use-region-p)
       (user-error "No active selection to surround"))
     (let ((tag (read-string "Tag: ")))
@@ -354,7 +354,7 @@ Uses `helixel--pending-sel' to determine the delimiter type.
 When the selection lacks surround info, activates textobj keys
 so the user can select a target with one keypress."
   (interactive)
-  (helixel-with-command helixel-surround-delete
+  (helixel--with-command helixel-surround-delete
     (let ((sel-ctx helixel--pending-sel)
           d)
       (if (and sel-ctx (setq d (helixel-sel-surround-delimiter sel-ctx)))
@@ -374,7 +374,7 @@ Prompts per type: tag `read-string', all others `read-char'.
 When the selection lacks surround info, activates textobj keys
 so the user can select a target with one keypress."
   (interactive)
-  (helixel-with-command helixel-surround-replace
+  (helixel--with-command helixel-surround-replace
     (let ((sel-ctx helixel--pending-sel)
           d)
       (if (and sel-ctx (setq d (helixel-sel-surround-delimiter sel-ctx)))

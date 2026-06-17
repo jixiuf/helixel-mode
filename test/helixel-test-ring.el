@@ -32,13 +32,13 @@
 ;;; Event commit basics
 
 (ert-deftest helixel-test-ring-commit-basic ()
-  "`helixel-action-commit' pushes live-event to ring (movement: no tx)."
+  "`helixel--action-commit' pushes live-event to ring (movement: no tx)."
   (let ((helixel--action-ring nil)
         (helixel--live-action nil)
         (helixel--last-action nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
-      (let ((entry (helixel-action-commit)))
+      (let ((entry (helixel--action-commit)))
         (should entry)
         (should (helixel-action-p entry))
         (should (= (length helixel--action-ring) 1))
@@ -48,11 +48,11 @@
         (should (null helixel--live-action))))))
 
 (ert-deftest helixel-test-ring-commit-nil-live ()
-  "`helixel-action-commit' with nil live-event returns nil."
+  "`helixel--action-commit' with nil live-event returns nil."
   (let ((helixel--action-ring nil)
         (helixel--live-action nil)
         (helixel--last-action nil))
-    (should (null (helixel-action-commit)))
+    (should (null (helixel--action-commit)))
     (should (null helixel--action-ring))
     (should (null helixel--last-action))))
 
@@ -64,13 +64,13 @@ Movement commits leave `helixel--last-action' unchanged."
         (helixel--last-action nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'edit 'kill 'kill)
-      (let* ((e1 (helixel-action-commit))
+      (let* ((e1 (helixel--action-commit))
              (tx1 e1))
         (should e1)
         (should tx1)
         (should (eq helixel--last-action tx1))
         (helixel--tracking-open 'edit 'change 'change)
-        (let* ((e2 (helixel-action-commit))
+        (let* ((e2 (helixel--action-commit))
                (tx2 e2))
           (should e2)
           (should (eq helixel--last-action tx2))
@@ -90,7 +90,7 @@ Movement commits leave `helixel--last-action' unchanged."
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill)
         (setf (helixel-action-payload helixel--live-action) '(:text "x")))
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--action-ring) 1))
       ;; Re-create identical live-event and commit again
       (helixel--tracking-open 'movement 'char)
@@ -98,7 +98,7 @@ Movement commits leave `helixel--last-action' unchanged."
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill)
         (setf (helixel-action-payload helixel--live-action) '(:text "x")))
-      (helixel-action-commit)
+      (helixel--action-commit)
       ;; Dedup should prevent the push — ring still has 1 entry
       (should (= (length helixel--action-ring) 1)))))
 
@@ -110,11 +110,11 @@ Movement commits leave `helixel--last-action' unchanged."
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
       (setf (helixel-action-op helixel--live-action) 'kill)
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--action-ring) 1))
       (helixel--tracking-open 'movement 'char)
       (setf (helixel-action-op helixel--live-action) 'change)
-      (helixel-action-commit)
+      (helixel--action-commit)
       ;; Different op — no dedup
       (should (= (length helixel--action-ring) 2)))))
 
@@ -128,14 +128,14 @@ Movement commits leave `helixel--last-action' unchanged."
       (let ((sel (helixel-sel-create 'line '(:dir forward :count 2))))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill))
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--action-ring) 1))
       ;; Different sel — should NOT be deduped
       (helixel--tracking-open 'movement 'char)
       (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill))
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--action-ring) 2)))))
 
 ;;; Ring cap
@@ -151,7 +151,7 @@ Movement commits leave `helixel--last-action' unchanged."
         (helixel--tracking-open 'movement 'char)
         (setf (helixel-action-op helixel--live-action) 'forward-char)
         (setf (helixel-action-payload helixel--live-action) `(:n ,i))
-        (helixel-action-commit))
+        (helixel--action-commit))
       (should (<= (length helixel--action-ring) 3))
       ;; Most recent entries are kept (front of ring)
       (should (= (plist-get (helixel-action-payload (nth 0 helixel--action-ring)) :n)
@@ -171,12 +171,12 @@ Movement commits leave `helixel--last-action' unchanged."
       (helixel--tracking-open 'movement 'char)
       (let ((m1 (car (helixel-action-mark-region helixel--live-action))))
         (should (marker-buffer m1))
-        (helixel-action-commit))
+        (helixel--action-commit))
       ;; Push second entry — first is evicted
       (helixel--tracking-open 'movement 'line)
       (let ((m2 (car (helixel-action-mark-region helixel--live-action))))
         (should (marker-buffer m2))
-        (helixel-action-commit))
+        (helixel--action-commit))
       (should (= (length helixel--action-ring) 1)))))
 
 ;;; Global jump log
@@ -190,7 +190,7 @@ Movement commits leave `helixel--last-action' unchanged."
         (helixel--jump-pos nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should helixel--global-jump-log)
       (should (= (length helixel--global-jump-log) 1)))))
 
@@ -204,17 +204,17 @@ Movement commits leave `helixel--last-action' unchanged."
     (helixel-test-with-buffer "hello world"
       (goto-char 3)
       (helixel--tracking-open 'movement 'char)
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--global-jump-log) 1))
       ;; Same position, same category → dedup
       (goto-char 3)
       (helixel--tracking-open 'movement 'char)
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--global-jump-log) 1))
       ;; Different position → no dedup
       (goto-char 7)
       (helixel--tracking-open 'movement 'char)
-      (helixel-action-commit)
+      (helixel--action-commit)
       (should (= (length helixel--global-jump-log) 2)))))
 
 (provide 'helixel-test-ring)

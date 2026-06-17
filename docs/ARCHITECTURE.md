@@ -73,7 +73,7 @@ Both store `helixel-action` structs. The jump-log stores a subset of ring events
 ```
 Editing command
   → helixel--record-action (creates an event tx, stores as helixel--last-action)
-  → helixel-action-commit
+  → helixel--action-commit
     → stamp :by-command
     → push to helixel--action-ring (dedup, cap)
     → push to helixel--global-jump-log (filtered)
@@ -141,7 +141,7 @@ helixel-repeat-edit
 2. Look up runner from op registry
 3. Create action via `helixel-action-create`
 4. Store as `helixel--last-action`
-5. Commit event via `helixel-action-commit`
+5. Commit event via `helixel--action-commit`
 
 ### Insert Recording (Phase 4.4)
 
@@ -204,7 +204,7 @@ list-of-txs rather than a kmacro recorder.
    set session active; `helixel-action-commit-hook` becomes the
    accumulator.
 2. Each helixel command commits an action via
-   `helixel-action-commit`; if the action's tx has a runner AND the
+   `helixel--action-commit`; if the action's tx has a runner AND the
    by-command is not in the chain-control set
    (chain-start / -end / -cancel / normal-escape), the tx is appended
    to `helixel-chain-session-action-list`.
@@ -400,7 +400,7 @@ These are load-bearing decisions that the codebase actively depends on
 — change them only with full-suite testing.
 
 1. **Single command-identity stamp.**  Every `helixel-action` carries
-   `:by-command` (auto-stamped in `helixel-action-commit`).  Dispatch
+   `:by-command` (auto-stamped in `helixel--action-commit`).  Dispatch
    decisions — mc fresh-edit replay vs `call-interactively`, `.` vs
    `,` — all key off this one field instead of separate flag
    networks.
@@ -409,7 +409,7 @@ These are load-bearing decisions that the codebase actively depends on
    slot (`dot` / `comma` / `chain` / `insert` / `mc-fake` /
    `mc-batch`) is the one authoritative answer to "what's happening
    right now", consumed by `helixel-replaying-p` and
-   `helixel-mc-dispatch-in-progress-p`.  Do not reintroduce
+   `helixel--mc-dispatch-in-progress-p`.  Do not reintroduce
    per-feature inhibit flags.
 
 3. **Runner-replay over advice.**  Prompt commands store their
@@ -476,14 +476,14 @@ was executed.
 Empirical breakdown of the 11 raw sites:
 - **7 sites commit immediately** — the 5 surround sites, the find-char
   def macro, and the n/N search branch all call `record-action' or
-  `helixel-action-commit' in the same command body.  Wrapping them in
+  `helixel--action-commit' in the same command body.  Wrapping them in
   `helixel-with-action-tracking' is a pure cosmetic change with no
   behavioral difference.  Left as-is.
 - **4 sites were deferred** — 2 state-toggle sites (`helixel-mode',
   `helixel-mode-all') and 2 search repeat sites (find-char repeat,
   n/N find-char branch).  These have been converted to immediate
   commit (state via `with-action-tracking', search via explicit
-  `helixel-action-commit' calls).
+  `helixel--action-commit' calls).
 
 Why a FULL audit was still rejected:
 - The 7 immediate-commit sites have no observable lifecycle smell

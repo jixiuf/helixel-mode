@@ -1914,8 +1914,8 @@ insertions."
       (set-register ?1 nil)
       (set-register ?2 nil)
       (helixel-delete)
-      (should-not (helixel-register-get helixel-register-small-delete-char))
-      (should-not (helixel-register-get ?1))
+      (should-not (helixel--register-get helixel-register-small-delete-char))
+      (should-not (helixel--register-get ?1))
       (should-not kill-ring))))
 
 (ert-deftest helixel-test-change-noyank-dot-repeat ()

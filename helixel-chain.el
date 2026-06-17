@@ -353,7 +353,7 @@ Step 2 — Vanilla capture:
   (when (helixel--chain-active-p)
     ;; Step 1: Eager commit — flush pending helixel action NOW.
     (when helixel--live-action
-      (helixel-action-commit))
+      (helixel--action-commit))
     ;; Step 2: Capture vanilla commands via unified push path.
     (when (and this-command
                (symbolp this-command)
@@ -396,7 +396,7 @@ that pre-chain commands don't leak into the action-list."
   ;; Flush any deferred live action (e.g. from `x' before `@')
   ;; so it commits to the ring BEFORE the chain hook is active,
   ;; preventing pre-chain selections from leaking into the action-list.
-  (helixel-action-commit)
+  (helixel--action-commit)
   (add-hook 'post-command-hook #'helixel--chain-post-cmd-hook nil t)
   (setq helixel--chain-session
         (make-helixel-chain-session
@@ -422,7 +422,7 @@ by the initial selection context snapshotted at chain-start."
   ;; command's pending action.  Defensive commit for edge cases
   ;; (e.g. called programmatically without command loop).
   (when helixel--live-action
-    (helixel-action-commit))
+    (helixel--action-commit))
   (let* ((s helixel--chain-session)
          (_ (setf (helixel-chain-session-active-p s) nil))
          (action-list (nreverse (helixel-chain-session-action-list s)))

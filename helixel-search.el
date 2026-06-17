@@ -300,7 +300,7 @@ is not committed by the next command."
                       :regexp isearch-regexp))
           (setf (helixel-action-runner helixel--live-action)
                 #'helixel-search--mc-runner))
-        (helixel-action-commit)
+        (helixel--action-commit)
         (helixel-search--echo-repeat-hint))
     ;; Cancelled — discard the tracking-open shell so the next
     ;; command's tracking-open does not commit a stale entry.
@@ -520,7 +520,7 @@ Signals `search-failed' if no visible match is found."
                          :category 'find-char :type ty
                          :char c :dir d))
                   (helixel-search--find-char-core d)))))
-      (helixel-action-commit)
+      (helixel--action-commit)
       (helixel-search--set-dir sym-dir)
       (setq helixel--active-search
             (make-helixel--last-motion
@@ -568,7 +568,7 @@ DOC is the docstring."
      ,doc
      (interactive "c\np")
      ;; Bind `helixel--current-command' so the action committed by
-     ;; `helixel-action-commit' carries the correct `by-command' stamp
+     ;; `helixel--action-commit' carries the correct `by-command' stamp
      ;; for unified mc dispatch.  `this-command' is already set by
      ;; Emacs's command loop for interactive invocation.
      (let ((helixel--current-command ',name)
@@ -649,7 +649,7 @@ Shared by `helixel--recreate-search' and `helixel--repeat-advance-search'."
 (defun helixel--recreate-search (ctx)
   "Replay search selection from CTX.
 Finds the next match, activates the region on it.
-If `(helixel-search-advance-done-p)' is t, skips the internal search
+If `(helixel--search-advance-done-p)' is t, skips the internal search
 \(the advance function already positioned point and set `match-data').
 If CTX has :entry-kind (insert or append), positions the cursor
 at the appropriate offset within the match for insert-text ops.
@@ -661,8 +661,8 @@ Uses :regexp from CTX to respect the \\=`M-r' toggle."
     (unless pat
       (user-error "No search pattern to repeat"))
     (helixel--with-span ctx
-      (if (helixel-search-advance-done-p)
-          (helixel-search-advance-done-set nil)
+      (if (helixel--search-advance-done-p)
+          (helixel--search-advance-done-set nil)
         ;; Internal search — only run when advance wasn't already done.
         (when (helixel-search--skip-current-match
                pat dir (helixel-sel-search-entry-kind ctx)
@@ -719,7 +719,7 @@ Updates n-count in the pending sel so \=`.' repeats the full sequence."
       (user-error "No find-char to repeat"))
     (helixel--tracking-open 'find-char type)
     (helixel-search--find-char-core dir char type)
-    (helixel-action-commit)
+    (helixel--action-commit)
     ;; Track n-count so . repeats the full n sequence.
     (helixel-search--find-char-set-sel char type dir)))
 
@@ -877,7 +877,7 @@ With prefix ARG (\\[universal-argument]), pick from history."
                   helixel--action-ring)))
     (unless entries
       (user-error "No search history"))
-    (mapcar (lambda (e) (cons (helixel-action-display-format e) e)) entries)))
+    (mapcar (lambda (e) (cons (helixel--action-display-format e) e)) entries)))
 
 (defun helixel-search--history-select (alist prompt)
   "Prompt user with PROMPT to select an entry from ALIST.
@@ -928,7 +928,7 @@ and appears correctly in `C-u n' history and \=`;\=' cycling."
                             :category 'find-char :type ty
                             :char c :dir d))
                      (helixel-search--find-char-core d)))))
-         (helixel-action-commit)
+         (helixel--action-commit)
          (helixel-search--find-char-core use-dir)))
        ('search
         (let* ((sel (helixel-action-sel event))
@@ -947,7 +947,7 @@ and appears correctly in `C-u n' history and \=`;\=' cycling."
                  :regexp regexp))
           (helixel-search--set-sel-ctx)
           (helixel--tracking-open cat (helixel-action-subcat event))
-          (helixel-action-commit)
+          (helixel--action-commit)
           ;; Now execute the actual search.
           (condition-case nil
               (helixel-search--search pattern use-dir nil nil regexp)
@@ -1042,7 +1042,7 @@ Called by `helixel-mode' deactivation."
 ;; ── Search advance state (defined in helixel-repeat.el) ──
 
 ;; Search-advance scratch now lives on the replay context (see
-;; `helixel-search-advance-done-p' etc in helixel-replay.el).
+;; `helixel--search-advance-done-p' etc in helixel-replay.el).
 
 ;; ── Search and insert advance ──
 
@@ -1073,8 +1073,8 @@ a search context), fall back to recreating the selection in-place."
         (progn
           (helixel-search--search pat dir nil nil regexp)
           (helixel-search--guard-repeat-advance pat dir regexp)
-          (helixel-search-advance-done-set t)
-          (helixel-search-advance-last-pos-set (match-beginning 0))
+          (helixel--search-advance-done-set t)
+          (helixel--search-advance-last-pos-set (match-beginning 0))
           (helixel-search--advance-n-count
            (helixel-sel-ctx sel)
            (lambda () (helixel-search--search pat dir nil nil regexp)))
@@ -1101,11 +1101,11 @@ REGEXP controls `isearch-regexp', forwarded to `helixel-search--search'."
     (when (and (= m-beg m-end)
                (or (= m-beg (point-min))
                    (= m-beg (point-max))))
-      (if (helixel-search-advance-edge-seen-p)
+      (if (helixel--search-advance-edge-seen-p)
           (signal 'search-failed nil)
-        (helixel-search-advance-edge-seen-set t)))
+        (helixel--search-advance-edge-seen-set t)))
     ;; Repeated match at same position.
-    (when (equal m-beg (helixel-search-advance-last-pos))
+    (when (equal m-beg (helixel--search-advance-last-pos))
       (if (= m-beg m-end)
           ;; Zero-width: step over and re-search.
           (progn

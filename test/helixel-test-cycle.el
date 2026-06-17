@@ -207,7 +207,7 @@
 				  (let* ((tx (helixel-action-create 'kill nil
 								    :runner (lambda (_) nil))))
 				    (helixel--live-action-set tx)
-				    (helixel-action-commit))
+				    (helixel--action-commit))
 				  (should helixel--action-ring)
 				  (let ((mr (helixel-action-mark-region
 					     (car helixel--action-ring))))

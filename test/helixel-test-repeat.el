@@ -740,7 +740,7 @@ entire `helixel--last-action', not just the payload."
             (apply #'helixel-action-create
                    (helixel-action-op event)
                    (helixel-action-sel event)
-                   :display (helixel-action-display-format event)
+                   :display (helixel--action-display-format event)
                    :runner (helixel-action-runner event)
                    (helixel-action-payload event))))
       (should event)

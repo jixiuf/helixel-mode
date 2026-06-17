@@ -173,7 +173,7 @@ Set at command start, committed to ring when complete.")
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
   "Event categories that carry a selection descriptor.
-Used by `helixel-action-commit' to sync `helixel--pending-sel'
+Used by `helixel--action-commit' to sync `helixel--pending-sel'
 into the committed event's :sel slot when the event's own :sel
 is nil.  Categories not listed here never carry a pending-sel.")
 
@@ -189,7 +189,7 @@ Releases markers of evicted entries to prevent leaks."
               nil))))
 
 (defvar helixel-action-commit-hook nil
-  "Abnormal hook run by `helixel-action-commit' after pushing to the ring.
+  "Abnormal hook run by `helixel--action-commit' after pushing to the ring.
 Each function receives one argument: the just-committed
 `helixel-action' (the deep-copied entry now sitting at the front
 of `helixel--action-ring').
@@ -201,7 +201,7 @@ replays each tx in order.
 Keep handlers fast — this fires on every command that commits an
 action.")
 
-(defun helixel-action-commit ()
+(defun helixel--action-commit ()
   "Commit `helixel--live-action' to `helixel--action-ring'.
 Deep-copies the event (marker + sel) so ring entries are independent.
 Deduplicates against the ring front — same (op sel payload) skips push.
@@ -308,7 +308,7 @@ cross-referencing ring entries."
   "Cancel the current action via \\[keyboard-quit].
 Commits meaningful events, pushes a state/cancel sentinel,
 and clears the live state."
-  (helixel-action-commit)
+  (helixel--action-commit)
   ;; Push cancel sentinel for dedup boundary
   (setq helixel--live-action
         (make-helixel-action
@@ -318,7 +318,7 @@ and clears the live state."
                          (cons pm (copy-marker pm t)))
          :timestamp (float-time)
          :buffer (current-buffer)))
-  (helixel-action-commit))
+  (helixel--action-commit))
 
 (defun helixel--live-action-set (tx)
   "Copy TX's replay slots onto `helixel--live-action'.
@@ -369,7 +369,7 @@ OP is an optional operator symbol (nil for movement/search).
 No-op when `(helixel-replaying-p)` is non-nil (dot-repeat).
 Does NOT commit the new event — caller is responsible for eventual commit."
   (unless (helixel-replaying-p)
-    (helixel-action-commit)
+    (helixel--action-commit)
     (setq helixel--live-action
           (make-helixel-action
            :category category
@@ -440,7 +440,7 @@ Creates independent marker copy; the jump-log entry is lightweight."
              (memq (helixel-action-category event) helixel-jump-categories)
              ;; Don't pollute the global (cross-buffer) jump log
              ;; with events committed during fake-cursor dispatch.
-             (not (helixel-replay-in-fake-p)))
+             (not (helixel--replay-in-fake-p)))
     (let* ((src-mr (helixel-action-mark-region event))
            (buf (if (and (consp src-mr) (markerp (car src-mr)))
                     (marker-buffer (car src-mr))
@@ -556,10 +556,10 @@ Old markers are freed before replacement to prevent leaks."
 Pushes mark to the group-start's begin, moves point to the
 newest event's end, and activates the region.  Returns the
 group-start position."
-  (let* ((gpos (helixel-gr-group-start ring pos
+  (let* ((gpos (helixel--gr-group-start ring pos
                  #'helixel-action--same-group-p))
          (grp-event (nth gpos ring))
-         (newest-pos (helixel-gr-group-newest ring pos
+         (newest-pos (helixel--gr-group-newest ring pos
                        #'helixel-action--same-group-p))
          (mr-begin (car (helixel-action-mark-region grp-event)))
          (mr-end (cdr (helixel-action-mark-region
@@ -598,7 +598,7 @@ Typically `helixel--clear-data'.")
 ;; Event display
 ;; ----------------------------------------------------------------------
 
-(defun helixel-action-display-format (event)
+(defun helixel--action-display-format (event)
   "Format `helixel-action' EVENT for display in cycling messages.
 Uses `helixel-action-display' if set, otherwise tries the
 selection descriptor's display, and finally falls back to
@@ -634,13 +634,13 @@ category symbols (match all subcats) and (CATEGORY . SUBCAT) pairs."
 
 (defun helixel-action--cycle-display (event pos ring)
   "Format cycling message for EVENT at POS in RING."
-  (let* ((total (helixel-gr-visible-count
+  (let* ((total (helixel--gr-visible-count
                  ring #'helixel-action--cycle-visible-p))
          (display-pos (1+ (cl-loop for i from 0 below pos
                                    count (helixel-action--cycle-visible-p
                                           (nth i ring))))))
     (format "[%d/%d] %s" display-pos total
-            (helixel-action-display-format event))))
+            (helixel--action-display-format event))))
 
 (defun helixel-action--push-sel-from-event (event)
   "Push a `helixel-sel' from EVENT for `.' repeat.
@@ -712,10 +712,10 @@ Thin orchestrator after step 15 — work split into
 `helixel-action--cycle-mark-region',
 `helixel-action--push-sel-from-event' and
 `helixel-action--cycle-auto-advance'."
-  (let* ((gpos (helixel-gr-group-start ring pos
+  (let* ((gpos (helixel--gr-group-start ring pos
                  #'helixel-action--same-group-p))
          (event (nth gpos ring))
-         (newest-pos (helixel-gr-group-newest ring pos
+         (newest-pos (helixel--gr-group-newest ring pos
                        #'helixel-action--same-group-p))
          (multi-event-p (not (= newest-pos gpos)))
          (sel-event (if multi-event-p (nth newest-pos ring) event))
@@ -829,11 +829,11 @@ Optional prefix ARG is passed to the underlying commands."
       ;; C-u ; → go forward (newer)
       (cond
        ((and helixel--action-pos (> helixel--action-pos 0))
-        (let* ((newest (helixel-gr-group-newest
+        (let* ((newest (helixel--gr-group-newest
                         helixel--action-ring helixel--action-pos
                         #'helixel-action--same-group-p))
                (prev (when (> newest 0)
-                       (helixel-gr-visible-index
+                       (helixel--gr-visible-index
                         helixel--action-ring (1- newest)
                         #'helixel-action--cycle-visible-p))))
           (if prev
@@ -847,13 +847,13 @@ Optional prefix ARG is passed to the underlying commands."
                           helixel--live-action)
                          t t)
               (message "[live] %s"
-                       (helixel-action-display-format helixel--live-action)))
+                       (helixel--action-display-format helixel--live-action)))
           (message "At newest")))
        (t (message "At newest")))
     ;; ; → go back (older)
     (cond
      (helixel--action-pos
-      (let ((pos (helixel-gr-find
+      (let ((pos (helixel--gr-find
                   helixel--action-ring helixel--action-pos 1
                   #'helixel-action--cycle-visible-p)))
         (if pos
@@ -872,7 +872,7 @@ Optional prefix ARG is passed to the underlying commands."
               (helixel-action--cycle-show pos helixel--action-ring))
           ;; No older group: jump to current group-start marker
           ;; to expand the visible region (first-`;' span wrap).
-          (let* ((gpos (helixel-gr-group-start
+          (let* ((gpos (helixel--gr-group-start
                         helixel--action-ring helixel--action-pos
                         #'helixel-action--same-group-p))
                  (grp-event (nth gpos helixel--action-ring)))
@@ -890,15 +890,15 @@ Optional prefix ARG is passed to the underlying commands."
                                grp-event gpos helixel--action-ring))))))))
      (helixel--live-action
       ;; Commit live event first, then show ring[0]
-      (helixel-action-commit)
-      (let ((pos (helixel-gr-visible-index
+      (helixel--action-commit)
+      (let ((pos (helixel--gr-visible-index
                   helixel--action-ring 0
                   #'helixel-action--cycle-visible-p)))
         (if pos
             (helixel-action--cycle-show pos helixel--action-ring)
           (message "No saved actions"))))
      (helixel--action-ring
-      (let ((pos (helixel-gr-visible-index
+      (let ((pos (helixel--gr-visible-index
                   helixel--action-ring 0
                   #'helixel-action--cycle-visible-p)))
         (if pos
@@ -982,7 +982,7 @@ Adds :before advice to record position before SYMBOL runs."
 
 (defun helixel--jump-goto (pos)
   "Go to the group-start of jump entry at POS, switching buffers as needed."
-  (let* ((gpos (helixel-gr-group-start helixel--global-jump-log pos
+  (let* ((gpos (helixel--gr-group-start helixel--global-jump-log pos
                  #'helixel--jump-same-group-p))
          (entry (nth gpos helixel--global-jump-log)))
     (while (and (not (helixel--jump-visible-p entry))
@@ -1015,7 +1015,7 @@ Adds :before advice to record position before SYMBOL runs."
     (helixel-register-jump 'jump 'return)
     (setq helixel--jump-pos (if saved-pos (1+ saved-pos) nil))
     (let* ((start (if helixel--jump-pos helixel--jump-pos 0))
-           (pos (helixel-gr-find
+           (pos (helixel--gr-find
                  helixel--global-jump-log start 1
                  #'helixel--jump-visible-p))
            (found nil))
@@ -1023,7 +1023,7 @@ Adds :before advice to record position before SYMBOL runs."
         (if (helixel--jump-goto pos)
             (setq found t pos nil)
           (setq helixel--jump-pos pos
-                pos (helixel-gr-find
+                pos (helixel--gr-find
                      helixel--global-jump-log pos 1
                      #'helixel--jump-visible-p))))
       (unless found
@@ -1033,12 +1033,12 @@ Adds :before advice to record position before SYMBOL runs."
   "Jump to next (newer) position in `helixel--global-jump-log'."
   (interactive)
   (if helixel--jump-pos
-      (let ((newest (helixel-gr-group-newest
+      (let ((newest (helixel--gr-group-newest
                      helixel--global-jump-log helixel--jump-pos
                      #'helixel--jump-same-group-p))
             (pos nil))
         (while (and (not pos) (> newest 0))
-          (setq pos (helixel-gr-visible-index
+          (setq pos (helixel--gr-visible-index
                      helixel--global-jump-log (1- newest)
                      #'helixel--jump-visible-p))
           (when pos

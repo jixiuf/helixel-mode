@@ -16,8 +16,8 @@
 
 (ert-deftest helixel-test-mc-create-and-clear ()
   (helixel-test-with-buffer "abc\ndef\nghi\n"
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     (should helixel-multi-cursor-mode)
     (should (= 2 (length (helixel-mc-all-cursors))))
     (should (= 3 (helixel-mc-num-cursors)))
@@ -27,7 +27,7 @@
 
 (ert-deftest helixel-test-mc-cursor-with-region ()
   (helixel-test-with-buffer "hello world\n"
-    (let ((c (helixel-mc-create-fake-cursor 1 6)))
+    (let ((c (helixel-mc--create-fake-cursor 1 6)))
       (should (helixel-mc-cursor-mark-active c))
       (should (overlay-get c 'helixel-mc-region))
       (helixel-mc-clear-all))))
@@ -52,8 +52,8 @@
 
 (ert-deftest helixel-test-mc-with-each-cursor-state-isolation ()
   (helixel-test-with-buffer "aaaa\nbbbb\ncccc\n"
-    (helixel-mc-create-fake-cursor 5)   ; on \n of line 1
-    (helixel-mc-create-fake-cursor 10)  ; on \n of line 2
+    (helixel-mc--create-fake-cursor 5)   ; on \n of line 1
+    (helixel-mc--create-fake-cursor 10)  ; on \n of line 2
     (goto-char 1)
     (let ((visited nil))
       (helixel-mc-with-each-cursor
@@ -67,8 +67,8 @@
 
 (ert-deftest helixel-test-mc-dispatch-insert ()
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
-    (helixel-mc-create-fake-cursor 5)   ; before 'b'
-    (helixel-mc-create-fake-cursor 9)   ; before 'c'
+    (helixel-mc--create-fake-cursor 5)   ; before 'b'
+    (helixel-mc--create-fake-cursor 9)   ; before 'c'
     (goto-char 1)
     (helixel-mc-with-each-cursor
       (insert "X"))
@@ -84,7 +84,7 @@
     (goto-char 1)
     (push-mark (point-max) t t)
     (let* ((sel (helixel-sel-create 'line '(:count 3)))
-           (targets (helixel-mc-spawn-from-line sel)))
+           (targets (helixel-mc--spawn-from-line sel)))
       (should (= 3 (length targets))))))
 
 ;; ── Spawn: column at offset 2 ──
@@ -94,7 +94,7 @@
     (goto-char 1)
     (push-mark (point-max) t t)
     (let* ((sel (helixel-sel-create 'line '(:count 3)))
-           (targets (helixel-mc-spawn-from-line sel)))
+           (targets (helixel-mc--spawn-from-line sel)))
       ;; one target per line; each target is (eol . bol) so the fake
       ;; cursor will select its own line
       (should (= 3 (length targets)))
@@ -215,8 +215,8 @@ NOT two at the last)."
   "`helixel-mc-all-cursors' must skip overlays whose point marker
 has been nulled (zombie state)."
   (helixel-test-with-buffer "abc def ghi\n"
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     (should (= 2 (length (helixel-mc-all-cursors))))
     ;; Simulate the zombie state: null out the marker WITHOUT
     ;; removing the overlay from the list (the actual production bug).
@@ -229,8 +229,8 @@ has been nulled (zombie state)."
 (ert-deftest helixel-test-mc-with-each-cursor-skips-zombie ()
   "`helixel-mc-with-each-cursor' must not crash on a zombie cursor."
   (helixel-test-with-buffer "abc def ghi\n"
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     ;; Zombie one cursor mid-state.
     (let ((victim (car (hash-table-values helixel-mc--cursors-by-id))))
       (set-marker (helixel-mc-cursor-point victim) nil))
@@ -251,7 +251,7 @@ has been nulled (zombie state)."
   "After chain-end with mc-mode + a chain TX, the runner must NOT
 be re-invoked by the advice (recording already broadcast)."
   (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
+    (helixel-mc--create-fake-cursor 2)
     ;; Fake a chain entry whose runner would `error' if called.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (entry (helixel-action-create 'chain sel
@@ -281,7 +281,7 @@ be re-invoked by the advice (recording already broadcast)."
 commands during chain recording — the live broadcast is the only
 application path; chain-end does not re-replay."
   (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
+    (helixel-mc--create-fake-cursor 2)
     (let ((helixel--chain-session
            (make-helixel-chain-session :active-p t))
           (this-command 'self-insert-command)
@@ -356,30 +356,30 @@ on guard commands (chain, escape, mc management)."
 and does NOT add a duplicate."
   (helixel-test-with-buffer "abcdefg\n"
     (goto-char 1)
-    (should (helixel-mc-create-fake-cursor 4))
+    (should (helixel-mc--create-fake-cursor 4))
     (should (= 1 (length (helixel-mc-all-cursors))))
     ;; Same point, no mark — dup.
-    (should-not (helixel-mc-create-fake-cursor 4))
+    (should-not (helixel-mc--create-fake-cursor 4))
     (should (= 1 (length (helixel-mc-all-cursors))))
     ;; Same point, different (active) mark — NOT a dup.
-    (should (helixel-mc-create-fake-cursor 4 7))
+    (should (helixel-mc--create-fake-cursor 4 7))
     (should (= 2 (length (helixel-mc-all-cursors))))
     ;; Same point + same mark again — dup.
-    (should-not (helixel-mc-create-fake-cursor 4 7))
+    (should-not (helixel-mc--create-fake-cursor 4 7))
     (should (= 2 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-dedupe-removes-fake-on-real ()
-  "`helixel-mc-dedupe-cursors' deletes any fake sharing the real
+  "`helixel-mc--dedupe-cursors' deletes any fake sharing the real
 cursor's (point, effective-mark)."
   (helixel-test-with-buffer "abcdefg\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 4)
-    (helixel-mc-create-fake-cursor 6)
+    (helixel-mc--create-fake-cursor 4)
+    (helixel-mc--create-fake-cursor 6)
     (should (= 2 (length (helixel-mc-all-cursors))))
     ;; Move real onto the fake at 4.
     (goto-char 4)
-    (should (= 1 (helixel-mc-dedupe-cursors)))
+    (should (= 1 (helixel-mc--dedupe-cursors)))
     (should (= 1 (length (helixel-mc-all-cursors))))
     ;; Surviving fake is at 6.
     (should (= 6 (marker-position
@@ -387,18 +387,18 @@ cursor's (point, effective-mark)."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-dedupe-merges-duplicate-fakes ()
-  "`helixel-mc-dedupe-cursors' collapses several fakes that share
+  "`helixel-mc--dedupe-cursors' collapses several fakes that share
 the same (point, effective-mark) into one."
   (helixel-test-with-buffer "abcdefg\n"
     (goto-char 1)
-    (let ((a (helixel-mc-create-fake-cursor 4))
-          (b (helixel-mc-create-fake-cursor 6))
-          (c (helixel-mc-create-fake-cursor 7)))
+    (let ((a (helixel-mc--create-fake-cursor 4))
+          (b (helixel-mc--create-fake-cursor 6))
+          (c (helixel-mc--create-fake-cursor 7)))
       (should (= 3 (length (helixel-mc-all-cursors))))
       (set-marker (helixel-mc-cursor-point c) 6)
       (set-marker (helixel-mc-cursor-mark c) 6)
       ;; b and c now collide.
-      (should (= 1 (helixel-mc-dedupe-cursors)))
+      (should (= 1 (helixel-mc--dedupe-cursors)))
       (should (= 2 (length (helixel-mc-all-cursors))))
       (ignore a b))
     (helixel-mc-clear-all)))
@@ -408,12 +408,12 @@ the same (point, effective-mark) into one."
 other, post-command dedup must trim them down."
   (helixel-test-with-buffer "abcdefg\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 4)
-    (helixel-mc-create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 4)
+    (helixel-mc--create-fake-cursor 5)
     ;; Pile both fakes up at 8.
     (helixel-mc-with-each-cursor
       (goto-char 8))
-    (should (= 1 (helixel-mc-dedupe-cursors)))
+    (should (= 1 (helixel-mc--dedupe-cursors)))
     (should (= 1 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
@@ -424,9 +424,9 @@ other, post-command dedup must trim them down."
   (helixel-test-with-buffer "abcdefghij\n"
     (helixel-enter-normal-state)
     (goto-char 1)                       ; real outside
-    (helixel-mc-create-fake-cursor 5 2) ; fake1 region [2,5)
-    (helixel-mc-create-fake-cursor 7 4) ; fake2 region [4,7) overlaps
-    (should (= 1 (helixel-mc-dedupe-cursors)))
+    (helixel-mc--create-fake-cursor 5 2) ; fake1 region [2,5)
+    (helixel-mc--create-fake-cursor 7 4) ; fake2 region [4,7) overlaps
+    (should (= 1 (helixel-mc--dedupe-cursors)))
     (should (= 1 (length (helixel-mc-all-cursors))))
     ;; The surviving fake is the leftmost (ended at 5).
     (let ((ov (car (helixel-mc-all-cursors))))
@@ -439,9 +439,9 @@ other, post-command dedup must trim them down."
   (helixel-test-with-buffer "abcdefghij\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 4 2) ; [2,4)
-    (helixel-mc-create-fake-cursor 6 4) ; [4,6) — touch but not overlap
-    (should (= 0 (helixel-mc-dedupe-cursors)))
+    (helixel-mc--create-fake-cursor 4 2) ; [2,4)
+    (helixel-mc--create-fake-cursor 6 4) ; [4,6) — touch but not overlap
+    (should (= 0 (helixel-mc--dedupe-cursors)))
     (should (= 2 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
@@ -452,8 +452,8 @@ Real is never deleted."
     (helixel-enter-normal-state)
     (goto-char 2)
     (set-mark 6)                        ; real region [2,6)
-    (helixel-mc-create-fake-cursor 8 4) ; fake region [4,8) overlaps
-    (should (= 1 (helixel-mc-dedupe-cursors)))
+    (helixel-mc--create-fake-cursor 8 4) ; fake region [4,8) overlaps
+    (should (= 1 (helixel-mc--dedupe-cursors)))
     (should (= 0 (length (helixel-mc-all-cursors))))
     ;; Real still in place and active.
     (should (= 2 (point)))
@@ -469,11 +469,11 @@ drop them."
     (helixel-enter-normal-state)
     (goto-char 1)
     ;; A fake with a region…
-    (helixel-mc-create-fake-cursor 7 3) ; [3,7)
+    (helixel-mc--create-fake-cursor 7 3) ; [3,7)
     ;; …and a point-only fake INSIDE that range.
-    (helixel-mc-create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 5)
     ;; Point-only fake has no region → region pass ignores it.
-    (should (= 0 (helixel-mc-dedupe-cursors)))
+    (should (= 0 (helixel-mc--dedupe-cursors)))
     (should (= 2 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
@@ -487,8 +487,8 @@ the real cursor's event."
   (helixel-test-with-buffer "foo bar baz\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     ;; Manufacture distinct events on each cursor by writing
     ;; directly to the overlay snapshots.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
@@ -519,7 +519,7 @@ property must be updated by `leave-cursor' — otherwise a later
     ;; Wipe any stale `helixel--last-action' from previous tests so
     ;; the fresh fake's snapshot really starts nil.
     (let ((helixel--last-action nil))
-      (helixel-mc-create-fake-cursor 5)
+      (helixel-mc--create-fake-cursor 5)
       ;; Initially fakes have no last-event snapshot.
       (let ((ov (car (helixel-mc-all-cursors))))
         (should-not (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)))
@@ -535,7 +535,7 @@ property must be updated by `leave-cursor' — otherwise a later
 loop — just `helixel-action-replay' once.  Verify the around-advice
 fires only when fakes exist."
   (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
+    (helixel-mc--create-fake-cursor 2)
     ;; Stub last-event with a counter.
     (let* ((called 0)
            (sel (helixel-sel-create 'line '(:dir forward :count 1)))
@@ -556,7 +556,7 @@ fires only when fakes exist."
 `helixel-mc--broadcast-last-event'.  A later `.' dispatched at a
 fake then replays the chain TX (not the pre-chain edit)."
   (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
+    (helixel-mc--create-fake-cursor 2)
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-action-create 'chain sel
                  :runner (lambda (_tx) (ignore))
@@ -585,8 +585,8 @@ other fakes' (snapshotted by `helixel-mc--leave-cursor')."
   (helixel-test-with-buffer "alpha beta gamma delta epsilon\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 7)   ; on `beta'
-    (helixel-mc-create-fake-cursor 12)  ; on `gamma'
+    (helixel-mc--create-fake-cursor 7)   ; on `beta'
+    (helixel-mc--create-fake-cursor 12)  ; on `gamma'
     ;; Broadcast one word-motion to every fake.
     (helixel-mc-with-each-cursor (helixel-forward-word-start 1))
     ;; Each fake's overlay should have a private ring with the
@@ -605,8 +605,8 @@ during fake dispatch (it is cross-buffer global state)."
   (helixel-test-with-buffer "alpha beta gamma delta\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 7)
-    (helixel-mc-create-fake-cursor 12)
+    (helixel-mc--create-fake-cursor 7)
+    (helixel-mc--create-fake-cursor 12)
     (let ((before (length helixel--global-jump-log)))
       ;; Broadcast a motion to 2 fakes — real does NOT run it here.
       (helixel-mc-with-each-cursor (helixel-forward-word-start 1))
@@ -623,7 +623,7 @@ events into the fake's OWN ring.  3 motions → 2 ring entries +
       "alpha beta gamma delta epsilon zeta eta theta\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 7)
+    (helixel-mc--create-fake-cursor 7)
     (dotimes (_ 3)
       (helixel-mc-with-each-cursor (helixel-forward-word-start 1)))
     (let* ((ov (car (helixel-mc-all-cursors)))
@@ -644,8 +644,8 @@ do NOT leak into cursor B's ring.  Achieved because
       "alpha beta gamma delta epsilon zeta eta theta iota kappa\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 7)   ; fake A on `beta'  (col 6)
-    (helixel-mc-create-fake-cursor 13)  ; fake B on `delta' (col 12)
+    (helixel-mc--create-fake-cursor 7)   ; fake A on `beta'  (col 6)
+    (helixel-mc--create-fake-cursor 13)  ; fake B on `delta' (col 12)
     ;; Two motions → each fake commits 1 to ring, 1 stays live.
     (helixel-mc-with-each-cursor (helixel-forward-word-start 1))
     (helixel-mc-with-each-cursor (helixel-forward-word-start 1))
@@ -678,7 +678,7 @@ must not corrupt the fake's state."
   (helixel-test-with-buffer "abc def ghi\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (let ((ov (helixel-mc-create-fake-cursor 5)))
+    (let ((ov (helixel-mc--create-fake-cursor 5)))
       ;; Sanity: fresh fake has nil ring and nil live-event.
       (should (null (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state))))
       (should (null (helixel-pcs-live-action (overlay-get ov 'helixel-pc-state))))
@@ -693,7 +693,7 @@ must not corrupt the fake's state."
 (ert-deftest helixel-test-mc-spawn-after-motion-inherits-real-ring ()
   "Spawning a fake AFTER real built a ring: the fake inherits
 real's `helixel--action-ring' / `--live-edit' via the snapshot
-taken by `helixel-mc-create-fake-cursor'.  This means
+taken by `helixel-mc--create-fake-cursor'.  This means
 `w w w s s ;' DOES work — fake's `;' cycles the inherited
 history."
   (helixel-test-with-buffer "alpha beta gamma delta epsilon\n"
@@ -706,7 +706,7 @@ history."
           (real-live helixel--live-action))
       (should (>= real-ring-len 1))
       ;; Spawn fake AFTER motions.
-      (let* ((ov (helixel-mc-create-fake-cursor 13))
+      (let* ((ov (helixel-mc--create-fake-cursor 13))
              (fake-ring (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state)))
              (fake-live (helixel-pcs-live-action (overlay-get ov 'helixel-pc-state))))
         ;; Fake's snapshot copies real's history.
@@ -721,8 +721,8 @@ doesn't echo once per fake."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 6)
-    (helixel-mc-create-fake-cursor 11)
+    (helixel-mc--create-fake-cursor 6)
+    (helixel-mc--create-fake-cursor 11)
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
     ;; Capture echo area: should not record per-fake messages.
     (let ((messages-count 0))
@@ -744,7 +744,7 @@ are no longer written by `helixel-mc--enter/leave-cursor'."
   (helixel-test-with-buffer "alpha beta gamma\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 7)
+    (helixel-mc--create-fake-cursor 7)
     (helixel-mc-with-each-cursor (helixel-forward-word-start 1))
     (let ((ov (car (helixel-mc-all-cursors))))
       (should (null (overlay-get ov 'helixel-mc-pre-point)))
@@ -766,8 +766,8 @@ must send each fake to ITS own matching delimiter."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
     (helixel-enter-normal-state)
     (goto-char 1)                       ; on first `('
-    (helixel-mc-create-fake-cursor 6)   ; on second `('
-    (helixel-mc-create-fake-cursor 11)  ; on third `('
+    (helixel-mc--create-fake-cursor 6)   ; on second `('
+    (helixel-mc--create-fake-cursor 11)  ; on third `('
     (helixel-jump-to-match)
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
     (should (= 5 (point)))              ; real → after first `)'
@@ -788,7 +788,7 @@ broadcast must advance each fake to ITS own next/outer match."
   (helixel-test-with-buffer "(aa) (bb) (cc) (dd)\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 6)
+    (helixel-mc--create-fake-cursor 6)
     (helixel-next-paren-end)
     (helixel-mc-with-each-cursor (helixel-next-paren-end))
     ;; `helixel-next-paren-end' lands one PAST the closing `)'.
@@ -804,8 +804,8 @@ activating mark over the (pre, post) span."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 6)
-    (helixel-mc-create-fake-cursor 11)
+    (helixel-mc--create-fake-cursor 6)
+    (helixel-mc--create-fake-cursor 11)
     ;; Broadcast `%' — each cursor moves to its own `)' (one past).
     (helixel-jump-to-match)
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
@@ -838,7 +838,7 @@ real."
   (helixel-test-with-buffer "abc { xx } def { yy } ghi\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 3)
-    (let ((ov (helixel-mc-create-fake-cursor 11 9)))
+    (let ((ov (helixel-mc--create-fake-cursor 11 9)))
       (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (goto-char 5)
     (helixel-mc-with-each-cursor (goto-char 17))
@@ -923,8 +923,8 @@ so that a subsequent `d' deletes the whole `{...}' block."
   (helixel-test-with-buffer "a {x} b {y} c {z}\n"
     (helixel-enter-normal-state)
     (goto-char 4)                       ; real on 'x' inside first pair
-    (helixel-mc-create-fake-cursor 10)  ; fake on 'y' inside second pair
-    (helixel-mc-create-fake-cursor 16)  ; fake on 'z' inside third pair
+    (helixel-mc--create-fake-cursor 10)  ; fake on 'y' inside second pair
+    (helixel-mc--create-fake-cursor 16)  ; fake on 'z' inside third pair
     ;; Broadcast `%' — each cursor jumps to one end of its pair
     ;; and live-event mark-region holds the pair bounds.
     (helixel-jump-to-match)
@@ -965,7 +965,7 @@ the call doesn't error and the fake's ring still exists."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 6)
+    (helixel-mc--create-fake-cursor 6)
     ;; Build a motion event in each fake's ring via `%'.
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
     ;; First `;': fake cycles to its `%' event.
@@ -986,7 +986,7 @@ and pushes mark to its own start-point, independent of real."
   (helixel-test-with-buffer "abc { xx } def { yy } ghi\n"
     (helixel-enter-normal-state)
     (goto-char 5)  ;; inside first braces
-    (helixel-mc-create-fake-cursor 16)  ;; inside second braces
+    (helixel-mc--create-fake-cursor 16)  ;; inside second braces
     ;; Build a motion event in each ring via `%'.
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
     ;; C-; broadcasts: real + fake each cycle their own ring.
@@ -1008,9 +1008,9 @@ and pushes mark to its own start-point, independent of real."
 string instead of allocating a new one each call."
   (helixel-test-with-buffer "\n"
     (setq helixel-mc--eol-cursor-string nil)
-    (let* ((ov1 (helixel-mc-create-fake-cursor 1))
+    (let* ((ov1 (helixel-mc--create-fake-cursor 1))
            (s1  (overlay-get ov1 'after-string))
-           (ov2 (helixel-mc-create-fake-cursor 1)))
+           (ov2 (helixel-mc--create-fake-cursor 1)))
       ;; Pass 1 dedupe will drop ov2 (same key as ov1), so spawn
       ;; another fresh fake at eol-equivalent position.
       (ignore ov2)
@@ -1021,15 +1021,15 @@ string instead of allocating a new one each call."
 
 (ert-deftest helixel-test-mc-dedupe-fast-path-no-regions ()
   "With many fakes but none carrying an active region, Pass 2 of
-`helixel-mc-dedupe-cursors' must short-circuit and return 0
+`helixel-mc--dedupe-cursors' must short-circuit and return 0
 removals without sorting."
   (helixel-test-with-buffer (make-string 200 ?x)
     (helixel-enter-normal-state)
     (goto-char 1)
     (dotimes (i 100)
-      (helixel-mc-create-fake-cursor (+ 2 i)))
+      (helixel-mc--create-fake-cursor (+ 2 i)))
     ;; No regions anywhere → Pass 2 fast-path.
-    (should (= 0 (helixel-mc-dedupe-cursors)))
+    (should (= 0 (helixel-mc--dedupe-cursors)))
     (should (= 100 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
@@ -1041,11 +1041,11 @@ dispatcher / dedupe pipeline."
     (helixel-enter-normal-state)
     (goto-char 1)
     (dotimes (i 200)
-      (helixel-mc-create-fake-cursor (+ 2 i)))
+      (helixel-mc--create-fake-cursor (+ 2 i)))
     (should (= 200 (length (helixel-mc-all-cursors))))
     (let ((start (float-time)))
       (helixel-mc-with-each-cursor (forward-char 1))
-      (helixel-mc-dedupe-cursors)
+      (helixel-mc--dedupe-cursors)
       (should (< (- (float-time) start) 1.0)))
     (helixel-mc-clear-all)))
 
@@ -1058,8 +1058,8 @@ advice, no real-only marking)."
   (helixel-test-with-buffer "abc def ghi\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     ;; Drive the command (sets `this-command' = helixel-replace-char),
     ;; then drive the post-command dispatcher which sees the fresh
     ;; edit (op=replace-char, by-command=helixel-replace-char) and
@@ -1080,8 +1080,8 @@ dispatch path (runner reads :char from payload — no advice)."
     ;; Real selects \"foo\" (1..4); fakes select \"bar\" (5..8), \"baz\" (9..12).
     (goto-char 4)
     (set-mark 1)
-    (helixel-mc-create-fake-cursor 8 5)
-    (helixel-mc-create-fake-cursor 12 9)
+    (helixel-mc--create-fake-cursor 8 5)
+    (helixel-mc--create-fake-cursor 12 9)
     (let ((unread-command-events (list ?\()))
       (call-interactively 'helixel-surround-add))
     (let ((this-command 'helixel-surround-add))
@@ -1109,8 +1109,8 @@ OWN enclosing pair — no per-cursor advice needed."
       ;; Real at first pair, fakes at others.
       (goto-char 3)                    ; inside first (foo)
       (helixel--sel-push (funcall mk-sel))
-      (helixel-mc-create-fake-cursor 9)  ; inside (bar)
-      (helixel-mc-create-fake-cursor 15) ; inside (baz)
+      (helixel-mc--create-fake-cursor 9)  ; inside (bar)
+      (helixel-mc--create-fake-cursor 15) ; inside (baz)
       ;; Snapshot pending-sel into each fake's overlay so enter-
       ;; cursor restores it during the broadcast.
       (dolist (ov (helixel-mc-all-cursors))
@@ -1134,7 +1134,7 @@ textobj."
     (helixel-enter-normal-state)
     (goto-char 2)
     (helixel--sel-push nil)
-    (helixel-mc-create-fake-cursor 3)
+    (helixel-mc--create-fake-cursor 3)
     ;; No pending-sel → transient branch sets pending-surround-op.
     (let ((helixel--pending-surround-op nil))
       (helixel-surround-delete)
@@ -1158,9 +1158,9 @@ and fall back to `yank' from the kill ring."
         (helixel-enter-normal-state)
         (goto-char 1)
         ;; Create fake cursor on second line, with its own register a.
-        (helixel-mc-create-fake-cursor 7)
+        (helixel-mc--create-fake-cursor 7)
         ;; Populate real cursor's register a with "HELLO".
-        (helixel-register-set ?a "HELLO")
+        (helixel--register-set ?a "HELLO")
         ;; Populate fake cursor's per-cursor register a with "HELLO"
         ;; as well (as would happen when `"ad` is dispatched to fakes).
         (dolist (ov (helixel-mc-all-cursors))
@@ -1189,8 +1189,8 @@ same char from its own position, using the substitute mechanism."
   (helixel-test-with-buffer "a-b c-d e-f g-h\n"
     (helixel-enter-normal-state)
     (goto-char 1)                       ; real before 'a'
-    (helixel-mc-create-fake-cursor 5)   ; before 'c'
-    (helixel-mc-create-fake-cursor 9)   ; before 'e'
+    (helixel-mc--create-fake-cursor 5)   ; before 'c'
+    (helixel-mc--create-fake-cursor 9)   ; before 'e'
     ;; Real: find next `-' → position 3 (after `-' in a-b).
     (helixel-find-next-char ?-)
     ;; Drive the substituted dispatcher by simulating post-command:
@@ -1214,8 +1214,8 @@ must be silently dropped instead of aborting the batch."
   (helixel-test-with-buffer "a-b c-d efghij\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)   ; before 'c' — has '-' ahead
-    (helixel-mc-create-fake-cursor 9)   ; before 'e' — NO '-' ahead
+    (helixel-mc--create-fake-cursor 5)   ; before 'c' — has '-' ahead
+    (helixel-mc--create-fake-cursor 9)   ; before 'e' — NO '-' ahead
     (helixel-find-next-char ?-)
     (let ((this-command 'helixel-find-next-char))
       (helixel-mc--post-command))
@@ -1228,12 +1228,12 @@ must be silently dropped instead of aborting the batch."
 
 (ert-deftest helixel-test-mc-amalgamated-dispatcher-dedupes ()
   "The amalgamated dispatcher must also call
-`helixel-mc-dedupe-cursors' after the batch (Phase A behaviour
+`helixel-mc--dedupe-cursors' after the batch (Phase A behaviour
 must apply with or without the substitute mechanism active)."
   (helixel-test-with-buffer "abcdefg\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 4)
-    (helixel-mc-create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 4)
+    (helixel-mc--create-fake-cursor 5)
     (let ((this-command 'forward-char))
       (helixel-mc-with-each-cursor (goto-char 8))
       (helixel-mc--post-command))
@@ -1249,8 +1249,8 @@ movements extend per-cursor selections."
   (helixel-test-with-buffer "abc def ghi\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     ;; Real enters visual.
     (helixel-begin-selection)
     ;; Real has mark-active at its own point.
@@ -1271,7 +1271,7 @@ mark on every fake cursor."
   (helixel-test-with-buffer "abc def ghi\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 5)
     ;; Simulate interactive `v' to enter visual.
     (let ((this-command 'helixel-begin-selection))
       (helixel-begin-selection))
@@ -1524,8 +1524,8 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
               )))
       (setq helixel--last-action tx)
       (goto-char 1)
-      (helixel-mc-create-fake-cursor 5)
-      (helixel-mc-create-fake-cursor 9)
+      (helixel-mc--create-fake-cursor 5)
+      (helixel-mc--create-fake-cursor 9)
       (helixel-mc-apply-last-action)
       ;; Insert at real cursor (pos 1) AND every fake cursor (pos 5, 9).
       ;; Result: "XAAA\nXAAA\nXAAA\n" (one X at each of 3 cursors).
@@ -1537,7 +1537,7 @@ BOL-point per line; semantics updated to match Helix `Alt-s'."
 (ert-deftest helixel-test-mc-kill-ring-isolation ()
   (helixel-test-with-buffer "x\n"
     (let ((kill-ring '("real")))
-      (helixel-mc-create-fake-cursor 2)
+      (helixel-mc--create-fake-cursor 2)
       (helixel-mc-with-each-cursor
         (setq kill-ring (cons "fake" kill-ring)))
       (should (equal kill-ring '("real")))
@@ -1678,7 +1678,7 @@ the wrong word and overlap with neighbouring cursors)."
     (let* ((sel (helixel-test-mc--word-sel))
            (tx (helixel-test-mc--make-replace-action "FOO"))
            (helixel--last-action tx))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       (should (use-region-p))
       ;; Real cursor: advice short-circuits to apply-only.
       (helixel-mc--repeat-edit-apply-only (lambda (&optional _) nil))
@@ -1699,7 +1699,7 @@ exactly N cursors (one per word) and every word becomes FOO."
     (let* ((sel (helixel-test-mc--word-sel))
            (tx (helixel-test-mc--make-replace-action "FOO"))
            (helixel--last-action tx))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; 5 words → 1 real + 4 fakes (NOT 5 fakes / 6 cursors).
       (should (= 4 (length (helixel-mc-all-cursors))))
       (helixel-mc--repeat-edit-apply-only nil)
@@ -1717,7 +1717,7 @@ exactly N cursors (one per word) and every word becomes FOO."
 (ert-deftest helixel-test-mc-dot-advice-falls-through-without-last-event ()
   "With fake cursors but no last-event, the override returns nil."
   (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
+    (helixel-mc--create-fake-cursor 2)
     (let ((helixel--last-action nil))
       (should-not (helixel-mc--repeat-edit-apply-only nil)))
     (helixel-mc-clear-all)))
@@ -1856,7 +1856,7 @@ point=eol); lighter must report 3 cursors; second `s s' clears."
     (push-mark 1 t t)
     (goto-char (line-end-position 3))
     (let* ((sel (helixel-sel-create 'line '(:count 3))))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; 2 fake cursors + 1 real = 3 cursors.
       (should (= 3 (helixel-mc-num-cursors)))
       (should (= 2 (length (helixel-mc-all-cursors))))
@@ -1887,7 +1887,7 @@ The cursor selects the (possibly empty) line content."
     (push-mark 1 t t)
     (goto-char (point-max))
     (let* ((sel (helixel-sel-create 'line '(:count 3))))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; 3 lines → 1 real + 2 fakes.
       (should (= 3 (helixel-mc-num-cursors)))
       (helixel-mc-clear-all))))
@@ -1910,7 +1910,7 @@ the same on real and fakes."
            (mk-before (mark t))
            (active-before mark-active))
       ;; Spawn via walk-advance (search has no :mc-spawn-fn).
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; Real cursor's region must still cover the first "foo".
       (should (= pt-before (point)))
       (should (= mk-before (mark t)))
@@ -1929,7 +1929,7 @@ whitespace / EOB; filter must drop it."
   (helixel-test-with-buffer "foo bar baz qux\n"
     (helixel-enter-normal-state)
     (let ((sel (helixel-test-mc--word-sel)))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; 4 words → 1 real + 3 fakes.
       (should (= 4 (helixel-mc-num-cursors)))
       (helixel-mc-clear-all))))
@@ -1942,7 +1942,7 @@ whitespace / EOB; filter must drop it."
     (let* ((sel (helixel-sel-create
                  'find-char
                  '(:char ?x :type next :dir forward :inline-advance t))))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; 4 x's → 1 real + 3 fakes.
       (should (= 4 (helixel-mc-num-cursors)))
       (helixel-mc-clear-all))))
@@ -1954,7 +1954,7 @@ whitespace / EOB; filter must drop it."
     (let ((sel (helixel-sel-create
                 'find-char
                 '(:char ?z :type next :dir forward :inline-advance t))))
-      (should-error (helixel-mc-spawn-from-sel sel)
+      (should-error (helixel-mc--spawn-from-sel sel)
                     :type 'user-error))))
 
 ;; ── 2. Per-cursor dispatch ──
@@ -1963,9 +1963,9 @@ whitespace / EOB; filter must drop it."
   "Movement command run through `helixel-mc-with-each-cursor' moves
 every fake cursor independently."
   (helixel-test-with-buffer "aaa bbb ccc ddd\n"
-    (helixel-mc-create-fake-cursor 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 1)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     (goto-char 13)
     (helixel-mc-with-each-cursor
       (forward-char 1))
@@ -1983,8 +1983,8 @@ every fake cursor independently."
   "`upcase-word' dispatched to each cursor upcases each cursor's word."
   (helixel-test-with-buffer "foo bar baz\n"
     ;; Real at start of "foo"; fakes at start of "bar" and "baz".
-    (helixel-mc-create-fake-cursor 5)   ; before 'b' of bar
-    (helixel-mc-create-fake-cursor 9)   ; before 'b' of baz
+    (helixel-mc--create-fake-cursor 5)   ; before 'b' of bar
+    (helixel-mc--create-fake-cursor 9)   ; before 'b' of baz
     (goto-char 1)
     (upcase-word 1)                     ; real → "FOO"
     (helixel-mc-with-each-cursor
@@ -2065,8 +2065,8 @@ every fake cursor independently."
     ;; Real cursor on "foo" with region.
     (goto-char 4) (push-mark 1 t t)
     ;; Fakes on "bar" and "baz" with regions.
-    (helixel-mc-create-fake-cursor 8 5)
-    (helixel-mc-create-fake-cursor 12 9)
+    (helixel-mc--create-fake-cursor 8 5)
+    (helixel-mc--create-fake-cursor 12 9)
     (let ((kill-ring nil)
           (per-fake-kills nil))
       ;; Real `d': kill its region.
@@ -2097,9 +2097,9 @@ every fake cursor independently."
   "Creating cursors past `helixel-mc-max-cursors' signals `user-error'."
   (helixel-test-with-buffer "a\nb\nc\nd\n"
     (let ((helixel-mc-max-cursors 2))
-      (helixel-mc-create-fake-cursor 1)
-      (helixel-mc-create-fake-cursor 2)
-      (should-error (helixel-mc-create-fake-cursor 3)
+      (helixel-mc--create-fake-cursor 1)
+      (helixel-mc--create-fake-cursor 2)
+      (should-error (helixel-mc--create-fake-cursor 3)
                     :type 'user-error))
     (helixel-mc-clear-all)))
 
@@ -2109,19 +2109,19 @@ every fake cursor independently."
     (let ((helixel-mc-max-cursors nil))
       ;; Spawn at distinct positions so dedup keeps them all.
       (dotimes (i 10)
-        (helixel-mc-create-fake-cursor (+ 1 i)))
+        (helixel-mc--create-fake-cursor (+ 1 i)))
       (should (= 10 (length (helixel-mc-all-cursors)))))
     (helixel-mc-clear-all)))
 
 ;; ── execute-for-all-cursors entry point ──
 
 (ert-deftest helixel-test-mc-execute-for-all-cursors ()
-  "`helixel-mc-execute-for-all-cursors' runs a command at real + every fake."
+  "`helixel-mc--execute-for-all-cursors' runs a command at real + every fake."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     (goto-char 1)
-    (helixel-mc-execute-for-all-cursors #'forward-char)
+    (helixel-mc--execute-for-all-cursors #'forward-char)
     (should (= 2 (point)))
     (let ((positions
            (sort (mapcar (lambda (ov) (marker-position
@@ -2140,8 +2140,8 @@ every fake cursor independently."
       (should-error (helixel-mc-toggle) :type 'user-error))))
 
 (ert-deftest helixel-test-mc-toggle-error-not-a-sel ()
-  "`helixel-mc-spawn-from-sel' signals user-error on non-sel input."
-  (should-error (helixel-mc-spawn-from-sel "not-a-sel") :type 'user-error))
+  "`helixel-mc--spawn-from-sel' signals user-error on non-sel input."
+  (should-error (helixel-mc--spawn-from-sel "not-a-sel") :type 'user-error))
 
 ;; ── region-text error guard ──
 
@@ -2196,8 +2196,8 @@ every fake cursor independently."
 the nearest fake to become the new real (Helix `A-,' semantics)."
   (helixel-test-with-buffer "abc def ghi jkl\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)   ; nearest to real@1 (dist 4)
-    (helixel-mc-create-fake-cursor 13)  ; farther (dist 12)
+    (helixel-mc--create-fake-cursor 5)   ; nearest to real@1 (dist 4)
+    (helixel-mc--create-fake-cursor 13)  ; farther (dist 12)
     ;; M-,: swaps real↔5, then deletes the fake now at old-real=1.
     ;; After: real@5 (promoted), 1 fake remaining at 13.
     (helixel-mc-remove-primary)
@@ -2213,9 +2213,9 @@ position (the one the user navigated to) and promotes the
 nearest remaining cursor."
   (helixel-test-with-buffer "aaa bbb ccc ddd\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)   ; bbb
-    (helixel-mc-create-fake-cursor 9)   ; ccc
-    (helixel-mc-create-fake-cursor 13)  ; ddd
+    (helixel-mc--create-fake-cursor 5)   ; bbb
+    (helixel-mc--create-fake-cursor 9)   ; ccc
+    (helixel-mc--create-fake-cursor 13)  ; ddd
     ;; ) rotate: real moves to 5, fake placed at 1.
     (helixel-mc-rotate-primary-forward)
     (should (= 5 (point)))
@@ -2239,8 +2239,8 @@ nearest remaining cursor."
 cursor just past real point."
   (helixel-test-with-buffer "abc def ghi\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     (goto-char 3)                       ; before both fakes
     (helixel-mc-unmark-next)
     (should (= 1 (length (helixel-mc-all-cursors))))
@@ -2254,8 +2254,8 @@ cursor just past real point."
 before real point."
   (helixel-test-with-buffer "abc def ghi\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     (goto-char 7)                       ; between both fakes
     (helixel-mc-unmark-previous)
     (should (= 1 (length (helixel-mc-all-cursors))))
@@ -2269,7 +2269,7 @@ before real point."
 `user-error'."
   (helixel-test-with-buffer "abc def\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 5)
     (goto-char 8)                       ; after the fake
     (should-error (helixel-mc-unmark-next) :type 'user-error)
     (helixel-mc-clear-all)))
@@ -2278,7 +2278,7 @@ before real point."
   "`s U' with no fake before point signals `user-error'."
   (helixel-test-with-buffer "abc def\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 5)
     (goto-char 1)                       ; before the fake
     (should-error (helixel-mc-unmark-previous) :type 'user-error)
     (helixel-mc-clear-all)))
@@ -2297,7 +2297,7 @@ before real point."
   "`M-s .' with no last-event signals `user-error'."
   (helixel-test-with-buffer "abc\n"
     (let ((helixel--last-action nil))
-      (helixel-mc-create-fake-cursor 2)
+      (helixel-mc--create-fake-cursor 2)
       (should-error (helixel-mc-apply-last-action) :type 'user-error))
     (helixel-mc-clear-all)))
 
@@ -2331,10 +2331,10 @@ before real point."
   (should-not (helixel-mc-fake-cursor-p 42)))
 
 (ert-deftest helixel-test-mc-delete-fake-cursor-noop-non-cursor ()
-  "`helixel-mc-delete-fake-cursor' is a no-op on non-cursor overlays."
+  "`helixel-mc--delete-fake-cursor' is a no-op on non-cursor overlays."
   (helixel-test-with-buffer "abc\n"
     (let ((ov (make-overlay 1 2)))
-      (helixel-mc-delete-fake-cursor ov)  ; should not crash
+      (helixel-mc--delete-fake-cursor ov)  ; should not crash
       (should (overlay-buffer ov))        ; still alive
       (delete-overlay ov))))
 
@@ -2342,8 +2342,8 @@ before real point."
 ;;
 ;; The legacy `helixel-mc--inhibit' and
 ;; `helixel-mc-executing-command-for-fake-cursor' flag-defvars are
-;; gone — replaced by `helixel-replay-in-fake-p' /
-;; `helixel-mc-dispatch-in-progress-p' over the single
+;; gone — replaced by `helixel--replay-in-fake-p' /
+;; `helixel-mc--dispatch-in-progress-p' over the single
 ;; `helixel-replay' struct (see helixel-replay.el).  The behavioural
 ;; coverage moved into
 ;; `helixel-test-mc-post-command-skips-when-replay-in-fake'.
@@ -2406,25 +2406,25 @@ before real point."
 (ert-deftest helixel-test-mc-update-fake-region-creates-when-active ()
   "Region overlay is created when mark-active + point ≠ mark."
   (helixel-test-with-buffer "abcdef\n"
-    (let ((ov (helixel-mc-create-fake-cursor 1 4)))
+    (let ((ov (helixel-mc--create-fake-cursor 1 4)))
       (unwind-protect
           (progn
             (helixel-mc--update-fake-region ov)
             (should (overlay-get ov 'helixel-mc-region))
             (should (overlayp (overlay-get ov 'helixel-mc-region))))
-        (helixel-mc-delete-fake-cursor ov)))))
+        (helixel-mc--delete-fake-cursor ov)))))
 
 (ert-deftest helixel-test-mc-update-fake-region-deletes-when-inactive ()
   "Region overlay is deleted when mark-active is nil."
   (helixel-test-with-buffer "abcdef\n"
-    (let ((ov (helixel-mc-create-fake-cursor 1)))
+    (let ((ov (helixel-mc--create-fake-cursor 1)))
       (unwind-protect
           (progn
             ;; Pre-create a region overlay to verify deletion.
             (overlay-put ov 'helixel-mc-region (make-overlay 1 4))
             (helixel-mc--update-fake-region ov)
             (should-not (overlay-get ov 'helixel-mc-region)))
-        (helixel-mc-delete-fake-cursor ov)))))
+        (helixel-mc--delete-fake-cursor ov)))))
 
 ;; ── find-char spawn: case-fold with uppercase ──
 
@@ -2435,7 +2435,7 @@ before real point."
     (let ((sel (helixel-sel-create
                 'find-char
                 '(:char ?X :type next :dir forward :inline-advance t))))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; Only 2 X's (not the 2 x's).
       (should (= 2 (helixel-mc-num-cursors)))
       (helixel-mc-clear-all))))
@@ -2469,7 +2469,7 @@ before real point."
         (progn
           (with-current-buffer buf
             (insert "test\n")
-            (helixel-mc-create-fake-cursor 1)
+            (helixel-mc--create-fake-cursor 1)
             (should helixel-multi-cursor-mode))
           (helixel-mc--cleanup-on-mode-off)
           (with-current-buffer buf
@@ -2526,7 +2526,7 @@ pre-spawn cursor, the pre-spawn active region is restored."
             (setf (helixel-kind-mc-spawn-fn entry)
                   (lambda (_sel)
                     (list (helixel-mc--make-target 4))))
-            (helixel-mc-spawn-from-sel
+            (helixel-mc--spawn-from-sel
              (helixel-sel-create 'line '(:count 1)))
             ;; Realize-targets cleared mark-active (degenerate target),
             ;; but spawn-from-sel's restore guard put it back because
@@ -2550,7 +2550,7 @@ region is NOT restored (the new target replaces it correctly)."
             (setf (helixel-kind-mc-spawn-fn entry)
                   (lambda (_sel)
                     (list (helixel-mc--make-target 8))))
-            (helixel-mc-spawn-from-sel
+            (helixel-mc--spawn-from-sel
              (helixel-sel-create 'line '(:count 1)))
             (should (= 8 (point)))
             (should-not mark-active))
@@ -2561,7 +2561,7 @@ region is NOT restored (the new target replaces it correctly)."
 (ert-deftest helixel-test-mc-enter-leave-roundtrip ()
   "A full enter-apply-leave cycle preserves cursor overlay state."
   (helixel-test-with-buffer "hello world\n"
-    (let* ((ov (helixel-mc-create-fake-cursor 7 1))
+    (let* ((ov (helixel-mc--create-fake-cursor 7 1))
            (orig-pt (marker-position (helixel-mc-cursor-point ov)))
            (orig-mk (marker-position (helixel-mc-cursor-mark ov)))
            (orig-active (helixel-mc-cursor-mark-active ov)))
@@ -2593,12 +2593,12 @@ region is NOT restored (the new target replaces it correctly)."
 ;; ── spawn-from-rect: delegates to from-line ──
 
 (ert-deftest helixel-test-mc-spawn-from-rect ()
-  "`helixel-mc-spawn-from-rect' behaves like spawn-from-line."
+  "`helixel-mc--spawn-from-rect' behaves like spawn-from-line."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 1)
     (push-mark (point-max) t t)
     (let* ((sel (helixel-sel-create 'rect '(:count 3)))
-           (targets (helixel-mc-spawn-from-rect sel)))
+           (targets (helixel-mc--spawn-from-rect sel)))
       (should (= 3 (length targets))))))
 
 ;; ── broadcast + replay: last-event roundtrip ──
@@ -2612,8 +2612,8 @@ region is NOT restored (the new target replaces it correctly)."
                :sel nil :payload nil
               )))
       (setq helixel--last-action tx)
-      (helixel-mc-create-fake-cursor 3)
-      (helixel-mc-create-fake-cursor 5)
+      (helixel-mc--create-fake-cursor 3)
+      (helixel-mc--create-fake-cursor 5)
       (helixel-mc--broadcast-last-event)
       ;; Every fake now has the tx.
       (dolist (ov (helixel-mc-all-cursors))
@@ -2648,7 +2648,7 @@ the tx at every fake — no substitute-alist needed."
 (ert-deftest helixel-test-mc-keyboard-quit-clears ()
   "`keyboard-quit' triggers fake cursor cleanup via advice."
   (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
+    (helixel-mc--create-fake-cursor 2)
     (should helixel-multi-cursor-mode)
     (condition-case nil (keyboard-quit) (quit nil))
     ;; After quit, mc mode is off and cursors cleared.
@@ -2674,8 +2674,8 @@ the tx at every fake — no substitute-alist needed."
 (ert-deftest helixel-test-mc-lighter-format ()
   "The mode-line lighter shows the correct cursor count."
   (helixel-test-with-buffer "abc\n"
-    (helixel-mc-create-fake-cursor 2)
-    (helixel-mc-create-fake-cursor 3)
+    (helixel-mc--create-fake-cursor 2)
+    (helixel-mc--create-fake-cursor 3)
     (let ((lighter (format helixel-mc-mode-line-indicator
                            (helixel-mc-num-cursors))))
       (should (string-match "3" lighter)))
@@ -2688,10 +2688,10 @@ the tx at every fake — no substitute-alist needed."
   (helixel-test-with-buffer "foo bar foo bar foo\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 4)  ; real on "foo"
-    (helixel-mc-create-fake-cursor 8 5)            ; fake on "bar"
-    (helixel-mc-create-fake-cursor 12 9)           ; fake on "foo"
-    (helixel-mc-create-fake-cursor 16 13)          ; fake on "bar"
-    (helixel-mc-create-fake-cursor 20 17)          ; fake on "foo"
+    (helixel-mc--create-fake-cursor 8 5)            ; fake on "bar"
+    (helixel-mc--create-fake-cursor 12 9)           ; fake on "foo"
+    (helixel-mc--create-fake-cursor 16 13)          ; fake on "bar"
+    (helixel-mc--create-fake-cursor 20 17)          ; fake on "foo"
     (dolist (ov (helixel-mc-all-cursors))
       (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (should (= 4 (length (helixel-mc-all-cursors))))
@@ -2711,8 +2711,8 @@ the tx at every fake — no substitute-alist needed."
   (helixel-test-with-buffer "foo bar foo bar foo\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 4)  ; real on "foo"
-    (helixel-mc-create-fake-cursor 8 5)            ; fake on "bar"
-    (helixel-mc-create-fake-cursor 12 9)           ; fake on "foo"
+    (helixel-mc--create-fake-cursor 8 5)            ; fake on "bar"
+    (helixel-mc--create-fake-cursor 12 9)           ; fake on "foo"
     (dolist (ov (helixel-mc-all-cursors))
       (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (helixel-mc-remove-matching "foo")
@@ -2727,8 +2727,8 @@ the tx at every fake — no substitute-alist needed."
   (helixel-test-with-buffer "abc def ghi\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 4)  ; real on "abc"
-    (helixel-mc-create-fake-cursor 8 5)            ; fake on "def"
-    (helixel-mc-create-fake-cursor 12 9)           ; fake on "ghi"
+    (helixel-mc--create-fake-cursor 8 5)            ; fake on "def"
+    (helixel-mc--create-fake-cursor 12 9)           ; fake on "ghi"
     (setf (helixel-pcs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (setf (helixel-pcs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (helixel-mc-rotate-primary-forward 1)
@@ -2748,8 +2748,8 @@ the tx at every fake — no substitute-alist needed."
   (helixel-test-with-buffer "AAA BBB CCC\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 4)  ; real on "AAA"
-    (let ((ov1 (helixel-mc-create-fake-cursor 8 5))   ; "BBB"
-          (ov2 (helixel-mc-create-fake-cursor 12 9))) ; "CCC"
+    (let ((ov1 (helixel-mc--create-fake-cursor 8 5))   ; "BBB"
+          (ov2 (helixel-mc--create-fake-cursor 12 9))) ; "CCC"
       (setf (helixel-pcs-mark-active (overlay-get ov1 'helixel-pc-state)) t)
       (setf (helixel-pcs-mark-active (overlay-get ov2 'helixel-pc-state)) t))
     (helixel-mc-rotate-content-forward 1)
@@ -2766,8 +2766,8 @@ on both real and fakes, so the second call hit
   (helixel-test-with-buffer "AAA BBB CCC\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 4)
-    (let ((ov1 (helixel-mc-create-fake-cursor 8 5))
-          (ov2 (helixel-mc-create-fake-cursor 12 9)))
+    (let ((ov1 (helixel-mc--create-fake-cursor 8 5))
+          (ov2 (helixel-mc--create-fake-cursor 12 9)))
       (setf (helixel-pcs-mark-active (overlay-get ov1 'helixel-pc-state)) t)
       (setf (helixel-pcs-mark-active (overlay-get ov2 'helixel-pc-state)) t))
     (helixel-mc-rotate-content-forward 1)
@@ -2787,8 +2787,8 @@ on both real and fakes, so the second call hit
   (helixel-test-with-buffer "abc def ghi\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 4)
-    (helixel-mc-create-fake-cursor 8 5)
-    (helixel-mc-create-fake-cursor 12 9)
+    (helixel-mc--create-fake-cursor 8 5)
+    (helixel-mc--create-fake-cursor 12 9)
     (setf (helixel-pcs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (setf (helixel-pcs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (helixel-mc-merge)
@@ -2805,7 +2805,7 @@ on both real and fakes, so the second call hit
     ;; Real: select "  foo   " (1..9)
     (goto-char 1) (push-mark 1 t t) (goto-char 9)
     ;; Fake: select "   bar  " (6..14)
-    (let ((ov (helixel-mc-create-fake-cursor 14 6)))
+    (let ((ov (helixel-mc--create-fake-cursor 14 6)))
       (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     (helixel-mc-trim)
     ;; Real shrinks to "foo" (3..6).
@@ -2820,7 +2820,7 @@ on both real and fakes, so the second call hit
     ;; Real: select leading spaces only (1..4) — all whitespace.
     (goto-char 1) (push-mark 1 t t) (goto-char 4)
     ;; Fake: select leading spaces at same positions.
-    (let ((ov (helixel-mc-create-fake-cursor 4 1)))
+    (let ((ov (helixel-mc--create-fake-cursor 4 1)))
       (setf (helixel-pcs-mark-active (overlay-get ov 'helixel-pc-state)) t))
     ;; Trim should convert both to point-only cursors, not drop them.
     (helixel-mc-trim)
@@ -2841,8 +2841,8 @@ on both real and fakes, so the second call hit
     ;; Real at end of line 1 (col 1 in 0-indexed = after "a").
     (goto-char 2)
     ;; Fakes at end of lines 2 and 3.
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
     (helixel-mc-align)
     ;; Max col was 3 (ccc).  Line 1 grew by 2 spaces, line 2 by 1.
     (should (equal "a  \nbb \nccc\n" (buffer-string)))
@@ -2902,8 +2902,8 @@ region cursor per line (Helix `Alt-s' semantics)."
     (helixel-enter-normal-state)
     (setq helixel-mc--history nil)
     (goto-char 1) (push-mark 1 t t) (goto-char 4)
-    (helixel-mc-create-fake-cursor 8 5)
-    (helixel-mc-create-fake-cursor 12 9)
+    (helixel-mc--create-fake-cursor 8 5)
+    (helixel-mc--create-fake-cursor 12 9)
     (setf (helixel-pcs-mark-active (overlay-get (car (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (setf (helixel-pcs-mark-active (overlay-get (cadr (helixel-mc-all-cursors)) 'helixel-pc-state)) t)
     (helixel-mc-clear-all)
@@ -2927,7 +2927,7 @@ treat that as a replayable tx — it must fall back to
   (helixel-test-with-buffer "foo bar baz\nfoo bar baz\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 13)
+    (helixel-mc--create-fake-cursor 13)
     (let ((this-command 'helixel-mark-inner-symbol))
       (call-interactively 'helixel-mark-inner-symbol)
       (helixel-mc--post-command))
@@ -2954,8 +2954,8 @@ context so electric-pair inserts the matching `)' there too."
     (unwind-protect
         (progn
           (goto-char 1) (end-of-line)              ; after `foo'
-          (helixel-mc-create-fake-cursor 8)        ; after `bar'
-          (helixel-mc-create-fake-cursor 12)       ; after `baz'
+          (helixel-mc--create-fake-cursor 8)        ; after `bar'
+          (helixel-mc--create-fake-cursor 12)       ; after `baz'
           (helixel-enter-insert-state)
           (let ((this-command 'self-insert-command)
                 (last-command-event ?\())
@@ -2991,8 +2991,8 @@ must still exist after the post-command dispatch."
     (unwind-protect
         (progn
           (goto-char 1)
-          (helixel-mc-create-fake-cursor 5)   ; on second line
-          (helixel-mc-create-fake-cursor 9)   ; on third line
+          (helixel-mc--create-fake-cursor 5)   ; on second line
+          (helixel-mc--create-fake-cursor 9)   ; on third line
           (should (= 2 (length (helixel-mc-all-cursors))))
           (let ((this-command 'helixel-test-mc--always-user-error))
             ;; Real cursor would also user-error in real usage, but
@@ -3023,8 +3023,8 @@ loadable in the batch environment."
     (unwind-protect
         (progn
           (goto-char 4)                       ; eol of first line
-          (helixel-mc-create-fake-cursor 8)   ; eol of second line
-          (helixel-mc-create-fake-cursor 12)  ; eol of third line
+          (helixel-mc--create-fake-cursor 8)   ; eol of second line
+          (helixel-mc--create-fake-cursor 12)  ; eol of third line
           (helixel-mc--completion-preview-sync
            (lambda () (insert "XYZ")))
           ;; Real cursor + both fakes each got `XYZ' inserted at eol.
@@ -3055,7 +3055,7 @@ an empty insert to fakes."
     (unwind-protect
         (progn
           (goto-char 1)
-          (helixel-mc-create-fake-cursor 5)
+          (helixel-mc--create-fake-cursor 5)
           (let ((orig-text (buffer-string)))
             (helixel-mc--completion-preview-sync (lambda () nil))
             ;; Buffer unchanged.
@@ -3125,7 +3125,7 @@ in mc-fake context (undo amalgamation already isolates each fake)."
       (should tx)
       (should (helixel-action-runner tx))
       ;; Replay at each fake cursor inside mc-fake replay context
-      ;; so helixel-replay-in-fake-p returns t (as the real dispatcher
+      ;; so helixel--replay-in-fake-p returns t (as the real dispatcher
       ;; does via helixel-mc-with-each-cursor).
       (dolist (ov (helixel-mc-all-cursors))
         (when (helixel-mc-fake-cursor-p ov)
@@ -3224,7 +3224,7 @@ per-cursor register content is independent."
     (let ((contents nil))
       (helixel-mc-with-each-cursor
         (push (cons (line-number-at-pos)
-                    (helixel-register-get ?a))
+                    (helixel--register-get ?a))
               contents))
       (setq contents (nreverse contents))
       (should (= (length contents) 2))
@@ -3332,8 +3332,8 @@ Cursor 1 copies to register a, cursor 2 to register b."
       (helixel-kill-ring-save))
     ;; Verify per-cursor isolation for register b.
     (helixel-mc-with-each-cursor
-      (should (equal "BBB" (helixel-register-get ?b)))
-      (should-not (helixel-register-get ?a)))
+      (should (equal "BBB" (helixel--register-get ?b)))
+      (should-not (helixel--register-get ?a)))
     ;; Real cursor's register a is in global storage.
     (should (equal "AAA" (get-register ?a)))
     (helixel-mc-clear-all)))
@@ -3349,7 +3349,7 @@ interfered with call-interactively dispatch."
     (put-text-property 1 9 (quote invisible) (quote outline))
     (add-to-invisibility-spec (quote (outline . t)))
     ;; Create a fake cursor at position 1
-    (let ((ov (helixel-mc-create-fake-cursor 1)))
+    (let ((ov (helixel-mc--create-fake-cursor 1)))
       (unwind-protect
           (progn
             ;; Simulate org-self-insert-command at the fake cursor for 'f', 'o', 'o'
@@ -3361,7 +3361,7 @@ interfered with call-interactively dispatch."
               (helixel-mc--call-interactively (quote org-self-insert-command)))
             ;; Buffer should now have "foofoohello" (foo inserted before hello)
             (should (string-prefix-p "foofoo" (buffer-string))))
-        (helixel-mc-delete-fake-cursor ov)))))
+        (helixel-mc--delete-fake-cursor ov)))))
 
 
 
@@ -3372,7 +3372,7 @@ Tests the actual dispatch path that caused the 'oohello' bug."
     (put-text-property 1 9 (quote invisible) (quote outline))
     (add-to-invisibility-spec (quote (outline . t)))
     ;; Simulate what ss+i+foo does: cursor at position 4 (match-beginning of 'hello')
-    (let ((ov (helixel-mc-create-fake-cursor 4 9))
+    (let ((ov (helixel-mc--create-fake-cursor 4 9))
           (helixel-multi-cursor-mode t))
       (unwind-protect
           (progn
@@ -3393,7 +3393,7 @@ Tests the actual dispatch path that caused the 'oohello' bug."
             ;; After inserting 'foo' before 'hello' within invisible text:
             ;; the buffer should contain "foofoohello" (original "foo" + inserted "foo" + "hello")
             (should (string-prefix-p "foofoo" (buffer-string))))
-        (helixel-mc-delete-fake-cursor ov)))))
+        (helixel-mc--delete-fake-cursor ov)))))
 
 
 
@@ -3414,8 +3414,8 @@ it, leaving fake cursors with no visible selection."
     ;; (before space after 'b-').  Each fake starts with an active
     ;; region (point=bol, mark=orig) to simulate the `gh fx' sequence
     ;; where gh extends to bol and fx extends to the char.
-    (let ((f1 (helixel-mc-create-fake-cursor 4))  ; before space after 'a-'
-          (f2 (helixel-mc-create-fake-cursor 8))) ; before space after 'b-'
+    (let ((f1 (helixel-mc--create-fake-cursor 4))  ; before space after 'a-'
+          (f2 (helixel-mc--create-fake-cursor 8))) ; before space after 'b-'
       ;; Activate regions on both fakes simulating gh: point at bol,
       ;; mark at current position.
       (dolist (ov (list f1 f2))
@@ -3458,7 +3458,7 @@ fake cursor."
                  'search
                  '(:pattern "^$" :dir forward :entry-kind nil)))
            (fakes-before (length (helixel-mc-all-cursors))))
-      (helixel-mc-spawn-from-sel sel)
+      (helixel-mc--spawn-from-sel sel)
       ;; 4 ^$-matches: at positions 7, 8, 9, and 16 (terminal empty line).
       ;; One becomes the real cursor → 3 fake cursors.
       (should (= 3 (length (helixel-mc-all-cursors))))
@@ -3485,7 +3485,7 @@ fake cursor."
   (helixel-test-with-buffer "hello world\nhello world\n"
     (goto-char 1)
     (push-mark 7 t t)
-    (helixel-mc-create-fake-cursor 13 19)
+    (helixel-mc--create-fake-cursor 13 19)
     (delete-region (region-beginning) (region-end))
     (helixel-mc-with-each-cursor
       (delete-region (region-beginning) (region-end)))
@@ -3497,7 +3497,7 @@ fake cursor."
   (helixel-test-with-buffer "hello\n"
     (setq buffer-undo-list nil)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 1)
+    (helixel-mc--create-fake-cursor 1)
     (let ((undo-before (copy-tree buffer-undo-list)))
       (helixel-mc--undo-step-begin)
       (helixel-mc--undo-step-finish)
@@ -3510,8 +3510,8 @@ fake cursor."
   (helixel-test-with-buffer "line one\nline two\nline three\n"
     (goto-char 4)
     (push-mark 6 t t)
-    (helixel-mc-create-fake-cursor 13 17)
-    (helixel-mc-create-fake-cursor 22)
+    (helixel-mc--create-fake-cursor 13 17)
+    (helixel-mc--create-fake-cursor 22)
     (let* ((before (helixel-mc--capture-all-positions))
            (num-cursors (helixel-mc-num-cursors)))
       (helixel-mc--restore-all-positions before)
@@ -3529,8 +3529,8 @@ fake cursor."
                            (cons 200 (cons 22 nil)))))
       (helixel-mc--restore-all-positions positions)
       (should (= 3 (helixel-mc-num-cursors)))
-      (should (helixel-mc-cursor-by-id 100))
-      (should (helixel-mc-cursor-by-id 200))
+      (should (helixel-mc--cursor-by-id 100))
+      (should (helixel-mc--cursor-by-id 200))
       (should (= 4 (point))))
     (helixel-mc-clear-all)))
 
@@ -3539,7 +3539,7 @@ fake cursor."
   (helixel-test-with-buffer "hello\n"
     (setq buffer-undo-list nil)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 1)
+    (helixel-mc--create-fake-cursor 1)
     (let ((len-before (length buffer-undo-list)))
       (helixel-mc--undo-step-begin)
       (should (consp buffer-undo-list))
@@ -3553,7 +3553,7 @@ fake cursor."
   (helixel-test-with-buffer "hello\n"
     (setq buffer-undo-list nil)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 1)
+    (helixel-mc--create-fake-cursor 1)
     (helixel-mc--undo-step-begin)
     (push 42 buffer-undo-list)     ; number entry (point adjustment)
     (push 99 buffer-undo-list)
@@ -3585,7 +3585,7 @@ fake cursor."
     (let (f1)
       (goto-char 1)
       (push-mark 7 t t)
-      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
       (should f1)
       (let ((fake-before (helixel-mc-test--fake-point f1))
             (undo-list-snapshot nil))
@@ -3617,7 +3617,7 @@ the buffer content and the fake cursor position."
     (let (f1)
       (goto-char 1)
       (push-mark 7 t t)
-      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
       (should f1)
       (let ((fake-before (helixel-mc-test--fake-point f1))
             (undo-list-snapshot nil))
@@ -3648,7 +3648,7 @@ the buffer content and the fake cursor position."
     (setq buffer-undo-list nil)
     (let (f1)
       (goto-char 1)
-      (setq f1 (helixel-mc-create-fake-cursor 13))
+      (setq f1 (helixel-mc--create-fake-cursor 13))
       (should f1)
       (let ((fake-before (helixel-mc-test--fake-point f1))
             (undo-list-snapshot nil))
@@ -3672,7 +3672,7 @@ the buffer content and the fake cursor position."
     (let (f1)
       (goto-char 1)
       (push-mark 7 t t)
-      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
       (should f1)
       (should (helixel-mc-cursor-mark-active f1))
       (let ((pos (helixel-mc--capture-all-positions)))
@@ -3687,7 +3687,7 @@ the buffer content and the fake cursor position."
   (helixel-test-with-buffer "aaa\nbbb\n"
     (setq buffer-undo-list nil)
     (goto-char 1)
-    (let* ((f1 (helixel-mc-create-fake-cursor 5))
+    (let* ((f1 (helixel-mc--create-fake-cursor 5))
            (id-before (overlay-get f1 'helixel-mc-id)))
       (should id-before)
       (helixel-mc--undo-step-begin)
@@ -3698,7 +3698,7 @@ the buffer content and the fake cursor position."
       (let ((undo-list-snapshot buffer-undo-list))
         (deactivate-mark)
         (primitive-undo 1 (helixel-mc-test--skip-leading-nil undo-list-snapshot)))
-      (let ((f2 (helixel-mc-cursor-by-id id-before)))
+      (let ((f2 (helixel-mc--cursor-by-id id-before)))
         (should f2)
         (should (eq f2 f1)))
       (helixel-mc-clear-all))))
@@ -3709,7 +3709,7 @@ After primitive-undo, cursor positions match their pre-edit state."
   (helixel-test-with-buffer "hello\n"
     (setq buffer-undo-list nil)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 1)
+    (helixel-mc--create-fake-cursor 1)
     (let ((pos-before (helixel-mc--capture-all-positions)))
       (helixel-mc--undo-step-begin)
       (insert "X")
@@ -3752,7 +3752,7 @@ and mark at the beginning — not at BOL (beginning of line)."
     (let (f1)
       ;; Set up a fake cursor with a region selecting "hello " on line 2.
       ;; point=19 (before 'w' in 'world'), mark=13 (before 'h').
-      (setq f1 (helixel-mc-create-fake-cursor 19 13))
+      (setq f1 (helixel-mc--create-fake-cursor 19 13))
       (should f1)
       (should (helixel-mc-cursor-mark-active f1))
       (let ((fake-mark-before (marker-position
@@ -3793,7 +3793,7 @@ When a fake cursor has an active region, the captured alist entry
 must have a non-nil cdr (mark position)."
   (helixel-test-with-buffer "hello world\nhello world\n"
     (let (f1)
-      (setq f1 (helixel-mc-create-fake-cursor 19 13))
+      (setq f1 (helixel-mc--create-fake-cursor 19 13))
       (should f1)
       (let ((pos (helixel-mc--capture-all-positions)))
         ;; Find the fake cursor entry by ID.
@@ -3817,7 +3817,7 @@ as its own undo step."
   (helixel-test-with-buffer "hello\n"
     (setq buffer-undo-list nil)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 1)
+    (helixel-mc--create-fake-cursor 1)
     ;; Step 1: insert.
     (helixel-mc--undo-step-begin)
     (insert "X")
@@ -3839,7 +3839,7 @@ is nil so the command loop does not clear `mark-active'."
     (let (f1)
       (goto-char 1)
       (push-mark 7 t t)
-      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
       (should f1)
       (helixel-mc--undo-step-begin)
       (delete-region (region-beginning) (region-end))
@@ -3865,7 +3865,7 @@ and fake cursor position."
     (let (f1)
       (goto-char 1)
       (push-mark 7 t t)
-      (setq f1 (helixel-mc-create-fake-cursor 13 19))
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
       (should f1)
       (let ((fake-before (helixel-mc-test--fake-point f1)))
         (helixel-mc--undo-step-begin)
@@ -3890,7 +3890,7 @@ After two edits, the undo list has two nil boundaries."
   (helixel-test-with-buffer "hello\n"
     (setq buffer-undo-list nil)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 1)
+    (helixel-mc--create-fake-cursor 1)
     ;; Edit 1.
     (helixel-mc--undo-step-begin)
     (insert "A")
@@ -3915,8 +3915,8 @@ After two edits, the undo list has two nil boundaries."
   "Restore-all-positions deletes fake cursors not in the positions alist."
   (helixel-test-with-buffer "line one\nline two\n"
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 5)
-    (helixel-mc-create-fake-cursor 10)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 10)
     (should (= 3 (helixel-mc-num-cursors)))
     ;; Restore with only one fake.
     (let ((positions (list (cons 0 (cons 1 nil))
@@ -3962,15 +3962,15 @@ Binds `this-command' and `helixel-mc--saved-this-command' so
       (helixel-mc--replay-at-one-fake
        action this-command cursor dead))
     (dolist (ov dead)
-      (helixel-mc-delete-fake-cursor ov))))
+      (helixel-mc--delete-fake-cursor ov))))
 
 (ert-deftest helixel-test-mc-search-replay-fake-finds-match ()
   "After `/pattern<RET>', each fake cursor searches from its own
 position and moves to the match."
   (helixel-test-with-buffer "hello world\nhello world\nxxx ss gh\n"
     (helixel-enter-normal-state)
-    (helixel-mc-create-fake-cursor 1)   ; line 1: "hello world"
-    (helixel-mc-create-fake-cursor 13)  ; line 2: "hello world"
+    (helixel-mc--create-fake-cursor 1)   ; line 1: "hello world"
+    (helixel-mc--create-fake-cursor 13)  ; line 2: "hello world"
     (goto-char 27)                      ; real cursor on line 3
     (should (= 2 (length (helixel-mc-all-cursors))))
     (helixel-test-mc--replay-action-at-fakes
@@ -3997,7 +3997,7 @@ position and moves to the match."
   (helixel-test-with-buffer "hello world\nno match here\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 14)  ; second line: no "world"
+    (helixel-mc--create-fake-cursor 14)  ; second line: no "world"
     (should (= 1 (length (helixel-mc-all-cursors))))
     (helixel-test-mc--replay-action-at-fakes
      (helixel-test-mc--make-search-action "world" 'forward))
@@ -4010,7 +4010,7 @@ is set so `n'/`N' works."
   (helixel-test-with-buffer "a world b\nc world d\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 12)  ; second line
+    (helixel-mc--create-fake-cursor 12)  ; second line
     (should (= 1 (length (helixel-mc-all-cursors))))
     (helixel-test-mc--replay-action-at-fakes
      (helixel-test-mc--make-search-action "world" 'forward))
@@ -4030,7 +4030,7 @@ and mark at match-end (matching isearch's backward orientation)."
     ;; Fake cursor after "world" — backward search should find
     ;; "world" and place point BEFORE it, mark AFTER it.
     (goto-char 1)
-    (helixel-mc-create-fake-cursor 15) ; after "world again"
+    (helixel-mc--create-fake-cursor 15) ; after "world again"
     (should (= 1 (length (helixel-mc-all-cursors))))
     (helixel-test-mc--replay-action-at-fakes
      (helixel-test-mc--make-search-action "world" 'backward))

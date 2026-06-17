@@ -29,8 +29,8 @@
 ;;   helixel-mc--realize-targets    — install targets as cursors
 ;;   helixel-mc--make-dummy-action      — minimal event for advance fns
 ;;   helixel-mc--walk-advance       — fallback for unregistered kinds
-;;   helixel-mc-spawn-from-sel      — generic dispatcher (kind → fn)
-;;   helixel-mc-spawn-from-line / -from-rect / -from-find-char
+;;   helixel-mc--spawn-from-sel      — generic dispatcher (kind → fn)
+;;   helixel-mc--spawn-from-line / -from-rect / -from-find-char
 ;;   helixel-mc--register-default-spawn-fns
 ;;
 ;; Strategy: a kind may provide `:mc-spawn-fn' in the kind registry
@@ -115,7 +115,7 @@ Returns count of fake cursors created."
          (count 0))
     (dolist (p targets)
       (unless (eq p closest)
-        (helixel-mc-create-fake-cursor
+        (helixel-mc--create-fake-cursor
          (marker-position (car p))
          (and (cdr p)
               (/= (marker-position (cdr p))
@@ -234,7 +234,7 @@ TARGETS and LAST-KEY are the current accumulator values."
 
 ;; ── Generic dispatcher ──
 
-(defun helixel-mc-spawn-from-sel (sel)
+(defun helixel-mc--spawn-from-sel (sel)
   "Spawn fake cursors for SEL.
 If SEL's kind has `:mc-spawn-fn' in the registry, use it;
 otherwise walk the kind's `:advance' function over the whole
@@ -273,7 +273,7 @@ region-relative position as on every fake."
 
 ;; ── Column spawn (line / rect) ──
 
-(defun helixel-mc-spawn-from-line (_sel)
+(defun helixel-mc--spawn-from-line (_sel)
   "Spawn one fake cursor per line of the active line selection.
 _SEL is the originating `line' selection (used only for dispatch).
 Each cursor SELECTS its own line: mark at bol, point at eol,
@@ -307,12 +307,12 @@ to the line that contains its current point."
         (user-error "No line targets"))
       result)))
 
-(defun helixel-mc-spawn-from-rect (sel)
+(defun helixel-mc--spawn-from-rect (sel)
   "Spawn column cursors at every line of a rectangle region SEL.
-Falls back to `helixel-mc-spawn-from-line' semantics for now."
-  (helixel-mc-spawn-from-line sel))
+Falls back to `helixel-mc--spawn-from-line' semantics for now."
+  (helixel-mc--spawn-from-line sel))
 
-(defun helixel-mc-spawn-from-find-char (sel)
+(defun helixel-mc--spawn-from-find-char (sel)
   "Spawn one fake cursor at every occurrence of SEL's :char.
 SEL must be a `find-char' selection.  For `:type next' each
 cursor lands AFTER the match (mimicking `fx' which leaves point
@@ -356,13 +356,13 @@ Mutates the `helixel-kind' struct entries in-place via
 `setf'.  Idempotent: re-running overwrites with the same fn."
   ;; line / rect → per-line / per-row cursors with own region.
   (when-let* ((k (gethash 'line helixel--kind-registry)))
-    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc-spawn-from-line))
+    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-line))
   (when-let* ((k (gethash 'rect helixel--kind-registry)))
-    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc-spawn-from-rect))
+    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-rect))
   ;; find-char → scan all char occurrences (advance-walk would only
   ;; visit from origin so we need a buffer-wide scan).
   (when-let* ((k (gethash 'find-char helixel--kind-registry)))
-    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc-spawn-from-find-char))
+    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-find-char))
   ;; search / textobj / movement inherit the advance-walk fallback
   ;; automatically (no entry needed).
   )

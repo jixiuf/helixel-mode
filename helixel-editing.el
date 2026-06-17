@@ -1053,14 +1053,20 @@ Ensures TEXT ends with a newline."
              text)))
     (propertize s 'yank-handler '(helixel--yank-handler-line-wise nil t))))
 
-(defun helixel--linewise-kill-p (&optional text)
-  "Return non-nil if TEXT (default: top of kill ring) was killed line-wise."
+(defun helixel--kill-type-p (handler &optional text)
+  "Return non-nil if TEXT (default: top of kill ring) uses yank-handler HANDLER.
+HANDLER is a symbol, the yank-handler function name.
+TEXT is an optional string; when nil, looks up the current kill-ring entry."
   (when-let* ((s (or text
                      (and helixel--current-register
                           (helixel--current-kill 0 t))
                      (and kill-ring (helixel--current-kill 0 t)))))
     (eq (car-safe (get-text-property 0 'yank-handler s))
-        'helixel--yank-handler-line-wise)))
+        handler)))
+
+(defun helixel--linewise-kill-p (&optional text)
+  "Return non-nil if TEXT (default: top of kill ring) was killed line-wise."
+  (helixel--kill-type-p 'helixel--yank-handler-line-wise text))
 
 (defun helixel--line-bounds-of-region ()
   "Return (BEG . END) expanded to full line boundaries.
@@ -1087,12 +1093,7 @@ Tags the text with a rect-wise yank-handler for proper pasting."
 
 (defun helixel--rect-wise-kill-p (&optional text)
   "Return non-nil if TEXT was killed as a rectangle."
-  (when-let* ((s (or text
-                     (and helixel--current-register
-                          (helixel--current-kill 0 t))
-                     (and kill-ring (helixel--current-kill 0 t)))))
-    (eq (car-safe (get-text-property 0 'yank-handler s))
-        'helixel--yank-handler-rect-wise)))
+  (helixel--kill-type-p 'helixel--yank-handler-rect-wise text))
 
 ;;; Rect change with replay
 

@@ -16,16 +16,16 @@
 
 ## Data Layer (`helixel-core.el`)
 
-### Two Structs (v5 unified)
+### Two Structs
 
 | Struct | Role | Mutable? |
 |--------|------|----------|
 | `helixel-sel` | Selection descriptor (kind + ctx + recreate closure) | Immutable (copy on update) |
 | `helixel-action` | Unified struct for replay AND history (op + sel + payload + runner + display + category + subcat + by-command + preposition + mark-region + timestamp + buffer) | `helixel--last-action` is the latest action, mutable cell; ring entries are immutable after commit |
 
-v5 merged the previously separate `helixel-action` (replay) and `helixel-action`
-(history) into a single 12-slot struct.  All accessors (`helixel-action-op`,
-`helixel-action-sel`, `helixel-action-payload-get`, `helixel-action-runner`,
+The single `helixel-action` struct serves both replay and history.
+All accessors (`helixel-action-op`, `helixel-action-sel`,
+`helixel-action-payload-get`, `helixel-action-runner`,
 `helixel-action-preposition`) operate on the unified struct.
 
 ### Kind Registry
@@ -50,7 +50,6 @@ Centralizes per-operator protocol:
 :runner            fn(tx) → nil      execute edit at replay time
 :display           string|fn         display string for history
 :moves-point-p    boolean           t = op self-advances, no auto-advance
-:strategy-builder  fn(edit rev) → strategy  custom strategy (chain)
 ```
 
 Access: `(helixel--op-runner 'kill)`, `(helixel--op-moves-point-p 'insert-text)`, etc.
@@ -94,40 +93,36 @@ Events are deduplicated by content: same op, category, subcat, sel, payload, and
 
 ## Repeat Engine
 
-### Strategy Struct
+Dot-repeat uses a single `helixel--repeat-advance(edit, effective)`
+function that delegates to the kind registry's `:advance` fn.
+All-buffer and all-dir scans pull `:all-buffer-fn` / `:all-dir-fn`
+directly from the kind registry.
 
 ```elisp
-(cl-defstruct helixel-repeat-strategy
-  advance        ;; fn(edit) → t|nil   next target
-  apply          ;; fn(edit) → nil     execute edit
-  reset          ;; fn(edit) → nil     goto marker (all-buffer)
-  all-buffer-fn  ;; fn(edit prefix) → nil   custom all-buffer (or nil)
-  all-dir-fn     ;; fn(edit) → nil          custom all-dir (or nil))
+;; Unified advance – one function, no closures
+(defun helixel--repeat-advance (edit effective)
+  "Advance to next replay target.  Return non-nil on success."
+  (let* ((op (helixel-action-op edit))
+         (advance-fn (helixel--kind-advance (helixel-sel-kind …))))
+    (cond
+     ((and (eq op 'chain) (null advance-fn)) t)   ; in-place
+     ((or (not advance-fn) (helixel--op-moves-point-p op))
+      (helixel-sel-call-recreate …))              ; recreate only
+     (t (funcall advance-fn edit)))))              ; kind drives
 ```
 
-### Strategy Builder
-
-`helixel--build-strategy(edit, reverse-p)` → strategy:
-
-1. Check op registry for custom `:strategy-builder` (chain uses this)
-2. Fall back to `helixel--default-strategy-builder`:
-   - Read kind from sel, advance-fn from kind registry
-   - Check `:moves-point-p` flag from op registry (t → no auto-advance)
-   - Handle `reverse-p` by creating reversed-edit copy
-   - Set `:all-buffer-fn` and `:all-dir-fn` from kind registry
-
-### `.` Dispatch (4 branches)
+### `.` Dispatch (4 modes, direct)
 
 ```
-helixel-repeat-edit
-  ├── :all-buffer  → helixel--repeat-all-buffer(strategy, tx, prefix)
-  │                    ├── all-buffer-fn set? → delegate
-  │                    └── else: reset → scan from point-min
-  ├── :all-dir     → helixel--repeat-all-dir(strategy, tx)
-  │                    ├── all-dir-fn set? → delegate
-  │                    └── else: advance+apply loop
-  ├── :n-times     → helixel--repeat-n (or execute directly if preview)
-  └── :preview     → execute once at current position
+helixel--repeat-edit-default
+  ├── :all-buffer  → helixel--repeat-all-buffer(edit, prefix, reverse-p)
+  │                    ├── :all-buffer-fn set? → delegate to kind
+  │                    └── else: goto marker → scan from point-min
+  ├── :all-dir     → helixel--repeat-all-dir(edit, reverse-p)
+  │                    ├── :all-dir-fn set? → delegate to kind
+  │                    └── else: advance+replay loop from point
+  ├── :n-times     → helixel--repeat-n(edit, n, reverse-p)
+  └── preview      → helixel--repeat-preview(edit, mode, n, reverse-p)
 ```
 
 ---
@@ -143,7 +138,7 @@ helixel-repeat-edit
 4. Store as `helixel--last-action`
 5. Commit event via `helixel--action-commit`
 
-### Insert Recording (Phase 4.4)
+### Insert Recording
 
 Insert-mode commands are captured as a list of **segments** via
 `after-change-functions` + `pre-command-hook` / `post-command-hook`:
@@ -162,41 +157,38 @@ so `electric-pair-mode`, snippet expansion, and completion
 providers never double-trigger on replay.  `helixel--execute-keys`
 accepts a segment list, a raw key vector, or a kbd string.
 
-### Line Advance
+### Kind-Driven Advance
 
-`helixel--repeat-advance-line(tx)`:
-- Moves `forward-line` by selection count in sel's direction
-- Skips blank lines
-- For `:entry-kind append`: advances 1 line
-- After advancing: calls `(deactivate-mark)` then `helixel--recreate-selection` to position point (bol for insert, eol for append)
+Each selection kind registers an `:advance` fn (and optionally
+`:all-buffer-fn` / `:all-dir-fn`) in the kind registry.
+`helixel--repeat-advance` delegates to the kind's `:advance` fn
+for positioning.  The advance fn is responsible for:
+- Moving point to the next target (line, search match, word, etc.)
+- Calling `helixel-sel-call-recreate` to position point appropriately
+- Guarding against edge cases (zero-width patterns, blank lines)
 
-### Search Advance
+Scratch state for search advance (edge-seen, last-pos, advance-done)
+lives as fields on the `helixel-replay` struct — each `.` / `,` press
+gets a fresh binding via `helixel-with-replay`.
 
-`helixel--repeat-advance-search(tx)`:
-- Skips past current match (if entry-kind present)
-- Searches for next match in sel's direction
-- Guards against zero-width patterns (`$`, `^`) at buffer edges via `helixel--advance-search-edge-seen`
-- Guards against repeated matches at same position via `helixel--advance-search-last-pos`
-- Calls `helixel--recreate-selection` to position cursor
+### All-Buffer / All-Dir Handlers
 
-### All-Buffer Handlers
-
-- **Line**: `helixel--all-buffer-line` — forward+backward pass from marker using `helixel--repeat-line-pass`
-- **Search**: `helixel--all-buffer-search` — entry-kind: text insertion at every match; non-entry-kind: force-dir scan
-- **Other kinds**: generic advance+apply scan from point-min
-
-### All-Dir Handler
-
-- **Line**: `helixel--all-dir-line` — uses `helixel--repeat-line-pass` from current position
-- **Other kinds**: generic advance+apply loop
+- **Line**: `helixel--all-buffer-line` — forward+backward pass from marker
+  using `helixel--repeat-line-pass`
+- **Search**: handled inline in `helixel--repeat-all-buffer` via
+  the kind's `:all-buffer-fn` or generic `helixel--repeat-advance` loop
+- **Other kinds**: generic advance+replay scan from point-min
+- **All-dir line**: `helixel--all-dir-line` — uses `helixel--repeat-line-pass`
+  from current position
+- **All-dir other**: generic advance+replay loop from point
 
 ---
 
 ## Chain (`helixel-chain.el`)
 
 Chain records a compound operation (any sequence of motions + edits)
-as a single repeatable unit.  Phase 4.4 reworked chain to be a
-list-of-txs rather than a kmacro recorder.
+as a single repeatable unit, using a list-of-txs rather
+than a kmacro recorder.
 
 ### Lifecycle
 
@@ -204,7 +196,7 @@ list-of-txs rather than a kmacro recorder.
    set session active; `helixel-action-commit-hook` becomes the
    accumulator.
 2. Each helixel command commits an action via
-   `helixel--action-commit`; if the action's tx has a runner AND the
+   `helixel--action-commit`; if the action has a runner AND the
    by-command is not in the chain-control set
    (chain-start / -end / -cancel / normal-escape), the tx is appended
    to `helixel-chain-session-action-list`.
@@ -212,19 +204,18 @@ list-of-txs rather than a kmacro recorder.
    chain tx with op=`chain`, payload `:action-list LIST`; runner
    iterates LIST and replays each sub-action; broadcast to fake cursors
    via `helixel-chain-recorded-functions`.
-4. `.` replays via custom `:strategy-builder` registered for `chain`:
-   - Advance: kind's `advance-fn`
-   - Apply: `helixel--repeat-chain-runner` iterates `:action-list`
+4. `.` replays via `helixel--repeat-advance` (delegates to the kind's
+   `:advance` fn for positioning), then `helixel--repeat-chain-runner`
+   iterates `:action-list` at each target.
 
 ### Why list-of-txs (vs kmacro)
 
-Every helixel command already produces a `helixel-action` (Phase 4.3),
-and each action is fully position-agnostic with its own runner.  Chain
+Every helixel command already produces a `helixel-action`, and each
+action is fully position-agnostic with its own runner.  Chain
 just collects them; replay just dispatches each in order.  No
 `execute-kbd-macro`, no separate move-keys / edit-keys phases, no
-key-capture pre-command-hook.  Result in Phase 4.4: chain session
-struct shrank from 7 slots to 4, and per-cursor chain replay reuses
-the same `helixel-action-replay` path as `.`-repeat on a single fake.
+key-capture pre-command-hook.  Chain session struct: 4 slots
+(active-p, action-list, init-ctx, init-bounds).
 
 ---
 
@@ -232,7 +223,7 @@ the same `helixel-action-replay` path as `.`-repeat on a single fake.
 
 ### Active Search State
 
-`helixel--active-search` is the single mutable search state (replaces the old 3-location direction storage):
+`helixel--active-search` is the single mutable search state:
 
 ```elisp
 (:category search|find-char :pattern PAT :dir forward|backward [:type TYPE :char CHAR])
@@ -254,11 +245,6 @@ Uses `helixel--action-ring`. Group-skipping: consecutive entries with same (cate
 ### C-o/C-i Jump Navigation
 
 Uses `helixel--global-jump-log` (global). Same group-skipping algorithm as `;`, with buffer identity included in grouping.
-
-### Bridge Functions
-
-Removed in Phase 3.  `helixel--tracking-open` in `helixel-ring.el`
-is the single entry point; no bridge functions needed.
 
 ---
 
@@ -332,7 +318,7 @@ helixel-core (cl-lib only; includes replay context + named registers)
 
 ## Test Architecture
 
-852 ERT tests across 17 test files.  Key conventions:
+ERT tests across 22 test files.  Key conventions:
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions
@@ -353,31 +339,35 @@ User presses `.`
   ▼
 helixel-repeat.el:helixel-repeat-edit
   ├── Resolves helixel--last-action (per-buffer)
-  ├── Decodes prefix via helixel-repeat-prefix struct (in core.el)
+  ├── Decodes prefix via helixel-repeat-prefix struct
+  ├── helixel--repeat-setup: flips dir if needed, resets search scratch
   │
   ▼
-helixel-repeat.el:helixel--build-strategy(edit, reverse-p)
-  ├── Checks op registry for :strategy-builder (chain uses this)
-  ├── Falls back to helixel--default-strategy-builder:
-  │     ├── Reads :moves-point-p flag from op registry
-  │     │     (nil=no advance, 'line=line-advance, fn=custom)
-  │     ├── Reads :advance/:recreate from kind registry
-  │     └── Reads :all-buffer-fn/:all-dir-fn from kind registry
+helixel-repeat.el:helixel--repeat-edit-default (with helixel-with-replay-as 'dot)
+  ├── Mode dispatch based on (helixel-repeat-prefix-mode prefix):
+  │     ├── :all-buffer → helixel--repeat-all-buffer(edit, prefix, reverse-p)
+  │     │     ├── :all-buffer-fn set? → delegate to kind's custom fn
+  │     │     └── else: goto marker → scan from point-min
+  │     ├── :all-dir    → helixel--repeat-all-dir(edit, reverse-p)
+  │     │     ├── :all-dir-fn set? → delegate to kind's custom fn
+  │     │     └── else: advance+replay loop from point
+  │     └── :n-times    → helixel--repeat-n(edit, n, reverse-p)
   │
   ▼
-helixel-repeat.el:advance+apply loop (with helixel-with-replay-as 'dot)
-  ├── Advance: recreate sel at next target
-  │     ├── helixel-core.el:helixel-sel-call-recreate → struct closure
-  │     └── (recreate functions live in helixel-move.el,
-  │          helixel-search.el, helixel-textobj.el)
+helixel-repeat.el:helixel--repeat-advance(edit, effective)
+  ├── Delegates to kind registry :advance fn
+  │     ├── line: advance line(s) then recreate
+  │     ├── search: find-next-match then recreate
+  │     ├── movement: advance steps then recreate
+  │     ├── textobj: advance to next textobj then recreate
+  │     └── find-char: find next char then recreate
   │
   ├── Apply: execute edit at current position
-  │     ├── helixel-core.el:helixel-action-replay(action)
-  │     │     └── calls helixel-action-runner(action) — closure stored at record time
-  │     └── (runners live in helixel-editing.el, registered via
-  │          helixel-register-op / helixel-define-operator)
+  │     └── helixel-core.el:helixel-action-replay(action)
+  │           ├── calls :preposition (if any) — mc cursor positioning
+  │           └── calls :runner — closure stored at record time
   │
-  └── All-buffer/all-dir: scan from point-min or marker
+  └── All-buffer/all-dir: scan from point-min or current position
         └── kind-specific handlers from helixel-repeat.el
               (line:line-pass, search:inline scan, others:generic loop)
 ```
@@ -394,7 +384,7 @@ Key invariants:
 
 ---
 
-## Design Invariants (from refactor)
+## Design Invariants
 
 These are load-bearing decisions that the codebase actively depends on
 — change them only with full-suite testing.
@@ -418,131 +408,15 @@ These are load-bearing decisions that the codebase actively depends on
    Multi-cursor and `.`-repeat both reuse the runner — no per-command
    `advice-add` needed.
 
-4. **One state struct per subsystem.**  Chain went from 7
-   buffer-locals to 1 (`helixel-chain-session`); replay from 6+ flags
-   to 1 struct (`helixel-replay`).  New per-subsystem state must
-   follow this pattern.
+4. **One state struct per subsystem.**  Chain uses 1 buffer-local
+   (`helixel-chain-session`); replay uses 1 struct
+   (`helixel-replay`).  New per-subsystem state must follow this
+   pattern.
 
 5. **Single keyboard-quit entry point.**  Modules contribute to
    `helixel-keyboard-quit-functions` (abnormal hook); only one
    `advice-add` on `keyboard-quit` lives in `helixel-state.el`.
    Never advise `keyboard-quit` from another module.
-
-## Decisions Considered and Rejected
-
-These alternatives were proposed during architectural review and
-explicitly rejected.  Documented so future contributors do not
-re-litigate them without new evidence.
-
-### 1. Merge two structs into `helixel-action` — **EXECUTED in v5**
-
-Originally REJECTED (see below for historical context).  Re-evaluated
-and executed in v5 (PR 1 of the v5 refactor series).  The unified
-struct `helixel-action` (12 slots) serves both replay and history.
-Net result: ~100 LOC deleted, `--ensure-action` eliminated.
-
-**Original rejection rationale (archived):**
-
-> The split encodes two genuine domains: history and replay.  Most
-> callsites operate in ONE domain.  Polymorphic accessors are a BRIDGE
-> at ~67 sites, not a tax at every call site.  The re-evaluation in v5
-> found the bridge tax > the conceptual clarity benefit, especially
-> with `--ensure-action` as a hidden mutator (Watch List #1).
-
-Deleted: 4 polymorphic accessors, 4 gv-setters, `--ensure-action`,
-`helixel-action` type.  ~150 callsites renamed
-from `tx-*` to `action-*`.
-
-### 2. Context-aware runners `(lambda (tx &optional context) ...)` — REJECTED
-
-Proposal: replace the dual-action (`tx` + `mc-action`) model with a single
-runner that branches internally on a `:real` / `:fake` context
-parameter.
-
-Why rejected: the `:preposition` slot on `helixel-action` achieves the same
-conceptual unification at lower cost (no runner signature change, no
-N small conditionals scattered across runners).  See
-`helixel-action-replay` in `helixel-core.el`.
-
-### 3. Eliminate deferred commit / audit all `helixel--tracking-open' raw call sites — PARTIALLY EXECUTED
-
-Proposal: force every command body through
-`helixel-with-action-tracking'; commit immediately in unwind-protect.
-
-Resolution: a full mechanical audit of all 11 raw call sites was
-rejected; a targeted fix of the 4 sites that ACTUALLY deferred commit
-was executed.
-
-Empirical breakdown of the 11 raw sites:
-- **7 sites commit immediately** — the 5 surround sites, the find-char
-  def macro, and the n/N search branch all call `record-action' or
-  `helixel--action-commit' in the same command body.  Wrapping them in
-  `helixel-with-action-tracking' is a pure cosmetic change with no
-  behavioral difference.  Left as-is.
-- **4 sites were deferred** — 2 state-toggle sites (`helixel-mode',
-  `helixel-mode-all') and 2 search repeat sites (find-char repeat,
-  n/N find-char branch).  These have been converted to immediate
-  commit (state via `with-action-tracking', search via explicit
-  `helixel--action-commit' calls).
-
-Why a FULL audit was still rejected:
-- The 7 immediate-commit sites have no observable lifecycle smell
-  — their `action-commit-hook' fires within the originating command,
-  not the next one.
-- The dual-source `by-command' stamp `(or helixel--current-command
-  this-command)' is NOT solely a deferred-commit workaround — it is
-  also required for ERT/batch use where `this-command' is nil (see
-  Refactor Lesson #1).  Eliminating deferred commit does not let us
-  simplify it.
-- Surround commands have a multi-step prompt→mark→wrap→commit
-  lifecycle that wraps awkwardly in a single-body macro.
-
-What WAS achieved by the targeted fix: zero deferred-commit sites
-remain in the codebase.  Any future hook handler can safely read
-`this-command' inside `action-commit-hook' and find it matches the
-action's `by-command' (modulo the ERT/batch nil case).
-
-### 4. Generalize `:preposition` to a list of hooks — **EXECUTED differently in v5**
-
-Originally REJECTED because no command attached more than one.
-Re-evaluated in v5: the preposition was promoted to a first-class
-`preposition` slot on `helixel-action` (v5 PR 1.5).  The single-write
-invariant is enforced by `cl-assert` rather than generalized to a
-list.  `helixel--live-action-set` preserves the existing preposition
-unless the tx provides its own, eliminating the `--inherit-preposition`
-special path in `record-action`.  
-
-**Original rejection rationale (archived):**
-
-> no command currently attaches more than one `:preposition'.
-> Generalizing is a 5-line change when actually needed, so
-> pre-solving has negative value.
-
-### 5. Marker → integer for `helixel-repeat-preview-pos' — REJECTED
-
-Proposal: replace the marker with a buffer-position integer.
-
-Why rejected: regression risk.  Markers auto-track buffer edits
-between `,` and `.'; integers don't.  Any intermediate insertion
-would shift the target position.
-
-### 6. Consolidate `helixel-keyboard-quit-functions' into `helixel-state-change-hook' — REJECTED
-
-Why rejected: C-g does not always trigger a state change (e.g. C-g
-in normal mode stays in normal).  Hooks model independent events.
-
-### 7. Replace `helixel-repeat-edit-function' with `:around' advice — REJECTED
-
-Why rejected: violates Design Invariant #3 ("Runner-replay over
-advice. No per-command advice-add").
-
-### 8. File merges beyond `helixel-replay.el' + `helixel-register.el' — REJECTED
-
-Proposals to merge: `macros.el' → `ring.el' (cycle), `chain.el' →
-`repeat.el' (produces 1000-LOC mega-file), `mc-integrate.el' →
-`mc-core.el' (pulls repeat+chain deps into mc-core, violating
-mc-core's minimal-deps invariant), `insert-record.el' → `repeat.el'
-(no callsite reduction).
 
 ## Refactor Lessons (load-bearing gotchas)
 
@@ -576,16 +450,3 @@ mc-core's minimal-deps invariant), `insert-record.el' → `repeat.el'
    tests that don't enable `helixel-mode` globally (e.g. mc
    keyboard-quit cleanup) must be installed at module load with a
    per-fn gate inside, not inside the `helixel-mode` toggle body.
-
-## Watch List (deferred concerns)
-
-Resolved items from previous Watch List:
-
-1. ~~`helixel-action--ensure-action`~~ — RESOLVED in v5 (merged action).
-2. ~~Third `eval-after-load`~~ — RESOLVED in v5 (PR 2: moved to `helixel-shims.el`).
-3. ~~`helixel-mc-integrate.el` size~~ — RESOLVED in v5 (PR 2: completion-preview extracted, now ~350 LOC).
-
-Current (post-v5) watch items:
-
-**None.** All previous Watch List items were addressed by the v5
-refactor series.  If new deferred concerns arise, add them here.

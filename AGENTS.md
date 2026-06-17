@@ -7,7 +7,7 @@
 | `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-action`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record, replay, strategy struct + builder, generic advance/apply/preview loops, kind-specific advance/all-buffer/all-dir functions, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel--record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload.  Replay iterates the list and `helixel-action-replay`s each entry.  No more kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
@@ -52,6 +52,8 @@
 | `test/helixel-test-chain-invariant.el` | Chain subsystem invariants (lifecycle flag, chain-control exclusion, runnerless tx exclusion, marker release) |
 | `test/helixel-test-repeat-invariant.el` | Repeat subsystem invariants (replay context, buffer-local last-action, tx-replay immutability, pre-replay order, cleanup on error) |
 | `test/helixel-test-ring-invariant.el` | Ring + jump-log invariants (dedup, cap, marker release, commit-hook contract, by-command fallback, jump-log lightweight) |
+| `test/helixel-test-cycle.el` | `;` action-cycle and `C-;` jump-cycle: group-start selection, push-mark, start-point vs full-span, per-fake cycling, cancel-session boundary |
+| `test/helixel-test-mc-invariant.el` | MC dispatch contract invariants: per-fake state isolation, undo-step amalgamation, kill-ring independence, fake-cursor overlay lifecycle |
 
 ## Deps (one-way, compile-time — actual `require` graph)
 
@@ -134,7 +136,7 @@ Notes:
 ;;   insert-selection-*  :cursor-offset
 ;;   insert-search-offset :offset
 
-### helixel-action / helixel-action (unified replay + history event, v5 merge)
+### helixel-action / helixel-action (unified replay + history event)
 
 ```elisp
 (cl-defstruct helixel-action op sel payload runner preposition mark-region
@@ -146,11 +148,6 @@ pure movement/search/state events (~40B per entry negligible).
 
 - `helixel-action-create' constructs an `helixel-action' directly.
 - `helixel-action--copy' performs deep copies for ring storage.
-
-### helixel-repeat-strategy (dot-repeat strategy, lives in `helixel-repeat.el`)
-```elisp
-(cl-defstruct helixel-repeat-strategy advance apply reset all-buffer-fn all-dir-fn)
-```
 
 ## Key APIs
 
@@ -206,17 +203,15 @@ pure movement/search/state events (~40B per entry negligible).
 
 ;; ── Op Registry ──
 (helixel-register-op op &rest props)
-  ;; props: :runner :display :moves-point-p :strategy-builder
+  ;; props: :runner :display :moves-point-p
 (helixel--op-runner op)         → fn
 (helixel--op-moves-point-p op)        → boolean
-(helixel--op-strategy-builder op) → fn|nil
 
 ;; ── Repeat ──
 (helixel--record-action op &rest extra)  ; stores action + commits event
 (helixel-action-replay action)           ; calls :preposition (if any), then :runner on action
 (helixel-repeat-edit &optional prefix) ; bound to .
-(helixel-repeat-selection &optional prefix) ; bound to M-.
-(helixel--build-strategy edit &optional reverse-p) → strategy struct
+(helixel-repeat-selection &optional prefix) ; bound to M-.  (preview, no edit)
 
 ;; ── Chain ──
 (helixel-repeat-chain-start/end/cancel)  ; interactive commands
@@ -294,10 +289,10 @@ After `helixel-select-line`, point is on the LAST selected line. `line-beginning
 When `transient-mark-mode` is on, `helixel-select-line-up`/`helixel-select-line` detect an active region and enter "extending" mode. Call `(deactivate-mark)` before recreate to ensure a fresh region.
 
 ### Zero-width search patterns ($, ^) and infinite loops
-`helixel--repeat-advance-search` uses `helixel--advance-search-edge-seen` to prevent infinite loops with zero-width patterns at buffer edges. Both `helixel-repeat-edit` and `helixel-repeat-selection` reset this flag.
+`helixel--repeat-advance` (via the kind's advance fn) uses `helixel-replay` struct fields (`search-edge-seen`, `search-last-pos`) to prevent infinite loops with zero-width patterns at buffer edges. Each new `helixel-with-replay` binding provides a fresh scratch area.
 
 ### Strategy all-buffer-fn recursion
-`helixel--all-buffer-search` for non-entry-kind must NOT call `helixel--repeat-all-buffer` with a strategy that has `:all-buffer-fn` set (would recurse). Instead it does the scan inline.
+`helixel--repeat-all-buffer` for non-entry-kind search must NOT recurse via `:all-buffer-fn` (would loop). Instead it does the scan inline via `helixel--repeat-advance`.
 
 ### Multi-cursor (mc) — fake cursor model
 `helixel-mc-core.el` provides REAL fake cursors with per-cursor state
@@ -345,10 +340,10 @@ CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use r
 ### Design notes
 - `:moves-point-p` boolean on ops: t = op moves point itself, suppress auto-advance (kill, change, join-lines); nil = op leaves point alone (insert, replace, paste, indent, surround, ...).
 - Insert replay: `pre-command-hook` captures `this-single-command-keys` (key-based replay) with `:text` fallback. No `:commands` layer. No `start-kbd-macro` used.
-- Chain and non-chain share the same strategy architecture. Chain has a custom `:strategy-builder` in the op registry.
-- `helixel-repeat-selection` (`M-.`) uses the same strategy + preview path.
+- Chain and non-chain share the same `helixel--repeat-advance` dispatch. Chain's `:action-list` runner iterates sub-actions at each advance target.
+- `helixel-repeat-selection` (`M-.`) uses the same advance + preview path (no apply).
 - Kind-specific all-buffer/all-dir logic lives in `helixel-repeat.el` via `:all-buffer-fn`/`:all-dir-fn` in the kind registry.
-- `helixel--advance-search-last-pos` and `helixel--advance-search-edge-seen` are reset per `helixel-repeat-edit` / `helixel-repeat-selection` call.
+- `helixel--advance-search-last-pos` and `helixel--advance-search-edge-seen` are now fields on the `helixel-replay` struct (per-session scratch), reset implicitly by each new `helixel-with-replay` binding.
 
 ### Naming Convention for `helixel-sel` Accessors
 
@@ -406,7 +401,7 @@ undo/redo cycles unchanged.
 **Do NOT use `undo-amalgamate-change-group' for mc dispatch** —
 the undo-step management replaces it entirely.
 
-### `preposition` slot (v5, was `:pre-replay-fn`)
+### `preposition` slot
 
 `helixel-action-preposition` is a first-class slot set by
 `helixel-define-command's `:preposition` clause.  It is called BEFORE

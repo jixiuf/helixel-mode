@@ -639,10 +639,8 @@ Uses `helixel--repeat-line-pass' for proper cursor advance."
 Set by `M-.' (`helixel-repeat-selection') at the preview position;
 consumed by `.' (`helixel-repeat-edit') when point is still there.
 
-Positional handoff replaces the old boolean flag +
-`post-command-hook' stale-clear: a marker auto-invalidates the
-moment the user moves point (the equality check in
-`.' fails), so no global hook is needed.")
+A marker auto-invalidates the moment the user moves point (the
+equality check in `.' fails), so no global hook is needed.")
 
 
 

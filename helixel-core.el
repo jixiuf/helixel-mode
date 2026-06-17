@@ -723,9 +723,6 @@ and `helixel--jump-to-match-core' delegate here."
 ;;                                (for n/N, survives intervening
 ;;                                movements)
 ;;
-;; Formerly two separate struct types (helixel-active-search and
-;; helixel--last-motion) with identical slots; merged in v5.
-
 (cl-defstruct (helixel--last-motion (:copier nil))
   "Self-contained record of the last repeatable motion.
 Slots:
@@ -1028,7 +1025,7 @@ then simply does not flip."
 ;; ONE struct serves two roles:
 ;;
 ;;   1. Replay transaction — carries OP, SEL, PAYLOAD, RUNNER,
-;;      PRE-REPLAY-FN, MARK-REGION.  Position-agnostic; `.' / `,'
+;;      PREPOSITION, MARK-REGION.  Position-agnostic; `.' / `,'
 ;;      / chain / mc all replay via `helixel-action-replay'.
 ;;
 ;;   2. History event — carries CATEGORY, SUBCAT, DISPLAY, TIMESTAMP,
@@ -1377,8 +1374,8 @@ Cleared by `helixel--clear-data-internal'.")
   "Return the selection type from pending-sel: nil, `line', `rect', `textobj'.
 Derived from `helixel--pending-sel' kind — the single source of truth.
 Falls back to `helixel--sel-type-override' for replay.
-Unlike the old variable, pending-sel is NOT popped until `clear-data',
-so this function returns the correct type throughout the operator body."
+Pending-sel is NOT popped until `clear-data', so this function returns
+the correct type throughout the operator body."
   (or helixel--sel-type-override
       (if helixel--pending-sel
           (pcase (helixel-sel-kind helixel--pending-sel)

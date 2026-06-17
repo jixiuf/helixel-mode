@@ -566,11 +566,11 @@ DOC is the docstring."
   `(defun ,name (char &optional count)
      ,doc
      (interactive "c\np")
-     ;; Bind `helixel--current-command' / `this-command' so the action
-     ;; committed by `helixel-action-commit' carries the correct
-     ;; `by-command' stamp for unified mc dispatch.
+     ;; Bind `helixel--current-command' so the action committed by
+     ;; `helixel-action-commit' carries the correct `by-command' stamp
+     ;; for unified mc dispatch.  `this-command' is already set by
+     ;; Emacs's command loop for interactive invocation.
      (let ((helixel--current-command ',name)
-           (this-command ',name)
            (n (abs (or count 1)))
            (effective-dir (* ,dir (if (and count (< count 0)) -1 1))))
        (helixel--tracking-open 'find-char ',type)

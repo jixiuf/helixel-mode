@@ -119,10 +119,10 @@ BODY is the command's business logic."
        ,interactive-form
        ;; ── Tag this command so `helixel-action-commit' can stamp
        ;; `by-command' on committed edits.  `helixel--current-command'
-       ;; is the single source of truth; `this-command' is a fallback
-       ;; in `helixel-action-commit' for batch/ERT paths.
-       (let ((helixel--current-command ',name)
-             (this-command ',name))
+       ;; is the single source of truth — committed actions use it
+       ;; directly; Emacs's command loop already sets `this-command'
+       ;; to ',name for interactive invocation, so we don't override it.
+       (let ((helixel--current-command ',name))
          ;; ── Open tracking event (via unified entry point) ──
          (helixel--tracking-open ',cat ',sub)
          ;; ── Optional :preposition attachment (for unified replay) ──

@@ -755,7 +755,7 @@ that many times (Vim-like 2p, 3P)."
           (if (or paste-after-p
                   ;; Replace handler positions point at bol of the
                   ;; inserted text (same as p), so use current line.
-                  (eq (or this-command helixel--current-command)
+                  (eq (or helixel--current-command this-command)
                       'helixel-replace))
               ;; p / replace: pasted at-or-below current line.
               (setq bounds (cons (pos-bol) (pos-eol)))
@@ -1024,7 +1024,7 @@ Like `join-line' but replaces `fixup-whitespace' with
   "Insert TEXT as a complete line.
 Dispatches on `this-command' (with `helixel--current-command' fallback
 for ERT/batch where `this-command' is nil) to decide insertion position."
-  (let ((cmd (or this-command helixel--current-command))
+  (let ((cmd (or helixel--current-command this-command))
         ;; Strip kill-ring properties (yank-handler)
         ;; so they don't leak into the buffer and infect subsequent copies.
         (clean-text (substring-no-properties text)))

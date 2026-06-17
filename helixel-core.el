@@ -536,7 +536,7 @@ pair's bounds so callers can still move to that closing."
                       ;; go to the closer.
                       (goto-char ce)
                       cur-bounds))
-                (error cur-bounds))))
+                (error nil))))
       ;; Step 2: return enclosing pair's bounds, or search forward
       ;; for the first opening delimiter if not inside any pair.
       (or cur-bounds

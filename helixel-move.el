@@ -905,29 +905,35 @@ MOTION is a `helixel--last-motion' struct."
           ('pair
            (when-let* ((dir)
                        (d (helixel--rebuild-delimiter motion)))
-             ;; When point sits on the opening delimiter,
-             ;; the finder skips PAST it to the parent's opener.
-             ;; Step inside so \=`helixel-delimiter-bounds-flat'
-             ;; finds THIS pair, not the parent.
-             ;; Use the delimiter's own :adjust-for-jump plus
-             ;; \=`helixel--step-off-delimiter' as fallback.
-             ;; Save start position; restore on error so
-             ;; a failing , doesn't make the cursor jitter.
-             (let ((start (point)))
-               (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
-                 (funcall adj))
-               (helixel--step-off-delimiter)
-               (condition-case _err
-                   (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
-                                 (helixel-delimiter-bounds-flat d)))
-                     (if (eq dir 'forward)
-                         (progn (goto-char ce)
-                                (skip-chars-forward " \t\n\r"))
-                       (goto-char (max (point-min) (1- ob)))
-                       (skip-chars-backward " \t\n\r")))
-                 (error
-                  ;; Bounds failed — restore point; don't jitter.
-                  (goto-char start))))))
+             ;; For inner-forward, AT-closing in bounds-next already
+             ;; handles one-level climb.  Advancing to CE would land
+             ;; on the parent's CB (adjacent ))), causing a
+             ;; double-jump on the next repeat.
+             (unless (and (eq dir 'forward)
+                          (helixel--last-motion-delim-inner-p motion))
+               ;; When point sits on the opening delimiter,
+               ;; the finder skips PAST it to the parent's opener.
+               ;; Step inside so \=`helixel-delimiter-bounds-flat'
+               ;; finds THIS pair, not the parent.
+               ;; Use the delimiter's own :adjust-for-jump plus
+               ;; \=`helixel--step-off-delimiter' as fallback.
+               ;; Save start position; restore on error so
+               ;; a failing , doesn't make the cursor jitter.
+               (let ((start (point)))
+                 (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
+                   (funcall adj))
+                 (helixel--step-off-delimiter)
+                 (condition-case _err
+                     (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                                   (helixel-delimiter-bounds-flat d)))
+                       (if (eq dir 'forward)
+                           (progn (goto-char ce)
+                                  (skip-chars-forward " \t\n\r"))
+                         (goto-char (max (point-min) (1- ob)))
+                         (skip-chars-backward " \t\n\r")))
+                   (error
+                    ;; Bounds failed — restore point; don't jitter.
+                    (goto-char start)))))))
           ('match nil)              ; handled by forward/backward-match
           ((or 'paragraph 'sentence 'function)
            (when dir

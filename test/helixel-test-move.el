@@ -2376,6 +2376,27 @@ recording is tested via integration tests."
       (helixel-repeat-last-motion)
       (should (> (point) p1))))) ;; moved further
 
+(ert-deftest helixel-test-motion-skip-inner-pair-forward-nested ()
+  ", repeats } past nested inner paren boundaries one level each."
+  ;; } takes cursor to inner ), then , steps to parent ) (not
+  ;; grandparent).  Regression: skip-past for inner-forward
+  ;; went to CE which equals CB of the parent pair (adjacent ))),
+  ;; causing , to double-jump to the grandparent.
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (goto-char 8)  ;; inside (c)
+    (helixel-inner-next-paren-end)
+    (should (= (point) 9))   ;; inner ) — cb of (c)
+    (helixel-repeat-last-motion)
+    (should (= (point) 10))  ;; middle ) — cb of (b
+    (helixel-repeat-last-motion)
+    (should (= (point) 11))  ;; outer ) — cb of (a
+    ;; At outermost — no more enclosing, no-op.
+    (helixel-repeat-last-motion)
+    (should (= (point) 11))))
+
 (ert-deftest helixel-test-motion-skip-inner-pair-backward ()
   ", repeats { past consecutive inner paren boundaries."
   (with-temp-buffer

@@ -376,60 +376,6 @@ If FORCE is non-nil, don't prompt for save when killing Emacs."
           target-buffers)
     (message "Reverted %s buffers" (length target-buffers))))
 
-(defvar helixel--command-alist
-  `((("w" "write") ,#'save-buffer)
-    (("q" "quit") ,#'helixel-quit)
-    (("q!" "quit!") ,(lambda () (helixel-quit t)))
-    (("wq" "write-quit") ,#'save-buffer ,#'helixel-quit)
-    (("o" "open" "e" "edit") ,#'find-file)
-    (("n" "new") ,#'scratch-buffer)
-    (("rl" "reload") ,#'revert-buffer-quick)
-    (("reload-all") ,#'helixel-revert-all-buffers-quick)
-    (("pwd" "show-directory") ,#'pwd)
-    (("vs" "vsplit") ,#'split-window-right)
-    (("hs" "hsplit") ,#'split-window-below)
-    (("config-open") ,(lambda () (find-file user-init-file))))
-  "Alist of commands executed by `helixel-execute-command'.")
-
-(defun helixel-define-ex-command (command callback)
-  "Add COMMAND to `helixel--command-alist' that can be invoked via ':<command>'.
-
-Argument CALLBACK is a function, command symbol, or list thereof.
-Each element of CALLBACK is executed in order:
-- If `commandp' is non-nil, it is called via `call-interactively'.
-- Otherwise, it is called via `funcall'.
-
-Example that defines the typable command ':build':
-\(helixel-define-ex-command \"build\" #\\='compile)
-
-Example with multiple callbacks:
-\(helixel-define-ex-command \"build\" \\='(save-buffer compile))"
-  (add-to-list 'helixel--command-alist
-               (cons (if (listp command) command (list command))
-                     (if (and (listp callback) (not (functionp callback)))
-                         callback
-                       (list callback)))))
-
-(defun helixel-execute-command (input)
-  "Look for INPUT in `helixel--command-alist' and execute it, if present."
-  (interactive "s:")
-  (let ((command (string-trim input)))
-    (if-let* ((callbacks
-               (catch 'found
-                 (dolist (entry helixel--command-alist)
-                   (let ((names (car entry)))
-                     (when (member command names)
-                       (throw 'found (cdr entry))))))))
-        (dolist (cb callbacks)
-          (if (and (symbolp cb) (commandp cb))
-              (progn
-                (call-interactively cb)
-                (setq this-command cb))
-            (when (symbolp cb)
-              (setq this-command cb))
-            (funcall cb)))
-      (message "no such command '%s'" command))))
-
 ;; ── Search & find-char keybindings ──
 
 (helixel-define-key 'normal "/"    #'helixel-search-forward)
@@ -557,7 +503,7 @@ Example with multiple callbacks:
   (define-key helixel-normal-map "I" #'helixel-insert-beginning-line)
   (define-key helixel-normal-map "a" #'helixel-insert-after)
   (define-key helixel-normal-map "A" #'helixel-insert-after-end-line)
-  (define-key helixel-normal-map ":" #'helixel-execute-command)
+  (define-key helixel-normal-map ":" #'execute-extended-command)
   (define-key helixel-normal-map [escape] #'helixel-normal-escape)
   (define-key helixel-normal-map [delete] #'ignore)
   (define-key helixel-normal-map [backspace] #'helixel-delete-backward-char)

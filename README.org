@@ -41,7 +41,7 @@ Some settings most users change:
 
 #+begin_src elisp
   ;; Enable PCRE-style regexp in search (/ and ?) via pcre2el
-  ;; You need install the optional pcre2el
+  ;; You need install the optional pcre2el (use-package pcre2el :ensure t)
   (setq helixel-search-pcre t)
 #+end_src
 
@@ -73,7 +73,6 @@ See ~M-x customize-group RET helixel RET~ for all options.
 | ~C-;~                   | Jump cycle (original position) — see [[#action-cycle--and-jump-cycle-c-][Action cycle / Jump cycle]]                                                                                                                                               |
 | ~C-o~ ~C-i~             | Jump to older / newer position (global, cross-buffer)                                                                                                                                                        |
 | ~%~                     | Jump to matching bracket , try ~,~ and ~;~ after ~%~                                                                                                                                                         |
-| ~:~                     | ex commands                                                                                                                                                                                                  |
 | ~ESC~                   | Normal mode                                                                                                                                                                                                  |
 | ~g~                     | Goto prefix                                                                                                                                                                                                  |
 | ~SPC~                   | Space prefix (LSP / project)                                                                                                                                                                                 |
@@ -1158,22 +1157,15 @@ Caveats:
   miw         sn  sn  c NEW <ESC>
 #+end_example
 
-*** Ex Commands
-
-~:w~ write, ~:q~ quit, ~:wq~ write-quit, ~:o~ open file, ~:n~ scratch buffer,
-~:vs~ vsplit, ~:hs~ hsplit, ~:rl~ reload buffer, ~:reload-all~ reload all,
-~:pwd~ show directory, ~:config-open~ open init.el.
 
 ** Extend
 
-*** Keybindings & Ex Commands
+*** Keybindings
 
 #+begin_src elisp
   ;; Add a keybinding
   (helixel-define-key 'space "w" #'my-command)
 
-  ;; Add a typable command
-  (helixel-define-ex-command "format" #'format-all-buffer)
 #+end_src
 
 *** Defining Commands

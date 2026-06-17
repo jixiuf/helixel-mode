@@ -287,7 +287,7 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
                 (eff-inner-p ,inner-p)
                 (eff-bounds-fn (if eff-forward-p
                                    'helixel--generic-bounds-next
-                                 'helixel--generic-bounds-at))
+                                 'helixel--generic-bounds-previous))
                 (eff-motion-extra (list :delim-open ,delim-open
                                         :delim-close ,delim-close
                                         :delim-type ',delim-type

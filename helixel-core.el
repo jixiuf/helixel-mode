@@ -546,6 +546,60 @@ pair's bounds so callers can still move to that closing."
               (when tag-p (search-forward ">" nil t))
               (helixel--generic-bounds-at d inner-p t)))))))
 
+(defun helixel--generic-bounds-previous (d &optional inner-p)
+  "Skip backward past current delimiter D, find previous opener.
+If INNER-P is non-nil, return inner bounds (open-end . close-begin).
+Otherwise return outer bounds (open-begin . close-end).
+This is the backward mirror of `helixel--generic-bounds-next'.
+
+Step 1: if inside a pair, go to its opener (ob for outer,
+oe for inner).  If already at the opener, climb outward to the
+parent pair's opener.
+
+Step 2: if not inside any pair, search backward for the first
+opening delimiter and return its bounds."
+  (save-excursion
+    (let* ((orig-pt (point))
+           (cur-bounds (save-excursion
+                         (condition-case nil
+                             (helixel--generic-bounds-at d inner-p)
+                           (error nil))))
+           (open (helixel-delimiter-open d))
+           (open-str (and open (if (characterp open)
+                                   (char-to-string open)
+                                 open)))
+           (tag-p (eq (helixel-delimiter-type d) 'tag)))
+      ;; Step 1: skip backward to current enclosing pair's opener
+      ;; (or climb outward if already at its opening edge).
+      (when cur-bounds
+        (setq cur-bounds
+              (condition-case nil
+                  (pcase-let* ((`(,ob ,oe ,_cb ,_ce)
+                                (helixel-delimiter-bounds-flat d))
+                               (at-opening
+                                (if inner-p
+                                    (= orig-pt oe)
+                                  (<= orig-pt ob))))
+                    (if at-opening
+                        ;; Already at the opener: go to its beginning
+                        ;; and re-find bounds — this finds the parent
+                        ;; pair because at ob we haven't crossed the
+                        ;; opener yet.
+                        (save-excursion
+                          (goto-char ob)
+                          (helixel--generic-bounds-at d inner-p))
+                      ;; NOT at opener: go to current pair's opener.
+                      (goto-char (if inner-p oe ob))
+                      cur-bounds))
+                (error cur-bounds))))
+      ;; Step 2: search backward for first opening delimiter
+      ;; if not inside any pair.
+      (or cur-bounds
+          (when open-str
+            (when (search-backward open-str nil t)
+              (when tag-p (search-backward "<" nil t))
+              (helixel--generic-bounds-at d inner-p t)))))))
+
 ;; ── Surround-pair entry struct ──
 ;;
 ;; Each entry in `helixel--surround-pairs' is a `helixel--surround-entry'

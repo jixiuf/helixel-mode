@@ -2334,11 +2334,10 @@ recording is tested via integration tests."
     ;; Another , goes to (a opener.
     (helixel-repeat-last-motion)
     (should (= (point) 1))  ;; at ( of (a
-    ;; At outermost level: call-interactively propagates the
-    ;; user-error from helixel-outer-paren because there is
-    ;; no enclosing pair.
-    (should-error (helixel-repeat-last-motion)
-                  :type 'user-error)))
+    ;; At outermost level: no more enclosing pair -- returns nil,
+    ;; consistent with --next at EOB (silent no-op, no error).
+    (helixel-repeat-last-motion)
+    (should (= (point) 1))))
 
 (ert-deftest helixel-test-motion-skip-block-nested-from-opener ()
   ", after [c lands on block opener steps one level, not two."
@@ -2360,9 +2359,9 @@ recording is tested via integration tests."
     ;; , must go one level outward to outer block opener.
     (helixel-repeat-last-motion)
     (should (= (point) 1))   ;; at #+begin_quote
-    ;; At outermost level: no enclosing block.
-    (should-error (helixel-repeat-last-motion)
-                  :type 'user-error)))
+    ;; At outermost level: no more enclosing block -- returns nil.
+    (helixel-repeat-last-motion)
+    (should (= (point) 1))))
 
 (ert-deftest helixel-test-motion-skip-inner-pair-forward ()
   ", repeats } past consecutive inner paren boundaries."
@@ -2388,6 +2387,59 @@ recording is tested via integration tests."
     (let ((p1 (point)))
       (helixel-repeat-last-motion)
       (should (< (point) p1))))) ;; moved backward
+
+;;; Backward opener stepping -- [ / { step one level per press
+
+(ert-deftest helixel-test-motion-outer-paren-step-backward ()
+  "[ ( steps outward through paren openers one level each press."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (goto-char 8)   ;; inside (c)
+    (helixel-outer-paren)
+    (should (= (point) 7))  ;; on ( of (c)
+    (helixel-outer-paren)
+    (should (= (point) 4))  ;; on ( of (b
+    (helixel-outer-paren)
+    (should (= (point) 1))  ;; on ( of (a
+    ;; At outermost -- no more openers, no-op.
+    (helixel-outer-paren)
+    (should (= (point) 1))))
+
+(ert-deftest helixel-test-motion-inner-paren-step-backward ()
+  "{ ( steps outward through inner paren openers one level each press."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (goto-char 8)   ;; inside (c)
+    (helixel-inner-outer-paren)
+    (should (= (point) 5))  ;; inner edge of (b -- after the opener
+    (helixel-inner-outer-paren)
+    (should (= (point) 2))  ;; inner edge of (a
+    ;; At outermost -- no more inner openers, no-op.
+    (helixel-inner-outer-paren)
+    (should (= (point) 2))))
+
+(ert-deftest helixel-test-motion-comma-repeats-backward-opener ()
+  ", repeats [ ( stepping outward through paren openers."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (goto-char 8)
+    ;; First press: go to innermost opener
+    (helixel-outer-paren)
+    (should (= (point) 7))
+    ;; , repeats: step outward
+    (helixel-repeat-last-motion)
+    (should (= (point) 4))
+    (helixel-repeat-last-motion)
+    (should (= (point) 1))
+    ;; At outermost -- , does nothing
+    (helixel-repeat-last-motion)
+    (should (= (point) 1))))
 
 (ert-deftest helixel-test-motion-skip-paragraph-forward ()
   ", repeats ]p past consecutive paragraph boundaries."

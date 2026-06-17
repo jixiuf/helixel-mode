@@ -1648,6 +1648,70 @@ On a single-char symbol at eob, w selects it."
     ;; Inner close beginning of outer tag: cb = 17 (the < of </p>).
     (should (= (point) 17))))
 
+;;; Triple-nested climb-outward — stepping one level per press
+
+(ert-deftest helixel-test-pair-next-paren-triple-nested ()
+  "Test ]) from inside 3-nested parens steps one level each press."
+  ;; Buffer: (a (b (c))) — point inside innermost (c)
+  ;; 1:\( 2:a 3:SPC 4:\( 5:b 6:SPC 7:\( 8:c 9:\) 10:\) 11:\) 12:eob
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a (b (c)))")
+    (deactivate-mark)
+    (goto-char 8)   ; between ( and c, inside innermost
+    (helixel-next-paren-end)
+    (should (= (point) 10)) ; after first )
+    (helixel-next-paren-end)
+    (should (= (point) 11)) ; after second )
+    (helixel-next-paren-end)
+    (should (= (point) 12)) ; after third ) = eob
+    ;; One more press at eob: no movement, no error
+    (helixel-next-paren-end)
+    (should (= (point) 12))))
+
+(ert-deftest helixel-test-pair-next-paren-triple-nested-compact ()
+  "Test ]) with no spaces: (a(b(c))) — adjacent ))."
+  ;; 1:\( 2:a 3:\( 4:b 5:\( 6:c 7:\) 8:\) 9:\) 10:eob
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "(a(b(c)))")
+    (deactivate-mark)
+    (goto-char 6)   ; between ( and c
+    (helixel-next-paren-end)
+    (should (= (point) 8))  ; after first )
+    (helixel-next-paren-end)
+    (should (= (point) 9))  ; after second )
+    (helixel-next-paren-end)
+    (should (= (point) 10)))) ; after third ) = eob
+
+(ert-deftest helixel-test-pair-next-brace-triple-nested ()
+  "Test ]{ from inside 3-nested braces steps one level each press."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "{a {b {c}}}")
+    (deactivate-mark)
+    (goto-char 8)   ; between { and c, inside innermost
+    (helixel-next-brace-end)
+    (should (= (point) 10)) ; after first }
+    (helixel-next-brace-end)
+    (should (= (point) 11)) ; after second }
+    (helixel-next-brace-end)
+    (should (= (point) 12)))) ; after third } = eob
+
+(ert-deftest helixel-test-pair-next-bracket-triple-nested ()
+  "Test ][ from inside 3-nested brackets steps one level each press."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "[a [b [c]]]")
+    (deactivate-mark)
+    (goto-char 8)   ; between [ and c, inside innermost
+    (helixel-next-bracket-end)
+    (should (= (point) 10)) ; after first ]
+    (helixel-next-bracket-end)
+    (should (= (point) 11)) ; after second ]
+    (helixel-next-bracket-end)
+    (should (= (point) 12)))) ; after third ] = eob
+
 ;;; Pair next-end from outside (not inside any pair)
 
 (ert-deftest helixel-test-pair-next-paren-end-from-outside ()

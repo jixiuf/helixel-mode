@@ -493,10 +493,31 @@ pair's bounds so callers can still move to that closing."
                              (helixel--generic-bounds-at d inner-p)
                            (error nil))))
            (open (helixel-delimiter-open d))
+           (close (helixel-delimiter-close d))
            (open-str (and open (if (characterp open)
                                    (char-to-string open)
                                  open)))
-           (tag-p (eq (helixel-delimiter-type d) 'tag)))
+           (tag-p (eq (helixel-delimiter-type d) 'tag))
+           ;; Detect when we just exited an inner pair and landed on
+           ;; the parent's cb (adjacent ))).  Only applies to outer-p
+           ;; (non-inner); for inner-p the existing AT-closing logic
+           ;; (goto ce + bounds-at with no-close-backoff) works
+           ;; correctly, stepping one level per press.
+           (just-exited
+            (and (not inner-p)
+                 (characterp close)
+                 (save-excursion
+                   (goto-char orig-pt)
+                   (catch 'helixel--just-exited
+                     (while (and (> (point) 1)
+                                 (= (char-before) close))
+                       (backward-char)
+                       (let ((bnds (condition-case nil
+                                       (helixel-delimiter-bounds-flat d)
+                                     (error nil))))
+                         (when (and bnds (= orig-pt (nth 3 bnds)))
+                           (throw 'helixel--just-exited t))))
+                     nil)))))
       ;; Step 1: skip past current enclosing pair (or climb outward
       ;; if already at its closing edge).
       (when cur-bounds
@@ -505,11 +526,14 @@ pair's bounds so callers can still move to that closing."
                   (pcase-let* ((`(,_ob ,_oe ,cb ,ce)
                                 (helixel-delimiter-bounds-flat d))
                                (at-closing
-                                (>= orig-pt cb)))
+                                (and (>= orig-pt cb)
+                                     (not just-exited))))
                     (if at-closing
                         (save-excursion
                           (goto-char ce)
                           (helixel--generic-bounds-at d inner-p t))
+                      ;; NOT at-closing (or just-exited inner pair):
+                      ;; go to the closer.
                       (goto-char ce)
                       cur-bounds))
                 (error cur-bounds))))

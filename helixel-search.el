@@ -144,8 +144,8 @@ Event-ring entries are immutable snapshots and never store
 mutable state.
 
 Holds the same struct type as `helixel--last-motion-cmd' —
-a `helixel--last-motion'.  This variable is only overwritten
-by search/find-char commands, so \=`n'/\=`N' survives intervening
+a helixel--last-motion.  This variable is only overwritten
+by search/find-char commands, so n/N survives intervening
 movements (unlike `helixel--last-motion-cmd' which tracks the
 most recent motion of any category for \=`,`\=').")
 
@@ -731,8 +731,8 @@ calling `helixel-register-motion-repeater'.
 Never consults the global `helixel--active-search'.
 
 Prefix RAW-PREFIX semantics:
-  \\=`-,'    — permanently flip direction (like \\=`N' for search)
-  Subsequent \\=`,' repeats in the flipped direction.
+  \\=`-,'    — permanently flip direction (like N for search)
+  Subsequent , repeats in the flipped direction.
   \\=`-,' again flips back.
   \\=`-3,'  — repeat 3 times in flipped direction.
   \\=`3,'   — repeat 3 times in stored direction.

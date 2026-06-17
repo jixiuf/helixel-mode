@@ -713,18 +713,18 @@ and `helixel--jump-to-match-core' delegate here."
 ;; ── Last-Motion Struct (unified motion + search state) ──
 ;;
 ;; The single struct for the last repeatable motion — consumed by both
-;; \=`,' (motion repeat via `helixel-repeat-last-motion') and
-;; \=`n'/\=`N' (search repeat via `helixel-search-repeat-next').
+;; , (motion repeat via `helixel-repeat-last-motion') and
+;; n/N (search repeat via `helixel-search-repeat-next').
 ;;
 ;; Two buffer-local variables hold this struct with different update
 ;; policies:
-;;   `helixel--last-motion-cmd' — updated by EVERY motion (for \=`,`\=')
-;;   `helixel--active-search'   — updated only by search/find-char
-;;                                (for \=`n'/\=`N', survives intervening
+;;   helixel--last-motion-cmd — updated by EVERY motion (for , ')
+;;   helixel--active-search   — updated only by search/find-char
+;;                                (for n/N, survives intervening
 ;;                                movements)
 ;;
-;; Formerly two separate struct types (`helixel-active-search' and
-;; `helixel--last-motion') with identical slots; merged in v5.
+;; Formerly two separate struct types (helixel-active-search and
+;; helixel--last-motion) with identical slots; merged in v5.
 
 (cl-defstruct (helixel--last-motion (:copier nil))
   "Self-contained record of the last repeatable motion.

@@ -68,6 +68,7 @@
 (defvar helixel--action-pos)              ; from `helixel-ring'
 (defvar helixel--jump-cycle-pos)          ; from `helixel-ring'
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
+(declare-function helixel-visual-exit "helixel-state")
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
                   (raw-prefix))
 
@@ -1005,12 +1006,18 @@ partially-executed command."
 (defun helixel-collapse-selection ()
   "Collapse every cursor's selection to a bare cursor (Helix `;').
 Each cursor (real and fake) with an active region has its mark
-deactivated, leaving point unchanged.  Cursors without a region
-are left unchanged.  No cursors are removed."
+deactivated, leaving point unchanged.  When the real cursor has an
+active region, visual state is also exited so subsequent movements
+start fresh selections rather than extending the collapsed one.
+Cursors without a region are left unchanged.  No cursors are removed."
   (interactive)
   ;; Collapse real cursor first.
   (when (use-region-p)
-    (deactivate-mark))
+    (deactivate-mark)
+    ;; Exit visual state so movements (w, e, b, etc.) start fresh
+    ;; selections instead of extending in visual mode.
+    (when (eq helixel--current-state 'visual)
+      (helixel-visual-exit)))
   ;; Collapse each fake cursor.
   (when (helixel-mc-any-p)
     (helixel-mc-with-each-cursor

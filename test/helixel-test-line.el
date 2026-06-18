@@ -805,23 +805,49 @@ mark-position-based bounds detection (not use-region-p)."
 ;;; Direction flip / shrink tests
 
 (ert-deftest helixel-test-line-select-enters-visual ()
-  "`x' enters visual state."
+  "`x' creates a line selection without entering visual state.
+Line/rect selections stay in normal state; operators (d/y/c) read
+pending-sel kind, not visual state."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (helixel-enter-normal-state)
     (helixel-select-line)
-    (should (eq helixel--current-state 'visual))
+    (should (eq helixel--current-state 'normal))
     (should (eq (helixel--sel-type) 'line))
     (should (use-region-p))))
 
 (ert-deftest helixel-test-line-select-up-enters-visual ()
-  "`X' enters visual state."
+  "`X' creates a line selection without entering visual state.
+Line/rect selections stay in normal state (operators d/y/c read
+pending-sel kind, not visual state)."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (helixel-enter-normal-state)
     (goto-char 5)
     (helixel-select-line-up)
-    (should (eq helixel--current-state 'visual))
+    (should (eq helixel--current-state 'normal))
     (should (eq (helixel--sel-type) 'line))
     (should (use-region-p))))
+
+(ert-deftest helixel-test-line-v-preserves-selection ()
+  "`v' after `x' preserves the existing line selection.
+Entering visual from normal with an active region keeps the
+region and enables extending (Helix-like)."
+  (helixel-test-with-buffer "line one\nline two\n"
+    (helixel-enter-normal-state)
+    ;; x selects the first line in normal state.
+    (helixel-select-line)
+    (should (eq helixel--current-state 'normal))
+    (should (use-region-p))
+    (let ((beg (region-beginning))
+          (end (region-end)))
+      ;; v enters visual but preserves the region.
+      (helixel-begin-selection)
+      (should (eq helixel--current-state 'visual))
+      (should (use-region-p))
+      (should (= beg (region-beginning)))
+      (should (= end (region-end)))
+      ;; Movements now extend (visual state).
+      (helixel-forward-word-start)
+      (should (> (region-end) end)))))
 
 (ert-deftest helixel-test-line-dir-stored-in-ctx ()
   "`:dir' is stored in pending-sel ctx for line selections."
@@ -831,6 +857,7 @@ mark-position-based bounds detection (not use-region-p)."
     (should (eq 'forward
                 (helixel-sel-line-dir helixel--pending-sel)))
     (helixel-enter-normal-state)
+    (helixel-clear-data)
     (goto-char 5)
     (helixel-select-line-up)
     (should (eq 'backward

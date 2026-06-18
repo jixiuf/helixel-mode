@@ -436,23 +436,24 @@ Rect is extended by pressing C-v again."
     (should (string= (buffer-string) "XXX line1\nXXX line2\nGHI line3"))))
 
 (ert-deftest helixel-test-rect-j-k-extend-preserves-sel-type ()
-  "After C-v, j/k do NOT clear sel-type in visual rect mode.
+  "After C-v, j/k do NOT clear sel-type.
 Basic motion commands preserve the selection type so operators
-can dispatch correctly.  (General motions deactivate the mark
-for line selections but preserve rect via rectangle-mark-mode.)"
+can dispatch correctly."
   (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5"
     (helixel-enter-normal-state)
-    (call-interactively #'helixel-select-rectangle)
-    (should (eq (helixel--sel-type) 'rect))
+    (helixel-select-rectangle 1)
+    ;; Verify rect selection is established for operator dispatch.
+    (should rectangle-mark-mode)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
     (setq last-command 'helixel-select-rectangle)
     (call-interactively #'helixel-next-line)
-    (should (eq (helixel--sel-type) 'rect))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
     (setq last-command 'helixel-next-line)
     (call-interactively #'helixel-next-line)
-    (should (eq (helixel--sel-type) 'rect))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
     (setq last-command 'helixel-next-line)
     (call-interactively #'helixel-previous-line)
-    (should (eq (helixel--sel-type) 'rect))))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))))
 
 (ert-deftest helixel-test-rect-w-converts-to-char ()
   "After C-v w, sel-type becomes nil (char) not rect.
@@ -461,9 +462,10 @@ Word movements in visual rect mode convert to char selection."
     (helixel-enter-normal-state)
     (goto-char 1)
     (call-interactively #'helixel-select-rectangle)
-    (should (eq (helixel--sel-type) 'rect))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
     (setq last-command 'helixel-select-rectangle)
     (call-interactively #'helixel-forward-word-start)
+    ;; Word movement clears rect pending-sel — converts to char selection.
     (should (null (helixel--sel-type)))))
 
 ;;; helixel-test-rect.el ends here

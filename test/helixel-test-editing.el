@@ -1727,11 +1727,12 @@ insertions."
     (should (eq helixel--current-state 'normal))))
 
 (ert-deftest helixel-test-line-kill-exits-visual ()
-  "`d' exits visual even with a line-wise selection (x)."
+  "`d' clears line-wise selection and stays in normal.
+Line selections (x) no longer enter visual state."
   (helixel-test-with-buffer "line1\nline2\nline3\n"
     (helixel-enter-normal-state)
     (helixel-select-line)
-    (should (eq helixel--current-state 'visual))
+    (should (eq helixel--current-state 'normal))
     (helixel-kill)
     (should (eq helixel--current-state 'normal))))
 
@@ -1801,11 +1802,12 @@ insertions."
     (should (not (use-region-p)))))
 
 (ert-deftest helixel-test-delete-linewise-exits-visual ()
-  "`D' exits visual even with a line-wise selection (x)."
+  "`D' clears line-wise selection and stays in normal.
+Line selections (x) no longer enter visual state."
   (helixel-test-with-buffer "line1\nline2\nline3\n"
     (helixel-enter-normal-state)
     (helixel-select-line)
-    (should (eq helixel--current-state 'visual))
+    (should (eq helixel--current-state 'normal))
     (helixel-delete)
     (should (eq helixel--current-state 'normal))))
 
@@ -2110,16 +2112,17 @@ insertions."
     (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
 
 (ert-deftest helixel-test-x-esc-bd-no-stale-leak ()
-  "ESC after x clears pending-sel, b creates fresh movement."
+  "ESC after x calls clear-data, b creates fresh movement."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 7)
     (helixel-enter-normal-state)
     (setq last-command nil this-command 'helixel-select-line)
     (helixel-select-line)
     (should (eq (helixel-sel-kind helixel--pending-sel) 'line))
-    (helixel-visual-exit)
+    ;; x stays in normal; call clear-data directly to clear pending-sel
+    (helixel-clear-data)
     (should (null helixel--pending-sel))
-    (setq last-command 'helixel-visual-exit
+    (setq last-command 'helixel-clear-data
           this-command 'helixel-backward-word-start)
     (helixel-backward-word-start)
     (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))

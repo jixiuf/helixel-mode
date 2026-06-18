@@ -74,13 +74,15 @@ the action carries no tx with a runner)."
     `(helixel-define-command ,name
          (:category movement :subcat ,type
                     :clear-highlights ,clear)
-       ;; Clear any stale pending-sel so pure motion commands
+       ;; Clear stale pending-sel so pure motion commands
        ;; (j, gh, etc.) don't inherit a selection from a prior
        ;; edit (e.g. insert-selection-end from insert-exit).
-       ;; In visual mode, the pending-sel carries the current
-       ;; selection type (rect/line) that operators (d/y/c)
-       ;; depend on — never clear it there.
-       (unless (eq helixel--current-state 'visual)
+       ;; Preserve when pending-sel is a structured kind
+       ;; (line/rect/textobj) so operators (d/y/c) can read the
+       ;; selection type even after a movement (e.g. x j d).
+       (unless (memq (and helixel--pending-sel
+                          (helixel-sel-kind helixel--pending-sel))
+                     '(line rect textobj))
          (setq helixel--pending-sel nil))
        (call-interactively #',builtin))))
 
@@ -1109,8 +1111,6 @@ new direction."
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (forward: point at bottom, mark at top).
-        (unless (helixel-replaying-p)
-          (helixel--switch-state 'visual))
         (beginning-of-line)
         (push-mark-command t t)
         (helixel--line-end-or-invisible)
@@ -1148,8 +1148,6 @@ new direction."
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (backward: point at top, mark at bottom).
-        (unless (helixel-replaying-p)
-          (helixel--switch-state 'visual))
         (helixel--line-end-or-invisible)
         (push-mark-command t t)
         (helixel--line-beginning-or-invisible)
@@ -1181,7 +1179,6 @@ new direction."
               (forward-line 1)
             (forward-line -1))
           (rectangle--reset-point-crutches))
-      (helixel--switch-state 'visual)
       (push-mark (point) t t)
       (rectangle-mark-mode 1)
       (dotimes (_ (1- n))

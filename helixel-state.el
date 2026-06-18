@@ -201,12 +201,27 @@ Consumed alongside `helixel--pending-sel'.")
 
 ;; Internal wiring deferred to `helixel-state--init' (see end of file).
 
-(defun helixel--switch-state (state)
-  "Switch to STATE."
+(defun helixel--switch-state (state &optional preserve-selection)
+  "Switch to STATE.
+When PRESERVE-SELECTION is non-nil (used by `helixel-begin-selection'
+to preserve an active region from x/rect-select), skip clearing
+`helixel--pending-sel', `rectangle-mark-mode', and the mark.
+`helixel--sel-type-override' and `helixel--action-pos' are
+always cleared — they represent incomplete state that should
+never survive a state transition."
   (unless (eq state helixel--current-state)
     (when-let* ((mode (alist-get helixel--current-state helixel-state-alist)))
       (funcall mode -1))
-    (helixel-clear-data-internal)
+    ;; Partial data that never survives any state transition.
+    (setq helixel--sel-type-override nil)
+    (setq helixel--action-pos nil)
+    ;; Selection data — preserved when entering visual from an
+    ;; active region (v after x/rect-select).
+    (unless preserve-selection
+      (setq helixel--pending-sel nil)
+      (when rectangle-mark-mode
+        (rectangle-mark-mode -1))
+      (deactivate-mark))
     (setq-local helixel--current-state state)
     (let ((mode (alist-get state helixel-state-alist)))
       (funcall mode 1))
@@ -214,8 +229,13 @@ Consumed alongside `helixel--pending-sel'.")
 
 (defun helixel--clear-highlights ()
   "Clear any active highlight, unless in visual state.
+Since x/X/rect-select no longer enter visual, being in visual always means
+the user pressed v and wants extending behavior — even for line/rect
+regions.  `helixel--pure-visual-state-p' is preserved for textobj
+and search handling.
 Also preserve highlights when `rectangle-mark-mode' is active."
-  (unless (or (helixel--pure-visual-state-p) rectangle-mark-mode)
+  (unless (or (eq helixel--current-state 'visual)
+              rectangle-mark-mode)
     (deactivate-mark)))
 
 (declare-function rectangle-exchange-point-and-mark "rect")
@@ -242,15 +262,24 @@ re-enters visual exit."
 ;; Clear-data hook deferred to `helixel-state--init' (see end of file).
 
 (defun helixel-begin-selection ()
-  "Begin visual selection or exit visual state."
+  "Begin visual selection or exit visual state.
+When entering visual from normal with a line selection (x), the
+region and pending-sel are preserved so movements extend.
+When entering from a rect selection, the rect is converted
+to a char selection."
   (interactive)
   (if (eq helixel--current-state 'visual)
       (helixel-visual-exit)
     (when rectangle-mark-mode
-      (rectangle-mark-mode -1))
-    (helixel--switch-state 'visual)
+      (rectangle-mark-mode -1)
+      ;; Rect → char: clear rect pending-sel so operators treat
+      ;; it as a regular char selection.
+      (setq helixel--pending-sel nil))
+    ;; Preserve any active line/char selection when entering visual.
+    (helixel--switch-state 'visual t)
     (setq helixel--sel-type-override nil)
-    (push-mark-command t t)))
+    (unless (use-region-p)
+      (push-mark-command t t))))
 
 (defun helixel-visual-exchange-point-and-mark ()
   "Exchange point and mark, preserving selection-type semantics.

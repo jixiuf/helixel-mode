@@ -59,14 +59,14 @@
 ;; so the byte compiler doesn't flag them when this file is built
 ;; before those modules are loaded.
 (defvar helixel--pending-sel)             ; from `helixel-core'
-(defvar helixel--last-action)             ; from `helixel-core'
+(defvar helixel-last-action)             ; from `helixel-core'
 (defvar helixel--yank-register-source)    ; from `helixel-core' (mc per-cursor)
 (defvar helixel--current-register)        ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
 (defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
 (defvar helixel--action-pos)              ; from `helixel-ring'
-(defvar helixel--jump-cycle-pos)          ; from `helixel-ring'
+(defvar helixel--mark-cycle-pos)          ; from `helixel-ring'
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
 (declare-function helixel-visual-exit "helixel-state")
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
@@ -170,14 +170,14 @@ so on — broadcasts at one cursor never leak into another."
   kill-ring-yank-pointer ; sublist of kill-ring
   mark-ring              ; list of markers
   pending-sel            ; `helixel-sel' or nil  (helixel--pending-sel)
-  last-action            ; `helixel-action'      (helixel--last-action)
+  last-action            ; `helixel-action'      (helixel-last-action)
   yank-register-source   ; swap-source plist     (helixel--yank-register-source)
   registers-alist        ; list (copy of register-alist)
   active-search          ; `helixel--last-motion'  (helixel--active-search)
   event-ring             ; list of `helixel-action' (helixel--action-ring)
   live-action            ; `helixel-action'      (helixel--live-action)
   action-pos             ; integer | nil         (helixel--action-pos)
-  jump-cycle-pos         ; integer | nil         (helixel--jump-cycle-pos)
+  jump-cycle-pos         ; integer | nil         (helixel--mark-cycle-pos)
   last-motion-cmd)       ; `helixel--last-motion' or nil
 
 (defun helixel-mc--pcs-clone ()
@@ -192,14 +192,14 @@ independent of any later movement of point / mark."
    :kill-ring-yank-pointer    kill-ring-yank-pointer
    :mark-ring                 mark-ring
    :pending-sel               helixel--pending-sel
-   :last-action               helixel--last-action
+   :last-action               helixel-last-action
    :yank-register-source      helixel--yank-register-source
    :registers-alist            (copy-tree register-alist)
    :active-search             helixel--active-search
    :event-ring                helixel--action-ring
    :live-action               helixel--live-action
    :action-pos                helixel--action-pos
-   :jump-cycle-pos            helixel--jump-cycle-pos
+   :jump-cycle-pos            helixel--mark-cycle-pos
    :last-motion-cmd           helixel--last-motion-cmd))
 
 (defun helixel-mc--pcs-swap-in (cs)
@@ -213,7 +213,7 @@ Moves point and the `mark-marker' to CS's positions, sets
         kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer cs)
         mark-ring              (helixel-pcs-mark-ring cs)
         helixel--pending-sel   (helixel-pcs-pending-sel cs)
-        helixel--last-action   (helixel-pcs-last-action cs)
+        helixel-last-action   (helixel-pcs-last-action cs)
         helixel--yank-register-source (helixel-pcs-yank-register-source cs)
         ;; Swap register-alist for per-cursor register isolation.
         ;; The real cursor's alist is preserved by the outer
@@ -224,7 +224,7 @@ Moves point and the `mark-marker' to CS's positions, sets
         helixel--action-ring    (helixel-pcs-event-ring cs)
         helixel--live-action   (helixel-pcs-live-action cs)
         helixel--action-pos    (helixel-pcs-action-pos cs)
-        helixel--jump-cycle-pos (helixel-pcs-jump-cycle-pos cs)
+        helixel--mark-cycle-pos (helixel-pcs-jump-cycle-pos cs)
         helixel--last-motion-cmd (helixel-pcs-last-motion-cmd cs)))
 
 (defun helixel-mc--pcs-release (cs)
@@ -246,14 +246,14 @@ any rendering code that holds them).  Sets the rest by `setf'."
         (helixel-pcs-kill-ring-yank-pointer cs) kill-ring-yank-pointer
         (helixel-pcs-mark-ring cs)              mark-ring
         (helixel-pcs-pending-sel cs)            helixel--pending-sel
-        (helixel-pcs-last-action cs)            helixel--last-action
+        (helixel-pcs-last-action cs)            helixel-last-action
         (helixel-pcs-yank-register-source cs)   helixel--yank-register-source
         (helixel-pcs-registers-alist cs)         (copy-tree register-alist)
         (helixel-pcs-active-search cs)          helixel--active-search
         (helixel-pcs-event-ring cs)             helixel--action-ring
         (helixel-pcs-live-action cs)            helixel--live-action
         (helixel-pcs-action-pos cs)             helixel--action-pos
-        (helixel-pcs-jump-cycle-pos cs)         helixel--jump-cycle-pos
+        (helixel-pcs-jump-cycle-pos cs)         helixel--mark-cycle-pos
         (helixel-pcs-last-motion-cmd cs)        helixel--last-motion-cmd))
 
 ;; ── Cursor accessors (read state via the struct on the overlay) ──
@@ -961,7 +961,7 @@ state (kill-ring, event-ring, last-action, …)."
                kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer ,cs)
                mark-ring              (helixel-pcs-mark-ring ,cs)
                helixel--pending-sel   (helixel-pcs-pending-sel ,cs)
-               helixel--last-action   (helixel-pcs-last-action ,cs)
+               helixel-last-action   (helixel-pcs-last-action ,cs)
                helixel--yank-register-source
                  (helixel-pcs-yank-register-source ,cs)
                register-alist
@@ -970,7 +970,7 @@ state (kill-ring, event-ring, last-action, …)."
                helixel--action-ring    (helixel-pcs-event-ring ,cs)
                helixel--live-action   (helixel-pcs-live-action ,cs)
                helixel--action-pos    (helixel-pcs-action-pos ,cs)
-               helixel--jump-cycle-pos (helixel-pcs-jump-cycle-pos ,cs))
+               helixel--mark-cycle-pos (helixel-pcs-jump-cycle-pos ,cs))
          (helixel-mc--pcs-release ,cs)))))
 
 (defvar helixel-mc--quit-p nil

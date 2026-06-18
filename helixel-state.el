@@ -206,7 +206,7 @@ Consumed alongside `helixel--pending-sel'.")
   (unless (eq state helixel--current-state)
     (when-let* ((mode (alist-get helixel--current-state helixel-state-alist)))
       (funcall mode -1))
-    (helixel--clear-data-internal)
+    (helixel-clear-data-internal)
     (setq-local helixel--current-state state)
     (let ((mode (alist-get state helixel-state-alist)))
       (funcall mode 1))
@@ -227,13 +227,13 @@ Also preserve highlights when `rectangle-mark-mode' is active."
   (interactive)
   (helixel--switch-state (helixel--default-state-for-buffer)))
 
-(defun helixel--clear-data-exit-visual ()
-  "Exit visual state during `helixel--clear-data', if active.
+(defun helixel-clear-data-exit-visual ()
+  "Exit visual state during `helixel-clear-data', if active.
 Registered on `helixel-clear-data-hook' so that every
-`helixel--clear-data' call (from edit commands, jump navigation,
+`helixel-clear-data' call (from edit commands, jump navigation,
 etc.) automatically returns to normal state after an edit.
 
-`helixel--switch-state' calls `helixel--clear-data-internal'
+`helixel--switch-state' calls `helixel-clear-data-internal'
 \(which does not run this hook), so state switching never
 re-enters visual exit."
   (when (eq helixel--current-state 'visual)
@@ -485,7 +485,7 @@ Argument STATUS is passed through to `helixel-mode-maybe-activate'."
     (setq helixel-global-mode (if status status 1))))
 
 (defvar helixel-keyboard-quit-functions
-  '(helixel--clear-data helixel--cancel-action)
+  '(helixel-clear-data helixel--cancel-action)
   "Abnormal hook: functions run :before `keyboard-quit'.
 Modules add to this list (e.g. via `with-eval-after-load' or in
 their own load body) instead of calling `advice-add' on
@@ -537,8 +537,8 @@ is installed at module load (see below).")
   (setq helixel-textobj-action-function #'helixel--tracking-open)
   (setq helixel-textobj-visual-state-p-function
         #'helixel--pure-visual-state-p)
-  (setq helixel-jump-cleanup-function #'helixel--clear-data)
-  (add-hook 'helixel-clear-data-hook #'helixel--clear-data-exit-visual)
+  (setq helixel-jump-cleanup-function #'helixel-clear-data)
+  (add-hook 'helixel-clear-data-hook #'helixel-clear-data-exit-visual)
   (add-hook 'helixel-motion-state-hook
             #'helixel--motion-patch-keymap-parent)
   (advice-add #'keyboard-quit :before

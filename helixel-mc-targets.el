@@ -51,7 +51,7 @@
 ;; Special vars from helixel-repeat / helixel-search — must be `defvar'
 ;; so the `let' binding below is treated as dynamic, not lexical.
 (defvar helixel--pending-sel)
-(defvar helixel--last-action)
+(defvar helixel-last-action)
 (defvar helixel--live-action)
 (defvar helixel--active-search)
 (defvar helixel--action-ring)
@@ -154,11 +154,11 @@ next iteration lands on a fresh target.  Bounded by
 `helixel-mc-max-cursors' to avoid runaways.
 
 Fully isolates helixel's event / selection / tracking globals so
-the walk does NOT pollute `helixel--last-action',
+the walk does NOT pollute `helixel-last-action',
 `helixel--pending-sel', `helixel--live-action' or
 `helixel--sel-type'.  Without this, textobj advance
 functions (which internally re-run the textobj command and
-capture `this-command') would clobber `helixel--last-action'
+capture `this-command') would clobber `helixel-last-action'
 with a sel whose `:command' is the outer mc command (e.g.
 `helixel-mc-toggle' with an accumulated `:count' equal to the
 number of walk iterations), breaking dot-repeat at fake cursors."

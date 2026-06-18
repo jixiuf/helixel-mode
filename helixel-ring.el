@@ -140,7 +140,7 @@ nil = live event.  0 = newest ring entry.  N = older.")
 
 (defvar helixel--cycle-jump-p nil
   "Bound to t during `C-;' to disable mark-thing path.
-Internal dynvar — see `helixel-action-cycle-jump'.")
+Internal dynvar — see `helixel-action-cycle-mark-start'.")
 
 (defsubst helixel--cycle-mark-thing-p ()
   "Return non-nil if the current cycle mode should select the full span.
@@ -148,8 +148,8 @@ Returns t for `;' (mark-thing), nil for `C-;' (jump cycle).
 Delegates to the inverse of `helixel--cycle-jump-p'."
   (not helixel--cycle-jump-p))
 
-(defvar-local helixel--jump-cycle-pos nil
-  "Ring position for `C-;' (`helixel-action-cycle-jump') cycling.
+(defvar-local helixel--mark-cycle-pos nil
+  "Ring position for `C-;' (`helixel-action-cycle-mark-start') cycling.
 nil = not cycling.  0 = newest ring entry.  N = older.
 `;' and `C-;' use separate positions so the two navigation
 modes are independent.")
@@ -168,7 +168,7 @@ Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
   "The currently in-progress `helixel-action'.
 Set at command start, committed to ring when complete.")
 
-;; `helixel--last-action' is defined in helixel-core.el.
+;; `helixel-last-action' is defined in helixel-core.el.
 ;; It is available transitively through the require chain.
 
 (defconst helixel--sel-categories '(movement search find-char textobj)
@@ -206,7 +206,7 @@ action.")
 Deep-copies the event (marker + sel) so ring entries are independent.
 Deduplicates against the ring front — same (op sel payload) skips push.
 Also mirrors to `helixel--global-jump-log'.
-Sets `helixel--last-action' to the committed entry.
+Sets `helixel-last-action' to the committed entry.
 Returns the committed entry or nil."
   (when helixel--live-action
     ;; Sync pending-sel into the live-event so movement/search
@@ -234,14 +234,14 @@ Returns the committed entry or nil."
                     entry (car helixel--action-ring)))
         (push entry helixel--action-ring)
         (helixel-action--ring-cap))
-      ;; `helixel--last-action' tracks the most recent EDIT for `.' replay.
+      ;; `helixel-last-action' tracks the most recent EDIT for `.' replay.
       ;; Movement txs (op = nil, runner-only) participate in mc dispatch
       ;; but must NOT advance last-action — that would shadow the prior
       ;; edit and break dot-repeat semantics.  The op-presence check
       ;; distinguishes real edits (kill, change, insert-text, …) from
       ;; mc-replay movement shims.
       (when-let* (((helixel-action-op entry)))
-        (setq helixel--last-action entry))
+        (setq helixel-last-action entry))
       (helixel--global-jump-log-push entry)
       (helixel-action--release-markers helixel--live-action)
       (setq helixel--live-action nil)
@@ -434,16 +434,16 @@ Creates independent marker copy; the jump-log entry is lightweight."
 (defvar rectangle-mark-mode)            ; defined in rect.el
 
 (defvar helixel-clear-data-hook nil
-  "Hook run at the start of `helixel--clear-data'.
+  "Hook run at the start of `helixel-clear-data'.
 Modules can add functions here to perform cleanup before
 selection data is cleared.  For example, `helixel-state.el'
 adds a function to exit visual state.")
 
-(defun helixel--clear-data-internal ()
+(defun helixel-clear-data-internal ()
   "Clear selection data without running `helixel-clear-data-hook'.
 Called directly by `helixel--switch-state' to avoid triggering
 hook functions (like visual exit) that would re-enter state switching.
-All other callers should use `helixel--clear-data'."
+All other callers should use `helixel-clear-data'."
   (setq helixel--sel-type-override nil)
   (setq helixel--action-pos nil)
   (setq helixel--pending-sel nil)
@@ -451,11 +451,11 @@ All other callers should use `helixel--clear-data'."
     (rectangle-mark-mode -1))
   (deactivate-mark))
 
-(defun helixel--clear-data ()
+(defun helixel-clear-data ()
   "Clear any intermediate data, e.g. selections/mark.
 Used by state machine, surround, and jump navigation."
   (run-hooks 'helixel-clear-data-hook)
-  (helixel--clear-data-internal))
+  (helixel-clear-data-internal))
 
 
 ;; ----------------------------------------------------------------------
@@ -560,7 +560,7 @@ Consults `helixel-semicolon-mark-thing'."
 
 (defvar helixel-jump-cleanup-function nil
   "Function called after a successful jump to clean up selection state.
-Typically `helixel--clear-data'.")
+Typically `helixel-clear-data'.")
 
 ;; ----------------------------------------------------------------------
 ;; Event display
@@ -888,26 +888,29 @@ Optional prefix ARG is passed to the underlying commands."
 ;;      the mark-thing path.  Every press pushes mark to the
 ;;      thing-start (non-mark-thing).
 ;;   2. Position: `helixel--action-pos' is let-bound from
-;;      `helixel--jump-cycle-pos' so the two commands track their
+;;      `helixel--mark-cycle-pos' so the two commands track their
 ;;      cycle positions independently.
 
-(defun helixel-action-cycle-jump (&optional arg)
-  "Push mark to event start positions with `C-;'.
+(defun helixel-action-cycle-mark-start (&optional arg)
+  "Cycle through event history, pushing mark to each event's start position.
+Bound to `C-;'.  Unlike `;' which selects the full movement span,
+this command always pushes mark to the original pre-motion cursor
+position (the start-position of each tracked action).
+
 Shares the full `;' cycle infrastructure (group navigation,
-newest-for-mark, group-span) but always pushes mark to the event
-start position instead of selecting the full span.
+newest-for-mark, group-span) but never selects the full span.
 
 Optional prefix ARG reverses direction (go newer)."
   (interactive "P")
-  (unless (eq last-command 'helixel-action-cycle-jump)
-    (setq helixel--jump-cycle-pos nil))
+  (unless (eq last-command 'helixel-action-cycle-mark-start)
+    (setq helixel--mark-cycle-pos nil))
   (let ((helixel--cycle-jump-p t)
-        (helixel--action-pos helixel--jump-cycle-pos))
-    ;; helixel--action-pos is let-bound from helixel--jump-cycle-pos
+        (helixel--action-pos helixel--mark-cycle-pos))
+    ;; helixel--action-pos is let-bound from helixel--mark-cycle-pos
     ;; so the shared cycle logic reads/writes C-;'s own position.
     (unwind-protect
         (helixel--action-cycle arg)
-      (setq helixel--jump-cycle-pos helixel--action-pos))))
+      (setq helixel--mark-cycle-pos helixel--action-pos))))
 
 ;; ----------------------------------------------------------------------
 ;; Global jump list (C-o / C-i)

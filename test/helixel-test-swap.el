@@ -397,8 +397,8 @@ independent of the kill-ring — so `d' does not invalidate it."
       (setq helixel--sel-type-override nil)
       (helixel-change)
       (insert "XXX")
-      (helixel--record-action 'change)
-      (helixel--clear-data)
+      (helixel-record-action 'change)
+      (helixel-clear-data)
       ;; Now buffer is "AAA XXX CCC", swap "AAA" with "CCC"
       (push-mark 12 t t)
       (goto-char 9)

@@ -61,23 +61,23 @@
 (ert-deftest helixel-test-chain-empty-no-record ()
   "Chain with no edits records nothing."
   (helixel-chain-test-with-buffer "line1\nline2\nline3\n"
-    (let ((prev-action helixel--last-action))
+    (let ((prev-action helixel-last-action))
       (helixel-repeat-chain-start)
       (should (helixel--chain-active-p))
       (helixel-repeat-chain-end)
       (should-not (helixel--chain-active-p))
-      (should (eq helixel--last-action prev-action)))))
+      (should (eq helixel-last-action prev-action)))))
 
 (ert-deftest helixel-test-chain-cancel-discards ()
   "Chain cancel discards macro and cleans up."
   (helixel-chain-test-with-buffer "aaa bbb\nccc ddd\n"
-    (let ((prev-action helixel--last-action))
+    (let ((prev-action helixel-last-action))
       (helixel-repeat-chain-start)
       (should (helixel--chain-active-p))
       (helixel-repeat-chain-cancel)
       (should-not (helixel--chain-active-p))
       (should-not defining-kbd-macro)
-      (should (eq helixel--last-action prev-action)))))
+      (should (eq helixel-last-action prev-action)))))
 
 (ert-deftest helixel-test-chain-nested-error ()
   "Starting a chain while already chaining signals error."
@@ -111,9 +111,9 @@
     (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-action-list helixel--chain-session))
     (helixel-repeat-chain-end)
-    (should helixel--last-action)
-    (should (eq (helixel-action-op helixel--last-action) 'chain))
-    (let ((action-list (plist-get (helixel-action-payload helixel--last-action)
+    (should helixel-last-action)
+    (should (eq (helixel-action-op helixel-last-action) 'chain))
+    (let ((action-list (plist-get (helixel-action-payload helixel-last-action)
                               :action-list)))
       (should action-list)
       (should (listp action-list))
@@ -121,14 +121,14 @@
       (should (helixel-action-p (car action-list))))))
 
 (ert-deftest helixel-test-chain-last-event-is-compound ()
-  "After chain-end, helixel--last-action is the chain tx."
+  "After chain-end, helixel-last-action is the chain tx."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
     (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-action-list helixel--chain-session))
     (helixel-repeat-chain-end)
-    (should (eq (helixel-action-op helixel--last-action) 'chain))))
+    (should (eq (helixel-action-op helixel-last-action) 'chain))))
 
 (ert-deftest helixel-test-chain-merge-entry-kind ()
   "`helixel--chain-propagate-entry-kind' updates init-ctx during recording."
@@ -143,8 +143,8 @@
     (push (helixel-action-create 'noop nil :runner #'ignore)
           (helixel-chain-session-action-list helixel--chain-session))
     (helixel-repeat-chain-end)
-    (should helixel--last-action)
-    (let ((sel (helixel-action-sel helixel--last-action)))
+    (should helixel-last-action)
+    (let ((sel (helixel-action-sel helixel-last-action)))
       (should sel)
       (should (eq (helixel-sel-search-entry-kind sel) 'insert)))))
 
@@ -177,12 +177,12 @@
     (should-not (helixel--blank-line-p))))
 
 (ert-deftest helixel-test-chain-no-record-during-kmacro ()
-  "helixel--record-action is inhibited during defining-kbd-macro."
+  "helixel-record-action is inhibited during defining-kbd-macro."
   (helixel-chain-test-with-buffer "test\n"
-    (let* ((prev-action helixel--last-action)
+    (let* ((prev-action helixel-last-action)
            (defining-kbd-macro t))
-      (helixel--record-action 'kill :runner #'ignore)
-      (should (eq helixel--last-action prev-action)))))
+      (helixel-record-action 'kill :runner #'ignore)
+      (should (eq helixel-last-action prev-action)))))
 
 ;; ── End-to-end: chain advance failure in . and , ──
 
@@ -203,7 +203,7 @@ tests in this section."
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-action ctx))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (should (string-match-p "aborted"
                               (helixel-repeat-edit))))))
@@ -214,7 +214,7 @@ tests in this section."
     (goto-char (point-max))
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-chain--make-test-action ctx))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       ;; Should not error: the last line is a valid target
       (helixel-repeat-edit)
@@ -227,7 +227,7 @@ tests in this section."
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-action ctx))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (should-error (helixel-repeat-selection)))))
 
@@ -238,7 +238,7 @@ tests in this section."
     (let* ((ctx (helixel-sel-create 'search
                   '(:pattern "foo" :dir forward :entry-kind insert)))
            (tx (helixel-chain--make-test-action ctx))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t)
            (helixel--repeat-preview-pos nil))
       (helixel-repeat-selection)
@@ -251,7 +251,7 @@ tests in this section."
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-chain--make-test-action ctx))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t)
            (helixel--repeat-preview-pos nil))
       (helixel-repeat-selection)
@@ -264,7 +264,7 @@ tests in this section."
     (goto-char 1)
     (let* ((ctx (helixel-sel-create 'movement '(:moves ((forward-word . 1)))))
             (tx (helixel-chain--make-test-action ctx))
-            (helixel--last-action tx)
+            (helixel-last-action tx)
             (helixel--inhibit-action-track t))
       ;; No advance data → should not error
       (helixel-repeat-edit))))
@@ -289,7 +289,7 @@ tests in this section."
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
       (should (= 3 helixel-chain--test-ctr)))))
@@ -305,7 +305,7 @@ tests in this section."
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
       (should (= 3 helixel-chain--test-ctr)))))
@@ -322,7 +322,7 @@ tests in this section."
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -3)
       (should (= 3 helixel-chain--test-ctr)))))
@@ -337,7 +337,7 @@ tests in this section."
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit 0)
       ;; 3 lines, first already processed → 2 remaining
@@ -353,7 +353,7 @@ tests in this section."
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit '(4))
       (should (= 3 helixel-chain--test-ctr)))))
@@ -369,7 +369,7 @@ tests in this section."
                  :runner #'helixel-chain--count-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-edit -2)
       (should (= 2 helixel-chain--test-ctr)))))
@@ -390,7 +390,7 @@ tests in this section."
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection 0)
       ;; After 0, : point should be at last match's match-end
@@ -407,7 +407,7 @@ tests in this section."
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection -3)
       ;; -3, reverse: each advance skips current and goes backward
@@ -424,7 +424,7 @@ tests in this section."
                  :runner #'helixel-chain--noop-runner
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil :runner #'ignore))))
-           (helixel--last-action tx)
+           (helixel-last-action tx)
            (helixel--inhibit-action-track t))
       (helixel-repeat-selection '(4))
       ;; C-u , previews all → ends at eol of last line
@@ -448,7 +448,7 @@ order."
       ;; the chain hook appends them to action-list).
       (helixel-backward-word-start)
       ;; Edit command.
-      (helixel--record-action 'kill :runner #'ignore)
+      (helixel-record-action 'kill :runner #'ignore)
       (let ((s helixel--chain-session))
         (should s)
         ;; action-list should have at least the kill entry.  Movement
@@ -456,16 +456,16 @@ order."
         ;; we test only the more invariant edit-entry presence.
         (should (> (length (helixel-chain-session-action-list s)) 0)))
       (helixel-repeat-chain-end)
-      (should helixel--last-action)
-      (should (eq (helixel-action-op helixel--last-action) 'chain))
-      (let ((action-list (plist-get (helixel-action-payload helixel--last-action)
+      (should helixel-last-action)
+      (should (eq (helixel-action-op helixel-last-action) 'chain))
+      (let ((action-list (plist-get (helixel-action-payload helixel-last-action)
                                 :action-list)))
         (should action-list)
         (should (listp action-list))
         (should (> (length action-list) 0))
         (should (helixel-action-p (car action-list))))
       ;; init-ctx merged into the chain action.s sel.
-      (should (equal init-ctx (helixel-action-sel helixel--last-action))))))
+      (should (equal init-ctx (helixel-action-sel helixel-last-action))))))
 
 (ert-deftest helixel-test-chain-comma-strategy-builder ()
   "After C2 flatten, chain repeat goes through the unified
@@ -483,7 +483,7 @@ returns t (allowing in-place repeat) instead of nil."
                  :display "chain"
                  :action-list (list (helixel-action-create 'noop nil
                                  :runner #'ignore)))))
-      (setq helixel--last-action tx)
+      (setq helixel-last-action tx)
       ;; line kind has an :advance fn so this returns whatever the
       ;; advance fn does — just confirm the unified dispatcher
       ;; accepts the chain tx without erroring.
@@ -515,7 +515,7 @@ chain-runner → insert-text-runner replay path, not capture."
                         :runner #'helixel--repeat-chain-runner
                         :display "chain"
                         :action-list (list insert-action))))
-      (setq helixel--last-action chain-action)
+      (setq helixel-last-action chain-action)
       ;; Replay at start of line 2.
       (goto-char (point-min))
       (forward-line 1)
@@ -660,7 +660,7 @@ deletes the prefix before inserting."
       ;; [w-move, kill-edit, w-move, insert-edit]
       (helixel-repeat-chain-end)
       (let ((chain-action-list
-             (plist-get (helixel-action-payload helixel--last-action) :action-list)))
+             (plist-get (helixel-action-payload helixel-last-action) :action-list)))
         (should (= 4 (length chain-action-list)))
         ;; First entry: w movement (sel but no runner)
         (should (helixel-action-sel (nth 0 chain-action-list)))
@@ -700,10 +700,10 @@ advance — use distinct patterns to avoid self-matching."
     (insert "bar") (helixel-insert-exit)
     (helixel-repeat-chain-end)
     ;; Verify chain has search sel
-    (should (eq (helixel-sel-kind (helixel-action-sel helixel--last-action))
+    (should (eq (helixel-sel-kind (helixel-action-sel helixel-last-action))
                 'search))
     (should (string= (helixel-sel-search-pattern
-                      (helixel-action-sel helixel--last-action))
+                      (helixel-action-sel helixel-last-action))
                      "hello"))
     ;; First dot: advance to next match and apply
     (helixel-repeat-edit)
@@ -741,7 +741,7 @@ PATTERN is a regexp."
     (helixel-repeat-chain-start)
     (helixel-insert) (insert "X") (helixel-insert-exit)
     (helixel-repeat-chain-end)
-    (should (eq (helixel-sel-kind (helixel-action-sel helixel--last-action)) 'search))
+    (should (eq (helixel-sel-kind (helixel-action-sel helixel-last-action)) 'search))
     ;; dot1: advance to line 2
     (helixel-repeat-edit)
     (save-excursion (goto-char 1) (forward-line 1)
@@ -923,7 +923,7 @@ be captured via `by-command' and replayed via `call-interactively'."
     (helixel-next-line)                   ;; j
     (execute-kbd-macro (kbd "C-a"))       ;; C-a
     (helixel-repeat-chain-end)            ;; ESC
-    (let ((action-list (helixel-action-payload-get helixel--last-action :action-list)))
+    (let ((action-list (helixel-action-payload-get helixel-last-action :action-list)))
       (should (= 4 (length action-list)))
       ;; Vanilla C-a is flushed after the last helixel, so it
       ;; appears as the last entry after nreverse.
@@ -951,7 +951,7 @@ be captured via `by-command' and replayed via `call-interactively'."
     (insert "X")
     (helixel-insert-exit)
     (helixel-repeat-chain-end)
-    (let ((action-list (helixel-action-payload-get helixel--last-action :action-list)))
+    (let ((action-list (helixel-action-payload-get helixel-last-action :action-list)))
       (should (= 3 (length action-list)))
       (should (eq (helixel-action-by-command (nth 0 action-list))
                   'move-beginning-of-line))
@@ -981,7 +981,7 @@ keymap and invokes the vanilla `right-char' command."
     (insert "X")
     (helixel-insert-exit)
     (helixel-repeat-chain-end)
-    (let ((action-list (helixel-action-payload-get helixel--last-action :action-list)))
+    (let ((action-list (helixel-action-payload-get helixel-last-action :action-list)))
       ;; 4 entries: C-a, <right>, <right>, insert-text.
       ;; insert-after's state entry is excluded (category=state).
       (should (= 4 (length action-list)))
@@ -1014,7 +1014,7 @@ Tested by calling the hook function directly."
     (let ((this-command 'move-beginning-of-line))
       (helixel--chain-post-cmd-hook))
     (helixel-repeat-chain-end)
-    (let ((action-list (helixel-action-payload-get helixel--last-action :action-list)))
+    (let ((action-list (helixel-action-payload-get helixel-last-action :action-list)))
       (should (= 1 (length action-list)))
       (should (eq (helixel-action-by-command (nth 0 action-list))
                   'move-beginning-of-line)))))
@@ -1080,7 +1080,7 @@ up with ((w . 2)) instead of ((w . 1))."
     (helixel-forward-word-start)   ;; w
     (helixel-kill)                  ;; d
     (helixel-repeat-chain-end)
-    (let ((action-list (helixel-action-payload-get helixel--last-action :action-list)))
+    (let ((action-list (helixel-action-payload-get helixel-last-action :action-list)))
       (should (= 3 (length action-list)))
       ;; w1 should have moves=((w . 1)), NOT ((w . 2))
       (let ((moves1 (helixel-sel-movement-moves
@@ -1140,7 +1140,7 @@ replay."
           (this-command 'next-line))
       (helixel--chain-post-cmd-hook))
     (helixel-repeat-chain-end)
-    (let ((action-list (helixel-action-payload-get helixel--last-action :action-list)))
+    (let ((action-list (helixel-action-payload-get helixel-last-action :action-list)))
       (should (= 1 (length action-list)))
       (should (eq 4 (helixel-action-payload-get (nth 0 action-list) :prefix))))))
 
@@ -1222,7 +1222,7 @@ insert-text segments, producing double newlines on replay."
           (helixel-repeat-chain-end)
           ;; Should have exactly 1 entry: insert-text only.
           (let ((action-list (helixel-action-payload-get
-                          helixel--last-action :action-list)))
+                          helixel-last-action :action-list)))
             (should (= 1 (length action-list)))
             (should (eq (helixel-action-op (nth 0 action-list))
                         'insert-text)))

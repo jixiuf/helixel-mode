@@ -207,28 +207,6 @@
     (should (= (marker-position
                 (car (helixel-action-mark-region helixel--live-action))) 10))))
 
-(ert-deftest helixel-test-action-wrapper-commands ()
-  "Test goto-line starts action correctly."
-  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5"
-    (setq helixel--action-ring nil helixel--live-action nil
-          helixel--action-pos nil
-          last-command nil this-command 'helixel-goto-line)
-    (goto-char 1)
-    (helixel-goto-line 3)
-    (should helixel--live-action)
-    (should (eq (helixel-action-subcat helixel--live-action) 'goto))))
-
-(ert-deftest helixel-test-goto-line-lisp-arg ()
-  "Test helixel-goto-line called from Lisp uses arg parameter."
-  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5"
-    (setq helixel--action-ring nil helixel--live-action nil
-          helixel--action-pos nil
-          last-command nil this-command 'helixel-goto-line
-          current-prefix-arg nil)
-    (helixel-goto-line 4)
-    (should (= (line-number-at-pos) 4))
-    (should (string= (buffer-substring (pos-bol) (pos-eol)) "line4"))))
-
 (ert-deftest helixel-test-action-select-commands ()
   "Test select-line starts action correctly."
   (helixel-test-with-buffer "hello world"

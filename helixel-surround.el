@@ -51,7 +51,7 @@
 (require 'cl-lib)
 (require 'helixel-core)
 (require 'helixel-ring)                 ; helixel--tracking-open, live-edit-set
-(require 'helixel-repeat)               ; for helixel--record-action
+(require 'helixel-repeat)               ; for helixel-record-action
 (require 'helixel-textobj)
 
 (defvar helixel--surround-pairs)
@@ -152,12 +152,12 @@ Returns a `helixel--surround-entry' struct, or nil if not found."
 (defun helixel--surround-lookup-delimiter (char)
   "Look up CHAR and return a helixel-delimiter plist, or nil."
   (if-let* ((block (helixel--surround-block-lookup char)))
-      (helixel--make-block-delimiter
+      (helixel-make-block-delimiter
        (helixel--surround-entry-open block)
        (helixel--surround-entry-close block))
     (when-let* ((entry (cl-find char (helixel--surround-pairs-active)
                                 :key #'helixel--surround-entry-open)))
-      (helixel--make-pair-delimiter
+      (helixel-make-pair-delimiter
        (helixel--surround-entry-open entry)
        (helixel--surround-entry-close entry)))))
 
@@ -257,7 +257,7 @@ The prompt shows the old delimiter being replaced."
     (helixel--surround-add (helixel-delimiter-open new-d)
                           (helixel-delimiter-close new-d))
     (helixel--tracking-open 'edit 'surround-replace)
-    (helixel--record-action 'surround-replace :new-char new-char)
+    (helixel-record-action 'surround-replace :new-char new-char)
      (helixel--sel-push
           (helixel-sel-create
            'surround `(:delimiter ,new-d)))))
@@ -306,12 +306,12 @@ D is the tag delimiter plist used to locate the tags."
         (user-error "Unknown surround delimiter: %c" char))
       (helixel--surround-add open close)
       (helixel--tracking-open 'edit 'surround-add)
-      (helixel--record-action 'surround-add :char char)
+      (helixel-record-action 'surround-add :char char)
       (helixel--sel-push
        (helixel-sel-create
         'surround `(:delimiter ,(if is-block
-                                    (helixel--make-block-delimiter open close)
-                                  (helixel--make-pair-delimiter open close)))))
+                                    (helixel-make-block-delimiter open close)
+                                  (helixel-make-pair-delimiter open close)))))
       (setq deactivate-mark nil))))
 
 (defun helixel-surround-add-tag ()
@@ -323,10 +323,10 @@ D is the tag delimiter plist used to locate the tags."
     (let ((tag (read-string "Tag: ")))
       (helixel--surround-add-tag tag)
       (helixel--tracking-open 'edit 'surround-add)
-      (helixel--record-action 'surround-add-tag :tag tag)
+      (helixel-record-action 'surround-add-tag :tag tag)
       (helixel--sel-push
        (helixel-sel-create
-        'surround `(:delimiter ,(helixel--make-tag-delimiter))))
+        'surround `(:delimiter ,(helixel-make-tag-delimiter))))
       (setq deactivate-mark nil))))
 
 (defun helixel--surround-prompt-target (cmd prefix)
@@ -364,7 +364,7 @@ so the user can select a target with one keypress."
             (let ((pos (helixel--surround-delete-delimiter d)))
               (goto-char pos)
               (helixel--tracking-open 'edit 'surround-delete)
-              (helixel--record-action 'surround-delete)))
+              (helixel-record-action 'surround-delete)))
         (helixel--surround-prompt-target #'helixel-surround-delete "md")))))
 
 (defun helixel-surround-replace ()
@@ -386,11 +386,11 @@ so the user can select a target with one keypress."
                    (goto-char (/ (+ (region-beginning) (region-end)) 2)))
                  (helixel--surround-replace-tag new-tag d)
                  (helixel--tracking-open 'edit 'surround-replace)
-                 (helixel--record-action 'surround-replace :tag new-tag
+                 (helixel-record-action 'surround-replace :tag new-tag
                                        :surround-type 'tag)
                  (helixel--sel-push
                   (helixel-sel-create
-                   'surround `(:delimiter ,(helixel--make-tag-delimiter))))))
+                   'surround `(:delimiter ,(helixel-make-tag-delimiter))))))
               (_ (helixel--surround-replace-generic d)))
             (setq deactivate-mark nil))
         (helixel--surround-prompt-target #'helixel-surround-replace "mr")))))

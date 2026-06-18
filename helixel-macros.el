@@ -82,7 +82,7 @@ METADATA is a plist:
                    For insert-entry commands, the prepos FN survives
                    the later `record-action' for \='insert-text that
                    creates the insert-text tx (preserved by
-                   `helixel--record-action').
+                   `helixel-record-action').
                    When omitted, no preposition is attached.
                    Invariant: at most one :preposition per command.
                    A second :preposition silently overwrites the first
@@ -180,7 +180,7 @@ Expands to:
   1. (helixel-register-op OP :display ... :runner (lambda () (NAME)))
   2. (helixel-define-command NAME (:category edit ...) BODY)
 
-The command body SHOULD call (helixel--record-action OP ...) to record
+The command body SHOULD call (helixel-record-action OP ...) to record
 the edit for \=`.\=` replay."
   (declare (indent 2))
   (let* ((op (plist-get metadata :op))

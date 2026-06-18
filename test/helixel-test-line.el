@@ -99,13 +99,13 @@
     (should (eq (helixel--sel-type) 'line))
     (should (region-active-p))))
 
-;;; helixel--clear-data resets selection type
+;;; helixel-clear-data resets selection type
 
 (ert-deftest helixel-test-clear-data-resets-type ()
-  "Test `helixel--clear-data' resets `helixel--sel-type'."
+  "Test `helixel-clear-data' resets `helixel--sel-type'."
   (helixel-test-with-buffer "hello"
     (setq helixel--sel-type-override 'line)
-    (helixel--clear-data)
+    (helixel-clear-data)
     (should-not (helixel--sel-type))))
 
 ;;; helixel--line-bounds-of-region tests

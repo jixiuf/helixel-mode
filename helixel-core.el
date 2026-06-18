@@ -974,7 +974,7 @@ Read by `helixel-repeat-last-motion' and its accessors.")
 Toggled by \=`-,'.  Reset on each new motion recording.
 Analogous to `helixel--repeat-permanent-flip' for \=`.\='.")
 
-(defun helixel--record-last-motion (cmd &rest extra-kv)
+(defun helixel-record-motion (cmd &rest extra-kv)
   "Record CMD as the last motion, with EXTRA-KV as keyword arguments.
 
 EXTRA-KV accepts: :category :subcat :dir :char :type :pattern
@@ -1008,7 +1008,7 @@ of extra keys passed directly by the caller.
 Called from the code injected by `helixel-define-command'
 for :category movement commands."
   (let* ((dir (if (> (point) origin) 'forward 'backward)))
-    (apply #'helixel--record-last-motion cmd
+    (apply #'helixel-record-motion cmd
            :category 'movement :subcat subcat :dir dir
            motion-extra)))
 
@@ -1236,7 +1236,7 @@ Replay slots (used by `.'/`,'/chain/mc):
                   for `;' jump targets AND by some runners.
   START-POINT   — marker; the original cursor position at
                   `tracking-open' time, before any movement.
-                  Used by `C-;' (`helixel-action-cycle-jump') to
+                  Used by `C-;' (`helixel-action-cycle-mark-start') to
                   push mark to the pre-motion cursor position.
                   Never modified after creation.  Free-standing
                   marker — not part of `mark-region'.
@@ -1540,7 +1540,7 @@ Shows operator name, display label, and `moves-point-p' flag."
   "Override for `helixel--sel-type' during dot-repeat replay.
 Set only by selection-recreate functions to tell operators the
 selection type when `helixel--pending-sel' was already cleared.
-Cleared by `helixel--clear-data-internal'.")
+Cleared by `helixel-clear-data-internal'.")
 
 (defun helixel--sel-type ()
   "Return the selection type from pending-sel: nil, `line', `rect', `textobj'.
@@ -1723,11 +1723,11 @@ track-visual-move) so the copy is fully independent."
 ;; Part 8 — Most-recent-action pointer (single source of truth)
 ;; ----------------------------------------------------------------------
 ;;
-;; `helixel--last-action' is the pointer that `.` (dot-repeat) and `,'
+;; `helixel-last-action' is the pointer that `.` (dot-repeat) and `,'
 ;; (selection-repeat) consume.  Buffer-local — dot-repeat is scoped
 ;; to the current buffer.
 
-(defvar-local helixel--last-action nil
+(defvar-local helixel-last-action nil
   "Pointer to the most recent committed `helixel-action' in this buffer.
 Consumed by `.' and `,' for repeat.  Buffer-local.")
 
@@ -1753,15 +1753,15 @@ Use for plain `defun' helixel commands that don't go through
      ,@body))
 
 (defun helixel--update-last-event (new-action)
-  "Update the payload of `helixel--last-action' from NEW-ACTION.
+  "Update the payload of `helixel-last-action' from NEW-ACTION.
 
 Only the payload plist is copied; the op, sel, runner, mark-region
-of the existing `helixel--last-action' are left untouched.  Used by
+of the existing `helixel-last-action' are left untouched.  Used by
 operator commands that need to inject replay metadata (e.g.
 `:keys', `:replacement') into the most recent action after it was
 already committed."
-  (when (and helixel--last-action (helixel-action-p helixel--last-action))
-    (setf (helixel-action-payload helixel--last-action)
+  (when (and helixel-last-action (helixel-action-p helixel-last-action))
+    (setf (helixel-action-payload helixel-last-action)
           (helixel-action-payload new-action))))
 
 

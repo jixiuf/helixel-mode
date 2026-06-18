@@ -55,7 +55,7 @@
     (helixel-toggle-case)
     (should (string= (buffer-string) "hello"))
     (should (= (point) 2))
-    (let ((tx helixel--last-action))
+    (let ((tx helixel-last-action))
       (funcall (helixel--op-runner (helixel-action-op tx)) tx))
     (should (string= (buffer-string) "hEllo"))
     (should (= (point) 3))))
@@ -301,8 +301,8 @@ runner, moving cursor to wrong position."
     (helixel-join-lines)
     ;; The tx must NOT carry a selection — dot-repeat relies on
     ;; :count alone, advance is a no-op for ops that move point.
-    (should-not (helixel-action-sel helixel--last-action))
-    (should (eql 4 (helixel-action-payload-get helixel--last-action :count)))))
+    (should-not (helixel-action-sel helixel-last-action))
+    (should (eql 4 (helixel-action-payload-get helixel-last-action :count)))))
 
 (ert-deftest helixel-test-toggle-case-bword-dot-repeat ()
   "b~ at eob, then . repeatedly — must advance backward each time.
@@ -362,7 +362,7 @@ so `.` advance continues forward."
 (ert-deftest helixel-test-toggle-case-dot-repeat-point-preserved ()
   "~ at eob followed by . errors cleanly but action is still recorded.
 
-After the error, `helixel--last-action' should still be valid for
+After the error, `helixel-last-action' should still be valid for
 replay at a non-eob position."
   (helixel-test-with-buffer "hello\nworld"
     (goto-char (point-max))              ; eob
@@ -371,10 +371,10 @@ replay at a non-eob position."
       (error nil))
     ;; Even though ~ errored, a tx was recorded (record-action runs
     ;; before the following-char check).  Move off eob and replay.
-    (should helixel--last-action)
+    (should helixel-last-action)
     (goto-char 1)
     ;; Replay the toggle-case tx at position 1
-    (let ((tx helixel--last-action))
+    (let ((tx helixel-last-action))
       (funcall (helixel--op-runner (helixel-action-op tx)) tx))
     (should (string= (buffer-string) "Hello\nworld"))))
 

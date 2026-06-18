@@ -1453,17 +1453,17 @@ On a single-char symbol at eob, w selects it."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
-          helixel--action-pos nil helixel--jump-cycle-pos nil)
+          helixel--action-pos nil helixel--mark-cycle-pos nil)
     (insert "hello world")
     (deactivate-mark)
     (goto-char 1)
     (helixel-forward-word-start)
-    (helixel-action-cycle-jump)
+    (helixel-action-cycle-mark-start)
     ;; C-; does NOT select the full span (non-mark-thing path).
     ;; The region should be active (push-mark with activate=t) but
     ;; from current point to the thing-start, not the whole word.
     (should (region-active-p))
-    (should helixel--jump-cycle-pos)))
+    (should helixel--mark-cycle-pos)))
 
 ;;; Tag pair movement [t and ; mark-thing
 
@@ -2296,7 +2296,7 @@ recording is tested via integration tests."
     (deactivate-mark)
     (goto-char 1)
     ;; Simulate a completed search for "foo".
-    (helixel--record-last-motion nil
+    (helixel-record-motion nil
       :category 'search :pattern "foo" :dir 'forward)
     (helixel-repeat-last-motion)
     ;; Should have found first "foo" and be at match-end.

@@ -112,7 +112,7 @@ surround-pairs entry for major-mode filtering."
            (funcall helixel-textobj-action-function 'textobj ',subcat))
          (helixel--activate-textobj-range
           ,selector
-          (helixel--make-pair-delimiter ,open ,close)
+          (helixel-make-pair-delimiter ,open ,close)
           count))
        ,@(unless inner-p surround-pushes))))
 
@@ -208,7 +208,7 @@ SUBCAT is the textobj subcat symbol (default: \='block)."
         (inner-doc (format "Select inner %s." name))
         (outer-doc (format "Select a %s." name))
         (cat (or subcat 'block))
-        (delimiter (helixel--make-regex-delimiter begin-re end-re name-group)))
+        (delimiter (helixel-make-regex-delimiter begin-re end-re name-group)))
     `(progn
        (defun ,inner-name (&optional count)
          ,inner-doc
@@ -253,7 +253,7 @@ COUNT is the number of tags to select."
     (when (helixel--use-region-p) (region-beginning))
     (when (helixel--use-region-p) (region-end))
     nil count nil)
-   (helixel--make-tag-delimiter)
+   (helixel-make-tag-delimiter)
    count))
 (defun helixel-mark-a-tag (&optional count)
   "Select a tag.
@@ -266,7 +266,7 @@ COUNT is the number of tags to select."
     (when (helixel--use-region-p) (region-beginning))
     (when (helixel--use-region-p) (region-end))
     nil count t)
-   (helixel--make-tag-delimiter)
+   (helixel-make-tag-delimiter)
    count))
 
 ;; ============================================================================
@@ -285,7 +285,7 @@ COUNT is the number of blocks to select."
     (when (helixel--use-region-p) (region-beginning))
     (when (helixel--use-region-p) (region-end))
     nil count nil)
-   (helixel--make-block-delimiter)
+   (helixel-make-block-delimiter)
    count))
 
 (defun helixel-mark-a-block (&optional count)
@@ -299,7 +299,7 @@ COUNT is the number of blocks to select."
     (when (helixel--use-region-p) (region-beginning))
     (when (helixel--use-region-p) (region-end))
     nil count t)
-   (helixel--make-block-delimiter)
+   (helixel-make-block-delimiter)
    count))
 
 (defun helixel-get-tree-sitter-textobj (group &optional query)

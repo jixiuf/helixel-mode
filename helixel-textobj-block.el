@@ -30,8 +30,8 @@
 ;;   helixel-select-regex-block             build a textobj selection
 ;;   helixel-up-block-at-point              dispatch by major mode
 ;;   helixel-select-block-at-point          ditto, as a select-block
-;;   helixel--make-block-delimiter          delimiter constructor
-;;   helixel--make-regex-delimiter          delimiter constructor
+;;   helixel-make-block-delimiter          delimiter constructor
+;;   helixel-make-regex-delimiter          delimiter constructor
 ;;
 ;; Depends on engine (helixel-range, helixel-with-restriction,
 ;; helixel--block-chosen-spec) and pair (helixel-select-block).
@@ -439,7 +439,7 @@ See `helixel-up-block-at-point' for supported modes."
 
 ;; ── Delimiter constructors ──
 
-(defun helixel--make-block-delimiter (&optional open close)
+(defun helixel-make-block-delimiter (&optional open close)
   "Create a block delimiter for OPEN and CLOSE strings.
 OPEN and CLOSE are display/accessor values; the actual finder always
 resolves the spec from `helixel-block-textobj-alist' for the current
@@ -459,7 +459,7 @@ mode at call time (via `helixel-up-block-at-point')."
         :adjust-for-jump #'helixel--block-adjust-for-jump
         :nl-p t))
 
-(defun helixel--make-regex-delimiter (begin-re end-re &optional name-group)
+(defun helixel-make-regex-delimiter (begin-re end-re &optional name-group)
   "Create a regex delimiter for BEGIN-RE and END-RE.
 Optional NAME-GROUP specifies the match group index for the name."
   (list :type 'regex

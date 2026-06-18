@@ -451,7 +451,7 @@ by the initial selection context snapshotted at chain-start."
                    :runner #'helixel--repeat-chain-runner
                    :display (format "chain(%d)" (length action-list))
                    :action-list action-list)))
-        (setq helixel--last-action (helixel-action-copy tx))
+        (setq helixel-last-action (helixel-action-copy tx))
         (helixel-with-action-tracking
             (:op 'chain :category 'edit :subcat 'chain)
           (helixel--live-action-set tx))))

@@ -28,8 +28,8 @@
 ;;   xml / sgml tag  (helixel-select-xml-tag, helixel-up-xml-tag)
 ;;
 ;; Plus the shared inner-bound helper `helixel-select-block' and the
-;; delimiter constructors `helixel--make-pair-delimiter' and
-;; `helixel--make-tag-delimiter'.
+;; delimiter constructors `helixel-make-pair-delimiter' and
+;; `helixel-make-tag-delimiter'.
 ;;
 ;; Depends on engine (helixel-range, helixel-with-restriction,
 ;; helixel-motion-loop, helixel-textobj-visual-state-p-function).
@@ -959,7 +959,7 @@ Handles backslash-escaped quotes via `helixel--preceded-by-odd-backslashes-p'."
           0
         1))))
 
-(defun helixel--make-pair-delimiter (open close)
+(defun helixel-make-pair-delimiter (open close)
   "Create a pair delimiter for OPEN and CLOSE characters."
   (let ((equal-p (= open close)))
     (list :type 'pair
@@ -973,7 +973,7 @@ Handles backslash-escaped quotes via `helixel--preceded-by-odd-backslashes-p'."
             `(lambda () (when (eq (char-after) ,open) (forward-char))))
           :nl-p nil)))
 
-(defun helixel--make-tag-delimiter ()
+(defun helixel-make-tag-delimiter ()
   "Create a tag delimiter."
   (list :type 'tag
         :open "<"

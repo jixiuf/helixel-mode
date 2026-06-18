@@ -74,13 +74,13 @@
     ;; rectangle-mark-mode not active
     (should-not (helixel--region-type))))
 
-;;; helixel--clear-data clears rect mode
+;;; helixel-clear-data clears rect mode
 
 (ert-deftest helixel-test-clear-data-clears-rect ()
-  "Test `helixel--clear-data' disables rectangle-mark-mode."
+  "Test `helixel-clear-data' disables rectangle-mark-mode."
   (helixel-test-with-buffer "first line\nsecond line"
     (helixel-select-rectangle)
-    (helixel--clear-data)
+    (helixel-clear-data)
     (should-not rectangle-mark-mode)
     (should-not (helixel--sel-type))))
 

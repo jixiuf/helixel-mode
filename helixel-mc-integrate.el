@@ -28,7 +28,7 @@
 ;;                               dispatcher.  Nothing else to do.
 ;;   * dot-repeat (`.')        — whitelisted ON: each cursor runs
 ;;                               `helixel-repeat-edit' with its own
-;;                               snapshotted `helixel--last-action'.
+;;                               snapshotted `helixel-last-action'.
 ;;   * repeat-selection (`,')  — same.
 ;;   * chain end               — `:after' advice: if any fake cursors,
 ;;                               propagate the newly built chain
@@ -46,7 +46,7 @@
 (require 'helixel-repeat)
 (require 'helixel-chain)
 
-(defvar helixel--last-action)
+(defvar helixel-last-action)
 ;; defined in helixel-last-edit.el (loaded transitively via
 ;; helixel-mc-core → ...; explicit defvar here keeps byte-compile happy).
 
@@ -79,9 +79,9 @@ the override path — mc dispatches the same edit at each fake."
   (ignore raw-prefix)
   (when (and (bound-and-true-p helixel-multi-cursor-mode)
              (helixel-mc-any-p)
-             helixel--last-action)
+             helixel-last-action)
     (helixel-with-replay-as 'dot
-      (helixel-action-replay helixel--last-action))
+      (helixel-action-replay helixel-last-action))
     t))
 
 ;; Install via `helixel-multi-cursor-mode' toggle — no top-level
@@ -98,22 +98,22 @@ the override path — mc dispatches the same edit at each fake."
 ;; ── Chain end: broadcast the new chain action ──
 
 (defun helixel-mc--broadcast-last-event ()
-  "Snapshot `helixel--last-action' into every fake cursor's overlay.
+  "Snapshot `helixel-last-action' into every fake cursor's overlay.
 Call after building a new chain transaction so subsequent `.' at
 each fake cursor replays the chain (not the pre-chain edit)."
   (dolist (ov (helixel-mc-all-cursors))
     (setf (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state))
-          helixel--last-action)))
+          helixel-last-action)))
 
 (defun helixel-mc--apply-chain-once ()
-  "Execute `helixel--last-action' once at every fake cursor.
-Assumes the current `helixel--last-action' is a chain transaction
+  "Execute `helixel-last-action' once at every fake cursor.
+Assumes the current `helixel-last-action' is a chain transaction
 \(or any replayable edit).  Wraps the batch in one undo step
 via `helixel-mc--undo-step-begin' / `helixel-mc--undo-step-end-cb'."
-  (when (and helixel-multi-cursor-mode helixel--last-action)
+  (when (and helixel-multi-cursor-mode helixel-last-action)
     (helixel-mc--with-undo-step
       (helixel-with-replay-as 'mc-batch
-        (let ((tx helixel--last-action))
+        (let ((tx helixel-last-action))
           (helixel-mc-with-each-cursor
             (helixel-with-replay-as 'dot
               (helixel-action-replay tx))))))))
@@ -158,23 +158,23 @@ Called from `helixel-mode-off-hook'."
 
 ;;;###autoload
 (defun helixel-mc-apply-last-action ()
-  "Apply `helixel--last-action' once at the real cursor and every fake cursor.
+  "Apply `helixel-last-action' once at the real cursor and every fake cursor.
 Useful when you spawned cursors AFTER an edit and want to retro-
 fit it onto the new positions.  Acts on the real cursor's
-`helixel--last-action' so all cursors replay the SAME edit.
+`helixel-last-action' so all cursors replay the SAME edit.
 Signals `user-error' when there are no fake cursors."
   (interactive)
   (unless (helixel-mc-any-p)
     (user-error "No fake cursors"))
-  (unless helixel--last-action
+  (unless helixel-last-action
     (user-error "No edit to apply"))
   (helixel-mc--broadcast-last-event)
   ;; Apply at real cursor AND every fake, wrapped in one undo step.
   (helixel-mc--with-undo-step
     (helixel-with-replay-as 'dot
-      (helixel-action-replay helixel--last-action))
+      (helixel-action-replay helixel-last-action))
     (helixel-with-replay-as 'mc-batch
-      (let ((tx helixel--last-action))
+      (let ((tx helixel-last-action))
         (helixel-mc-with-each-cursor
           (helixel-with-replay-as 'dot
             (helixel-action-replay tx)))))))
@@ -222,7 +222,7 @@ selection started.
 When leaving visual, deactivation is only triggered for direct
 toggles (`helixel-begin-selection', `helixel-visual-exit').
 For edit commands (kill, change, etc.) that exit visual as a
-side-effect via `helixel--clear-data', the mc post-command
+side-effect via `helixel-clear-data', the mc post-command
 dispatch loop replays the edit at each fake and handles mark
 deactivation there — deactivating here would destroy the region
 before dispatch can use it."
@@ -328,10 +328,10 @@ of commands from modules `mc-integrate' itself depends on."
 
 ;; ── Action cycle (`;') and jump cycle (`C-;') ──
 ;;
-;; `helixel-action-cycle' and `helixel-action-cycle-jump' are
+;; `helixel-action-cycle' and `helixel-action-cycle-mark-start' are
 ;; dispatched to fake cursors.  Each fake owns its own
 ;; `helixel--action-ring', `helixel--live-action', `helixel--action-pos',
-;; and `helixel--jump-cycle-pos' via `helixel-pc-state'.  When
+;; and `helixel--mark-cycle-pos' via `helixel-pc-state'.  When
 ;; broadcast, each fake navigates its OWN ring independently.
 ;;
 ;; Global jump nav (C-o / C-i) uses the shared
@@ -343,7 +343,7 @@ of commands from modules `mc-integrate' itself depends on."
 
 (helixel-mc-mark-all-for-multi-cursors
  '(helixel-action-cycle
-   helixel-action-cycle-jump))
+   helixel-action-cycle-mark-start))
 
 ;; ── `;' and `C-;' at fakes are handled by the per-fake event
 ;; ring (see `helixel-pc-state' slots `event-ring', `live-action',

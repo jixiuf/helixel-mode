@@ -287,7 +287,7 @@ is not committed by the next command."
         ;; Record for motion repeat (bound to `,'):
         ;; store category+pattern+dir+regexp so `,' can replay search
         ;; via `helixel-search--isearch-repeat'.
-        (helixel--record-last-motion nil
+        (helixel-record-motion nil
           :category 'search :pattern isearch-string
           :dir dir :regexp isearch-regexp)
         (helixel-search--set-sel-ctx)
@@ -579,7 +579,7 @@ DOC is the docstring."
        ;; Stash char/type/dir so `,' replays self-contained
        ;; without consulting `helixel--active-search'.
        (let ((sym-dir (if (> effective-dir 0) 'forward 'backward)))
-         (helixel--record-last-motion ',name
+         (helixel-record-motion ',name
            :category 'find-char :char char :type ',type :dir sym-dir))
        ;; unwind-protect: on error, discard the stale live-action.
        (unwind-protect

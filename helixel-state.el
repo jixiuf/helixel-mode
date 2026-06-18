@@ -172,6 +172,15 @@ Populated by `helixel-keymap' at load time.")
 MODE is a major or minor mode symbol.  STATE is a helixel state symbol.
 Stores mode-specific helixel bindings registered via `helixel-define-key'.")
 
+(defvar helixel--keymap-bindings nil
+  "Alist of ((KEYMAP-SYMBOL . STATE) . sparse-keymap).
+KEYMAP-SYMBOL is a quoted keymap name like `prog-mode-map'.
+STATE is a helixel state symbol (normal, motion, etc.).
+Stores keymap-targeted helixel bindings registered via `helixel-define-key'.
+The resolved keymap value is checked against `current-active-maps'
+at state-change time, so bindings apply to all buffers whose active
+keymaps include the target keymap.")
+
 ;; ── Pending-op system (selection-first pattern) ──
 ;;
 ;; Helixel is selection-first: user selects a region (w/b/e/iw/aw/line/

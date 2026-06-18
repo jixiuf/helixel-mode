@@ -61,8 +61,19 @@
 
 When MODES is nil, bind to the keymap associated with STATE from
 `helixel-state-map-alist'.  When MODES is provided, each argument
-is a major or minor mode symbol for which the binding takes
-precedence via `minor-mode-overriding-map-alist'.
+is either a major/minor mode symbol or a keymap symbol:
+
+- **Mode symbols** (e.g., `dired-mode', `org-mode'): the binding
+  activates via `minor-mode-overriding-map-alist' when the mode is
+  the current `major-mode' or an active minor mode.
+
+- **Keymap symbols** (e.g., `prog-mode-map', `special-mode-map'):
+  the binding activates in any buffer whose `current-active-maps'
+  includes the resolved keymap.  This makes it easy to target
+  parent keymaps inherited by many modes.
+
+Automatic detection: a symbol is treated as a keymap when it is
+bound and its value satisfies `keymapp'.
 
 Argument STATE must be one of: insert, normal, motion, visual, view,
 goto, window, space, textobj (m prefix), textobj-inner (mi prefix),
@@ -70,7 +81,7 @@ textobj-outer (ma prefix).
 
 Argument KEY and DEF follow the same conventions as `define-key'.
 
-Any arguments after DEF are treated as mode symbols.
+Any arguments after DEF are treated as mode or keymap symbols.
 
 Example:
   ;; Standard: bind to Helix's normal state keymap
@@ -96,33 +107,97 @@ Example:
   (helixel-define-key \\='normal \"j\" #\\='next-line
     \\='prog-mode \\='text-mode)
   (helixel-define-key \\='normal (kbd \"C-i\") nil
-    \\='org-mode \\='markdown-mode)"
+    \\='org-mode \\='markdown-mode)
+
+  ;; Keymap-targeted: apply to ALL `prog-mode' derived modes at once
+  (helixel-define-key \\='normal (kbd \"g q\")
+    #\\='prog-fill-reindent-defun \\='prog-mode-map)"
   (unless (alist-get state helixel-state-map-alist)
     (error "Invalid state %s" state))
   (if modes
-      ;; Store binding in helixel--mode-keybindings
-      (dolist (m modes)
-        (let* ((alist-key (cons m state))
-               (entry (assoc alist-key helixel--mode-keybindings)))
-          (unless entry
-            (setq entry (cons alist-key (make-sparse-keymap)))
-            (push entry helixel--mode-keybindings))
-          (define-key (cdr entry) key def)))
+      (progn
+        (dolist (m modes)
+          (cond
+           ;; Already a keymap object (unquoted prog-mode-map):
+           ;; store the object itself as the alist key.
+           ((keymapp m)
+            (let* ((alist-key (cons m state))
+                   (entry (assoc alist-key helixel--keymap-bindings)))
+              (unless entry
+                (setq entry (cons alist-key (make-sparse-keymap)))
+                (push entry helixel--keymap-bindings))
+              (define-key (cdr entry) key def)))
+           ;; Symbol bound to a keymap (quoted 'prog-mode-map):
+           ;; store the symbol for lazy resolution.
+           ((and (symbolp m) (boundp m) (keymapp (symbol-value m)))
+            (let* ((alist-key (cons m state))
+                   (entry (assoc alist-key helixel--keymap-bindings)))
+              (unless entry
+                (setq entry (cons alist-key (make-sparse-keymap)))
+                (push entry helixel--keymap-bindings))
+              (define-key (cdr entry) key def)))
+           ;; Mode symbol: store in helixel--mode-keybindings
+           (t
+            (let* ((alist-key (cons m state))
+                   (entry (assoc alist-key helixel--mode-keybindings)))
+              (unless entry
+                (setq entry (cons alist-key (make-sparse-keymap)))
+                (push entry helixel--mode-keybindings))
+              (define-key (cdr entry) key def)))))
+        ;; Immediately refresh if helixel is already active in the
+        ;; current buffer, so the new binding takes effect without
+        ;; requiring a state change.
+        (when (and (boundp 'helixel--current-state)
+                   helixel--current-state)
+          (helixel--refresh-overriding-maps)
+          (helixel--refresh-textobj-overrides)))
     ;; Bind to global state keymap
     (let ((state-keymap (alist-get state helixel-state-map-alist)))
       (define-key state-keymap key def))))
 
+(defun helixel--keymap-active-p (target active-maps)
+  "Return non-nil if TARGET keymap is active in the current buffer.
+Checks whether TARGET is a member of ACTIVE-MAPS or is in the
+parent chain of any keymap in ACTIVE-MAPS (parent maps are
+traversed during key lookup but are not themselves listed in
+`current-active-maps')."
+  (catch 'active
+    (dolist (map active-maps)
+      (let ((m map))
+        (while m
+          (when (eq m target)
+            (throw 'active t))
+          (setq m (keymap-parent m)))))
+    nil))
+
 (defun helixel--refresh-overriding-maps ()
-  "Rebuild `minor-mode-overriding-map-alist' for the current buffer."
+  "Rebuild `minor-mode-overriding-map-alist' for the current buffer.
+Collects overrides from both mode-specific (`helixel--mode-keybindings')
+and keymap-targeted (`helixel--keymap-bindings') registrations."
   (let ((state helixel--current-state)
         (state-mode (alist-get helixel--current-state helixel-state-alist))
         (overrides nil))
+    ;; Mode-specific bindings
     (dolist (entry helixel--mode-keybindings)
       (let ((mode (caar entry)))
         (when (and (eq (cdar entry) state)
                    (or (eq mode major-mode)
                        (and (boundp mode) (symbol-value mode))))
           (push (cdr entry) overrides))))
+    ;; Keymap-targeted bindings: activate if the resolved keymap
+    ;; is in the current buffer's active-map chain (current-active-maps
+    ;; includes local maps whose parents are traversed during key lookup).
+    (when helixel--keymap-bindings
+      (let ((active-maps (current-active-maps)))
+        (dolist (entry helixel--keymap-bindings)
+          (let ((key (caar entry)))
+            (when (eq (cdar entry) state)
+              (let ((target (if (symbolp key)
+                                (and (boundp key) (symbol-value key))
+                              key)))
+                (when (and target
+                           (helixel--keymap-active-p target active-maps))
+                  (push (cdr entry) overrides))))))))
     (setq minor-mode-overriding-map-alist
           (assq-delete-all state-mode minor-mode-overriding-map-alist))
     (when overrides
@@ -134,12 +209,16 @@ Example:
 
 (defun helixel--refresh-textobj-overrides ()
   "Build mode-specific composed keymaps for textobj inner/outer.
-When `helixel--mode-keybindings' contains entries for `textobj-inner'
-or `textobj-outer' in the current `major-mode', make
-`helixel-textobj-map' buffer-local and point its \"i\"/\"a\" entries
-to composed keymaps with mode overrides on top of the base maps."
+When `helixel--mode-keybindings' or `helixel--keymap-bindings' contain
+entries for `textobj-inner' or `textobj-outer' in the current buffer's
+mode or active keymaps, make `helixel-textobj-map' buffer-local and
+point its \"i\"/\"a\" entries to composed keymaps with overrides
+on top of the base maps."
   (let ((inner-overrides nil)
-        (outer-overrides nil))
+        (outer-overrides nil)
+        (active-maps (when helixel--keymap-bindings
+                       (current-active-maps))))
+    ;; Mode-specific textobj overrides
     (dolist (entry helixel--mode-keybindings)
       (let ((mode (caar entry))
             (sub (cdar entry)))
@@ -149,6 +228,19 @@ to composed keymaps with mode overrides on top of the base maps."
                  (push (cdr entry) inner-overrides))
                 ((eq sub 'textobj-outer)
                  (push (cdr entry) outer-overrides))))))
+    ;; Keymap-targeted textobj overrides
+    (dolist (entry helixel--keymap-bindings)
+      (let ((key (caar entry))
+            (sub (cdar entry)))
+        (let ((target (if (symbolp key)
+                          (and (boundp key) (symbol-value key))
+                        key)))
+          (when (and target
+                     (helixel--keymap-active-p target active-maps))
+            (cond ((eq sub 'textobj-inner)
+                   (push (cdr entry) inner-overrides))
+                  ((eq sub 'textobj-outer)
+                   (push (cdr entry) outer-overrides)))))))
     ;; Restore defaults when no overrides
     (unless (or inner-overrides outer-overrides)
       (when (local-variable-p 'helixel-textobj-map)

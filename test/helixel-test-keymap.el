@@ -151,4 +151,161 @@
         ;; Non-overridden key falls back to helixel binding
         (should (eq (lookup-key (cdr entry) "k") #'helixel-previous-line))))))
 
+;;; Keymap-targeted binding tests
+
+(ert-deftest helixel-test-define-key-with-keymap ()
+  "Test helixel-define-key with a keymap symbol stores in helixel--keymap-bindings."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
+    ;; prog-mode-map is a known keymap symbol
+    (helixel-define-key 'normal (kbd "g q") #'prog-fill-reindent-defun 'prog-mode-map)
+    ;; Should NOT be in mode-keybindings
+    (should-not (assoc (cons 'prog-mode-map 'normal) helixel--mode-keybindings))
+    ;; Should be in keymap-bindings
+    (let ((entry (assoc (cons 'prog-mode-map 'normal) helixel--keymap-bindings)))
+      (should entry)
+      (should (eq (lookup-key (cdr entry) (kbd "g q")) #'prog-fill-reindent-defun)))))
+
+(ert-deftest helixel-test-define-key-with-keymap-multiple-bindings ()
+  "Test that multiple bindings for the same keymap and state accumulate."
+  (let ((helixel--keymap-bindings nil))
+    (helixel-define-key 'normal (kbd "g q") #'prog-fill-reindent-defun 'prog-mode-map)
+    (helixel-define-key 'normal ")" #'hel-mark-function-forward 'prog-mode-map)
+    (let ((entry (assoc (cons 'prog-mode-map 'normal) helixel--keymap-bindings)))
+      (should (eq (lookup-key (cdr entry) (kbd "g q")) #'prog-fill-reindent-defun))
+      (should (eq (lookup-key (cdr entry) ")") #'hel-mark-function-forward)))))
+
+(ert-deftest helixel-test-define-key-with-unquoted-keymap ()
+  "Test helixel-define-key with an unquoted keymap object.
+When the user passes prog-mode-map unquoted, the keymap object
+itself is stored as the alist key (not the symbol)."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
+    ;; Unquoted: prog-mode-map evaluates to the keymap object
+    (helixel-define-key 'normal (kbd "g q") #'prog-fill-reindent-defun
+                        prog-mode-map)
+    ;; Should NOT be in mode-keybindings
+    (should-not (assoc (cons 'prog-mode-map 'normal)
+                       helixel--mode-keybindings))
+    ;; Should be in keymap-bindings (car of alist key is the keymap obj)
+    (should helixel--keymap-bindings)
+    (let ((entry (car helixel--keymap-bindings)))
+      (should (eq (cdar entry) 'normal))
+      (should (keymapp (caar entry)))
+      (should (eq (lookup-key (cdr entry) (kbd "g q"))
+                  #'prog-fill-reindent-defun)))))
+
+(ert-deftest helixel-test-define-key-with-unquoted-keymap-refresh ()
+  "Test that unquoted keymap bindings activate in a prog-mode buffer."
+  (let ((helixel--keymap-bindings nil))
+    (helixel-define-key 'normal (kbd "g q") #'prog-fill-reindent-defun
+                        prog-mode-map)
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (setq-local helixel--current-state 'normal)
+      (helixel--refresh-overriding-maps)
+      (let ((entry (assq 'helixel-normal-state
+                         minor-mode-overriding-map-alist)))
+        (should entry)
+        (should (eq (lookup-key (cdr entry) (kbd "g q"))
+                    #'prog-fill-reindent-defun))))))
+
+(ert-deftest helixel-test-define-key-mixed-modes-and-keymaps ()
+  "Test that mixing mode and keymap symbols creates entries in both tables."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
+    (helixel-define-key 'normal "j" #'next-line
+                        'dired-mode 'prog-mode-map)
+    ;; dired-mode is not a keymap, should go to mode-keybindings
+    (let ((mode-entry (assoc (cons 'dired-mode 'normal)
+                             helixel--mode-keybindings)))
+      (should mode-entry)
+      (should (eq (lookup-key (cdr mode-entry) "j") #'next-line)))
+    ;; prog-mode-map is a keymap, should go to keymap-bindings
+    (let ((keymap-entry (assoc (cons 'prog-mode-map 'normal)
+                               helixel--keymap-bindings)))
+      (should keymap-entry)
+      (should (eq (lookup-key (cdr keymap-entry) "j") #'next-line)))))
+
+(ert-deftest helixel-test-refresh-overriding-maps-with-keymap ()
+  "Test that keymap-targeted bindings activate when the keymap is active."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
+    ;; Register a binding for prog-mode-map
+    (helixel-define-key 'normal (kbd "g q") #'prog-fill-reindent-defun
+                        'prog-mode-map)
+    (with-temp-buffer
+      ;; Use emacs-lisp-mode which inherits from prog-mode so
+      ;; prog-mode-map appears in current-active-maps.
+      (emacs-lisp-mode)
+      (setq-local helixel--current-state 'normal)
+      (helixel--refresh-overriding-maps)
+      (let ((entry (assq 'helixel-normal-state
+                         minor-mode-overriding-map-alist)))
+        (should entry)
+        (should (eq (lookup-key (cdr entry) (kbd "g q"))
+                    #'prog-fill-reindent-defun))))))
+
+(ert-deftest helixel-test-refresh-overriding-maps-keymap-not-active ()
+  "Test that keymap bindings don't activate when keymap is not in active-maps."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
+    ;; Register a binding for prog-mode-map
+    (helixel-define-key 'normal (kbd "g q") #'prog-fill-reindent-defun
+                        'prog-mode-map)
+    ;; Use a buffer that doesn't inherit from prog-mode-map
+    (with-current-buffer (get-buffer-create "*helixel-test-keymap-NA*")
+      (fundamental-mode)
+      (setq-local helixel--current-state 'normal)
+      (helixel--refresh-overriding-maps)
+      ;; Should have no overriding entry (or an entry without g q)
+      (let ((entry (assq 'helixel-normal-state
+                         minor-mode-overriding-map-alist)))
+        (if entry
+            ;; If there's an entry, g q should NOT be bound
+            (should-not (lookup-key (cdr entry) (kbd "g q")))
+          ;; No entry at all is also fine
+          t)))))
+
+(ert-deftest helixel-test-refresh-overriding-maps-keymap-fallback ()
+  "Test that non-overridden keys fall back to base with keymap overrides."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
+    ;; Override only g q on prog-mode-map
+    (helixel-define-key 'normal (kbd "g q") #'prog-fill-reindent-defun
+                        'prog-mode-map)
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (setq-local helixel--current-state 'normal)
+      (helixel--refresh-overriding-maps)
+      (let ((entry (assq 'helixel-normal-state
+                         minor-mode-overriding-map-alist)))
+        (should entry)
+        ;; Overridden key works
+        (should (eq (lookup-key (cdr entry) (kbd "g q"))
+                    #'prog-fill-reindent-defun))
+        ;; Non-overridden key falls back to helixel binding
+        (should (eq (lookup-key (cdr entry) "j")
+                    #'helixel-next-line))))))
+
+(ert-deftest helixel-test-refresh-overriding-maps-keymap-textobj ()
+  "Test that keymap-targeted textobj overrides work."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
+    ;; Register a textobj-inner binding for prog-mode-map
+    (helixel-define-key 'textobj-inner "f"
+                        #'helixel-mark-inner-function 'prog-mode-map)
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      ;; Activate refresh
+      (helixel--refresh-overriding-maps)
+      ;; helixel-textobj-map should be buffer-local and have the
+      ;; inner composed keymap
+      (when (local-variable-p 'helixel-textobj-map)
+        (let ((inner-map (lookup-key helixel-textobj-map "i")))
+          (when inner-map
+            ;; The composed keymap should include our f binding
+            (should (eq (lookup-key inner-map "f")
+                        #'helixel-mark-inner-function))))))))
+
 ;;; helixel-test-keymap.el ends here

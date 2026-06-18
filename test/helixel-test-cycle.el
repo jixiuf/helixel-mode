@@ -273,8 +273,8 @@
       (setq helixel--live-action nil)
       (setq helixel--action-pos nil))))
 
-(ert-deftest helixel-test-cycle-mark-group-span-uses-group-mr ()
-  "cycle-mark-group-span uses :group-span-mr when available."
+(ert-deftest helixel-test-cycle-mark-group-span-on-the-fly ()
+  "cycle-mark-group-span computes bounding box on-the-fly from all events."
   (let ((helixel--action-ring nil))
     (unwind-protect
         (helixel-test-with-buffer "abcdefghijklmnop"
@@ -282,32 +282,34 @@
                             (set-marker (make-marker) 4)))
                  (mr2 (cons (set-marker (make-marker) 6)
                             (set-marker (make-marker) 8)))
-                 (gs-mr (cons (set-marker (make-marker) 2)
-                              (set-marker (make-marker) 12)))
+                 (mr3 (cons (set-marker (make-marker) 2)
+                            (set-marker (make-marker) 12)))
+                 (ev3 (make-helixel-action
+                       :category 'edit :subcat 'paste-after
+                       :mark-region mr3))
                  (ev2 (make-helixel-action
                        :category 'edit :subcat 'paste-after
-                       :mark-region mr2
-                       :payload `(:group-span-mr ,gs-mr)))
+                       :mark-region mr2))
                  (ev1 (make-helixel-action
                        :category 'edit :subcat 'paste-after
                        :mark-region mr1)))
-            (setq helixel--action-ring (list ev2 ev1))
+            ;; Three events: mr1=(2,4) mr2=(6,8) mr3=(2,12)
+            ;; Bounding box = (min cars=2, max cdrs=12) = (2 . 12)
+            (setq helixel--action-ring (list ev3 ev2 ev1))
             (goto-char 14)
             (let ((gpos (helixel-action--cycle-mark-group-span
                          helixel--action-ring 0)))
-              ;; Should use :group-span-mr from newest (ev2),
-              ;; giving span 2-12 instead of 2-8.
               (should (= (mark t) 2))
               (should (= (point) 12))
               (should (region-active-p))
-              (should (= gpos 1))
+              (should (= gpos 2))
               ;; Clean up
               (set-marker (car mr1) nil)
               (set-marker (cdr mr1) nil)
               (set-marker (car mr2) nil)
               (set-marker (cdr mr2) nil)
-              (set-marker (car gs-mr) nil)
-              (set-marker (cdr gs-mr) nil))))
+              (set-marker (car mr3) nil)
+              (set-marker (cdr mr3) nil))))
       (setq helixel--action-ring nil))))
 
 ;; ---------------------------------------------------------------------------
@@ -540,7 +542,7 @@
     (helixel-forward-word-start)  ;; first w: pos4 → pos7, mark-region=(1 . 7)
     (helixel-forward-word-start)  ;; second w: pos7 → pos12, mark-region=(7 . 12)
     ;; Two events form a group (movement.word).
-    ;; group-span-mr = (1 . 12), group-start is the first event.
+    ;; group span = (1 . 12), group-start is the first event.
     ;; For C-;, mr car should be group-start's start-point (=4), not thing-start (=1).
     (helixel-action-cycle-jump)
     (should (region-active-p))

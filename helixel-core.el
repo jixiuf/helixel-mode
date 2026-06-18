@@ -1360,8 +1360,7 @@ The result is fully independent of EVENT for ring storage."
 
 (defun helixel-action--release-markers (event)
   "Free all markers in EVENT via `set-marker' nil.
-Releases mark-region, start-point, and any marker-valued payload
-keys (:group-span-mr, :group-start-point).  No-op if EVENT is nil
+Releases mark-region and start-point.  No-op if EVENT is nil
 or not a `helixel-action-p'.
 
 Call this before discarding an action struct to prevent marker
@@ -1374,18 +1373,7 @@ pending markers still track buffer changes and waste CPU."
       (when (markerp (cdr mr)) (set-marker (cdr mr) nil)))
     (when-let* ((sp (helixel-action-start-point event))
                 ((markerp sp)))
-      (set-marker sp nil))
-    ;; Payload may carry group-span markers added by
-    ;; `helixel--action-commit' during group pre-computation.
-    (when-let* ((gs (plist-get (helixel-action-payload event)
-                               :group-span-mr))
-                ((consp gs)))
-      (when (markerp (car gs)) (set-marker (car gs) nil))
-      (when (markerp (cdr gs)) (set-marker (cdr gs) nil)))
-    (when-let* ((gsp (plist-get (helixel-action-payload event)
-                                :group-start-point))
-                ((markerp gsp)))
-      (set-marker gsp nil))))
+      (set-marker sp nil))))
 
 (defun helixel-action--same-content-p (e1 e2)
   "Return non-nil if E1 and E2 have identical key content.

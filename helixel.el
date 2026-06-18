@@ -70,7 +70,6 @@ Each init function registers its module's internal hooks only when
 `helixel-mode' is enabled."
   (add-hook 'helixel-mode-on-hook #'helixel-keymap--init-hooks)
   (add-hook 'helixel-mode-on-hook #'helixel-surround--init)
-  (add-hook 'helixel-mode-on-hook #'helixel-ring--init)
   (add-hook 'helixel-mode-on-hook #'helixel-mc-spawn--init)
   (add-hook 'helixel-mode-on-hook #'helixel-mc-integrate--init)
   (add-hook 'helixel-mode-on-hook #'helixel--init-chain-hooks))

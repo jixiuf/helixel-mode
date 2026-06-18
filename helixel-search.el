@@ -711,13 +711,30 @@ When CHAR, TYPE and DIR are given (from \=`,'), use them directly.
 Otherwise (from \=`n') read from `helixel--active-search'.
 Passes CHAR/TYPE/DIR explicitly to `helixel-search--find-char-core'
 so no temp dynamic binding of `helixel--active-search' is needed.
-Updates n-count in the pending sel so \=`.' repeats the full sequence."
+Updates n-count in the pending sel so \=`.' repeats the full sequence.
+Also attaches a runner + payload so the unified mc dispatcher can
+replay this repeat at every fake cursor without re-entering `n'."
   (let ((char (or char (helixel-search--safe-char)))
         (type (or type (helixel-search--safe-type)))
         (dir  (or dir  (helixel-search--current-dir))))
     (unless (and char type)
       (user-error "No find-char to repeat"))
     (helixel--tracking-open 'find-char type)
+    ;; Attach runner + payload (mirrors helixel-search--find-char-exec)
+    ;; so mc dispatch and . replay can use this entry.
+    (when helixel--live-action
+      (setf (helixel-action-payload helixel--live-action)
+            (list :char char :type type :dir dir))
+      (setf (helixel-action-runner helixel--live-action)
+            (lambda (tx)
+              (let ((c (helixel-action-char tx))
+                    (ty (helixel-action-type tx))
+                    (d (helixel-action-dir tx)))
+                (setq helixel--active-search
+                      (make-helixel--last-motion
+                       :category 'find-char :type ty
+                       :char c :dir d))
+                (helixel-search--find-char-core d)))))
     (helixel-search--find-char-core dir char type)
     (helixel--action-commit)
     ;; Track n-count so . repeats the full n sequence.

@@ -4045,5 +4045,55 @@ and mark at match-end (matching isearch's backward orientation)."
                           (min p m) (max p m))))))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-find-char-repeat-n-at-fakes ()
+  "After `fl' broadcast, `n' (repeat) must advance every fake cursor
+to the next occurrence of the same character.  Regression: before the
+fix, `n' did not attach a runner to its action, so the mc dispatcher
+fell back to `call-interactively' which failed."
+  (helixel-test-with-buffer "hello world\ncolor label\nlevel field\n"
+    (helixel-enter-normal-state)
+    ;; Line 1: "hello world"  — 'l' at positions 3, 4, 10
+    ;; Line 2: "color label"  — 'l' at positions 15, 19, 23
+    ;; Line 3: "level field"  — 'l' at positions 25, 29, 34
+    (goto-char 1)
+    ;; Create fake cursors at bol of line 2 and line 3.
+    (helixel-mc--create-fake-cursor 13)   ; line 2 bol (after "\n" at 12)
+    (helixel-mc--create-fake-cursor 25)   ; line 3 bol (after "\n" at 24)
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    ;; f l — real cursor finds first 'l' on line 1 (at position 3).
+    (helixel-find-next-char ?l)
+    (let ((this-command 'helixel-find-next-char))
+      (helixel-mc--post-command))
+    ;; After fl dispatch, each fake must have found its first 'l'.
+    ;; Fake at line2 bol (13): first 'l' at 15 ("color"), point at 16.
+    ;; Fake at line3 bol (25): first 'l' at 25 ("level"), point at 26.
+    (let ((pts (sort (mapcar (lambda (ov)
+                               (marker-position
+                                (helixel-mc-cursor-point ov)))
+                             (helixel-mc-all-cursors))
+                     #'<)))
+      (should (equal '(16 26) pts)))
+    ;; Also verify active-search is set on each fake.
+    (dolist (ov (helixel-mc-all-cursors))
+      (let* ((cs (overlay-get ov 'helixel-pc-state))
+             (as (helixel-pcs-active-search cs)))
+        (should as)
+        (should (eq 'find-char (helixel--last-motion-category as)))
+        (should (eq ?l (helixel--last-motion-char as)))))
+    ;; n — repeat find-char; real cursor moves to next 'l' (col 4 → pt 5).
+    (helixel-search-repeat-next)
+    (let ((this-command 'helixel-search-repeat-next))
+      (helixel-mc--post-command))
+    ;; After n dispatch, each fake must have advanced to its next 'l'.
+    ;; Fake at line2: after 'l' at 15, next is 'l' at 19 ("label"), pt=20.
+    ;; Fake at line3: after 'l' at 25, next is 'l' at 29 ("level"), pt=30.
+    (let ((pts (sort (mapcar (lambda (ov)
+                               (marker-position
+                                (helixel-mc-cursor-point ov)))
+                             (helixel-mc-all-cursors))
+                     #'<)))
+      (should (equal '(20 30) pts)))
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

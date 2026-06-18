@@ -1103,6 +1103,26 @@ first, then runner if any."
 
 ;; ── Unified fake-cursor dispatch ──
 
+(defun helixel-mc--replay-at-one-fake-1 (fresh-runnable cmd)
+  "Replay FRESH-RUNNABLE or `call-interactively' execute CMD.
+Return non-nil on success, nil on error (fake cursor deleted).
+Uses a separate function (not inline in the macro) to avoid any
+interaction between `condition-case' and `call-interactively' that
+can cause spurious errors in the fallback path."
+  (condition-case e
+      (progn
+        (if fresh-runnable
+            (helixel-with-replay-as 'dot
+              (helixel-action-replay fresh-runnable))
+          (helixel-mc--call-interactively cmd))
+        t)
+    (search-failed nil)
+    (user-error t)  ;; user-error: cursor survives
+    (error
+     (message "helixel-mc: %s at fake: %s"
+              cmd (error-message-string e))
+     nil)))
+
 (defmacro helixel-mc--replay-at-one-fake (fresh-runnable cmd cursor dead)
   "Replay FRESH-RUNNABLE (or run CMD) at fake CURSOR.
 Appends to DEAD list on `search-failed' or other errors.
@@ -1111,16 +1131,8 @@ Must be a macro (not a function) because `push' on DEAD must
 mutate the caller's binding — a function would only modify its
 own parameter."
   (declare (debug (form form form form)))
-  `(condition-case e
-       (if ,fresh-runnable
-           (helixel-with-replay-as 'dot
-             (helixel-action-replay ,fresh-runnable))
-         (helixel-mc--call-interactively ,cmd))
-     (search-failed (push ,cursor ,dead))
-     (user-error (ignore e))
-     (error (message "helixel-mc: %s at fake: %s"
-                     ,cmd (error-message-string e))
-            (push ,cursor ,dead))))
+  `(unless (helixel-mc--replay-at-one-fake-1 ,fresh-runnable ,cmd)
+     (push ,cursor ,dead)))
 
 (defvar helixel-mc--post-command-depth 0
   "Nesting depth for mc `pre-command-hook' / `post-command-hook'.

@@ -146,60 +146,64 @@ Unset `l' from `help-mode-map' so it falls through to the
 `helixel-backward-char' automatically."
   (keymap-unset help-mode-map "l" t)
   (keymap-unset special-mode-map "h" t)
-  (helixel-define-key 'motion "g b" #'help-go-back 'help-mode)
-  (helixel-define-key 'motion "g f" #'help-go-forward 'help-mode)
-  (helixel-define-key 'motion "g n" #'help-goto-next-page 'help-mode)
-  (helixel-define-key 'motion "g p" #'help-goto-previous-page 'help-mode)
-  (helixel-define-key 'motion "g t" #'forward-button 'help-mode)
-  (helixel-define-key 'motion "g T" #'backward-button 'help-mode)
-  (helixel-define-key 'motion "g r" #'revert-buffer 'help-mode)
-  (helixel-define-key 'motion "g s" #'help-view-source 'help-mode)
-  (helixel-define-key 'motion "g i" #'help-goto-info 'help-mode)
-  (helixel-define-key 'motion "g c" #'help-customize 'help-mode))
+  (helixel-define-key 'motion "gb" #'help-go-back 'help-mode)
+  (helixel-define-key 'motion "gf" #'help-go-forward 'help-mode)
+  (helixel-define-key 'motion "gn" #'help-goto-next-page 'help-mode)
+  (helixel-define-key 'motion "gp" #'help-goto-previous-page 'help-mode)
+  (helixel-define-key 'motion "gt" #'forward-button 'help-mode)
+  (helixel-define-key 'motion "gT" #'backward-button 'help-mode)
+  (helixel-define-key 'motion "gr" #'revert-buffer 'help-mode)
+  (helixel-define-key 'motion "gs" #'help-view-source 'help-mode)
+  (helixel-define-key 'motion "gi" #'help-goto-info 'help-mode)
+  (helixel-define-key 'motion "gc" #'help-customize 'help-mode))
 
 (defun helixel-shims--setup-info-mode ()
   "Setup info-mode keybindings in motion state."
-  (helixel-define-key 'motion "g n" #'Info-next 'Info-mode)
-  (helixel-define-key 'motion "g p" #'Info-prev 'Info-mode)
-  (helixel-define-key 'motion "g u" #'Info-up 'Info-mode)
-  (helixel-define-key 'motion "g t" #'Info-top-node 'Info-mode)
-  (helixel-define-key 'motion "g d" #'Info-directory 'Info-mode)
-  (helixel-define-key 'motion "g m" #'Info-menu 'Info-mode)
-  (helixel-define-key 'motion "g f" #'Info-follow-reference 'Info-mode)
-  (helixel-define-key 'motion "g s" #'Info-search 'Info-mode)
-  (helixel-define-key 'motion "g i" #'Info-index 'Info-mode)
-  (helixel-define-key 'motion "g I" #'Info-virtual-index 'Info-mode)
-  (helixel-define-key 'motion "g l" #'Info-history 'Info-mode)
-  (helixel-define-key 'motion "g ," #'Info-index-next 'Info-mode)
-  (helixel-define-key 'motion "g ?" #'Info-summary 'Info-mode)
-  (helixel-define-key 'motion "g r" #'revert-buffer 'Info-mode))
+  (helixel-define-key 'motion "gn" #'Info-next 'Info-mode)
+  (helixel-define-key 'motion "gp" #'Info-prev 'Info-mode)
+  (helixel-define-key 'motion "gu" #'Info-up 'Info-mode)
+  (helixel-define-key 'motion "gt" #'Info-top-node 'Info-mode)
+  (helixel-define-key 'motion "gd" #'Info-directory 'Info-mode)
+  (helixel-define-key 'motion "gm" #'Info-menu 'Info-mode)
+  (helixel-define-key 'motion "gf" #'Info-follow-reference 'Info-mode)
+  (helixel-define-key 'motion "gs" #'Info-search 'Info-mode)
+  (helixel-define-key 'motion "gi" #'Info-index 'Info-mode)
+  (helixel-define-key 'motion "gI" #'Info-virtual-index 'Info-mode)
+  (helixel-define-key 'motion "gl" #'Info-history 'Info-mode)
+  (helixel-define-key 'motion "g," #'Info-index-next 'Info-mode)
+  (helixel-define-key 'motion "g?" #'Info-summary 'Info-mode)
+  (helixel-define-key 'motion "gr" #'revert-buffer 'Info-mode))
 
 (defun helixel-shims--setup-apropos-mode ()
   "Setup apropos-mode keybindings in motion state."
-  (helixel-define-key 'motion "g r" #'revert-buffer 'apropos-mode))
+  (helixel-define-key 'motion "gr" #'revert-buffer 'apropos-mode))
 
 (defun helixel-shims--setup-shortdoc-mode ()
   "Setup `shortdoc-mode' keybindings in motion state."
-  (helixel-define-key 'motion "g n" #'shortdoc-next-section
-                       'shortdoc-mode)
-  (helixel-define-key 'motion "g p" #'shortdoc-previous-section
-                       'shortdoc-mode))
+  (helixel-define-key 'motion "gn" #'shortdoc-next-section
+                      'shortdoc-mode)
+  (helixel-define-key 'motion "gp" #'shortdoc-previous-section
+                      'shortdoc-mode))
 
 (defun helixel-shims--setup-man-mode ()
   "Setup `Man-mode' keybindings in motion state."
-  (helixel-define-key 'motion "g n" #'Man-next-manpage 'Man-mode)
-  (helixel-define-key 'motion "g p" #'Man-previous-manpage 'Man-mode))
+  (helixel-define-key 'motion "gn" #'Man-next-manpage 'Man-mode)
+  (helixel-define-key 'motion "gp" #'Man-previous-manpage 'Man-mode))
+
+(defun helixel-shims--setup-prog-mode ()
+  "Setup `Man-mode' keybindings in motion state."
+  (helixel-define-key 'normal "gq" #'prog-fill-reindent-defun prog-mode-map))
 
 (defun helixel-shims--setup-woman-mode ()
   "Setup `woman-mode' keybindings in motion state."
-  (helixel-define-key 'motion "g n" #'WoMan-next-manpage 'woman-mode)
-  (helixel-define-key 'motion "g p" #'WoMan-previous-manpage 'woman-mode))
+  (helixel-define-key 'motion "gn" #'WoMan-next-manpage 'woman-mode)
+  (helixel-define-key 'motion "gp" #'WoMan-previous-manpage 'woman-mode))
 
 (defun helixel-shims--setup-eww-mode ()
   "Setup `eww-mode' keybindings in motion state."
-  (helixel-define-key 'motion "g b" #'eww-back-url 'eww-mode)
-  (helixel-define-key 'motion "g f" #'eww-forward-url 'eww-mode)
-  (helixel-define-key 'motion "g r" #'eww-reload 'eww-mode))
+  (helixel-define-key 'motion "gb" #'eww-back-url 'eww-mode)
+  (helixel-define-key 'motion "gf" #'eww-forward-url 'eww-mode)
+  (helixel-define-key 'motion "gr" #'eww-reload 'eww-mode))
 
 ;; ── Deferred registration ──
 ;; We defer calling the setup functions until the target library is
@@ -228,6 +232,7 @@ Called at top-level when this file is loaded."
   (helixel-shims--defer-setup 'apropos 'helixel-shims--setup-apropos-mode)
   (helixel-shims--defer-setup 'shortdoc 'helixel-shims--setup-shortdoc-mode)
   (helixel-shims--defer-setup 'man 'helixel-shims--setup-man-mode)
+  (helixel-shims--defer-setup 'prog-mode 'helixel-shims--setup-prog-mode)
   (helixel-shims--defer-setup 'woman 'helixel-shims--setup-woman-mode)
   (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode))
 

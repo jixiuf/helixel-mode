@@ -1189,15 +1189,35 @@ using advance+apply without recursion."
              (forced-sel (helixel-sel-update-ctx sel :dir forced-dir))
              (forced-action (helixel-action-copy edit)))
         (setf (helixel-action-sel forced-action) forced-sel)
-        (when-let* ((m (car (helixel-action-mark-region forced-action))))
-          (goto-char (marker-position m)))
-        (save-excursion
-          (goto-char (if reverse-p (point-max) (point-min)))
-          (let ((cnt 0))
-            (while (helixel--repeat-advance forced-action forced-action)
-              (cl-incf cnt)
-              (helixel-action-replay forced-action))
-            (helixel--repeat-echo cnt)))))))
+        ;; Remember the start of the original edit so we can skip the
+        ;; already-edited match when the replacement text happens to
+        ;; contain the search pattern again (e.g. hello → helloworld).
+        ;; The marker auto-tracks buffer changes so it stays correct.
+        (let ((orig-edit-pos
+               (when-let* ((m (car (helixel-action-mark-region
+                                   forced-action))))
+                 (copy-marker (marker-position m)))))
+          (when orig-edit-pos
+            (goto-char orig-edit-pos))
+          (save-excursion
+            (goto-char (if reverse-p (point-max) (point-min)))
+            (let ((cnt 0))
+              (while (helixel--repeat-advance forced-action forced-action)
+                (if (and orig-edit-pos
+                         (= (region-beginning)
+                            (marker-position orig-edit-pos)))
+                    ;; This match sits at the same position as the
+                    ;; original edit (the replacement contains the
+                    ;; search pattern).  Skip it so we don't re-edit.
+                    (progn
+                      (goto-char (region-end))
+                      (set-marker orig-edit-pos nil)
+                      (setq orig-edit-pos nil))
+                  (cl-incf cnt)
+                  (helixel-action-replay forced-action)))
+              (when orig-edit-pos
+                (set-marker orig-edit-pos nil))
+              (helixel--repeat-echo cnt))))))))
 
 ;; ── Kind registrations ──
 

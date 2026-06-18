@@ -1723,6 +1723,37 @@ must detect we're still on the same line as the ^ match."
       (helixel-repeat-edit '(4))
       (should (string= (buffer-string) "XXX A XXX B XXX C")))))
 
+(ert-deftest helixel-test-repeat-all-buffer-search-pattern-in-replacement ()
+  "C-u . after /hello c helloworld <ESC> changes all 'hello' to 'helloworld'.
+When the replacement text contains the search pattern (e.g. hello → helloworld),
+the all-buffer scan must skip the already-edited match so it does not re-edit
+the replacement's prefix."
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "hello\nhello\nhello"
+      (goto-char 1)
+      (re-search-forward "hello")
+      (let ((isearch-success t)
+            (isearch-string "hello")
+            (isearch-regexp t)
+            (isearch-forward t)
+            (isearch-other-end (match-beginning 0)))
+        (helixel-search--handle-done nil))
+      (setq helixel--pending-sel
+            (helixel-sel-create
+             'search '(:pattern "hello" :dir forward)))
+      (setq last-command nil
+            this-command 'helixel-change)
+      (helixel-change)
+      (insert "helloworld")
+      (helixel-insert-exit)
+      ;; C-u . -> all matches from point-min forward
+      (helixel-repeat-edit '(4))
+      ;; Every "hello" should become "helloworld" exactly once.
+      ;; If the scan re-edits the already-modified first line,
+      ;; we'd get "helloworldworld".
+      (should (string= (buffer-string)
+                       "helloworld\nhelloworld\nhelloworld")))))
+
 (ert-deftest helixel-test-repeat-all-buffer-forward-insert ()
   "C-u . after /search iXXX<ESC> inserts BEFORE all matches from point-min.
 entry-kind=insert means insert at match-beginning, not match-end."

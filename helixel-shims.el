@@ -191,8 +191,9 @@ Unset `l' from `help-mode-map' so it falls through to the
   (helixel-define-key 'motion "gp" #'Man-previous-manpage 'Man-mode))
 
 (defun helixel-shims--setup-prog-mode ()
-  "Setup `Man-mode' keybindings in motion state."
-  (helixel-define-key 'normal "gq" #'prog-fill-reindent-defun prog-mode-map))
+  "Setup `prog-mode' keybindings in normal state."
+  (when (fboundp 'prog-fill-reindent-defun)
+    (helixel-define-key 'normal "gq" #'prog-fill-reindent-defun prog-mode-map)))
 
 (defun helixel-shims--setup-woman-mode ()
   "Setup `woman-mode' keybindings in motion state."

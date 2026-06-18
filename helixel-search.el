@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2026  jixiuf
 
-;; Author: jixiuf
+;; Author: jixiuf <https://github.com/jixiuf>
 ;; Keywords: convenience
 ;; URL: https://github.com/jixiuf/helixel-mode
 ;; SPDX-License-Identifier: GPL-3.0-or-later

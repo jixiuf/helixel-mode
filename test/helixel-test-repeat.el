@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2025  jixiuf
 
-;; Author: jixiuf
+;; Author: jixiuf <https://github.com/jixiuf>
 ;; Keywords: tests
 ;; Version: 0
 ;; URL: https://github.com/jixiuf/helixel-mode
@@ -508,7 +508,7 @@ than call-interactively (which triggers mode-specific side effects)."
 ;;; helixel-test-repeat-new.el --- Tests for new dot-repeat features  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026  jixiuf
-;; Author: jixiuf
+;; Author: jixiuf <https://github.com/jixiuf>
 ;; Keywords: tests
 
 ;; This program is free software; you can redistribute it and/or modify

@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2025  jixiuf
 
-;; Author: jixiuf
+;; Author: jixiuf <https://github.com/jixiuf>
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Keywords: convenience
 

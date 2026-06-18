@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2025  jixiuf
 
-;; Author: jixiuf
+;; Author: jixiuf <https://github.com/jixiuf>
 ;; Keywords: tests
 ;; Version: 0
 ;; URL: https://github.com/jixiuf/helixel-mode

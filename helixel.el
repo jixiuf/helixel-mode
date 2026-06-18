@@ -2,7 +2,8 @@
 
 ;; Copyright (C) 2025  jixiuf
 
-;; Author: jixiuf
+;; Author: jixiuf <https://github.com/jixiuf>
+;; Assisted-by: deepseek-v4-pro
 ;; Keywords: convenience
 ;; Version: 0.9.0
 ;; Package-Requires: ((emacs "29.1"))

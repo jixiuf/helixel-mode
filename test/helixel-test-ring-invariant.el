@@ -64,6 +64,50 @@
       (helixel--action-commit)
       (should (= (length helixel--action-ring) after-first)))))
 
+(ert-deftest helixel-test-inv-ring-commit-no-dedup-different-cdr ()
+  "INV: two commits with same car but different cdr are NOT deduped.
+Prevents consecutive pastes at the same cursor position from
+amalgamating into a single ring entry (Bug: ; newest-for-mark)."
+  (helixel-ring-inv-with-buffer "abc\n"
+    (setq helixel--live-action
+          (make-helixel-action
+           :category 'edit :subcat 'paste-after
+           :mark-region (cons (copy-marker 1) (copy-marker 5 t))
+           :timestamp (float-time)
+           :buffer (current-buffer)))
+    (helixel--action-commit)
+    (let ((after-first (length helixel--action-ring)))
+      (setq helixel--live-action
+            (make-helixel-action
+             :category 'edit :subcat 'paste-after
+             :mark-region (cons (copy-marker 1) (copy-marker 3 t))
+             :timestamp (float-time)
+             :buffer (current-buffer)))
+      (helixel--action-commit)
+      ;; Same car (1), different cdr (5 vs 3) — must NOT dedup.
+      (should (= (length helixel--action-ring) (1+ after-first))))))
+
+(ert-deftest helixel-test-inv-ring-commit-dedups-same-car-and-cdr ()
+  "INV: two commits with same car AND cdr still dedup."
+  (helixel-ring-inv-with-buffer "abc\n"
+    (setq helixel--live-action
+          (make-helixel-action
+           :category 'edit :subcat 'paste-after
+           :mark-region (cons (copy-marker 1) (copy-marker 5 t))
+           :timestamp (float-time)
+           :buffer (current-buffer)))
+    (helixel--action-commit)
+    (let ((after-first (length helixel--action-ring)))
+      (setq helixel--live-action
+            (make-helixel-action
+             :category 'edit :subcat 'paste-after
+             :mark-region (cons (copy-marker 1) (copy-marker 5 t))
+             :timestamp (float-time)
+             :buffer (current-buffer)))
+      (helixel--action-commit)
+      ;; Same car AND cdr — still dedup.
+      (should (= (length helixel--action-ring) after-first)))))
+
 ;; ── INV-RING-2: cap respected ──
 
 (ert-deftest helixel-test-inv-ring-cap-respected ()

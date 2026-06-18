@@ -555,15 +555,25 @@ Old markers are freed before replacement to prevent leaks."
   "Mark the full group span for the group containing RING[POS].
 Pushes mark to the group-start's begin, moves point to the
 newest event's end, and activates the region.  Returns the
-group-start position."
+group-start position.
+
+Uses the pre-computed :group-span-mr from the newest event when
+available (see `helixel--on-action-commit-group-span'), falling
+back to the raw mark-regions otherwise."
   (let* ((gpos (helixel--gr-group-start ring pos
                  #'helixel-action--same-group-p))
          (grp-event (nth gpos ring))
          (newest-pos (helixel--gr-group-newest ring pos
                        #'helixel-action--same-group-p))
-         (mr-begin (car (helixel-action-mark-region grp-event)))
-         (mr-end (cdr (helixel-action-mark-region
-                       (nth newest-pos ring)))))
+         (newest-event (nth newest-pos ring))
+         (gs-mr (plist-get (helixel-action-payload newest-event)
+                            :group-span-mr))
+         (mr-begin (if gs-mr
+                       (car gs-mr)
+                     (car (helixel-action-mark-region grp-event))))
+         (mr-end (if gs-mr
+                     (cdr gs-mr)
+                   (cdr (helixel-action-mark-region newest-event)))))
     (push-mark mr-begin t t)
     (goto-char mr-end)
     (activate-mark)

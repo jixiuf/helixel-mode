@@ -1389,17 +1389,21 @@ pending markers still track buffer changes and waste CPU."
 
 (defun helixel-action--same-content-p (e1 e2)
   "Return non-nil if E1 and E2 have identical key content.
-Compares category, subcat, marker position, and — if both carry an
-op — op/sel/payload.  Two events at different positions are never
-the same."
+Compares category, subcat, marker positions (car and cdr), and — if
+both carry an op — op/sel/payload.  Two events with different extents
+are never the same (prevents consecutive paste amalgamation)."
   (if (or (null e1) (null e2))
       (eq e1 e2)
-    (let ((op1 (helixel-action-op e1))
-          (op2 (helixel-action-op e2)))
+    (let* ((op1 (helixel-action-op e1))
+           (op2 (helixel-action-op e2))
+           (mr1 (helixel-action-mark-region e1))
+           (mr2 (helixel-action-mark-region e2)))
       (and (eq (helixel-action-category e1) (helixel-action-category e2))
            (eq (helixel-action-subcat e1) (helixel-action-subcat e2))
-           (= (marker-position (car (helixel-action-mark-region e1)))
-              (marker-position (car (helixel-action-mark-region e2))))
+           (= (marker-position (car mr1))
+              (marker-position (car mr2)))
+           (= (marker-position (cdr mr1))
+              (marker-position (cdr mr2)))
            ;; If exactly one side has an op, they differ.
            (eq (and op1 t) (and op2 t))
            ;; If both have no replay data (no op, no payload, no sel),

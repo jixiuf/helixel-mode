@@ -162,6 +162,154 @@
 ;; Integration: ; after paste selects newest then full group
 ;; ---------------------------------------------------------------------------
 
+(ert-deftest helixel-test-cycle-paste-consecutive-not-deduped ()
+  "Consecutive pastes at the same position produce separate ring entries."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil))
+    (unwind-protect
+        (helixel-test-with-buffer "hello world"
+          (helixel-forward-word-start)
+          (setq helixel--sel-type-override nil)
+          (let ((this-command 'helixel-kill-ring-save))
+            (helixel-kill-ring-save))
+          (goto-char (point-max))
+          (dotimes (_ 4)
+            (let ((this-command 'helixel-yank-before)
+                  (helixel--current-command 'helixel-yank-before))
+              (helixel-yank-before)))
+          (let ((paste-count
+                 (cl-count-if
+                  (lambda (e)
+                    (eq 'paste-before (helixel-action-subcat e)))
+                  helixel--action-ring)))
+            (should (= 4 paste-count))))
+      (setq helixel--action-ring nil)
+      (setq helixel--live-action nil))))
+
+(ert-deftest helixel-test-cycle-paste-first-semicolon-selects-newest ()
+  "After PPPP, the first ; selects only the last paste."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil)
+        (helixel-action-cycle-categories '(edit movement))
+        (helixel-action-cycle-newest-for-mark '(edit)))
+    (unwind-protect
+        (helixel-test-with-buffer "hello world"
+          (helixel-forward-word-start)
+          (setq helixel--sel-type-override nil)
+          (let ((this-command 'helixel-kill-ring-save))
+            (helixel-kill-ring-save))
+          (goto-char (point-max))
+          (dotimes (_ 4)
+            (let ((this-command 'helixel-yank-before)
+                  (helixel--current-command 'helixel-yank-before))
+              (helixel-yank-before)))
+          (let ((last-command 'helixel-yank-before))
+            (helixel-action-cycle))
+          (should (region-active-p))
+          (let ((r1 (buffer-substring (region-beginning) (region-end))))
+            ;; First ; selects only the last paste ("hello ", 6 chars)
+            (should (= 6 (length r1)))))
+      (setq helixel--action-ring nil)
+      (setq helixel--live-action nil)
+      (setq helixel--action-pos nil))))
+
+(ert-deftest helixel-test-cycle-paste-second-semicolon-selects-all ()
+  "After PPPP, the second ; selects all 4 pastes."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil)
+        (helixel-action-cycle-categories '(edit movement))
+        (helixel-action-cycle-newest-for-mark '(edit)))
+    (unwind-protect
+        (helixel-test-with-buffer "hello world"
+          (helixel-forward-word-start)
+          (setq helixel--sel-type-override nil)
+          (let ((this-command 'helixel-kill-ring-save))
+            (helixel-kill-ring-save))
+          (goto-char (point-max))
+          (dotimes (_ 4)
+            (let ((this-command 'helixel-yank-before)
+                  (helixel--current-command 'helixel-yank-before))
+              (helixel-yank-before)))
+          ;; First ;
+          (let ((last-command 'helixel-yank-before))
+            (helixel-action-cycle))
+          ;; Second ; should select all 4 pastes (24 chars)
+          (let ((last-command 'helixel-action-cycle)
+                (helixel--action-pos helixel--action-pos))
+            (helixel-action-cycle))
+          (should (region-active-p))
+          (let ((r2 (buffer-substring (region-beginning) (region-end))))
+            (should (= 24 (length r2)))))
+      (setq helixel--action-ring nil)
+      (setq helixel--live-action nil)
+      (setq helixel--action-pos nil))))
+
+(ert-deftest helixel-test-cycle-paste-after-newest-for-mark ()
+  "After pppp, the first ; selects only the last paste (paste-after variant)."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil)
+        (helixel-action-cycle-categories '(edit movement))
+        (helixel-action-cycle-newest-for-mark '(edit)))
+    (unwind-protect
+        (helixel-test-with-buffer "hello world"
+          (helixel-forward-word-start)
+          (setq helixel--sel-type-override nil)
+          (let ((this-command 'helixel-kill-ring-save))
+            (helixel-kill-ring-save))
+          (goto-char 1)
+          (dotimes (_ 4)
+            (let ((this-command 'helixel-yank)
+                  (helixel--current-command 'helixel-yank))
+              (helixel-yank)))
+          (let ((last-command 'helixel-yank))
+            (helixel-action-cycle))
+          (should (region-active-p))
+          (let ((r1 (buffer-substring (region-beginning) (region-end))))
+            (should (= 6 (length r1)))))
+      (setq helixel--action-ring nil)
+      (setq helixel--live-action nil)
+      (setq helixel--action-pos nil))))
+
+(ert-deftest helixel-test-cycle-mark-group-span-uses-group-mr ()
+  "cycle-mark-group-span uses :group-span-mr when available."
+  (let ((helixel--action-ring nil))
+    (unwind-protect
+        (helixel-test-with-buffer "abcdefghijklmnop"
+          (let* ((mr1 (cons (set-marker (make-marker) 2)
+                            (set-marker (make-marker) 4)))
+                 (mr2 (cons (set-marker (make-marker) 6)
+                            (set-marker (make-marker) 8)))
+                 (gs-mr (cons (set-marker (make-marker) 2)
+                              (set-marker (make-marker) 12)))
+                 (ev2 (make-helixel-action
+                       :category 'edit :subcat 'paste-after
+                       :mark-region mr2
+                       :payload `(:group-span-mr ,gs-mr)))
+                 (ev1 (make-helixel-action
+                       :category 'edit :subcat 'paste-after
+                       :mark-region mr1)))
+            (setq helixel--action-ring (list ev2 ev1))
+            (goto-char 14)
+            (let ((gpos (helixel-action--cycle-mark-group-span
+                         helixel--action-ring 0)))
+              ;; Should use :group-span-mr from newest (ev2),
+              ;; giving span 2-12 instead of 2-8.
+              (should (= (mark t) 2))
+              (should (= (point) 12))
+              (should (region-active-p))
+              (should (= gpos 1))
+              ;; Clean up
+              (set-marker (car mr1) nil)
+              (set-marker (cdr mr1) nil)
+              (set-marker (car mr2) nil)
+              (set-marker (cdr mr2) nil)
+              (set-marker (car gs-mr) nil)
+              (set-marker (cdr gs-mr) nil))))
+      (setq helixel--action-ring nil))))
+
 ;; ---------------------------------------------------------------------------
 ;; After y (copy), ; re-selects copied region
 ;; ---------------------------------------------------------------------------

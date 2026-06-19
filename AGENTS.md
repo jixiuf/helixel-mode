@@ -1,13 +1,16 @@
 # AGENTS.md — helixel-mode
 
+> User docs: `docs/USER-GUIDE.md` | Extension API: `docs/API.md`
+> Architecture: `docs/ARCHITECTURE.md` | Debug: `docs/DEBUG-SKILL.md`
+
 ## File Map
 
 | File | Role |
 |------|------|
-| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel--last-action`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel-last-action`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel--record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel-record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload.  Replay iterates the list and `helixel-action-replay`s each entry.  No more kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
@@ -107,7 +110,7 @@ Notes:
 - `helixel--replace-region` lives in `helixel-editing.el`.
 - `helixel--delete-selection` lives in `helixel-editing.el`.
 - `helixel--swap-source-type` lives in `helixel-core.el`.
-- `helixel--last-action` lives in `helixel-core.el` (buffer-local).
+- `helixel-last-action` lives in `helixel-core.el` (buffer-local).
   Every module that requires `helixel-core` can read/write the most recent transaction.
 - `declare-function` counts are minimal and only for third-party packages:
   - `helixel-keymap.el`: 7 (flymake, eglot)
@@ -208,7 +211,7 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel--op-moves-point-p op)        → boolean
 
 ;; ── Repeat ──
-(helixel--record-action op &rest extra)  ; stores action + commits event
+(helixel-record-action op &rest extra)  ; stores action + commits event
 (helixel-action-replay action)           ; calls :preposition (if any), then :runner on action
 (helixel-repeat-edit &optional prefix) ; bound to .
 (helixel-repeat-selection &optional prefix) ; bound to M-.  (preview, no edit)
@@ -267,7 +270,7 @@ these side effects in tests, call the underlying function directly instead.
 - First line must be a complete sentence
 - Function args must appear in docstring (uppercase)
 
-### helixel--last-action is buffer-local
+### helixel-last-action is buffer-local
 `. ` replays the last edit from the current buffer only.
 
 ### helixel-action-create keyword handling
@@ -327,7 +330,7 @@ C-o / C-i remain real-only.
 
 ### Multi-cursor + `.` / `@` integration
 `helixel-repeat-edit' is whitelisted ON for multi-cursors: each
-cursor's snapshotted `helixel--last-action' is replayed at its own
+cursor's snapshotted `helixel-last-action' is replayed at its own
 position.  `helixel-repeat-chain-end' commits a chain action whose
 `by-command' stamp is `helixel-repeat-chain-end'; mc-integrate's
 `action-commit-hook' handler detects this and broadcasts the new
@@ -430,6 +433,6 @@ that calls a `defsubst` defined in `helixel-core.el` is compiled AFTER
 
 `helixel-define-command`, `helixel-define-operator`, and
 `helixel-with-action-tracking` are documented in detail in
-[docs/MACROS.md](docs/MACROS.md) — including auto-injected behavior
+`docs/API.md` — including auto-injected behavior
 (`helixel--tracking-open`, highlight clearing, visual-move tracking)
 and a decision flowchart for choosing the right macro.

@@ -21,7 +21,7 @@
 | Struct | Role | Mutable? |
 |--------|------|----------|
 | `helixel-sel` | Selection descriptor (kind + ctx + recreate closure) | Immutable (copy on update) |
-| `helixel-action` | Unified struct for replay AND history (op + sel + payload + runner + display + category + subcat + by-command + preposition + mark-region + timestamp + buffer) | `helixel--last-action` is the latest action, mutable cell; ring entries are immutable after commit |
+| `helixel-action` | Unified struct for replay AND history (op + sel + payload + runner + display + category + subcat + by-command + preposition + mark-region + timestamp + buffer) | `helixel-last-action` is the latest action, mutable cell; ring entries are immutable after commit |
 
 The single `helixel-action` struct serves both replay and history.
 All accessors (`helixel-action-op`, `helixel-action-sel`,
@@ -71,7 +71,7 @@ Both store `helixel-action` structs. The jump-log stores a subset of ring events
 
 ```
 Editing command
-  → helixel--record-action (creates an event tx, stores as helixel--last-action)
+  → helixel-record-action (creates an event tx, stores as helixel-last-action)
   → helixel--action-commit
     → stamp :by-command
     → push to helixel--action-ring (dedup, cap)
@@ -131,11 +131,11 @@ helixel--repeat-edit-default
 
 ### Recording
 
-`helixel--record-action(op, &rest extra)`:
+`helixel-record-action(op, &rest extra)`:
 1. Pop pending sel via `helixel--sel-pop`
 2. Look up runner from op registry
 3. Create action via `helixel-action-create`
-4. Store as `helixel--last-action`
+4. Store as `helixel-last-action`
 5. Commit event via `helixel--action-commit`
 
 ### Insert Recording
@@ -310,7 +310,7 @@ helixel-core (cl-lib only; includes replay context + named registers)
 | Variable | Location | Purpose |
 |----------|----------|---------|
 | `helixel--pending-sel` | `helixel-core.el` | Pending selection descriptor |
-| `helixel--last-action` | `helixel-core.el` | Most recent edit transaction |
+| `helixel-last-action` | `helixel-core.el` | Most recent edit transaction |
 | `helixel--live-action` | `helixel-ring.el` | Current in-progress event |
 | `helixel--active-search` | `helixel-search.el` | Active search direction+pattern |
 
@@ -322,7 +322,7 @@ ERT tests across 22 test files.  Key conventions:
 
 - `(helixel-test-with-buffer "content" body...)` — creates temp buffer with `transient-mark-mode 1`
 - Set `last-command` and `this-command` before calling selection/edit functions
-- For dot-repeat tests: build action with `helixel-action-create` and set `helixel--last-action`
+- For dot-repeat tests: build action with `helixel-action-create` and set `helixel-last-action`
 - For chain tests: use `helixel-chain--make-test-action` helper
 - Max 12s timeout per test run; zero hangs expected
 
@@ -338,7 +338,7 @@ User presses `.`
   │
   ▼
 helixel-repeat.el:helixel-repeat-edit
-  ├── Resolves helixel--last-action (per-buffer)
+  ├── Resolves helixel-last-action (per-buffer)
   ├── Decodes prefix via helixel-repeat-prefix struct
   ├── helixel--repeat-setup: flips dir if needed, resets search scratch
   │
@@ -376,7 +376,7 @@ Key invariants:
 - The `helixel-replay` struct tracks the current replay context
   (origin: `dot` / `comma` / `chain` / `insert` / `mc-fake` / `mc-batch`);
   `helixel-replaying-p` gates all record/commit side effects.
-- `helixel--last-action` IS buffer-local (`defvar-local`).  `.' replays
+- `helixel-last-action` IS buffer-local (`defvar-local`).  `.' replays
   the last edit in the current buffer only.
 - The runner closure stored in the event struct was captured at record time
   from the op registry, so replay never queries the registry.

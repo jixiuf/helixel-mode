@@ -1117,45 +1117,37 @@ first, then runner if any."
 ;; ── Unified fake-cursor dispatch ──
 
 (defun helixel-mc--replay-at-one-fake-1 (fresh-runnable cmd)
-  "Replay FRESH-RUNNABLE or \=`call-interactively' execute CMD.
+  "Dispatch CMD (or FRESH-RUNNABLE) at one fake cursor.
 Return non-nil on success, nil on error (fake cursor deleted).
-Uses a separate function (not inline in the macro) to avoid any
-interaction between \=`condition-case' and \=`call-interactively' that
-can cause spurious errors in the fallback path.
 
-The \=`dot' replay wrapper is no longer needed on the
-\=`call-interactively' fallback because
-\=`helixel-mc--create-fake-cursor' already sets
-\=`helixel--live-action' to nil on fresh fake cursors — there
-is no stale live-action to suppress.  Removing it lets
-\=`helixel--tracking-open' populate each fake's per-cursor
-event-ring so \=`;' cycling works correctly after mc dispatch.
+Design: a fake cursor should execute commands like the real cursor.
+The only exception is operator commands (op non-nil), which may
+prompt (surround-*, replace-char) or change global state
+\(change → insert).  Those replay the pre-built runner.
 
-For fresh-runnable movement commands (op = nil) we call
-\=`helixel--tracking-open' + \=`helixel-action-replay' +
-\=`helixel--action-commit' to record a per-fake ring entry.
-Edit commands (op non-nil) keep the runner-replay path to
-avoid re-prompting (surround-*, replace-char)."
+Movement / search / textobj commands (op = nil) run the runner
+AND record a per-fake ring entry so \=`;' cycling works.
+Fallback commands (no fresh action) run via
+\=`call-interactively' with no suppression — the fake's
+\=`live-action' is nil at creation, so there is no stale state.
+The \=`mc-fake' replay context does NOT inhibit
+\=`helixel--tracking-open', so rings grow naturally."
   (condition-case e
       (progn
         (if fresh-runnable
             (if (helixel-action-op fresh-runnable)
-                ;; Edit: replay runner to avoid prompting.
-                (helixel-with-replay-as 'dot
-                  (helixel-action-replay fresh-runnable))
-              ;; Movement (op nil): replay runner AND record a
-              ;; per-fake ring entry so `;' cycling works at the
-              ;; fake cursor.  tracking-open + action-replay +
-              ;; commit mirrors what the full command would do.
+                ;; Operator command: replay runner (no prompts).
+                (helixel-action-replay fresh-runnable)
+              ;; Non-operator: run the runner AND record a
+              ;; per-fake ring entry via tracking-open + commit.
               (progn
                 (helixel--tracking-open
                  (helixel-action-category fresh-runnable)
                  (helixel-action-subcat fresh-runnable))
                 (helixel-action-replay fresh-runnable)
                 (helixel--action-commit)))
-          ;; No fresh action — run interactively.  No dot-replay
-          ;; wrapper so `helixel--tracking-open' populates the
-          ;; per-fake event-ring.
+          ;; No fresh-runnable: run via call-interactively.
+          ;; mc-fake context → tracking-open works → ring grows.
           (helixel-mc--call-interactively cmd))
         t)
     (search-failed nil)

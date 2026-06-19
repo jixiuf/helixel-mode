@@ -645,14 +645,15 @@ equality check in `.' fails), so no global hook is needed.")
 
 
 (defun helixel--repeat-flip-action-dir ()
-  "Toggle `helixel--repeat-permanent-flip' for line/search selections.
+  "Toggle `helixel--repeat-permanent-flip' for the last edit's selection kind.
 Like \=`N\=` for search, \=`-.\=` permanently reverses dot-repeat direction.
-No-op for movement, textobj, or nil selections.
+Works for any kind that has a `:flip-dir-fn' registered (line, search, etc.).
+No-op for kinds without directional state (movement, textobj, rect).
 Returns t on success, nil otherwise."
   (when-let* ((tx helixel-last-action)
               (sel (helixel-action-sel tx))
               (kind (helixel-sel-kind sel))
-              ((memq kind '(line search))))
+              ((helixel--kind-flip-dir-fn kind)))
     (setq helixel--repeat-permanent-flip
           (not helixel--repeat-permanent-flip))
     t))

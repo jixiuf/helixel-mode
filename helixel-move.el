@@ -1334,6 +1334,15 @@ advance functions to avoid double-moving."
   :ctx-schema '(:required (:moves) :optional (:inline-advance :normal-mode))
   :recreate #'helixel--recreate-movement
   :advance  #'helixel--repeat-advance-movement
+  :flip-dir-fn (lambda (sel)
+                 (helixel-sel-update-ctx
+                  sel :moves
+                  (mapcar (lambda (entry)
+                            (let* ((cmd (car entry))
+                                   (cnt (cdr entry))
+                                   (rev (helixel--motion-reverse-lookup cmd)))
+                              (cons (or rev cmd) cnt)))
+                          (helixel-sel-movement-moves sel))))
   :display  (lambda (ctx)
               (let ((ms (helixel-sel-movement-moves ctx)))
                 (let ((n (apply #'+ (mapcar #'cdr ms))))

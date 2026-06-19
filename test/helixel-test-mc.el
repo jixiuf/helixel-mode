@@ -1058,6 +1058,32 @@ that go through the normal post-command dispatch loop."
                     (helixel-pcs-live-action cs)))))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-input-cache-advice-installed ()
+  "`read-char', `read-string', etc. must be advised with
+input-cache wrappers so third-party commands that prompt
+for user input don't block at fake cursors during mc dispatch."
+  (should (advice-member-p #'helixel-mc--cache-read-char 'read-char))
+  (should (advice-member-p #'helixel-mc--cache-read-string 'read-string))
+  (should (advice-member-p #'helixel-mc--cache-read-from-kill-ring
+                            'read-from-kill-ring))
+  (should (advice-member-p #'helixel-mc--cache-read-quoted-char
+                            'read-quoted-char))
+  (should (advice-member-p #'helixel-mc--cache-register-read-with-preview
+                            'register-read-with-preview)))
+
+(ert-deftest helixel-test-mc-input-cache-nil-when-mc-off ()
+  "Input cache advice must call through to the original function
+when `helixel-multi-cursor-mode' is nil (normal operation)."
+  (let ((helixel-mc--input-cache '((("fake" . t) . "stale"))))
+    ;; Simulate a call to the advised read-char when mc is off.
+    ;; The advice should NOT use the stale cache.
+    (should (null (helixel-mc--input-cache-lookup 'read-char "x")))))
+
+(defun helixel-mc--input-cache-lookup (fn prompt)
+  "Test helper: look up (FN . PROMPT) in `helixel-mc--input-cache'."
+  (cdr (assoc (cons fn prompt) helixel-mc--input-cache
+              (lambda (k1 k2) (equal k1 k2)))))
+
 ;; ── Performance: large cursor counts ────────────────────────
 
 (ert-deftest helixel-test-mc-eol-cursor-string-cached ()

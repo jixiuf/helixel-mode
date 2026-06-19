@@ -809,6 +809,10 @@ Used by `helixel-mc--undo-step-finish' to detect no-op steps:
 if no text changes occurred, this entry is popped from
 `buffer-undo-list'.")
 
+(defvar helixel-mc--input-cache nil
+  "See `helixel-mc--def-input-cache' in helixel-mc-integrate.el.
+Declared here because `helixel-mc--pre-command' sets it.")
+
 (defun helixel-mc--undo-command-p (command)
   "Return non-nil if COMMAND is an undo/redo command.
 These commands should never be wrapped in an mc undo step
@@ -1258,7 +1262,13 @@ eligible for mc dispatch, and it is not an undo/redo operation.
 
 Also snapshots `this-command' into `helixel-mc--saved-this-command'
 so the dispatcher can find the fresh action even after a recursive
-edit (e.g. isearch) overwrites `this-command'."
+edit (e.g. isearch) overwrites `this-command'.
+
+Clears `helixel-mc--input-cache' so each command starts with a
+fresh cache for third-party user-input functions (\=`read-char',
+\=\`read-string\=, etc.)."
+  ;; Clear the input cache at the start of each outer command.
+  (setq helixel-mc--input-cache nil)
   ;; Snapshot `this-command' early — before any recursive edit
   ;; (isearch, query-replace, etc.) can overwrite it.  Used by
   ;; `helixel-mc--fresh-action-from-real' as a fallback.

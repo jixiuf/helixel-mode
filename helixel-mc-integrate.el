@@ -367,9 +367,63 @@ of commands from modules `mc-integrate' itself depends on."
   (add-hook 'helixel-action-commit-hook
             #'helixel-mc--on-chain-end)
   (add-hook 'helixel-keyboard-quit-functions #'helixel-mc--maybe-clear-on-quit)
-  (add-hook 'helixel-state-change-hook #'helixel-mc--sync-visual-state))
+  (add-hook 'helixel-state-change-hook #'helixel-mc--sync-visual-state)
+  (helixel-mc--install-input-cache-advice))
 ;; helixel-mc-integrate--init registered via `helixel--register-mode-hooks'
 ;; in helixel.el.
+
+;; ── Input cache for third-party commands ──
+;;
+;; Third-party commands whitelisted for mc dispatch may call
+;; `read-char', `read-string', etc.  Without caching, each fake
+;; cursor would block waiting for user input.  This mechanism
+;; caches the real cursor's response and replays it at fakes.
+;;
+;; The cache is cleared at the start of every mc undo step
+;; (`helixel-mc--pre-command'), so each command starts fresh.
+;; Advice is only active during mc dispatch (`mc-batch' or
+;; `mc-fake' replay context) inside `helixel-multi-cursor-mode'.
+
+(defvar-local helixel-mc--input-cache nil
+  "Alist of ((FN-NAME . PROMPT) . VALUE) during mc dispatch.
+Cleared at the start of each mc undo step so each command
+starts with a fresh cache.")
+
+(defmacro helixel-mc--def-input-cache (fn-name)
+  "Install advice on FN-NAME that caches user input during mc dispatch.
+FN-NAME must take an optional PROMPT as its first argument.
+The advice only intercepts when `helixel-multi-cursor-mode' is
+active AND we are inside a fake-cursor dispatch
+\(`helixel-mc--dispatch-in-progress-p')."
+  (let ((advice-name (intern (format "helixel-mc--cache-%s" fn-name))))
+    `(progn
+       (defun ,advice-name (orig-fun &rest args)
+         (if (bound-and-true-p helixel-multi-cursor-mode)
+             (let* ((prompt (car-safe args))
+                    (key (cons ',fn-name prompt))
+                    (cached (cdr (assoc key helixel-mc--input-cache
+                                       (lambda (k1 k2) (equal k1 k2))))))
+               (or cached
+                   (let ((val (apply orig-fun args)))
+                     (push (cons key val) helixel-mc--input-cache)
+                     val)))
+           (apply orig-fun args)))
+       (advice-add ',fn-name :around ',advice-name))))
+
+(defun helixel-mc--install-input-cache-advice ()
+  "Install input-cache advice for functions that read user input.
+Safe to call multiple times — `advice-add' is idempotent."
+  (helixel-mc--def-input-cache read-char)
+  (helixel-mc--def-input-cache read-string)
+  (helixel-mc--def-input-cache read-from-kill-ring)
+  (helixel-mc--def-input-cache read-char-from-minibuffer)
+  (helixel-mc--def-input-cache read-char-by-name)
+  (helixel-mc--def-input-cache read-quoted-char)
+  (helixel-mc--def-input-cache register-read-with-preview))
+
+;; Third-party functions that read user input.
+(with-eval-after-load 'consult
+  (helixel-mc--def-input-cache consult--read))
 
 (provide 'helixel-mc-integrate)
 ;;; helixel-mc-integrate.el ends here

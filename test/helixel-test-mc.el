@@ -692,26 +692,32 @@ must not corrupt the fake's state."
 
 (ert-deftest helixel-test-mc-spawn-after-motion-inherits-real-ring ()
   "Spawning a fake AFTER real built a ring: the fake inherits
-real's `helixel--action-ring' / `--live-edit' via the snapshot
-taken by `helixel-mc--create-fake-cursor'.  This means
-`w w w s s ;' DOES work — fake's `;' cycles the inherited
-history."
+real's \=`helixel--action-ring' via the snapshot taken by
+\=`helixel-mc--create-fake-cursor'.  This means \=`w w w s s ;' DOES
+work — fake's \=`;' cycles the inherited history.
+
+The fake does NOT inherit \=`helixel--live-action' (the real cursor's
+in-progress uncommitted action).  A fresh fake starts with a clean
+slate — the real cursor's live-action markers will be released by
+its own commit, and sharing the same struct would cause stale
+marker corruption during subsequent dispatch."
   (helixel-test-with-buffer "alpha beta gamma delta epsilon\n"
     (helixel-enter-normal-state)
     (goto-char 1)
     ;; Real builds ring with 2 word motions.
     (helixel-forward-word-start 1)
     (helixel-forward-word-start 1)
-    (let ((real-ring-len (length helixel--action-ring))
-          (real-live helixel--live-action))
+    (let ((real-ring-len (length helixel--action-ring)))
       (should (>= real-ring-len 1))
       ;; Spawn fake AFTER motions.
       (let* ((ov (helixel-mc--create-fake-cursor 13))
              (fake-ring (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state)))
              (fake-live (helixel-pcs-live-action (overlay-get ov 'helixel-pc-state))))
-        ;; Fake's snapshot copies real's history.
+        ;; Fake's snapshot copies real's event-ring history.
         (should (= real-ring-len (length fake-ring)))
-        (should (eq real-live fake-live))))
+        ;; Fake does NOT inherit the real cursor's in-progress
+        ;; live-action — it starts with a clean slate.
+        (should-not fake-live)))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-action-cycle-no-message-spam ()
@@ -4093,6 +4099,46 @@ fell back to `call-interactively' which failed."
                              (helixel-mc-all-cursors))
                      #'<)))
       (should (equal '(20 30) pts)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-movement-xxx-ss-gh-w ()
+  "After line-spawn (xxx ss), gh then w must NOT delete fake cursors.
+Regression: commit 7b2e9c4 added marker-release to action-commit.
+At spawn time, fake cursors inherit the real cursor's
+helixel--live-action struct (same object, not a copy).  When `gh'
+runs on the real cursor, action-commit releases the markers on this
+shared struct.  Without the fix in helixel-mc--replay-at-one-fake-1
+(wrapping call-interactively in helixel-with-replay 'dot), the
+dispatched `gh' and `w' at fakes would re-commit the stale struct,
+corrupting fake cursor state and causing them to disappear.
+
+Simulates the full command loop by manually invoking
+helixel-mc--pre-command / helixel-mc--post-command around each
+command (matches the established pattern in the mc test suite)."
+  (helixel-test-with-buffer "aaa bbb ccc\nddd eee fff\nggg hhh iii\n"
+    (helixel-enter-normal-state)
+    ;; xxx: select 3 lines
+    (goto-char 1)
+    (push-mark (point-max) t t)
+    (helixel-select-line 3)
+    ;; ss: spawn cursors from line selection
+    (let* ((sel (helixel-sel-create 'line '(:count 3 :dir forward)))
+           (targets (helixel-mc--spawn-from-line sel)))
+      (helixel-mc--realize-targets targets))
+    (let ((initial-fakes (length (helixel-mc-all-cursors))))
+      (should (= 2 initial-fakes))
+      ;; gh through full command-loop simulation
+      (setq this-command 'helixel-go-beginning-line)
+      (helixel-mc--pre-command)
+      (helixel-go-beginning-line)
+      (helixel-mc--post-command)
+      (should (= initial-fakes (length (helixel-mc-all-cursors))))
+      ;; w through full command-loop simulation
+      (setq this-command 'helixel-forward-word-start)
+      (helixel-mc--pre-command)
+      (helixel-forward-word-start 1)
+      (helixel-mc--post-command)
+      (should (= initial-fakes (length (helixel-mc-all-cursors)))))
     (helixel-mc-clear-all)))
 
 (provide 'helixel-test-mc)

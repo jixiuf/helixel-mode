@@ -45,8 +45,14 @@
 
 
 (defcustom helixel-major-mode-default-states
-  '((calc-mode . insert)
-    (Custom-mode . normal))
+  '((calc-mode    . insert)
+    (ghostel-mode . insert)
+    (eshell-mode  . insert)
+    (shell-mode   . insert)
+    (term-mode    . insert)
+    (reb-mode     . insert)
+    (pi-chat-mode . insert)
+    (Custom-mode  . normal))
   "Alist mapping major modes to default Helixel states.
 Each element should be a cons cell (MAJOR-MODE . STATE), where
 MAJOR-MODE is a symbol like `dired-mode', and STATE is one of

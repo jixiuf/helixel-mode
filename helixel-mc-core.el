@@ -130,7 +130,7 @@ cursor's selection stands out among fake selections."
   :type 'string
   :group 'helixel)
 
-(defcustom helixel-mc-max-cursors 200
+(defcustom helixel-mc-max-cursors 500
   "Maximum number of fake cursors before refusing to create more.
 Nil disables the check."
   :type '(choice (const :tag "Unlimited" nil) integer)

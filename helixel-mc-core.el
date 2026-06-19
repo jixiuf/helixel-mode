@@ -183,7 +183,13 @@ so on — broadcasts at one cursor never leak into another."
 (defun helixel-mc--pcs-clone ()
   "Capture the current cursor state into a fresh `helixel-pc-state'.
 Markers are FRESH copies (`copy-marker') so the snapshot is
-independent of any later movement of point / mark."
+independent of any later movement of point / mark.
+
+Used by `helixel-mc--save-main-state' and
+`helixel-mc-with-saved-state' — callers that need to snapshot the
+REAL cursor's full state and restore it later.  For fake cursor
+creation, use `helixel-mc--pcs-create-fresh' instead, which nil's
+live-action and registers and deep-copies the event-ring."
   (make-helixel-pc-state
    :point          (copy-marker (point) t)
    :mark           (copy-marker (mark-marker))
@@ -201,6 +207,23 @@ independent of any later movement of point / mark."
    :action-pos                helixel--action-pos
    :jump-cycle-pos            helixel--mark-cycle-pos
    :last-motion-cmd           helixel--last-motion-cmd))
+
+(defun helixel-mc--pcs-create-fresh ()
+  "Create a fresh `helixel-pc-state' for a NEW fake cursor.
+Like `helixel-mc--pcs-clone' but clears inherited state that
+should NOT leak from the real cursor into a fake:
+  - event-ring: deep-copied (independent list, not shared ref)
+  - live-action: nil (real cursor's in-progress action belongs
+    to the real cursor; its markers will be released)
+  - registers-alist: nil (fresh fake starts with empty registers)
+Callers override point, mark, and \=`mark-active' to match the
+spawn site."
+  (let ((cs (helixel-mc--pcs-clone)))
+    (setf (helixel-pcs-event-ring cs)
+          (copy-sequence helixel--action-ring))
+    (setf (helixel-pcs-live-action cs) nil)
+    (setf (helixel-pcs-registers-alist cs) nil)
+    cs))
 
 (defun helixel-mc--pcs-swap-in (cs)
   "Restore cursor state CS into the current globals.
@@ -512,21 +535,13 @@ event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
      (t
       (let* ((ov (make-overlay point point nil nil t))
              (id (cl-incf helixel-mc--next-cursor-id))
-             ;; Snapshot the real cursor's current state into the
-             ;; struct, then override the position fields to match
-             ;; the requested POINT/MARK so the new fake reflects
-             ;; the spawn site, not the real cursor's location.
-             (cs (helixel-mc--pcs-clone)))
+             ;; Snapshot the real cursor's state, then clear
+             ;; inherited state that must not leak into a fake.
+             ;; helixel-mc--pcs-create-fresh handles this.
+             (cs (helixel-mc--pcs-create-fresh)))
         (set-marker (helixel-pcs-point cs) point)
         (set-marker (helixel-pcs-mark cs) eff-mark)
         (setf (helixel-pcs-mark-active cs) (and mark (/= mark point)))
-        ;; Fresh fake cursor starts with empty register storage
-        ;; and no inherited live-action — the real cursor's
-        ;; in-progress live-action belongs to the real cursor
-        ;; and must not leak into fake dispatch (its markers
-        ;; will be released by the real cursor's commit).
-        (setf (helixel-pcs-registers-alist cs) nil)
-        (setf (helixel-pcs-live-action cs) nil)
         (overlay-put ov 'helixel-mc-cursor t)
         (overlay-put ov 'helixel-mc-id id)
         (overlay-put ov 'priority 100)
@@ -666,12 +681,10 @@ fake cursors to match.  Auto-toggles `helixel-multi-cursor-mode'."
              (p (cadr entry))
              (m (cddr entry))
              (ov (make-overlay p p nil nil t))
-             (cs (helixel-mc--pcs-clone)))
+             (cs (helixel-mc--pcs-create-fresh)))
         (set-marker (helixel-pcs-point cs) p)
         (set-marker (helixel-pcs-mark cs) (or m p))
         (setf (helixel-pcs-mark-active cs) m)
-        (setf (helixel-pcs-registers-alist cs) nil)
-        (setf (helixel-pcs-live-action cs) nil)
         (overlay-put ov 'helixel-mc-cursor t)
         (overlay-put ov 'helixel-mc-id id)
         (overlay-put ov 'priority 100)

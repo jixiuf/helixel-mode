@@ -378,6 +378,9 @@ Example:
                 :optional (:inline-advance))
   :recreate #'helixel--recreate-textobj
   :advance  #'helixel--repeat-advance-textobj
+  :flip-dir-fn (lambda (sel)
+                 (helixel-sel-update-ctx
+                  sel :count (- (helixel-sel-field sel :count))))
   :display  (lambda (ctx)
               (let ((cmd (helixel-sel-textobj-command ctx)))
                 (if cmd

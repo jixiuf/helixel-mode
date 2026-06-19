@@ -824,31 +824,57 @@ backward if COUNT is negative.  A function is defined via
   "Replay a textobj selection from CTX.
 Skips past the current target (if cursor is inside one), then
 skips whitespace, then re-executes the textobj command.
+When COUNT is negative, skips backward instead of forward.
 When :span is set, extends region back to the pre-recreate origin.
 Signals errors when no more targets exist."
   (when-let* ((command (helixel-sel-textobj-command ctx))
               (cnt (helixel-sel-textobj-count ctx)))
-    (helixel--with-span ctx
-      (unless (region-active-p)
-        (helixel--with-debug-log textobj-recreate-position
-            (save-excursion
-              (funcall command 1)
-              (when (and (use-region-p)
-                         (<= (region-beginning) (point))
-                         (< (point) (region-end)))
-                (goto-char (region-end))))
-          (error nil))
-        (when (looking-at-p "[ \t\n\r\f]")
-          (skip-chars-forward " \t\n\r\f")))
-      (condition-case nil
-          (funcall command cnt)
-        (error
-         (save-match-data
-           (let ((orig (point)))
-             (forward-word 1)
-             (when (= (point) orig)
-               (forward-char 1))
-             (funcall command cnt)))))))
+    (let ((forward-p (>= cnt 0)))
+      (helixel--with-span ctx
+        (unless (region-active-p)
+          ;; Skip past the current target so the next funcall
+          ;; picks up a fresh one.  For forward repeat use count=1
+          ;; to position past the current target; for backward
+          ;; repeat use count=-1 to position before it.
+          (let ((saved-pending-sel helixel--pending-sel)
+                (saved-mark-active mark-active))
+            (helixel--with-debug-log textobj-recreate-position
+                (save-excursion
+                  (funcall command (if forward-p 1 -1))
+                  (when (and (use-region-p)
+                             (<= (region-beginning) (point))
+                             (< (point) (region-end)))
+                    (goto-char (if forward-p (region-end)
+                                 (region-beginning)))))
+              (error nil))
+            ;; Restore state mutated by the inner funcall.
+            ;; `push-mark' with ACTIVATE=t inside
+            ;; `helixel--activate-textobj-range' sets `mark-active'
+            ;; and pushes `helixel--pending-sel'; save-excursion
+            ;; may not restore `mark-active' in all Emacs versions.
+            ;; Restoring both ensures the real call below starts
+            ;; from a clean slate.
+            (setq helixel--pending-sel saved-pending-sel)
+            (setq mark-active saved-mark-active))
+          ;; Skip whitespace in the direction of travel.
+          (if forward-p
+              (skip-chars-forward " \t\n\r\f")
+            (skip-chars-backward " \t\n\r\f")))
+        (condition-case nil
+            (funcall command cnt)
+          (error
+           (save-match-data
+             (let ((orig (point)))
+               (if forward-p
+                   (progn
+                     (forward-word 1)
+                     (when (= (point) orig)
+                       (forward-char 1)))
+                 (progn
+                   (forward-word -1)
+                   (when (= (point) orig)
+                     (forward-char -1))))
+               (funcall command cnt))))))))
   (setq helixel--sel-type-override 'textobj))
 
 (defun helixel--repeat-advance-textobj (tx)

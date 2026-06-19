@@ -408,9 +408,8 @@ After `-.' a plain `.` continues backward.  `-.' again flips back."
                      "line1X\nline2X\nline3X\nline4\nline5\n"))
     (should (not helixel--repeat-permanent-flip))))
 
-(ert-deftest helixel-test-repeat-flip-dir-line-noop-on-movement ()
-  "`-.' on a movement selection is a no-op for direction flip.
-Still does 1 repeat normally (movement selections have no :dir)."
+(ert-deftest helixel-test-repeat-flip-dir-movement-works ()
+  "`-.' on a movement selection flips direction via reverse-motion lookup."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
     (setq helixel-last-action
@@ -420,10 +419,11 @@ Still does 1 repeat normally (movement selections have no :dir)."
              '(:moves ((forward-word . 1))))
             :text "X"))
     (insert "X")
-    ;; `-.' — flip is no-op (movement has no :dir), does 1 repeat.
-    ;; Movement recreate moves point via forward-word,
-    ;; then execute inserts X at the new position.
+    ;; `-.' — flips direction permanently, does 1 repeat backward.
+    ;; forward-word is reversed to backward-word via motion-reverse registry.
     (helixel-repeat-edit '-)
+    (should helixel--repeat-permanent-flip)
+    (setq helixel--repeat-permanent-flip nil)
     (should (>= (how-many "X" (point-min) (point-max)) 2))))
 
 (ert-deftest helixel-test-repeat-flip-dir-neg3 ()
@@ -459,7 +459,9 @@ Like 3N for search — negative count also permanently flips."
     (end-of-line)
     (helixel-repeat-edit)
     (should (string= (buffer-string)
-                     "line1\nline2X\nline3X\nline4XX\nline5\nline6\n"))))
+                     "line1\nline2X\nline3X\nline4XX\nline5\nline6\n"))
+    ;; Clean up: reset permanent flip so later tests aren't affected.
+    (setq helixel--repeat-permanent-flip nil)))
 
 (ert-deftest helixel-test-repeat-flip-dir-comma ()
   "`-,' flips direction permanently and previews.
@@ -485,7 +487,9 @@ After `-,' a plain `.` uses the preview position (helixel--repeat-preview-pos)."
     ;; the current position directly (no advance).
     (helixel-repeat-edit)
     (should (string= (buffer-string)
-                     "line1X\nline2\nline3\nline4\n"))))
+                     "line1X\nline2\nline3\nline4\n"))
+    ;; Clean up: reset permanent flip so later tests aren't affected.
+    (setq helixel--repeat-permanent-flip nil)))
 
 (ert-deftest helixel-test-repeat-keys-mode-remap ()
   "`. ` replays insert keys when self-insert-command is remapped.
@@ -645,6 +649,46 @@ than call-interactively (which triggers mode-specific side effects)."
     (should (string= (buffer-string) "XXX XXX bar"))
     (helixel-repeat-edit)
     (should (string= (buffer-string) "XXX XXX XXX"))))
+
+(ert-deftest helixel-test-repeat-textobj-diw-dot-backward ()
+  "miw d then -. flips direction and deletes previous word."
+  (helixel-test-with-buffer "aaa bbb ccc ddd"
+    (goto-char 5)
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (setq last-command 'helixel-mark-inner-word
+          this-command 'helixel-kill)
+    (helixel-kill)
+    (should (string= (buffer-string) "aaa  ccc ddd"))
+    ;; -. permanently flips direction + 1 repeat backward
+    (helixel-repeat-edit '-)
+    ;; aaa deleted (the word before point)
+    (should (string= (buffer-string) "  ccc ddd"))
+    (should helixel--repeat-permanent-flip)
+    ;; . continues backward — at bob with leading spaces, selects
+    ;; the non-word region (spaces) and deletes it.
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "ccc ddd"))
+    (setq helixel--repeat-permanent-flip nil)))
+
+(ert-deftest helixel-test-repeat-textobj-miw-d-backward-flip ()
+  "-. flips direction permanently; -. again flips back to forward."
+  (helixel-test-with-buffer "aaa bbb ccc"
+    (goto-char 5)
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (setq last-command 'helixel-mark-inner-word
+          this-command 'helixel-kill)
+    (helixel-kill)
+    (should (string= (buffer-string) "aaa  ccc"))
+    ;; -. backward: deletes "aaa"
+    (helixel-repeat-edit '-)
+    (should helixel--repeat-permanent-flip)
+    (should (string= (buffer-string) "  ccc"))
+    ;; -. again: flips back to forward
+    (helixel-repeat-edit '-)
+    (should (not helixel--repeat-permanent-flip))
+    (setq helixel--repeat-permanent-flip nil)))
 
 ;; ── Find-char dot-repeat ──
 

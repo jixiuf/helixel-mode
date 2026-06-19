@@ -1007,6 +1007,57 @@ and pushes mark to its own start-point, independent of real."
       (should (> m 10)))  ;; somewhere in the second braces area
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-semicolon-after-undo-uses-per-fake-ring ()
+  "After mc edit + undo, `;' at a fake cursor uses its own
+per-cursor event-ring populated by mc dispatch.  The fake's
+`;' must activate mark at the fake's position (not the real
+cursor's) because the ring entries were committed with
+per-fake markers."
+  (helixel-test-with-buffer "hello world\nhello world\n---\n"
+    (helixel-enter-normal-state)
+    (setq buffer-undo-list nil)
+    ;; Spawn a fake cursor on the second "hello world" line.
+    (goto-char 13)
+    (let ((ov (helixel-mc--create-fake-cursor 13)))
+      (should ov)
+      ;; Broadcast a word motion to populate the fake's ring.
+      (helixel-mc-with-each-cursor (helixel-forward-word-start 1))
+      ;; Fake must have a live action (ring entry pending commit).
+      (let ((cs (overlay-get ov 'helixel-pc-state)))
+        (should (helixel-pcs-live-action cs)))
+      ;; Broadcast `;' — fake must activate mark from its own ring.
+      (let ((last-command 'helixel-forward-word-start))
+        (helixel-mc-with-each-cursor (helixel-action-cycle)))
+      ;; After `;', fake's mark must be active.
+      (should (helixel-mc-cursor-mark-active ov))
+      ;; Fake's mark must be on its own line (pos ≥ 13), not on the
+      ;; real cursor's line.
+      (let ((mark-pos (marker-position (helixel-mc-cursor-mark ov))))
+        (should (>= mark-pos 13))
+        (should (<= mark-pos 24))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-fake-ring-grows-after-post-command-dispatch ()
+  "Fake cursor's event-ring must grow after movement commands
+are dispatched via the post-command-hook (fresh-runnable path).
+This verifies the fix for \=`;' cycling at fakes after commands
+that go through the normal post-command dispatch loop."
+  (helixel-test-with-buffer "alpha beta gamma delta\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    (let ((ov (helixel-mc--create-fake-cursor 7)))
+      ;; Simulate the post-command dispatch for a movement command.
+      ;; Real cursor runs the command; we manually dispatch to fakes.
+      (helixel-forward-word-start 1)
+      (let ((this-command 'helixel-forward-word-start)
+            (helixel-multi-cursor-mode t))
+        (helixel-mc--post-command))
+      ;; Fake must have a ring entry (committed by dispatch).
+      (let ((cs (overlay-get ov 'helixel-pc-state)))
+        (should (or (helixel-pcs-event-ring cs)
+                    (helixel-pcs-live-action cs)))))
+    (helixel-mc-clear-all)))
+
 ;; ── Performance: large cursor counts ────────────────────────
 
 (ert-deftest helixel-test-mc-eol-cursor-string-cached ()

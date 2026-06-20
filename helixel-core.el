@@ -1015,45 +1015,36 @@ for :category movement commands."
 ;; ── Motion Repeater Registry ──
 ;;
 ;; Extensible dispatch for `helixel-repeat-last-motion'.
+;; ── Motion Repeater Property ──
+;;
+;; Motion repeaters are stored as subalists on each category
+;; symbol's `helixel-motion-repeater' property — no global alist.
 ;; Third-party packages register repeater functions for custom
-;; motion categories; the command looks them up here instead of
-;; using a hardcoded `pcase'.
-
-(defvar helixel--motion-repeater-alist nil
-  "Alist mapping (CATEGORY . SUBCAT) to repeater function.
-Each function receives one argument, the `helixel--last-motion'
-struct, and should replay the recorded motion.
-When SUBCAT is nil, the entry matches any subcat under CATEGORY.
-Entries are checked in order — first match wins.
-Populated by `helixel-register-motion-repeater'.")
+;; categories; the lookup reads the property directly.
 
 (defun helixel-register-motion-repeater (category subcat fn)
-  "Register FN as the motion repeater for (CATEGORY . SUBCAT).
+  "Store FN as the motion repeater for (CATEGORY . SUBCAT).
 CATEGORY is a symbol like \='movement, \='search, or \='find-char.
 SUBCAT is a symbol like \='pair, \='match, or nil for \='any subcat\='.
 FN receives the `helixel--last-motion' struct and should replay it.
 
-Specific (CAT . SUB) entries take priority over nil-subcat
-entries because `push' adds to the front of the alist and
-`helixel--lookup-motion-repeater' scans sequentially."
-  (push (cons (cons category subcat) fn)
-        helixel--motion-repeater-alist))
+Stored on CATEGORY's `helixel-motion-repeater' symbol property as a
+subcat→fn alist.  Later registrations (specific subcat) push to the
+front; `assq' finds the first match, so specific entries take priority
+over nil-subcat fallbacks."
+  (let ((entry (cons subcat fn)))
+    (put category 'helixel-motion-repeater
+         (cons entry (get category 'helixel-motion-repeater)))))
 
-(defun helixel--lookup-motion-repeater (rec)
-  "Find the repeater function for the motion REC.
-Returns the function, or nil if no repeater is registered.
-Scans `helixel--motion-repeater-alist' — first match wins.
-Specific (CAT . SUB) entries match before nil-subcat fallbacks
-because `push' adds later registrations to the front."
+(defsubst helixel--lookup-motion-repeater (rec)
+  "Return the repeater function for motion REC, or nil.
+Reads the `helixel-motion-repeater' symbol property on REC's category.
+Looks up SUBCAT first (specific), then falls back to nil (any)."
   (let* ((cat (helixel--last-motion-category rec))
-         (sub (helixel--last-motion-subcat rec)))
-    (cl-some (lambda (entry)
-               (let ((key (car entry)))
-                 (when (and (eq (car key) cat)
-                            (or (null (cdr key))
-                                (eq (cdr key) sub)))
-                   (cdr entry))))
-             helixel--motion-repeater-alist)))
+         (sub (helixel--last-motion-subcat rec))
+         (alist (get cat 'helixel-motion-repeater)))
+    (cdr (or (assq sub alist)
+             (assq nil alist)))))
 
 ;; ── Motion Reverse-Command Property ──
 ;;

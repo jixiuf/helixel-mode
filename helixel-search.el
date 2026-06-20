@@ -745,8 +745,8 @@ replay this repeat at every fake cursor without re-entering `n'."
 Reads self-contained replay data from `helixel--last-motion-cmd'.
 The stored category+subcat is checked against
 `helixel-motion-repeat-categories' via `helixel--category-match-p'.
-Dispatches via `helixel--motion-repeater-alist' — extend by
-calling `helixel-register-motion-repeater'.
+Dispatches via `helixel-register-motion-repeater' — extend by
+calling it with (CATEGORY SUBCAT FN).
 Never consults the global `helixel--active-search'.
 
 Prefix RAW-PREFIX semantics:

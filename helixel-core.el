@@ -336,7 +336,8 @@ against the schema for KIND."
   "Execute BODY with `:span' region extension.
 If CTX plist has `:span', captures point before BODY
 as the span origin and extends the mark back to it after BODY.
-For `;' + `.' repeating the full session-start-to-point span."
+For \\[helixel-action-cycle] + \\[helixel-repeat-edit] repeating
+the full session-start-to-point span."
   (declare (indent 1))
   `(let ((span-origin (when (plist-get ,ctx :span) (point))))
      (prog1 (progn ,@body)
@@ -893,15 +894,18 @@ and `helixel--jump-to-match-core' delegate here."
 ;; ── Last-Motion Struct (unified motion + search state) ──
 ;;
 ;; The single struct for the last repeatable motion — consumed by both
-;; , (motion repeat via `helixel-repeat-last-motion') and
-;; n/N (search repeat via `helixel-search-repeat-next').
+;; \\[helixel-repeat-last-motion\\] (motion repeat) and
+;; \\[helixel-search-repeat-next\\]/\\[helixel-search-repeat-reverse\\]
+;; (search repeat).
 ;;
 ;; Two buffer-local variables hold this struct with different update
 ;; policies:
-;;   helixel--last-motion-cmd — updated by EVERY motion (for , ')
+;;   helixel--last-motion-cmd — updated by EVERY motion (for
+;;   \\[helixel-repeat-last-motion\\] repeat)
 ;;   helixel--active-search   — updated only by search/find-char
-;;                                (for n/N, survives intervening
-;;                                movements)
+;;                                (for \\[helixel-search-repeat-next\\]/
+;;                                \\[helixel-search-repeat-reverse\\],
+;;                                survives intervening movements)
 ;;
 (cl-defstruct (helixel--last-motion (:copier nil))
   "Self-contained record of the last repeatable motion.
@@ -931,7 +935,7 @@ Slots:
 (defcustom helixel-motion-repeat-categories
   '((movement . pair) (movement . match) (movement . paragraph)
     (movement . sentence) (movement . function) search find-char)
-  "Motion categories that \=`,' can repeat.
+  "Motion categories that \\[helixel-repeat-last-motion] can repeat.
 Each element is either a plain category symbol (matches all
 subcats) or a cons (CATEGORY . SUBCAT) for precise matching —
 the same format as `helixel-action-cycle-categories'.
@@ -951,7 +955,8 @@ Each element of CHECKLIST is a plain symbol (matches any subcat
 under that category) or a cons (C . S) (matches the specific
 subcat S of category C).
 
-Used by \=`;' cycling visibility, \=`,' motion-repeat filtering,
+Used by \\[helixel-action-cycle] cycling visibility,
+\\[helixel-repeat-last-motion] motion-repeat filtering,
 and semicolon mark-thing selection.  They share the
 same (CAT . SUBCAT) or CAT pattern for precise category+subcat
 matching."
@@ -970,9 +975,11 @@ sentence, function subcats) and find-char / search commands.
 Read by `helixel-repeat-last-motion' and its accessors.")
 
 (defvar-local helixel--motion-permanent-flip nil
-  "When non-nil, \=`,`\=' repeats the last motion in reversed direction.
-Toggled by \=`-,'.  Reset on each new motion recording.
-Analogous to `helixel--repeat-permanent-flip' for \=`.\='.")
+            "When non-nil, reverses the motion repeat direction.
+\\[helixel-repeat-last-motion] repeats the last motion in
+reversed direction.  Toggled by \\=`-,'.
+Analogous to `helixel--repeat-permanent-flip' for
+\\[helixel-repeat-edit].")
 
 (defun helixel-record-motion (cmd &rest extra-kv)
   "Record CMD as the last motion, with EXTRA-KV as keyword arguments.
@@ -1172,7 +1179,7 @@ to walking the kind's :advance function from `point-min'."
 (defun helixel--kind-flip-dir-fn (kind)
   "Return the :flip-dir-fn for KIND from the registry, or nil.
 The flip-dir function takes a `helixel-sel' and returns a new
-sel with its direction reversed.  Used by `.' /
+sel with its direction reversed.  Used by \\[helixel-repeat-edit] /
 `helixel-repeat-edit' with a prefix argument or while
 `helixel--repeat-permanent-flip' is non-nil.
 
@@ -1190,7 +1197,8 @@ then simply does not flip."
 ;; ONE struct serves two roles:
 ;;
 ;;   1. Replay transaction — carries OP, SEL, PAYLOAD, RUNNER,
-;;      PREPOSITION, MARK-REGION.  Position-agnostic; `.' / `,'
+;;      PREPOSITION, MARK-REGION.  Position-agnostic; \\[helixel-repeat-edit] /
+;; \\[helixel-repeat-last-motion]
 ;;      / chain / mc all replay via `helixel-action-replay'.
 ;;
 ;;   2. History event — carries CATEGORY, SUBCAT, DISPLAY, TIMESTAMP,
@@ -1205,7 +1213,8 @@ then simply does not flip."
                               (:copier helixel-action--shallow-copy))
   "Unified replay/history event.  See module commentary above.
 
-Replay slots (used by `.'/`,'/chain/mc):
+Replay slots (used by \\[helixel-repeat-edit]
+/\\[helixel-repeat-last-motion]/chain/mc):
   OP            — symbol: registered operator name (kill, change, ...)
                   or nil for pure movement/search/state events.
   SEL           — `helixel-sel' struct or nil.
@@ -1218,10 +1227,10 @@ Replay slots (used by `.'/`,'/chain/mc):
                   Single-write invariant: at most one per command.
   MARK-REGION   — cons (START . END) of two markers; the position
                   where the event was originally recorded.  Used
-                  for `;' jump targets AND by some runners.
+                  for \\[helixel-action-cycle] jump targets AND by some runners.
   START-POINT   — marker; the original cursor position at
                   `tracking-open' time, before any movement.
-                  Used by `C-;' (`helixel-action-cycle-mark-start') to
+                  Used by \\[helixel-action-cycle-mark-start] to
                   push mark to the pre-motion cursor position.
                   Never modified after creation.  Free-standing
                   marker — not part of `mark-region'.
@@ -1261,7 +1270,7 @@ MARK-REGION is initialised from `point' at call time.
 START-POINT is intentionally left nil — it is set at
 `tracking-open' time by `helixel--live-action-set' which
 captures the pre-motion cursor position.  For edit events
-where start-point is nil, `C-;' falls back to the
+where start-point is nil, \\[helixel-action-cycle-mark-start] falls back to the
 mark-region car (which is the pre-edit point)."
   (let (runner display-field rest)
     (while payload-kv
@@ -1708,13 +1717,15 @@ track-visual-move) so the copy is fully independent."
 ;; Part 8 — Most-recent-action pointer (single source of truth)
 ;; ----------------------------------------------------------------------
 ;;
-;; `helixel-last-action' is the pointer that `.` (dot-repeat) and `,'
+;; `helixel-last-action' is the pointer that `.` (dot-repeat) and
+;; \\[helixel-repeat-last-motion]
 ;; (selection-repeat) consume.  Buffer-local — dot-repeat is scoped
 ;; to the current buffer.
 
 (defvar-local helixel-last-action nil
   "Pointer to the most recent committed `helixel-action' in this buffer.
-Consumed by `.' and `,' for repeat.  Buffer-local.")
+Consumed by \\[helixel-repeat-edit] and
+\\[helixel-repeat-last-motion] for repeat.  Buffer-local.")
 
 (defvar helixel--current-command nil
   "Symbol of the currently-executing helixel command.
@@ -1772,7 +1783,8 @@ accumulator inside `pre-command-hook'."
 ;; Pure data primitives: an ordered list of entries with two query
 ;; axes — visibility (skip entries the caller wants hidden) and
 ;; grouping (consecutive entries that should be treated as one
-;; navigation step).  Consumed by both `;' cycling and C-o/C-i.
+;; navigation step).  Consumed by both \\[helixel-action-cycle\\] cycling
+;; and \\[helixel-jump-backward\\]/\\[helixel-jump-forward\\].
 ;;
 ;; The "ring" is a plain list, NEWEST FIRST.  The caller owns
 ;; mutation (push / pop / cap); this section only provides query
@@ -1834,7 +1846,9 @@ if no further visible entry exists in that direction."
 (cl-defstruct (helixel-replay (:conc-name helixel-replay--))
   "Replay-time context.  Bound dynamically via `helixel-with-replay'.
 The ORIGIN field is one of:
-  dot       — `.' / `,' / chain / insert replay of a stored edit
+  dot       — \\[helixel-repeat-edit]
+            / \\[helixel-repeat-last-motion]
+            / chain / insert replay of a stored edit
   mc-fake   — dispatcher running a command at a fake cursor
   mc-batch  — mc broadcast outer loop (suppresses re-dispatch)
 
@@ -1854,7 +1868,9 @@ Dynamically bound by `helixel-with-replay'.")
 
 (defsubst helixel-replaying-p ()
   "Return non-nil when the current replay is replaying a stored edit.
-True only for the `dot' origin (used by `.' / `,' / chain / insert
+True only for the `dot' origin (used by
+\\[helixel-repeat-edit]
+/ \\[helixel-repeat-last-motion] / chain / insert
 replay paths).  Does NOT include `mc-fake' / `mc-batch' origins —
 those wrap normal command execution at fake cursors and should not
 suppress per-fake recording.  Use `helixel--replay-in-fake-p' /

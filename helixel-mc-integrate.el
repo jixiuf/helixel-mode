@@ -18,18 +18,20 @@
 
 ;;; Commentary:
 
-;; Wires the multi-cursor model into helixel-mode's repeat (`.'),
-;; chain (`@' ... ESC) and insert subsystems.
+;; Wires the multi-cursor model into helixel-mode's repeat
+;; (\\[helixel-repeat-edit]),
+;; chain (\\[helixel-repeat-chain-start] ... ESC) and insert subsystems.
 ;;
 ;; Strategy:
 ;;   * insert mode             — `self-insert-command' is whitelisted,
 ;;                               so each fake cursor gets its own
 ;;                               character via the post-command-hook
 ;;                               dispatcher.  Nothing else to do.
-;;   * dot-repeat (`.')        — whitelisted ON: each cursor runs
+;;   * dot-repeat (\\[helixel-repeat-edit])        — whitelisted ON: each cursor
+;; runs
 ;;                               `helixel-repeat-edit' with its own
 ;;                               snapshotted `helixel-last-action'.
-;;   * repeat-selection (`,')  — same.
+;;   * repeat-selection (\\[helixel-repeat-last-motion])  — same.
 ;;   * chain end               — `:after' advice: if any fake cursors,
 ;;                               propagate the newly built chain
 ;;                               transaction to every fake cursor and
@@ -50,9 +52,11 @@
 ;; defined in helixel-last-edit.el (loaded transitively via
 ;; helixel-mc-core → ...; explicit defvar here keeps byte-compile happy).
 
-;; ── `.' / `,' semantics under multi-cursor ──
+;; ── \\[helixel-repeat-edit] / \\[helixel-repeat-last-motion] semantics under
+;; multi-cursor ──
 ;;
-;; Without mc, `.' does advance+apply: it moves to the NEXT target
+;; Without mc, \\[helixel-repeat-edit] does advance+apply: it moves to the NEXT
+;; target
 ;; (e.g. next word for a textobj sel) and applies the edit there.
 ;; Under mc this is wrong: every fake cursor (and the real cursor,
 ;; after `helixel-mc--realize-targets') is already positioned exactly
@@ -74,7 +78,8 @@
 Return non-nil (handled) when `helixel-mc-mode' is on AND
 fake cursors exist; run `helixel-action-replay' once at point
 instead of the full advance + apply loop.  Return nil to fall
-through to the default `.' otherwise.  RAW-PREFIX is ignored in
+through to the default \\[helixel-repeat-edit] otherwise.
+RAW-PREFIX is ignored in
 the override path — mc dispatches the same edit at each fake."
   (ignore raw-prefix)
   (when (and (bound-and-true-p helixel-mc-mode)
@@ -99,7 +104,8 @@ the override path — mc dispatches the same edit at each fake."
 
 (defun helixel-mc--broadcast-last-event ()
   "Snapshot `helixel-last-action' into every fake cursor's overlay.
-Call after building a new chain transaction so subsequent `.' at
+Call after building a new chain transaction so subsequent
+\\[helixel-repeat-edit] at
 each fake cursor replays the chain (not the pre-chain edit)."
   (dolist (ov (helixel-mc-all-cursors))
     (setf (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state))
@@ -326,7 +332,8 @@ of commands from modules `mc-integrate' itself depends on."
 ;; path A after textobj selection and broadcast goes through
 ;; fresh-edit dispatch normally.
 
-;; ── Action cycle (`;') and jump cycle (`C-;') ──
+;; ── Action cycle (\\[helixel-action-cycle]) and jump cycle
+;; (\\[helixel-action-cycle-mark-start]) ──
 ;;
 ;; `helixel-action-cycle' and `helixel-action-cycle-mark-start' are
 ;; dispatched to fake cursors.  Each fake owns its own
@@ -334,7 +341,8 @@ of commands from modules `mc-integrate' itself depends on."
 ;; and `helixel--mark-cycle-pos' via `helixel-pc-state'.  When
 ;; broadcast, each fake navigates its OWN ring independently.
 ;;
-;; Global jump nav (C-o / C-i) uses the shared
+;; Global jump nav (\\[helixel-jump-backward\\] / \\[helixel-jump-forward\\])
+;; uses the shared
 ;; `helixel--global-jump-log' and is real-cursor-only.
 
 (helixel-mc-mark-all-for-real-cursor-only
@@ -345,11 +353,14 @@ of commands from modules `mc-integrate' itself depends on."
  '(helixel-action-cycle
    helixel-action-cycle-mark-start))
 
-;; ── `;' and `C-;' at fakes are handled by the per-fake event
+;; ── \\[helixel-action-cycle] and \\[helixel-action-cycle-mark-start] at fakes
+;; are handled by the per-fake event
 ;; ring (see `helixel-pc-state' slots `event-ring', `live-action',
 ;; `action-pos', and `jump-cycle-pos').
-;; When `;' or `C-;' broadcasts, each fake runs against its OWN
-;; ring — `;' marks the traversed span on first press, `C-;' pushes
+;; When \\[helixel-action-cycle] or \\[helixel-action-cycle-mark-start]
+;; broadcasts, each fake runs against its OWN
+;; ring — \\[helixel-action-cycle] marks the traversed span on first press,
+;; \\[helixel-action-cycle-mark-start] pushes
 ;; mark to the event start position.  Subsequent presses cycle
 ;; the history, and all logic works naturally with no mc-specific
 ;; bookkeeping.

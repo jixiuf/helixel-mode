@@ -710,11 +710,13 @@ a property list."
 (defun helixel--activate-textobj-range (range &optional delimiter count)
   "Activate RANGE as a textobj selection with optional DELIMITER and COUNT.
 If an existing textobj sel of the same command is pending, accumulates
-the count so `.' repeats the full chain of textobj selections."
+the count so \\[helixel-repeat-edit] repeats the full chain
+of textobj selections."
   (when range
     (push-mark (car range) nil t)
     (goto-char (if (consp (cdr range)) (cadr range) (cdr range)))
-    ;; Update the live event's mark-region so `;' can mark the full
+    ;; Update the live event's mark-region so \\[helixel-action-cycle] can mark
+    ;; the full
     ;; textobj selection.
     (helixel--set-mark-region
      (cons (car range)

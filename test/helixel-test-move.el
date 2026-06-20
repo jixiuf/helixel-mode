@@ -1449,7 +1449,7 @@ On a single-char symbol at eob, w selects it."
     (should helixel--action-pos)))
 
 (ert-deftest helixel-test-c-semicolon-non-mark-thing ()
-  "Test `C-;' pushes mark to event start without selecting the full span."
+  "Test \\[helixel-action-cycle-mark-start] pushes mark to event start without selecting the full span."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil

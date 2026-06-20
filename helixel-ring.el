@@ -24,15 +24,19 @@
 ;; Event storage layer + history navigation for helixel-mode.
 ;;
 ;; Two storage containers:
-;;   1. buffer-local `helixel--action-ring' — serves `;` cycling,
-;;      `.`/`,` repeat, and history selection.
-;;   2. global `helixel--global-jump-log' — serves C-o/C-i jump
+;;   1. buffer-local `helixel--action-ring' — serves
+;;      \\[helixel-action-cycle\\] cycling,
+;;      \\[helixel-repeat-edit\\]/\\[helixel-repeat-last-motion\\] repeat,
+;;      and history selection.
+;;   2. global `helixel--global-jump-log' — serves
+;;      \\[helixel-jump-backward\\]/\\[helixel-jump-forward\\] jump
 ;;      navigation across buffers.
 ;;
 ;; Provides:
 ;;   - the unified tracking entry point `helixel--tracking-open' used by
 ;;     all command-definition macros and live-event management helpers;
-;;   - the `;' action-cycle commands and the C-o / C-i jump commands
+;;   - the \\[helixel-action-cycle\\] action-cycle commands and the
+;;     \\[helixel-jump-backward\\]/\\[helixel-jump-forward\\] jump commands
 ;;     (consumers of the two containers above).
 
 ;;; Code:
@@ -52,7 +56,7 @@
   '(movement textobj search find-char
     (edit . copy) (edit . paste-after) (edit . paste-before)
     (edit . replace) (edit . yank-pop))
-  "Event categories that `;' (`helixel-action-cycle') navigates.
+  "Event categories that \\[helixel-action-cycle\\] navigates.
 Each element is either a category symbol (matches all subcats)
 or a cons (CATEGORY . SUBCAT) for precise matching.
 Categories not listed here are invisible during cycling.
@@ -69,14 +73,19 @@ Set to nil to disable entirely."
 
 (defcustom helixel-action-cycle-newest-for-mark
   '(edit (movement . pair) (movement . match))
-  "Categories whose first \\=';\\=' marking uses the newest event's mark-region.
+  "Control which categories use the newest event's mark-region.
+For the first \\[helixel-action-cycle\\] marking in these categories,
+the newest event's bounds are selected.
 
-For categories listed here, the first \\=';\\=' in a multi-event group
-selects the bounds of the *newest* event (e.g. after pppp, the
-first \\=';\\=' selects the last paste, second \\=';\\=' selects all 4 pastes).
-For other categories, the first \\=';\\=' uses the group-start event
-to mark the span from the start of the sequence (e.g. after www,
-the first \\=';\\=' marks from the first word to point).
+For categories listed here, the first
+\\[helixel-action-cycle\\] in a multi-event group selects the bounds
+of the *newest* event (e.g. after pppp, the first
+\\[helixel-action-cycle\\] selects the last paste, second
+\\[helixel-action-cycle\\] selects all 4 pastes).
+For other categories, the first \\[helixel-action-cycle\\] uses the
+group-start event to mark the span from the start of the sequence
+\(e.g. after www, the first \\[helixel-action-cycle\\] marks from the
+first word to point).
 
 Each element is a category symbol (matches all subcats) or a
 cons (CATEGORY . SUBCAT) for precise matching.
@@ -92,11 +101,12 @@ Set to nil to always use the group-start event."
 
 (defcustom helixel-semicolon-mark-thing
   '(movement textobj search find-char edit)
-  "List controlling when the first `;' marks the full thing.
-Each element is either a category symbol (matches all subcats)
-or a cons (CATEGORY . SUBCAT) for precise matching.
-The first `;' selects the full thing (word, pair, etc.) instead of
-starting the action cycle.  The next `;' does the normal cycle.
+  "Choose when \\[helixel-action-cycle\\] marks the full span first.
+Each element is either a category symbol (matches all subcats) or a
+cons (CATEGORY . SUBCAT) for precise matching.
+The first \\[helixel-action-cycle\\] selects the full thing (word,
+pair, etc.) instead of starting the action cycle.  The next
+\\[helixel-action-cycle\\] does the normal cycle.
 
 Examples:
   \='(movement textobj)              -> all movement + textobj subcats
@@ -135,24 +145,26 @@ Only categories listed here are shown when pressing
 ;; ----------------------------------------------------------------------
 
 (defvar-local helixel--action-pos nil
-  "Ring position for `;' cycling.
+  "Ring position for \\[helixel-action-cycle\\] cycling.
 nil = live event.  0 = newest ring entry.  N = older.")
 
 (defvar helixel--cycle-jump-p nil
-  "Bound to t during `C-;' to disable mark-thing path.
+  "Non-nil during \\[helixel-action-cycle-mark-start\\].
+Disables the mark-thing path internally.
 Internal dynvar — see `helixel-action-cycle-mark-start'.")
 
 (defsubst helixel--cycle-mark-thing-p ()
   "Return non-nil if the current cycle mode should select the full span.
-Returns t for `;' (mark-thing), nil for `C-;' (jump cycle).
+Returns t for \\[helixel-action-cycle\\] (mark-thing), nil for
+\\[helixel-action-cycle-mark-start\\] (jump cycle).
 Delegates to the inverse of `helixel--cycle-jump-p'."
   (not helixel--cycle-jump-p))
 
 (defvar-local helixel--mark-cycle-pos nil
-  "Ring position for `C-;' (`helixel-action-cycle-mark-start') cycling.
+  "Ring position for \\[helixel-action-cycle-mark-start\\] cycling.
 nil = not cycling.  0 = newest ring entry.  N = older.
-`;' and `C-;' use separate positions so the two navigation
-modes are independent.")
+\\[helixel-action-cycle\\] and \\[helixel-action-cycle-mark-start\\]
+use separate positions so the two navigation modes are independent.")
 
 ;; ----------------------------------------------------------------------
 ;; Buffer-local event ring
@@ -162,7 +174,9 @@ modes are independent.")
 (defvar-local helixel--action-ring nil
   "Event ring, most recent first.  Capped at `helixel-action-ring-max'.
 Each entry is a `helixel-action' struct.
-Shared by session jump (`;'), repeat (`.`/`,`), and history (`C-u n').")
+Shared by session jump (\\[helixel-action-cycle\\]), repeat
+\(\\[helixel-repeat-edit\\]/\\[helixel-repeat-last-motion\\]), and history
+\(\\[universal-argument\\] \\[helixel-search-repeat-next\\]).")
 
 (defvar-local helixel--live-action nil
   "The currently in-progress `helixel-action'.
@@ -234,7 +248,8 @@ Returns the committed entry or nil."
                     entry (car helixel--action-ring)))
         (push entry helixel--action-ring)
         (helixel-action--ring-cap))
-      ;; `helixel-last-action' tracks the most recent EDIT for `.' replay.
+      ;; `helixel-last-action' tracks the most recent EDIT for
+      ;; \\[helixel-repeat-edit] replay.
       ;; Movement txs (op = nil, runner-only) participate in mc dispatch
       ;; but must NOT advance last-action — that would shadow the prior
       ;; edit and break dot-repeat semantics.  The op-presence check
@@ -332,7 +347,8 @@ attaches a prepos function before `record-action' runs)."
 
 (defun helixel--tracking-open (category subcat &optional op)
   "Commit previous `helixel--live-action' and create a new one.
-CATEGORY and SUBCAT classify the event for \=`;\=` and jump-list.
+CATEGORY and SUBCAT classify the event for \\[helixel-action-cycle\\]
+and jump-list.
 OP is an optional operator symbol (nil for movement/search).
 
 No-op when `(helixel-replaying-p)` is non-nil (dot-repeat).
@@ -360,7 +376,7 @@ Does NOT commit the new event — caller is responsible for eventual commit."
           helixel--action-pos nil)))
 
 ;; ----------------------------------------------------------------------
-;; Global jump log (C-o / C-i)
+;; Global jump log (\\[helixel-jump-backward\\] / \\[helixel-jump-forward\\])
 ;; ----------------------------------------------------------------------
 
 (defvar helixel--global-jump-log nil
@@ -459,13 +475,14 @@ Used by state machine, surround, and jump navigation."
 
 
 ;; ----------------------------------------------------------------------
-;; Action cycle (`;') and global jump list (C-o / C-i)
+;; Action cycle (\\[helixel-action-cycle\\]) and global jump list
+;; (\\[helixel-jump-backward\\] / \\[helixel-jump-forward\\])
 ;; ----------------------------------------------------------------------
 ;;
 ;; Thin consumers of `helixel--action-ring' and `helixel--global-jump-log'.
-;; `helixel-action-cycle' (`;') navigates session start positions within
-;; the current buffer; `helixel-jump-backward' / `helixel-jump-forward'
-;; (C-o / C-i) navigate across buffers.  Both use the generic
+;; \\[helixel-action-cycle\\] navigates session start positions within
+;; the current buffer; \\[helixel-jump-backward\\] /
+;; \\[helixel-jump-forward\\] navigate across buffers.  Both use the generic
 ;; grouped-ring helpers in `helixel-core' (Part 10).
 
 
@@ -592,7 +609,8 @@ category and subcat."
 ;; ----------------------------------------------------------------------
 
 (defun helixel-action--cycle-visible-p (event)
-  "Return non-nil if EVENT should be visible during `;' cycling.
+  "Return non-nil if EVENT is visible during cycle.
+Checks \\[helixel-action-cycle\\] cycling visibility.
 Consults `helixel-action-cycle-categories', which supports both
 category symbols (match all subcats) and (CATEGORY . SUBCAT) pairs."
   (helixel--category-match-p
@@ -611,12 +629,12 @@ category symbols (match all subcats) and (CATEGORY . SUBCAT) pairs."
             (helixel--action-display-format event))))
 
 (defun helixel-action--push-sel-from-event (event)
-  "Push a `helixel-sel' from EVENT for `.' repeat.
+  "Push a `helixel-sel' from EVENT for \\[helixel-repeat-edit] repeat.
 Preserves current \=`n\=' count by preferring
 `helixel--pending-sel' \(which has up-to-date :n-count) over
 the selection descriptor stored in EVENT.
 Adds `:span t' so the strategy builder extends the region
-to session-start, matching `;''s behaviour."
+to session-start, matching \\[helixel-action-cycle\\]'s behaviour."
   (let ((pending helixel--pending-sel)
         (event-sel (helixel-action-sel event))
         sel)
@@ -635,7 +653,8 @@ to session-start, matching `;''s behaviour."
     sel))
 
 (defun helixel-action--cycle-mark-region (event mr first-call)
-  "Mark the region during `;' cycling using mark-region MR from EVENT.
+  "Mark the region during \\[helixel-action-cycle\\] cycling.
+Uses mark-region MR from EVENT.
 MR is a cons (START . END) of two markers or two integers.
 If FIRST-CALL is non-nil, MR is non-degenerate,
 `helixel--cycle-mark-thing-p' returns non-nil, and EVENT matches
@@ -643,7 +662,8 @@ If FIRST-CALL is non-nil, MR is non-degenerate,
 the far edge from point (mark-thing) and return t (did-mark).
 Otherwise just push the mark to the begin marker and return nil.
 
-When `helixel--cycle-mark-thing-p' returns nil (from `C-;'), the
+When `helixel--cycle-mark-thing-p' returns nil (from
+\\[helixel-action-cycle-mark-start\\]), the
 mark-thing path is skipped entirely — every call is non-mark-thing."
   (let* ((a (if (markerp (car mr))
                 (marker-position (car mr))
@@ -748,7 +768,8 @@ Thin orchestrator after step 15 — work split into
 
 (defun helixel--cycle-mark-start (event)
   "Return the start marker/position for EVENT based on cycle mode.
-When `helixel--cycle-mark-thing-p' returns nil (C-; mode), returns
+When `helixel--cycle-mark-thing-p' returns nil
+\\(\\[helixel-action-cycle-mark-start\\] mode), returns
 EVENT's start-point (the original pre-motion cursor position).
 Otherwise returns the car of EVENT's mark-region.
 Falls back to mark-region car when start-point is nil."
@@ -768,9 +789,11 @@ category and subcat."
        (eq (helixel-action-subcat a) (helixel-action-subcat b))))
 
 (defun helixel-action--cycle-auto-advance (did-mark first-call)
-  "Auto-advance the action cycle when `;' produced no useful change.
+  "Auto-advance the action cycle to skip dead spots.
+Called when \\[helixel-action-cycle\\] produced no useful change.
 DID-MARK is non-nil when mark-thing selected a region.
-FIRST-CALL is non-nil when this is the first `;' after a movement.
+FIRST-CALL is non-nil when this is the first
+\\[helixel-action-cycle\\] after a movement.
 
 When the current event doesn't change point or the region, skip
 forward to the next older event to avoid cycling through dead spots."
@@ -780,8 +803,10 @@ forward to the next older event to avoid cycling through dead spots."
     (helixel--action-cycle)))
 
 (defun helixel-action-cycle (&optional arg)
-  "Cycle through `helixel--action-ring' entries with `;'.
-The first `;' after a movement selects the full span (mark-thing).
+  "Cycle through `helixel--action-ring' entries.
+Uses \\[helixel-action-cycle\\] at each step.
+The first \\[helixel-action-cycle\\] after a movement selects the full
+span (mark-thing).
 Subsequent presses cycle to older events.
 
 Optional prefix ARG is passed to the underlying commands."
@@ -797,7 +822,8 @@ Optional prefix ARG is passed to the underlying commands."
   ;; Normal action cycle — marking is handled inline when showing
   ;; events that have a non-degenerate :mark-region.
   (if arg
-      ;; C-u ; → go forward (newer)
+      ;; \\[universal-argument\\] \\[helixel-action-cycle\\]
+      ;; → go forward (newer)
       (cond
        ((and helixel--action-pos (> helixel--action-pos 0))
         (let* ((newest (helixel--gr-group-newest
@@ -842,7 +868,8 @@ Optional prefix ARG is passed to the underlying commands."
                        helixel--action-ring pos))
               (helixel-action--cycle-show pos helixel--action-ring))
           ;; No older group: jump to current group-start marker
-          ;; to expand the visible region (first-`;' span wrap).
+          ;; to expand the visible region
+          ;; (first-\\[helixel-action-cycle\\] span wrap).
           (let* ((gpos (helixel--gr-group-start
                         helixel--action-ring helixel--action-pos
                         #'helixel-action--same-group-p))
@@ -877,12 +904,14 @@ Optional prefix ARG is passed to the underlying commands."
           (message "No saved actions"))))
      (t (message "No saved actions")))))
 
-;; ── Jump cycle (`C-;') ──
+;; ── Jump cycle (\\[helixel-action-cycle-mark-start\\]) ──
 ;;
-;; `C-;' shares the full `;' cycle infrastructure (group navigation,
+;; \\[helixel-action-cycle-mark-start\\] shares the full
+;; \\[helixel-action-cycle\\] cycle infrastructure (group navigation,
 ;; newest-for-mark, group-span computation, auto-advance) via
 ;; `helixel--action-cycle'.
-;; It uses the same ring, visibility, and grouping as `;'.  The two
+;; It uses the same ring, visibility, and grouping as
+;; \\[helixel-action-cycle\\].  The two
 ;; differences are:
 ;;   1. Marking: `helixel--cycle-mark-thing-p' returns nil, disabling
 ;;      the mark-thing path.  Every press pushes mark to the
@@ -893,11 +922,13 @@ Optional prefix ARG is passed to the underlying commands."
 
 (defun helixel-action-cycle-mark-start (&optional arg)
   "Cycle through event history, pushing mark to each event's start position.
-Bound to `C-;'.  Unlike `;' which selects the full movement span,
+Bound to \\[helixel-action-cycle-mark-start\\].  Unlike
+\\[helixel-action-cycle\\] which selects the full movement span,
 this command always pushes mark to the original pre-motion cursor
 position (the start-position of each tracked action).
 
-Shares the full `;' cycle infrastructure (group navigation,
+Shares the full \\[helixel-action-cycle\\] cycle infrastructure
+\(group navigation,
 newest-for-mark, group-span) but never selects the full span.
 
 Optional prefix ARG reverses direction (go newer)."
@@ -907,13 +938,14 @@ Optional prefix ARG reverses direction (go newer)."
   (let ((helixel--cycle-jump-p t)
         (helixel--action-pos helixel--mark-cycle-pos))
     ;; helixel--action-pos is let-bound from helixel--mark-cycle-pos
-    ;; so the shared cycle logic reads/writes C-;'s own position.
+    ;; so the shared cycle logic reads/writes
+;; \\[helixel-action-cycle-mark-start\\]'s own position.
     (unwind-protect
         (helixel--action-cycle arg)
       (setq helixel--mark-cycle-pos helixel--action-pos))))
 
 ;; ----------------------------------------------------------------------
-;; Global jump list (C-o / C-i)
+;; Global jump list (\\[helixel-jump-backward\\] / \\[helixel-jump-forward\\])
 ;; ----------------------------------------------------------------------
 
 (defun helixel-register-jump (&optional category subcat)

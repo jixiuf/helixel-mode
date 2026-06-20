@@ -44,7 +44,7 @@
   "Execute BODY with full event tracking (open → body → commit).
 
 OP — operator symbol (nil for movement/search).
-CATEGORY + SUBCAT — classification for \=`;\=` and jump-list.
+CATEGORY + SUBCAT — classification for \\[helixel-action-cycle] and jump-list.
 
 Calls `helixel--tracking-open' for the open phase.  Commits the
 event in an `unwind-protect' so it always finalises even on error."
@@ -89,7 +89,8 @@ METADATA is a plist:
                    (the payload plist holds a single :preposition).
 
 For :category movement:
-  - Auto-injects `helixel--track-visual-move' for \=`.\=` replay.
+  - Auto-injects `helixel--track-visual-move' for
+    \\[helixel-repeat-edit] replay.
   - Auto-injects `helixel--clear-highlights' (unless :clear-highlights nil).
   - A `let'-bound variable `helixel--motion-extra' is available
     inside BODY — commands can `setq' it to pass runtime-discovered
@@ -165,12 +166,13 @@ BODY is the command's business logic."
 (defmacro helixel-define-operator (name metadata &rest body)
   "Define a helixel editing operator NAME.
 
-Combines command definition (action tracking for \=`;\=` jumping
-and jump-list navigation) with op registration (for \=`.\=` repeat)
+Combines command definition (action tracking for
+\\[helixel-action-cycle] jumping and jump-list navigation)
+with op registration (for \\[helixel-repeat-edit] repeat)
 into a single form.
 
 METADATA is a plist:
-  :op OP              — operator symbol for \=`.\=` (required)
+  :op OP              — operator symbol for \\[helixel-repeat-edit] (required)
   :display DISPLAY    — label string or function (TX) -> string
   :moves-point-p P    — boolean; see `helixel-register-op'.
   :subcat SUB         — action subcategory (default: OP)
@@ -181,7 +183,7 @@ Expands to:
   2. (helixel-define-command NAME (:category edit ...) BODY)
 
 The command body SHOULD call (helixel-record-action OP ...) to record
-the edit for \=`.\=` replay."
+the edit for \\[helixel-repeat-edit] replay."
   (declare (indent 2))
   (let* ((op (plist-get metadata :op))
          (display (plist-get metadata :display))

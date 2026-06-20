@@ -312,7 +312,8 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
            (deactivate-mark)
            ;; Override the motion-extra recorded by
            ;; helixel-define-command with our flipped version
-           ;; so \\=`,' and \\=`;' see the actual direction used.
+           ;; so \\[helixel-repeat-last-motion] and \\[helixel-action-cycle]
+           ;; see the actual direction used.
            (setq helixel--motion-extra eff-motion-extra)
            (dotimes (_ n)
              (let* ((d (,factory ,@factory-args))
@@ -738,7 +739,7 @@ Caches the regexp in `helixel--pair-char-regex' for performance."
 DELIM is the delimiter plist to use for the outward lookup.
 When nil, falls back to `helixel--last-motion-cmd's
 :last-match-delimiter entry.  If neither is available, uses raw
-`up-list'.  Sets mark-region for `;' support.
+`up-list'.  Sets mark-region for \\[helixel-action-cycle] support.
 Returns t on success, nil (point unchanged) on failure.
 
 Outward candidates are collected from four sources:
@@ -748,7 +749,8 @@ Outward candidates are collected from four sources:
   4. tag delimiter (XML/HTML)
 
 The candidate closest to the original position wins, so
-\=`,' naturally expands layer-by-layer from innermost to
+\\[helixel-repeat-last-motion] naturally expands layer-by-layer
+from innermost to
 outermost, whether the enclosing structure is a bracket pair or
 a fenced block."
   (let* ((backward-p (eq dir :backward))
@@ -965,7 +967,8 @@ outward navigation via `helixel--up-list-once'.
 
 Opens tracking before the jump so `helixel--up-list-once' can
 set `:mark-region' on the live action and the committed event
-appears in the action ring.  This makes \=`;\=' after \=`,'
+appears in the action ring.  This makes
+\\[helixel-action-cycle] after \\[helixel-repeat-last-motion]
 select the full span of the enclosing pair."
   (let* ((dir (helixel--last-motion-dir rec))
          (delim (helixel--last-motion-last-match-delimiter rec))
@@ -982,7 +985,7 @@ select the full span of the enclosing pair."
 Skips past the current boundary via `helixel--motion-skip-past'
 then re-invokes the original command with the recorded prefix arg.
 On user-error restores point to before skip-past so a failing
-\=`,`\=' doesn't leave the cursor stranded."
+\\[helixel-repeat-last-motion] doesn't leave the cursor stranded."
   (let* ((cmd (helixel--last-motion-command rec))
          (orig (point))
          (effective-cmd (if helixel--motion-permanent-flip
@@ -1256,7 +1259,8 @@ simple `push-mark' would interact poorly with the rect-mode mark."
 By default, the region accumulates across all commands (visual-mode
 behaviour for e.g. `v w w d .`).  When :normal-mode is non-nil in
 CTX, each movement resets the selection (normal-mode behaviour).
-When :span is set (from `;' push), `normal-mode' is ignored so
+When :span is set (from \\[helixel-action-cycle] push),
+`normal-mode' is ignored so
 \=`; d .' replays the full movement span correctly.
 Signals `user-error' when point does not move (no more targets)."
   ;; :span forces visual-mode accumulation regardless of :normal-mode.

@@ -383,10 +383,10 @@
     (should-not (helixel-action--newest-for-mark-p
                  (make-helixel-action :category 'edit :subcat 'replace)))))
 
-;; ── `C-;' jump cycle tests ──
+;; ── \\[helixel-action-cycle-mark-start] jump cycle tests ──
 
 (ert-deftest helixel-test-jump-cycle-first-press ()
-  "First `C-;' shows ring\=[0] and sets jump-cycle-pos."
+  "First \\[helixel-action-cycle-mark-start] shows ring\=[0] and sets jump-cycle-pos."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
@@ -400,7 +400,7 @@
     (should (region-active-p))))
 
 (ert-deftest helixel-test-jump-cycle-empty-ring ()
-  "`C-;' on empty ring shows a message."
+  "\\[helixel-action-cycle-mark-start] on empty ring shows a message."
   (with-temp-buffer
     (setq helixel--action-ring nil helixel--live-action nil
           helixel--mark-cycle-pos nil)
@@ -408,7 +408,7 @@
     (should-not helixel--mark-cycle-pos)))
 
 (ert-deftest helixel-test-semicolon-always-mark-thing ()
-  "`;' always does mark-thing on first press regardless of category."
+  "\\[helixel-action-cycle] always does mark-thing on first press regardless of category."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
@@ -423,7 +423,7 @@
     (should helixel--action-pos)))
 
 (ert-deftest helixel-test-jump-cycle-live-action ()
-  "`C-;' commits live action before showing ring\=[0]."
+  "\\[helixel-action-cycle-mark-start] commits live action before showing ring\=[0]."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
@@ -440,7 +440,7 @@
     (should helixel--mark-cycle-pos)))
 
 (ert-deftest helixel-test-jump-cycle-second-press ()
-  "Second `C-;' advances or shows group-span without error."
+  "Second \\[helixel-action-cycle-mark-start] advances or shows group-span without error."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
@@ -485,7 +485,7 @@
     (should (region-active-p))))
 
 (ert-deftest helixel-test-jump-cycle-independent-from-semicolon ()
-  "`C-;' and `;' have independent cycle positions."
+  "\\[helixel-action-cycle-mark-start] and \\[helixel-action-cycle] have independent cycle positions."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
@@ -508,7 +508,7 @@
       (should (equal helixel--action-pos semicolon-pos)))))
 
 (ert-deftest helixel-test-jump-cycle-uses-start-point ()
-  "`C-;' pushes mark to start-point, not mark-region car."
+  "\\[helixel-action-cycle-mark-start] pushes mark to start-point, not mark-region car."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil
@@ -531,7 +531,7 @@
     (should (= (region-beginning) 4))))
 
 (ert-deftest helixel-test-jump-cycle-multi-event-group ()
-  "`C-;' handles multi-event groups using group-start's start-point."
+  "\\[helixel-action-cycle-mark-start] handles multi-event groups using group-start's start-point."
   (with-temp-buffer
     (transient-mark-mode 1)
     (setq helixel--action-ring nil helixel--live-action nil

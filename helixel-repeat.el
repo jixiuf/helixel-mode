@@ -21,17 +21,20 @@
 
 ;;; Commentary:
 ;;
-;; Dot-repeat (`.') infrastructure + insert-mode recording for helixel-mode.
+;; Dot-repeat (\\[helixel-repeat-edit]) infrastructure + insert-mode recording
+;; for helixel-mode.
 ;;
 ;; Records every editing operation as a *transaction* (see helixel-core.el)
-;; into a per-buffer ring; `.' replays the head transaction, optionally with
+;; into a per-buffer ring; \\[helixel-repeat-edit] replays the head transaction,
+;; optionally with
 ;; a numeric prefix.  `helixel-repeat-edit-pick' chooses an older entry from
 ;; the ring via completing-read.
 ;;
 ;; Architecture:
 ;;   Selection commands  → set helixel--pending-sel (selection descriptor)
 ;;   Editing commands    → helixel-record-action → last-action + ring
-;;   `.'                 → helixel-repeat-edit → sel-recreate + op-runner
+;;   \\[helixel-repeat-edit]                 → helixel-repeat-edit →
+;; sel-recreate + op-runner
 ;;
 ;; Both selection recreation and op execution use the `helixel-sel' struct
 ;; registry lookups in helixel-core.el.
@@ -49,7 +52,8 @@
 ;; Insert-mode key + text recording
 ;; ----------------------------------------------------------------------
 ;;
-;; Records insert-mode user activity for dot-repeat (`.') and
+;; Records insert-mode user activity for dot-repeat (\\[helixel-repeat-edit])
+;; and
 ;; multi-cursor broadcast.  Each command run during insert mode is
 ;; captured as ONE of two segment kinds:
 ;;
@@ -263,7 +267,7 @@ Printable chars use `insert-char' + `post-self-insert-hook' so
 ;; The `helixel-repeat-strategy' struct, the default strategy builder,
 ;; the dispatcher (`helixel--build-strategy') that delegates to
 ;; op-registered builders, and the generic advance / apply / preview
-;; loops invoked by `.' and `,'.
+;; loops invoked by \\[helixel-repeat-edit] and \\[helixel-repeat-last-motion].
 ;;
 ;; Knows nothing about specific kinds beyond what the kind registry
 ;; exposes.  Per-kind line / search / textobj behaviour lives in the
@@ -477,7 +481,8 @@ registry and stores them in the transaction so `helixel-action-replay'
 can dispatch without registry lookups.
 Builds a transaction via `helixel-action-create', pushes it onto
 the event ring, and stores the most recent edit in `helixel-last-action'.
-Also notifies the event ring so `;' jumping picks up the new edit.
+Also notifies the event ring so \\[helixel-action-cycle]
+jumping picks up the new edit.
 
 NOTE: Caller is responsible for calling `helixel--tracking-open' first.
 The `helixel-define-command' macro handles this automatically."
@@ -631,24 +636,30 @@ Uses `helixel--repeat-line-pass' for proper cursor advance."
 ;;
 ;; The 3 former globals (`--search-advance-done', `--advance-search-last-pos',
 ;; `--advance-search-edge-seen') now live as fields on the
-;; `helixel-replay' context, so they reset automatically per `.' /
-;; `,' session.  See `helixel-search-advance-*' in `helixel-replay.el'.
+;; `helixel-replay' context, so they reset automatically per
+;; \\[helixel-repeat-edit] /
+;; \\[helixel-repeat-last-motion] session.  See `helixel-search-advance-*' in
+;; `helixel-replay.el'.
 
 (defvar-local helixel--repeat-preview-pos nil
-  "Marker for the `M-.' preview position, consumed by `.'.
-Set by `M-.' (`helixel-repeat-selection') at the preview position;
-consumed by `.' (`helixel-repeat-edit') when point is still there.
-
-A marker auto-invalidates the moment the user moves point (the
-equality check in `.' fails), so no global hook is needed.")
-
+        "Marker for the \\[helixel-repeat-selection] preview position.
+Consumed by \\[helixel-repeat-edit].
+Set by \\[helixel-repeat-selection] at the preview position;
+consumed by \\[helixel-repeat-edit] when point is still there.
+A marker auto-invalidates the moment the user moves point
+\(the equality check in \\[helixel-repeat-edit] fails),
+so no global hook is needed.")
 
 
 (defun helixel--repeat-flip-action-dir ()
-  "Toggle `helixel--repeat-permanent-flip' for the last edit's selection kind.
-Like \=`N\=` for search, \=`-.\=` permanently reverses dot-repeat direction.
-Works for any kind that has a `:flip-dir-fn' registered (line, search, etc.).
-No-op for kinds without directional state (movement, textobj, rect).
+  "Toggle `helixel--repeat-permanent-flip' for the last edit.
+Like \\=`N\\=` for search,
+\\[negative-argument] \\[helixel-repeat-edit]
+permanently reverses dot-repeat direction.
+Works for any kind that has a `:flip-dir-fn' registered
+\(line, search, etc.).
+No-op for kinds without directional state
+\(movement, textobj, rect).
 Returns t on success, nil otherwise."
   (when-let* ((tx helixel-last-action)
               (sel (helixel-action-sel tx))
@@ -662,10 +673,11 @@ Returns t on success, nil otherwise."
 
 (defun helixel--repeat-setup (raw-prefix)
   "Common setup for `helixel-repeat-edit' and `helixel-repeat-selection'.
-Takes RAW-PREFIX (the raw prefix argument from `interactive').
-Gets the last edit transaction (falling back to the event ring if
-`helixel-last-action' is not an edit), parses the prefix argument,
-handles permanent direction flip, and resets search-advance state.
+Takes RAW-PREFIX \(the raw prefix argument from `interactive').
+Gets the last edit transaction (falling back to the event ring
+if `helixel-last-action' is not an edit), parses the prefix
+argument, handles permanent direction flip, and resets
+search-advance state.
 
 Returns (TX PREFIX SAVED-STATE) where:
   TX           — resolved edit `helixel-action'
@@ -692,7 +704,8 @@ Signals `user-error' when no edit is available."
            (prefix (helixel--decode-repeat-prefix raw-prefix)))
       (when flip-dir-p (helixel--repeat-flip-action-dir))
       ;; Search-advance scratch lives on the replay ctx, no reset needed
-      ;; — each `.' / `,' creates a fresh `helixel-replay' binding.
+      ;; — each \\[helixel-repeat-edit] / \\[helixel-repeat-last-motion]
+      ;; creates a fresh `helixel-replay' binding.
       (list tx prefix saved-state))))
 
 ;; ── Interactive entry points ──
@@ -703,7 +716,8 @@ Each function receives RAW-PREFIX and should return non-nil if it
 handled the dot-repeat; nil delegates to the default implementation.
 Uses `run-hook-with-args-until-success'.
 
-Set by mc-integrate to override `.' when fake cursors exist, so `.'
+Set by mc-integrate to override \\[helixel-repeat-edit]
+when fake cursors exist, so \\[helixel-repeat-edit]
 applies the last edit once at each cursor's current position without
 advancing.")
 
@@ -719,7 +733,7 @@ RAW-PREFIX is the raw prefix argument.  Delegates to
     (helixel--repeat-edit-default raw-prefix)))
 
 (defun helixel--repeat-edit-default (&optional raw-prefix)
-  "Default implementation of `.' (`helixel-repeat-edit').
+  "Default implementation of \\[helixel-repeat-edit] (`helixel-repeat-edit').
 
 Prefix RAW-PREFIX semantics:
   3.     -> 3 times in stored direction
@@ -789,7 +803,7 @@ Prefix RAW-PREFIX semantics (same as `.`):
   \\[universal-argument] ,    -> all targets in entire buffer
 
 Leaves a marker at the preview position in
-`helixel--repeat-preview-pos' so a subsequent `.' that fires
+`helixel--repeat-preview-pos' so a subsequent \\[helixel-repeat-edit] that fires
 without the user moving point in between will replay at that
 position.  Any other command moves point off the marker and
 automatically invalidates the preview."
@@ -816,7 +830,8 @@ automatically invalidates the preview."
               ;; Generic: unified advance/preview
               (helixel--repeat-preview tx mode n reverse-p)))
         (setq helixel--current-state saved-state))
-      ;; Stash preview position for the next `.' (positional handoff).
+      ;; Stash preview position for the next \\[helixel-repeat-edit] (positional
+      ;; handoff).
       (when helixel--repeat-preview-pos
         (set-marker helixel--repeat-preview-pos nil))
       (setq helixel--repeat-preview-pos (point-marker)))))

@@ -25,10 +25,15 @@
 ;; Search and find-char for helixel-mode.
 ;;
 ;; Keybindings in normal state:
-;;   /  ?        prompt then isearch-regexp forward/backward
-;;   *  #        search for symbol at point forward/backward
-;;   f  t  F  T  find-char/till-char forward/backward
-;;   n  N        repeat last search or find (N toggles direction)
+;;   \\[helixel-search-forward\\] \\[helixel-search-backward\\]
+;;       isearch-regexp forward/backward
+;;   \\[helixel-search-at-point-next\\] \\[helixel-search-at-point-prev\\]
+;;       search for symbol at point forward/backward
+;;   \\[helixel-find-next-char\\] \\[helixel-find-prev-char\\]
+;;   \\[helixel-find-till-char\\] \\[helixel-find-prev-till-char\\]
+;;       find-char/till-char forward/backward
+;;   \\[helixel-search-repeat-next\\] \\[helixel-search-repeat-reverse\\]
+;;       repeat last search or find (reverse toggles direction)
 
 ;;; Code:
 
@@ -127,19 +132,26 @@ Called from `helixel-state-change-hook'."
 ;; Active Search — single mutable search state
 ;;
 ;; `helixel--active-search' is the single source of truth for
-;; what n/N repeats and in which direction.
+;; what \\[helixel-search-repeat-next\\]/
+;; \\[helixel-search-repeat-reverse\\] repeats and in which direction.
 ;;
-;; Set by /, ?, *, #, f, F, t, T, C-u n/N
-;; Read by n/N commands and `.` / `,` repeat
+;; Set by search, find-char, and \\[universal-argument\\]
+;; \\[helixel-search-repeat-next\\]/\\[helixel-search-repeat-reverse\\].
+;; Read by \\[helixel-search-repeat-next\\]/
+;; \\[helixel-search-repeat-reverse\\] commands and
+;; \\[helixel-repeat-edit\\] / \\[helixel-repeat-last-motion\\] repeat.
 ;;
 ;; :dir is MUTABLE — N flips it.  Event-ring entries are immutable
 ;; snapshots and never store mutable state.
 
 (defvar-local helixel--active-search nil
   "Active repeat target as a `helixel--last-motion' struct.
-Set by /, ?, *, #, f, F, t, T.
-Read by n/N commands and `.` / `,` repeat.
-The :dir slot is MUTABLE — N flips it.
+Set by search and find-char commands.
+Read by \\[helixel-search-repeat-next\\]/
+\\[helixel-search-repeat-reverse\\] and \\[helixel-repeat-edit\\] /
+\\[helixel-repeat-last-motion\\] repeat.
+The :dir slot is MUTABLE —
+\\[helixel-search-repeat-reverse\\] flips it.
 Event-ring entries are immutable snapshots and never store
 mutable state.
 
@@ -147,7 +159,7 @@ Holds the same struct type as `helixel--last-motion-cmd' —
 a helixel--last-motion.  This variable is only overwritten
 by search/find-char commands, so n/N survives intervening
 movements (unlike `helixel--last-motion-cmd' which tracks the
-most recent motion of any category for \=`,`\=').")
+most recent motion of any category for \\[helixel-repeat-last-motion]).")
 
 (defsubst helixel-search--current-dir ()
   "Return current repeat direction from `helixel--active-search'.
@@ -252,8 +264,9 @@ we bridge that via `helixel--search-filter-loop'."
 Increments :n-count each time (0 for initial search, 1 for first n,
 2 for second n, etc.) so . advance skips the correct number of
 matches to match the original n count.
-Also stores :regexp from `helixel--active-search' so \\=`,' and \\=`.'
-respect the \\=`M-r' toggle."
+Also stores :regexp from `helixel--active-search' so
+\\[helixel-repeat-last-motion] and \\[helixel-repeat-edit]
+respect toggle \\[isearch-toggle-regexp] the."
   (when-let* ((s helixel--active-search)
               (pat (helixel-search--safe-pattern))
               (dir (helixel-search--current-dir)))
@@ -284,8 +297,9 @@ is not committed by the next command."
               (make-helixel--last-motion
                :category 'search :pattern isearch-string
                :dir dir :regexp isearch-regexp))
-        ;; Record for motion repeat (bound to `,'):
-        ;; store category+pattern+dir+regexp so `,' can replay search
+        ;; Record for motion repeat (bound to \\[helixel-repeat-last-motion]):
+        ;; store category+pattern+dir+regexp so \\[helixel-repeat-last-motion]
+        ;; can replay search
         ;; via `helixel-search--isearch-repeat'.
         (helixel-record-motion nil
           :category 'search :pattern isearch-string
@@ -575,8 +589,10 @@ DOC is the docstring."
            (n (abs (or count 1)))
            (effective-dir (* ,dir (if (and count (< count 0)) -1 1))))
        (helixel--tracking-open 'find-char ',type)
-       ;; Record this as the last motion for `,' repeat.
-       ;; Stash char/type/dir so `,' replays self-contained
+       ;; Record this as the last motion for \\[helixel-repeat-last-motion]
+       ;; repeat.
+       ;; Stash char/type/dir so \\[helixel-repeat-last-motion] replays
+       ;; self-contained
        ;; without consulting `helixel--active-search'.
        (let ((sym-dir (if (> effective-dir 0) 'forward 'backward)))
          (helixel-record-motion ',name
@@ -707,11 +723,13 @@ the full f x n n sequence.  Extends region back to origin when
 
 (defun helixel-search--repeat-find-char (&optional char type dir)
   "Repeat the last find-char.
-When CHAR, TYPE and DIR are given (from \=`,'), use them directly.
+When CHAR, TYPE and DIR are given
+\(from \\[helixel-repeat-last-motion]\), use them directly.
 Otherwise (from \=`n') read from `helixel--active-search'.
 Passes CHAR/TYPE/DIR explicitly to `helixel-search--find-char-core'
 so no temp dynamic binding of `helixel--active-search' is needed.
-Updates n-count in the pending sel so \=`.' repeats the full sequence.
+Updates n-count in the pending sel so
+\\[helixel-repeat-edit] repeats the full sequence.
 Also attaches a runner + payload so the unified mc dispatcher can
 replay this repeat at every fake cursor without re-entering `n'."
   (let ((char (or char (helixel-search--safe-char)))
@@ -843,12 +861,15 @@ consultation needed."
 ;; ---------------------------------------------------------------------------
 ;; n / N  — repeat
 ;;
-;; n repeats the last search or find-char recorded by `helixel-repeat-set'.
-;; N flips direction, exchanges point and mark, then delegates to n.
+;; \\[helixel-search-repeat-next\\] repeats the last search or find-char.
+;; \\[helixel-search-repeat-reverse\\] flips direction, exchanges
+;; point and mark, then delegates to
+;; \\[helixel-search-repeat-next\\].
 ;;
-;; C-u n picks from history → executes in stored direction.
-;; C-u N picks from history → executes in opposite of stored direction.
-;; Both update `helixel--repeat-data' so subsequent n repeats the pick.
+;; \\[universal-argument\\] \\[helixel-search-repeat-next\\] picks
+;; from history → executes in stored direction.
+;; \\[universal-argument\\] \\[helixel-search-repeat-reverse\\] picks
+;; from history → executes in opposite of stored direction.
 ;;
 ;; Direction lives in `helixel--repeat-dir', never in the event.
 ;; The event `:dir' is a historical record set at creation.
@@ -875,14 +896,17 @@ With prefix ARG (\\[universal-argument]), pick from history."
 With prefix ARG (\\[universal-argument]), pick from history."
   (interactive "P")
   (if arg
-      ;; C-u N: from-history with forwardp=nil already toggles the
-      ;; stored direction — no pre-flip needed.
+      ;; \\[universal-argument\\] \\[helixel-search-repeat-reverse\\]:
+      ;; from-history with forwardp=nil already toggles the stored
+      ;; direction — no pre-flip needed.
       (helixel-search--from-history nil)
     (helixel-search--flip-dir)
     (exchange-point-and-mark)
     (helixel-search-repeat-next)))
 
-;; ── C-u n / C-u N  from-history ──
+;; ── \\[universal-argument\\] \\[helixel-search-repeat-next\\] /
+;;     \\[universal-argument\\] \\[helixel-search-repeat-reverse\\]
+;;     from-history ──
 
 (defun helixel-search--history-collect ()
   "Return alist of (display . event) for valid repeatable entries."
@@ -914,7 +938,9 @@ Returns the chosen action plist or nil."
   "Execute EVENT (a `helixel-action' struct) in direction USE-DIR.
 Sets `helixel--active-search' and pushes the pending sel BEFORE
 committing, so the new ring entry carries its selection descriptor
-and appears correctly in `C-u n' history and \=`;\=' cycling."
+and appears correctly in
+\\[universal-argument\\] \\[helixel-search-repeat-next\\] history
+and \\[helixel-action-cycle\\] cycling."
   (let ((cat (helixel-action-category event)))
     (helixel-search--set-dir use-dir)
     (pcase cat

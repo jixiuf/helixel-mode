@@ -2585,7 +2585,7 @@ Tests the all-dir branch of `helixel--repeat-preview'."
 ;; ── Step 14: positional preview handoff regression ──
 
 (ert-deftest helixel-test-repeat-preview-cleared-by-other-command ()
-  "After `,', moving point invalidates the preview handoff.
+  "After \\[helixel-repeat-last-motion], moving point invalidates the preview handoff.
 Replaces the old `helixel--repeat-preview-pos' flag +
 `post-command-hook' stale-clear design: a marker at the preview
 position auto-invalidates the moment point moves."
@@ -2601,7 +2601,7 @@ position auto-invalidates the moment point moves."
     (should (markerp helixel--repeat-preview-pos))
     (should (= (point) (marker-position helixel--repeat-preview-pos)))
     ;; Move point: marker still exists but no longer matches point —
-    ;; the next `.' would NOT treat this as a preview replay.
+    ;; the next \\[helixel-repeat-edit] would NOT treat this as a preview replay.
     (forward-char 1)
     (should (markerp helixel--repeat-preview-pos))
     (should-not (= (point)

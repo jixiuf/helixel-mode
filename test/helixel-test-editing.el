@@ -418,7 +418,7 @@
       (should (equal helixel-last-action before)))))
 
 (ert-deftest helixel-test-repeat-edit-change-end-to-end ()
-  "End-to-end: c<text><esc> records inserted text; `.' replays it."
+  "End-to-end: c<text><esc> records inserted text; \\[helixel-repeat-edit] replays it."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 1)
     (setq last-command nil this-command 'helixel-mark-inner-word)
@@ -435,7 +435,7 @@
     (should (string= (buffer-string) "X X foo"))))
 
 (ert-deftest helixel-test-repeat-edit-insert-end-to-end ()
-  "End-to-end: i<text><esc> records inserted text; `.' replays it."
+  "End-to-end: i<text><esc> records inserted text; \\[helixel-repeat-edit] replays it."
   (let ((helixel-last-action nil)
         (helixel-repeat-change-method 'text))
     (helixel-test-with-buffer "abc"

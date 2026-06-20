@@ -554,7 +554,8 @@ instead of `insert-for-yank' — `helixel-replace' passes
        text
        (lambda () (helixel-with-replay-as 'dot (helixel--yank-body nil))))
       (helixel--register-consume)
-      ;; Store paste bounds as mark-region for `;' re-select.
+      ;; Store paste bounds as mark-region for \\[helixel-action-cycle]
+      ;; re-select.
       (when helixel--yank-pop-bounds
         (helixel--set-mark-region helixel--yank-pop-bounds))
       (helixel-record-action 'replace)
@@ -613,14 +614,15 @@ instead of `insert-for-yank' — `helixel-replace' passes
               (insert text "\n")
             (insert-for-yank text))
           (setq helixel--yank-pop-bounds (cons beg (point)))
-          ;; Store bounds as mark-region for `;' re-select.
+          ;; Store bounds as mark-region for \\[helixel-action-cycle] re-select.
           (helixel--set-mark-region (cons beg (point))))
       ;; No bounds available — fall back or browse.
       (if (memq last-command '(helixel-yank helixel-yank-before
                                helixel-replace yank yank-pop
                                helixel-yank-pop))
           ;; After a yank/replace with no region, delegate to yank-pop.
-          ;; Capture bounds afterward so subsequent M-y cycles via the
+          ;; Capture bounds afterward so subsequent
+          ;; \\[helixel-yank-pop\\] cycles via the
           ;; helixel--yank-pop-bounds path (yank-pop may not set them).
           (progn
             (yank-pop arg)
@@ -746,8 +748,9 @@ that many times (Vim-like 2p, 3P)."
               (yank 1)))))
       (helixel--register-consume)
       (helixel--register-consume)
-      ;; Store pasted bounds as mark-region for `;' re-select,
-      ;; and as yank-pop-bounds for M-y cycling.
+      ;; Store pasted bounds as mark-region for \\[helixel-action-cycle]
+      ;; re-select,
+      ;; and as yank-pop-bounds for \\[helixel-yank-pop\\] cycling.
       (let ((bounds nil))
         (cond
          ;; Line-wise: handler already positioned cursor.
@@ -771,7 +774,8 @@ that many times (Vim-like 2p, 3P)."
             (set-marker end nil))))
         (when bounds
           (helixel--set-mark-region bounds)
-          ;; Also set pop-bounds so M-y can find the pasted text.
+          ;; Also set pop-bounds so \\[helixel-yank-pop\\] can find the
+          ;; pasted text.
           (setq helixel--yank-pop-bounds bounds)))
       ;; Restore cursor to start for char/rect (line handler does its own).
       (when start

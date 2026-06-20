@@ -1027,7 +1027,8 @@ partially-executed command."
                  (helixel-mc--leave-cursor cursor)))))))))
 
 (defun helixel-collapse-selection ()
-  "Collapse every cursor's selection to a bare cursor (Helix `;').
+  "Collapse every cursor's selection to a bare cursor.
+\(Helix \\[helixel-action-cycle]).
 Each cursor (real and fake) with an active region has its mark
 deactivated, leaving point unchanged.  When the real cursor has an
 active region, visual state is also exited so subsequent movements
@@ -1143,7 +1144,7 @@ prompt (surround-*, replace-char) or change global state
 \(change → insert).  Those replay the pre-built runner.
 
 Movement / search / textobj commands (op = nil) run the runner
-AND record a per-fake ring entry so \=`;' cycling works.
+AND record a per-fake ring entry so \\[helixel-action-cycle] cycling works.
 Fallback commands (no fresh action) run via
 \=`call-interactively' with no suppression — the fake's
 \=`live-action' is nil at creation, so there is no stale state.
@@ -1233,7 +1234,7 @@ commands like `helixel-mc-toggle')."
                      fresh-runnable cmd cursor dead))
                   (dolist (ov dead)
                     (helixel-mc--delete-fake-cursor ov)))
-              (quit nil)  ; belt-and-suspenders after C-g
+              (quit nil)  ; belt-and-suspenders after \\[keyboard-quit\\]
               (error
                (message "helixel-mc: %s outer error: %s"
                         cmd (error-message-string err))))

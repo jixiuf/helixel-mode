@@ -390,8 +390,8 @@ used selection management lives here under `s'."
   "U"   #'helixel-mc-unmark-previous
   "."   #'helixel-mc-apply-last-action
   ;; Helix-style selection ops
-  ";"   #'helixel-collapse-selection ; like Helix `;'
-  ","   #'helixel-mc-clear-all       ;`,' = remove fakes
+  ";"   #'helixel-collapse-selection ; like Helix \\[helixel-action-cycle]
+  ","   #'helixel-mc-clear-all       ;\\[helixel-mc-clear-all] = remove fakes
   "v"   #'helixel-mc-restore-cursors ; like Helix gv
   "k"   #'helixel-mc-keep-matching   ; like Helix K
   "K"   #'helixel-mc-remove-matching ; like Helix `M-K'

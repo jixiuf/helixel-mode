@@ -383,7 +383,8 @@ navigated to, then real moves back to the nearest neighbor
 
 ;;;###autoload
 (defun helixel-mc-keep-primary ()
-  "Remove all fake cursors except the real cursor (Helix `,' equivalent).
+  "Remove all fake cursors except the real cursor.
+\(Helix \\[helixel-mc-clear-all] equivalent).
 Keeps only the current primary (real cursor) and discards every
 other fake cursor."
   (interactive)
@@ -980,7 +981,8 @@ that want to suppress recording locally can rebind
 ;;;###autoload
 (defun helixel-mc-restore-cursors ()
   "Restore the most recent cursor layout snapshot.
-Useful after `,' / `s ,' / `s SPC' (clear-all): press `g v' to
+Useful after \\[helixel-mc-clear-all] / `s ,' / `s SPC'
+\(clear-all): press `g v' to
 bring back the prior set of fakes.  Repeated `g v' walks deeper
 into history."
   (interactive)

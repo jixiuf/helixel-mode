@@ -79,7 +79,7 @@ at point (t) or simply insert without deleting (nil)."
 When a buffer enters motion state and its `major-mode' is not in
 this list, the mode's keymap parent is extended with
 `helixel-normal-map', giving fallback access to normal-state
-commands (scroll, `;' action cycle, etc.)."
+commands (scroll, \\[helixel-action-cycle] action cycle, etc.)."
   :type '(repeat symbol)
   :group 'helixel)
 
@@ -420,7 +420,8 @@ search mark handling."
 
 ;; ── Motion-state keymap parent patching ──
 ;; Extend major-mode keymaps with `helixel-normal-map' as fallback
-;; parent so that normal-state commands (scroll, `;' action cycle,
+;; parent so that normal-state commands (scroll, \\[helixel-action-cycle] action
+;; cycle,
 ;; etc.) are available in motion state.
 
 (defvar helixel--motion-parent-patched (make-hash-table :test #'eq)

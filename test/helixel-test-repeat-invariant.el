@@ -17,8 +17,8 @@
 
 ;;; Commentary:
 
-;; Invariant tests for the repeat subsystem (dot-repeat `.', selection
-;; repeat `,').  Asserts structural properties the implementation MUST
+;; Invariant tests for the repeat subsystem (dot-repeat \\[helixel-repeat-edit], selection
+;; repeat \\[helixel-repeat-last-motion]).  Asserts structural properties the implementation MUST
 ;; maintain so that future refactors (tx/action merge, preposition
 ;; first-class slot, etc.) can be validated quickly.
 
@@ -45,7 +45,7 @@ Resets last-tx and pending sel before BODY."
 
 (ert-deftest helixel-test-inv-repeat-replay-context-active ()
   "INV: `helixel-replaying-p' is t while a `dot' origin context is active.
-This is what prevents `.' from recording itself."
+This is what prevents \\[helixel-repeat-edit] from recording itself."
   (helixel-repeat-inv-with-buffer "abc\n"
     (should-not (helixel-replaying-p))
     (helixel-with-replay 'dot
@@ -78,7 +78,7 @@ does not bleed into another."
 
 (ert-deftest helixel-test-inv-repeat-tx-replay-does-not-mutate ()
   "INV: replaying a tx via `helixel-action-replay' must not mutate the tx.
-Otherwise `.' twice in a row would produce different second results."
+Otherwise \\[helixel-repeat-edit] twice in a row would produce different second results."
   (helixel-repeat-inv-with-buffer "abcde\n"
     (let* ((calls 0)
            (tx (make-helixel-action

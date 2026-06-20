@@ -245,7 +245,7 @@ has been nulled (zombie state)."
 ;; During recording each keystroke broadcasts live to every fake,
 ;; so an extra `apply-chain-once' at chain-end would double the
 ;; edit.  Verify the advice only emits the user message and
-;; broadcasts the TX for future `.' replay.
+;; broadcasts the TX for future \\[helixel-repeat-edit] replay.
 
 (ert-deftest helixel-test-mc-chain-end-does-not-double-apply ()
   "After chain-end with mc-mode + a chain TX, the runner must NOT
@@ -289,7 +289,7 @@ application path; chain-end does not re-replay."
       (should (helixel-mc--should-run-for-all-p 'self-insert-command)))
     (helixel-mc-clear-all)))
 
-;; ── Regression: chain end must NOT capture the trailing `ESC' that
+;; ── Regression: chain end must NOT capture the trailing \\[helixel-normal-escape] that
 ;; triggered `helixel-normal-escape' — otherwise replaying the macro
 ;; at each fake would run normal-escape with chain inactive, falling
 ;; through to `helixel-mc-clear-all' which wipes cursors mid-replay
@@ -481,7 +481,7 @@ drop them."
 
 (ert-deftest helixel-test-mc-dot-replays-per-cursor-last-event ()
   "Each fake snapshots its own `helixel-last-action' via
-`helixel-pc-state' after the broadcast.  `.' replayed via
+`helixel-pc-state' after the broadcast.  \\[helixel-repeat-edit] replayed via
 the amalgamated dispatcher must use the per-cursor snapshot, not
 the real cursor's event."
   (helixel-test-with-buffer "foo bar baz\n"
@@ -498,7 +498,7 @@ the real cursor's event."
       (setq helixel-last-action tx)
       (dolist (ov (helixel-mc-all-cursors))
         (setf (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)) tx)))
-    ;; Now broadcast `.' — dispatcher's around-advice converts it
+    ;; Now broadcast \\[helixel-repeat-edit] — dispatcher's around-advice converts it
     ;; to a single execute-edit at each cursor's point.
     (helixel-action-replay helixel-last-action)
     (helixel-mc-with-each-cursor
@@ -512,7 +512,7 @@ the real cursor's event."
 (ert-deftest helixel-test-mc-broadcast-snapshots-last-event ()
   "After a broadcast edit, each fake's overlay `helixel-last-action'
 property must be updated by `leave-cursor' — otherwise a later
-`.' at the fake would replay a stale TX."
+\\[helixel-repeat-edit] at the fake would replay a stale TX."
   (helixel-test-with-buffer "aaa bbb\n"
     (helixel-enter-normal-state)
     (goto-char 1)
@@ -542,7 +542,7 @@ fires only when fakes exist."
            (tx (helixel-action-create 'noop sel
                  :runner (lambda (_tx) (cl-incf called)))))
       (setq helixel-last-action tx)
-      ;; Direct call to advised `.':
+      ;; Direct call to advised \\[helixel-repeat-edit]:
       (helixel-repeat-edit)
       ;; The around advice runs `helixel-action-replay' exactly once
       ;; at real (no advance loop).  Broadcast to fakes is the
@@ -553,7 +553,7 @@ fires only when fakes exist."
 
 (ert-deftest helixel-test-mc-chain-broadcast-then-dot-at-fakes ()
   "After `q...ESC' the chain TX is broadcast to every fake via
-`helixel-mc--broadcast-last-event'.  A later `.' dispatched at a
+`helixel-mc--broadcast-last-event'.  A later \\[helixel-repeat-edit] dispatched at a
 fake then replays the chain TX (not the pre-chain edit)."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc--create-fake-cursor 2)
@@ -570,10 +570,10 @@ fake then replays the chain TX (not the pre-chain edit)."
 
 ;; ── Phase C: find-char per-cursor + per-fake error tolerance ────
 
-;; ── Action cycle (`;') + jump nav (C-o / C-i) are real-only ─────
+;; ── Action cycle (\\[helixel-action-cycle]) + jump nav (C-o / C-i) are real-only ─────
 
 (ert-deftest helixel-test-mc-action-cycle-broadcasts ()
-  "`;' is whitelisted for multi-cursor dispatch: each fake
+  "\\[helixel-action-cycle] is whitelisted for multi-cursor dispatch: each fake
 cycles its OWN per-cursor `helixel--action-ring' built from
 commands dispatched after the fake was spawned."
   (should (eq t (get 'helixel-action-cycle 'multiple-cursors))))
@@ -672,7 +672,7 @@ do NOT leak into cursor B's ring.  Achieved because
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-semicolon-on-empty-ring-is-noop ()
-  "Pressing `;' at a fake whose ring is empty (no motions ever
+  "Pressing \\[helixel-action-cycle] at a fake whose ring is empty (no motions ever
 broadcast since spawn) is a silent no-op — must not error and
 must not corrupt the fake's state."
   (helixel-test-with-buffer "abc def ghi\n"
@@ -682,7 +682,7 @@ must not corrupt the fake's state."
       ;; Sanity: fresh fake has nil ring and nil live-event.
       (should (null (helixel-pcs-event-ring (overlay-get ov 'helixel-pc-state))))
       (should (null (helixel-pcs-live-action (overlay-get ov 'helixel-pc-state))))
-      ;; Broadcast `;' — fake's `helixel-action-cycle' sees no
+      ;; Broadcast \\[helixel-action-cycle] — fake's `helixel-action-cycle' sees no
       ;; ring, no live; prints "No saved actions" and returns.
       (helixel-mc-with-each-cursor (helixel-action-cycle))
       ;; Fake's point/mark unchanged.
@@ -694,7 +694,7 @@ must not corrupt the fake's state."
   "Spawning a fake AFTER real built a ring: the fake inherits
 real's \=`helixel--action-ring' via the snapshot taken by
 \=`helixel-mc--create-fake-cursor'.  This means \=`w w w s s ;' DOES
-work — fake's \=`;' cycles the inherited history.
+work — fake's \\[helixel-action-cycle] cycles the inherited history.
 
 The fake does NOT inherit \=`helixel--live-action' (the real cursor's
 in-progress uncommitted action).  A fresh fake starts with a clean
@@ -721,7 +721,7 @@ marker corruption during subsequent dispatch."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-action-cycle-no-message-spam ()
-  "`with-each-cursor' binds `inhibit-message' so that `;' (which
+  "`with-each-cursor' binds `inhibit-message' so that \\[helixel-action-cycle] (which
 calls `(message ...)' inside `helixel-action--cycle-show')
 doesn't echo once per fake."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
@@ -760,7 +760,7 @@ are no longer written by `helixel-mc--enter/leave-cursor'."
 
 (ert-deftest helixel-test-mc-jump-nav-is-real-only ()
   "C-o / C-i navigate the GLOBAL `helixel--global-jump-log'; same
-argument as `;' — real-only."
+argument as \\[helixel-action-cycle] — real-only."
   (dolist (cmd '(helixel-jump-backward helixel-jump-forward))
     (should (plist-member (symbol-plist cmd) 'multiple-cursors))
     (should (null (get cmd 'multiple-cursors)))))
@@ -805,7 +805,7 @@ broadcast must advance each fake to ITS own next/outer match."
 
 (ert-deftest helixel-test-mc-semicolon-after-percent-marks-per-cursor ()
   "After `%' (broadcast) every cursor has point at its own match;
-the first `;' must then select the pair AT EACH cursor by
+the first \\[helixel-action-cycle] must then select the pair AT EACH cursor by
 activating mark over the (pre, post) span."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
     (helixel-enter-normal-state)
@@ -815,11 +815,11 @@ activating mark over the (pre, post) span."
     ;; Broadcast `%' — each cursor moves to its own `)' (one past).
     (helixel-jump-to-match)
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
-    ;; Pre-`;': no cursor has an active region.
+    ;; Pre-\\[helixel-action-cycle]: no cursor has an active region.
     (should (not mark-active))
     (dolist (ov (helixel-mc-all-cursors))
       (should (not (helixel-mc-cursor-mark-active ov))))
-    ;; First `;' — broadcast so each fake cycles its OWN ring's
+    ;; First \\[helixel-action-cycle] — broadcast so each fake cycles its OWN ring's
     ;; `%' event and marks its enclosing pair.
     (let ((last-command 'helixel-jump-to-match))
       (helixel-action-cycle)
@@ -836,9 +836,9 @@ activating mark over the (pre, post) span."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-semicolon-marks-pair-at-each-fake ()
-  "`%' then `;' at every fake: each fake's per-cursor event ring
+  "`%' then \\[helixel-action-cycle] at every fake: each fake's per-cursor event ring
 holds its own `%' event whose `:mark-region' covers that fake's
-enclosing pair.  Broadcasting `;' makes each fake cycle its OWN
+enclosing pair.  Broadcasting \\[helixel-action-cycle] makes each fake cycle its OWN
 ring and select the FAR endpoint of that pair, exactly like
 real."
   (helixel-test-with-buffer "abc { xx } def { yy } ghi\n"
@@ -859,7 +859,7 @@ real."
            (p (marker-position (helixel-mc-cursor-point fake))))
       ;; The first `%' (backward-only reposition) + second `%'
       ;; (on-delimiter jump) together make both ends of `{ yy }'
-      ;; selected by `;'.  The mark/point positions here reflect
+      ;; selected by \\[helixel-action-cycle].  The mark/point positions here reflect
       ;; the far-end-from-origin selection.
       (should (= 22 m))                 ; at `}' end
       (should (= 16 p))                 ; at `{' begin
@@ -923,7 +923,7 @@ Fix: the sync only acts on transitions INTO / OUT OF `visual'."
   "Regression for `/hello<RET>ss%;d': `%' from a position INSIDE
 an enclosing pair (e.g. on the word \"hello\" between `{' and
 `}') jumps to ONE end of the pair, and stores the pair bounds
-in the live event's mark-region.  The first `;' must select the
+in the live event's mark-region.  The first \\[helixel-action-cycle] must select the
 FULL pair AT EACH cursor — not just (pre-point, post-point) —
 so that a subsequent `d' deletes the whole `{...}' block."
   (helixel-test-with-buffer "a {x} b {y} c {z}\n"
@@ -935,7 +935,7 @@ so that a subsequent `d' deletes the whole `{...}' block."
     ;; and live-event mark-region holds the pair bounds.
     (helixel-jump-to-match)
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
-    ;; First `;' broadcast — each fake cycles its OWN ring.
+    ;; First \\[helixel-action-cycle] broadcast — each fake cycles its OWN ring.
     (let ((last-command 'helixel-jump-to-match))
       (helixel-action-cycle)
       (helixel-mc-with-each-cursor (helixel-action-cycle)))
@@ -964,9 +964,9 @@ so that a subsequent `d' deletes the whole `{...}' block."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-semicolon-second-press-cycles-fake-ring ()
-  "Second `;' (consecutive press) at fakes also broadcasts now:
+  "Second \\[helixel-action-cycle] (consecutive press) at fakes also broadcasts now:
 because each fake owns a `helixel--action-ring' and `helixel--
-action-pos', repeated `;' cycles each fake's OWN history.  Verify
+action-pos', repeated \\[helixel-action-cycle] cycles each fake's OWN history.  Verify
 the call doesn't error and the fake's ring still exists."
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
     (helixel-enter-normal-state)
@@ -974,10 +974,10 @@ the call doesn't error and the fake's ring still exists."
     (helixel-mc--create-fake-cursor 6)
     ;; Build a motion event in each fake's ring via `%'.
     (helixel-mc-with-each-cursor (helixel-jump-to-match))
-    ;; First `;': fake cycles to its `%' event.
+    ;; First \\[helixel-action-cycle]: fake cycles to its `%' event.
     (let ((last-command 'helixel-jump-to-match))
       (helixel-mc-with-each-cursor (helixel-action-cycle)))
-    ;; Second `;': fake cycles further back in its OWN ring —
+    ;; Second \\[helixel-action-cycle]: fake cycles further back in its OWN ring —
     ;; "At oldest" message is harmless; no error.
     (let ((last-command 'helixel-action-cycle))
       (helixel-mc-with-each-cursor (helixel-action-cycle)))
@@ -987,7 +987,7 @@ the call doesn't error and the fake's ring still exists."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-jump-cycle-at-each-fake ()
-  "`C-;' broadcasts to fakes: each fake cycles its own ring
+  "\\[helixel-action-cycle-mark-start] broadcasts to fakes: each fake cycles its own ring
 and pushes mark to its own start-point, independent of real."
   (helixel-test-with-buffer "abc { xx } def { yy } ghi\n"
     (helixel-enter-normal-state)
@@ -1008,9 +1008,9 @@ and pushes mark to its own start-point, independent of real."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-semicolon-after-undo-uses-per-fake-ring ()
-  "After mc edit + undo, `;' at a fake cursor uses its own
+  "After mc edit + undo, \\[helixel-action-cycle] at a fake cursor uses its own
 per-cursor event-ring populated by mc dispatch.  The fake's
-`;' must activate mark at the fake's position (not the real
+\\[helixel-action-cycle] must activate mark at the fake's position (not the real
 cursor's) because the ring entries were committed with
 per-fake markers."
   (helixel-test-with-buffer "hello world\nhello world\n---\n"
@@ -1025,10 +1025,10 @@ per-fake markers."
       ;; Fake must have a live action (ring entry pending commit).
       (let ((cs (overlay-get ov 'helixel-pc-state)))
         (should (helixel-pcs-live-action cs)))
-      ;; Broadcast `;' — fake must activate mark from its own ring.
+      ;; Broadcast \\[helixel-action-cycle] — fake must activate mark from its own ring.
       (let ((last-command 'helixel-forward-word-start))
         (helixel-mc-with-each-cursor (helixel-action-cycle)))
-      ;; After `;', fake's mark must be active.
+      ;; After \\[helixel-action-cycle], fake's mark must be active.
       (should (helixel-mc-cursor-mark-active ov))
       ;; Fake's mark must be on its own line (pos ≥ 13), not on the
       ;; real cursor's line.
@@ -1040,7 +1040,7 @@ per-fake markers."
 (ert-deftest helixel-test-mc-fake-ring-grows-after-post-command-dispatch ()
   "Fake cursor's event-ring must grow after movement commands
 are dispatched via the post-command-hook (fresh-runnable path).
-This verifies the fix for \=`;' cycling at fakes after commands
+This verifies the fix for \\[helixel-action-cycle] cycling at fakes after commands
 that go through the normal post-command dispatch loop."
   (helixel-test-with-buffer "alpha beta gamma delta\n"
     (helixel-enter-normal-state)
@@ -1726,7 +1726,7 @@ N word targets, not N+1."
                   (helixel-sel-textobj-command
                    (helixel-action-sel helixel-last-action)))))))
 
-;; ── `.' (dot) at mc cursors: apply-only, no advance ──
+;; ── \\[helixel-repeat-edit] (dot) at mc cursors: apply-only, no advance ──
 ;;
 ;; Regression: under multi-cursor, `helixel-repeat-edit' must NOT do
 ;; the usual advance+apply loop.  Each cursor is already positioned on
@@ -1753,7 +1753,7 @@ N word targets, not N+1."
   ))
 
 (ert-deftest helixel-test-mc-dot-apply-only-no-advance ()
-  "Under mc, `.' applies the last edit ONCE at each cursor's region.
+  "Under mc, \\[helixel-repeat-edit] applies the last edit ONCE at each cursor's region.
 It must NOT advance to the next textobj target (which would target
 the wrong word and overlap with neighbouring cursors)."
   (helixel-test-with-buffer "alpha beta gamma delta epsilon\n"
@@ -1772,9 +1772,9 @@ the wrong word and overlap with neighbouring cursors)."
       (helixel-mc-clear-all))))
 
 (ert-deftest helixel-test-mc-dot-trailing-empty-line ()
-  "Combined regression: trailing empty line + `.' at mc cursors.
+  "Combined regression: trailing empty line + \\[helixel-repeat-edit] at mc cursors.
 With a buffer ending in `\\n\\n', the pre-fix walk produced a 6th
-spurious cursor whose region spanned almost the whole buffer; `.'
+spurious cursor whose region spanned almost the whole buffer; \\[helixel-repeat-edit]
 then collapsed the buffer to a single replacement.  Post-fix:
 exactly N cursors (one per word) and every word becomes FOO."
   (helixel-test-with-buffer "alpha beta gamma delta epsilon\n\n"
@@ -1816,7 +1816,7 @@ exactly N cursors (one per word) and every word becomes FOO."
 ;; stale read — because the mark coincidentally landed at the same
 ;; position as the leftover.  Result: the first target was degenerate
 ;; `(pt . pt)', `realize-targets' couldn't install an active region
-;; on the real cursor, and `.' fell through to the `no-region' branch
+;; on the real cursor, and \\[helixel-repeat-edit] fell through to the `no-region' branch
 ;; of `helixel-delete-selection' which just deleted one char and
 ;; appended FOO instead of replacing the word.
 ;;
@@ -1854,7 +1854,7 @@ must produce `FOO FOO FOO FOO FOO\\n' — NOT `FOOFOOFOO FOO FOO FOO'."
       ;; CRITICAL invariants after spawn:
       ;;   * 4 fake cursors (5 words → 1 real + 4 fakes)
       ;;   * real cursor's region around "FOO" is ACTIVE (mk=1, pt=4)
-      ;; — if either fails, the next `.' will mangle the buffer.
+      ;; — if either fails, the next \\[helixel-repeat-edit] will mangle the buffer.
       (should (= 4 (length (helixel-mc-all-cursors))))
       (should (= 4 (point)))
       (should (= 1 (mark t)))
@@ -2270,12 +2270,12 @@ every fake cursor independently."
 ;; ── unmark-next / unmark-previous ──
 
 (ert-deftest helixel-test-mc-remove-primary-bound-to-m-comma ()
-  "`M-,' is bound to `helixel-mc-remove-primary' in normal map."
+  "\\[helixel-mc-remove-primary] is bound to `helixel-mc-remove-primary' in normal map."
   (should (eq (lookup-key helixel-normal-map (kbd "M-,"))
               'helixel-mc-remove-primary)))
 
 (ert-deftest helixel-test-mc-remove-primary-deletes-and-promotes ()
-  "`M-,' removes the cursor at real's position and promotes
+  "\\[helixel-mc-remove-primary] removes the cursor at real's position and promotes
 the nearest fake to become the new real (Helix `A-,' semantics)."
   (helixel-test-with-buffer "abc def ghi jkl\n"
     (goto-char 1)
@@ -2291,7 +2291,7 @@ the nearest fake to become the new real (Helix `A-,' semantics)."
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-remove-primary-post-rotate ()
-  "After `)` rotation, `M-,' deletes the cursor at real's
+  "After `)` rotation, \\[helixel-mc-remove-primary] deletes the cursor at real's
 position (the one the user navigated to) and promotes the
 nearest remaining cursor."
   (helixel-test-with-buffer "aaa bbb ccc ddd\n"

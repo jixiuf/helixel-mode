@@ -757,8 +757,8 @@ Prefix RAW-PREFIX semantics:
   \\=`3,'   — repeat 3 times in stored direction.
 
 Direction flip works for search, find-char, match, and movement
-categories.  Movement commands use the reverse-command registry
-\(`helixel--motion-reverse-alist') to call the opposite command."
+categories.  Movement commands use the `helixel-motion-reverse'
+symbol property on the command to find the opposite command."
   (interactive "P")
   (let ((rec helixel--last-motion-cmd)
         (flip-p (or (eq raw-prefix '-)

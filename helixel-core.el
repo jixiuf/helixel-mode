@@ -1055,31 +1055,25 @@ because `push' adds later registrations to the front."
                    (cdr entry))))
              helixel--motion-repeater-alist)))
 
-;; ── Motion Reverse-Command Registry ──
+;; ── Motion Reverse-Command Property ──
 ;;
 ;; When \=`-,', permanently flips the direction, the movement
-;; motion repeater looks up the reverse command here instead of
-;; calling the original recorded command.  Only movement commands
-;; need this — search, find-char, and match repeater functions
-;; already read direction from the struct.
-
-(defvar helixel--motion-reverse-alist nil
-  "Alist mapping movement-command → reverse-command.
-Populated automatically by `helixel-define-movement',
-`helixel--def-thing-move', and `helixel--define-delimiter-movement'.
-
-When \=`-,', flips `helixel--motion-permanent-flip' and the
-`helixel--repeat-movement-motion' repeater consults this alist
-to call the reverse command instead of the original.")
+;; motion repeater consults the 'helixel-motion-reverse symbol
+;; property on the recorded command to find its counterpart.
+;; Only movement commands need this — search, find-char, and match
+;; repeater functions already read direction from the struct.
 
 (defun helixel-register-motion-reverse (cmd reverse-cmd)
-  "Register REVERSE-CMD as the direction-flipped counterpart of CMD.
-Both are command symbols.  Called by movement definition macros."
-  (push (cons cmd reverse-cmd) helixel--motion-reverse-alist))
+  "Store REVERSE-CMD as the direction-flipped counterpart of CMD.
+Both are command symbols.  Called by movement definition macros.
+Sets the `helixel-motion-reverse' symbol property on CMD so
+`helixel--motion-reverse-lookup' can find it via `get'."
+  (put cmd 'helixel-motion-reverse reverse-cmd))
 
-(defun helixel--motion-reverse-lookup (cmd)
-  "Return the reverse command for CMD, or nil if not registered."
-  (cdr (assq cmd helixel--motion-reverse-alist)))
+(defsubst helixel--motion-reverse-lookup (cmd)
+  "Return the reverse command for CMD, or nil if not registered.
+Reads the `helixel-motion-reverse' symbol property."
+  (get cmd 'helixel-motion-reverse))
 
 ;; ── Unified delimiter-char query ──
 ;; All delimiter-char enumeration uses this single function.

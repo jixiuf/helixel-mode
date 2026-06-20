@@ -2059,7 +2059,7 @@ would consume the register before fake cursors can replay.  We
 suppress the clear here; `helixel-mc--post-command' clears it
 after all cursors have run."
   (prog1 helixel--current-register
-    (unless (bound-and-true-p helixel-multi-cursor-mode)
+    (unless (bound-and-true-p helixel-mc-mode)
       (setq helixel--current-register nil))))
 
 (defun helixel--register-rotate-delete (text)

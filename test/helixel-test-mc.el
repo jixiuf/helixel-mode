@@ -18,11 +18,11 @@
   (helixel-test-with-buffer "abc\ndef\nghi\n"
     (helixel-mc--create-fake-cursor 5)
     (helixel-mc--create-fake-cursor 9)
-    (should helixel-multi-cursor-mode)
+    (should helixel-mc-mode)
     (should (= 2 (length (helixel-mc-all-cursors))))
     (should (= 3 (helixel-mc-num-cursors)))
     (helixel-mc-clear-all)
-    (should-not helixel-multi-cursor-mode)
+    (should-not helixel-mc-mode)
     (should (null (helixel-mc-all-cursors)))))
 
 (ert-deftest helixel-test-mc-cursor-with-region ()
@@ -285,7 +285,7 @@ application path; chain-end does not re-replay."
     (let ((helixel--chain-session
            (make-helixel-chain-session :active-p t))
           (this-command 'self-insert-command)
-          (helixel-multi-cursor-mode t))
+          (helixel-mc-mode t))
       (should (helixel-mc--should-run-for-all-p 'self-insert-command)))
     (helixel-mc-clear-all)))
 
@@ -1050,7 +1050,7 @@ that go through the normal post-command dispatch loop."
       ;; Real cursor runs the command; we manually dispatch to fakes.
       (helixel-forward-word-start 1)
       (let ((this-command 'helixel-forward-word-start)
-            (helixel-multi-cursor-mode t))
+            (helixel-mc-mode t))
         (helixel-mc--post-command))
       ;; Fake must have a ring entry (committed by dispatch).
       (let ((cs (overlay-get ov 'helixel-pc-state)))
@@ -1073,7 +1073,7 @@ for user input don't block at fake cursors during mc dispatch."
 
 (ert-deftest helixel-test-mc-input-cache-nil-when-mc-off ()
   "Input cache advice must call through to the original function
-when `helixel-multi-cursor-mode' is nil (normal operation)."
+when `helixel-mc-mode' is nil (normal operation)."
   (let ((helixel-mc--input-cache '((("fake" . t) . "stale"))))
     ;; Simulate a call to the advised read-char when mc is off.
     ;; The advice should NOT use the stale cache.
@@ -2553,10 +2553,10 @@ before real point."
           (with-current-buffer buf
             (insert "test\n")
             (helixel-mc--create-fake-cursor 1)
-            (should helixel-multi-cursor-mode))
+            (should helixel-mc-mode))
           (helixel-mc--cleanup-on-mode-off)
           (with-current-buffer buf
-            (should-not helixel-multi-cursor-mode)
+            (should-not helixel-mc-mode)
             (should (null (helixel-mc-all-cursors)))))
       (ignore-errors (kill-buffer buf)))))
 
@@ -2732,10 +2732,10 @@ the tx at every fake — no substitute-alist needed."
   "`keyboard-quit' triggers fake cursor cleanup via advice."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc--create-fake-cursor 2)
-    (should helixel-multi-cursor-mode)
+    (should helixel-mc-mode)
     (condition-case nil (keyboard-quit) (quit nil))
     ;; After quit, mc mode is off and cursors cleared.
-    (should-not helixel-multi-cursor-mode)
+    (should-not helixel-mc-mode)
     (should (null (helixel-mc-all-cursors)))))
 
 ;; ── current-column-zero edge: col 0 always reachable ──
@@ -3456,7 +3456,7 @@ Tests the actual dispatch path that caused the 'oohello' bug."
     (add-to-invisibility-spec (quote (outline . t)))
     ;; Simulate what ss+i+foo does: cursor at position 4 (match-beginning of 'hello')
     (let ((ov (helixel-mc--create-fake-cursor 4 9))
-          (helixel-multi-cursor-mode t))
+          (helixel-mc-mode t))
       (unwind-protect
           (progn
             ;; Simulate org-self-insert-command via the mc dispatcher path

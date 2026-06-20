@@ -368,7 +368,7 @@ In multi-cursor mode reads from the per-cursor variable
 global `helixel--yank-register'.
 Returns nil if no valid swap-source is found."
   (helixel--swap-source--validate
-   (if (and (bound-and-true-p helixel-multi-cursor-mode)
+   (if (and (bound-and-true-p helixel-mc-mode)
             helixel--yank-register-source)
        helixel--yank-register-source
      (get-register helixel--yank-register))))

@@ -666,7 +666,7 @@ directly — use the whitelist mechanism instead.
 (add-hook 'helixel-mc-before-clear-hook #'my-snapshot-layout)
 
 ;; After toggling multi-cursor mode
-(add-hook 'helixel-multi-cursor-mode-hook #'my-on-mc-toggle)
+(add-hook 'helixel-mc-mode-hook #'my-on-mc-toggle)
 ```
 
 ---
@@ -711,7 +711,7 @@ Fired after every action commits to the event ring.  The committed
 
 ```elisp
 (add-hook 'helixel-mc-before-clear-hook #'my-save-cursor-layout)
-(add-hook 'helixel-multi-cursor-mode-hook #'my-mc-mode-toggle)
+(add-hook 'helixel-mc-mode-hook #'my-mc-mode-toggle)
 ```
 
 ### Keyboard Quit Functions

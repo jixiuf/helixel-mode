@@ -534,7 +534,7 @@ is installed at module load (see below).")
 ;; Single point where helixel touches `keyboard-quit'.  Installed at
 ;; load so it's active regardless of `helixel-mode' state — each
 ;; registered fn is responsible for its own gate (e.g. `when
-;; helixel-multi-cursor-mode').
+;; helixel-mc-mode').
 ;; keyboard-quit advice deferred to `helixel-state--init' (see end of file).
 
 ;;;###autoload

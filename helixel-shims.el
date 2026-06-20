@@ -272,7 +272,7 @@ already in progress (nested call), or the original call did not
 advance point (preview not active / nothing inserted)."
   (let ((start (point)))
     (apply orig args)
-    (when (and helixel-multi-cursor-mode
+    (when (and helixel-mc-mode
                (helixel-mc-any-p)
                (not (helixel-mc--dispatch-in-progress-p))
                (> (point) start))

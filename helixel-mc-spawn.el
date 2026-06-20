@@ -1015,7 +1015,7 @@ into history."
 
 ;; Auto-snapshot before `clear-all' destroys cursors.  Done via
 ;; `helixel-mc-before-clear-hook' (cleaner than advice).  The
-;; recursive call from `(helixel-multi-cursor-mode -1)' inside
+;; recursive call from `(helixel-mc-mode -1)' inside
 ;; `clear-all' is harmless: `--push-history' requires at least
 ;; one fake cursor in the snapshot, and by that point the fakes
 ;; have already been deleted.

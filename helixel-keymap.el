@@ -439,8 +439,8 @@ Else fall back to `keyboard-quit'."
   (cond
    ((helixel--chain-active-p)
     (helixel-repeat-chain-end))
-   ((and (boundp 'helixel-multi-cursor-mode)
-         helixel-multi-cursor-mode)
+   ((and (boundp 'helixel-mc-mode)
+         helixel-mc-mode)
     (helixel-mc-clear-all))
    (t (keyboard-quit))))
 

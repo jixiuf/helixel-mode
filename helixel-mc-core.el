@@ -26,7 +26,7 @@
 ;; cursor via `post-command-hook'.
 ;;
 ;; Public API:
-;;   helixel-multi-cursor-mode      buffer-local minor mode (auto)
+;;   helixel-mc-mode      buffer-local minor mode (auto)
 ;;   helixel-mc--create-fake-cursor  create one fake cursor
 ;;   helixel-mc-clear-all           remove all fake cursors
 ;;   helixel-mc-all-cursors         list of overlays
@@ -51,7 +51,7 @@
     (maphash (lambda (_k v) (push v values)) table)
     (nreverse values)))
 
-(defvar helixel-multi-cursor-mode)        ; forward decl — defined below
+(defvar helixel-mc-mode)        ; forward decl — defined below
 (defvar helixel--current-state)           ; from `helixel-state'
 ;; Per-cursor state variables that `helixel-mc--pcs-clone' /
 ;; `-restore' / `-update-from-globals' read and write.  Defined
@@ -125,7 +125,7 @@ cursor's selection stands out among fake selections."
   :group 'helixel)
 
 (defcustom helixel-mc-mode-line-indicator " mc:%d"
-  "Mode-line format string for `helixel-multi-cursor-mode'.
+  "Mode-line format string for `helixel-mc-mode'.
 %d is replaced by the total cursor count (real + fake)."
   :type 'string
   :group 'helixel)
@@ -510,7 +510,7 @@ already exists.  Signals `user-error' if `helixel-mc-max-cursors'
 would be exceeded.
 Snapshots the cursor state into a `helixel-pc-state' struct
 attached to the overlay (so each cursor has its own `kill-ring',
-event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
+event-ring, etc.).  Auto-enables `helixel-mc-mode'."
   (when (and helixel-mc-max-cursors
              (and helixel-mc--cursors-by-id
                   (>= (hash-table-count helixel-mc--cursors-by-id)
@@ -557,8 +557,8 @@ event-ring, etc.).  Auto-enables `helixel-multi-cursor-mode'."
         ;; the state-change hook (helixel-mc--sync-visual-state).
         (when (eq helixel--current-state 'visual)
           (helixel-enter-normal-state))
-        (unless helixel-multi-cursor-mode
-          (helixel-multi-cursor-mode 1))
+        (unless helixel-mc-mode
+          (helixel-mc-mode 1))
         ov)))))
 
 (defun helixel-mc--delete-fake-cursor (cursor)
@@ -590,8 +590,8 @@ Clears the ID-lookup hash table."
     (dolist (ov (helixel--hash-table-values helixel-mc--cursors-by-id))
       (helixel-mc--delete-fake-cursor ov))
     (clrhash helixel-mc--cursors-by-id))
-  (when helixel-multi-cursor-mode
-    (helixel-multi-cursor-mode -1)))
+  (when helixel-mc-mode
+    (helixel-mc-mode -1)))
 
 ;; ── Cursor-by-ID accessor ──
 
@@ -643,7 +643,7 @@ Fake cursors are sorted by point position ascending."
   "Restore all cursors from the POSITIONS alist.
 POSITIONS is in the format returned by `helixel-mc--capture-all-positions'.
 Restores real cursor (ID 0) first, then creates/updates/deletes
-fake cursors to match.  Auto-toggles `helixel-multi-cursor-mode'."
+fake cursors to match.  Auto-toggles `helixel-mc-mode'."
   (let ((existing-ids nil)
         (new-fakes nil))
     (dolist (entry positions)
@@ -698,10 +698,10 @@ fake cursors to match.  Auto-toggles `helixel-multi-cursor-mode'."
         (helixel-mc--delete-fake-cursor ov)))
     ;; Ensure mc minor mode reflects reality.
     (if (helixel-mc-any-p)
-        (unless helixel-multi-cursor-mode
-          (helixel-multi-cursor-mode 1))
-      (when helixel-multi-cursor-mode
-        (helixel-multi-cursor-mode -1)))))
+        (unless helixel-mc-mode
+          (helixel-mc-mode 1))
+      (when helixel-mc-mode
+        (helixel-mc-mode -1)))))
 
 ;; ── Whitelist ──
 
@@ -1204,7 +1204,7 @@ No-op when the mode is off, dispatch is already in progress, we're in
 a keyboard-macro, isearch is active (global modal state), the command
 is whitelisted off, or no fresh tx exists (e.g. for real-cursor-only
 commands like `helixel-mc-toggle')."
-  (when (and helixel-multi-cursor-mode
+  (when (and helixel-mc-mode
              (not (helixel-mc--dispatch-in-progress-p))
              (not executing-kbd-macro)
              (not defining-kbd-macro)
@@ -1249,7 +1249,7 @@ commands like `helixel-mc-toggle')."
     (setq helixel-mc--post-command-depth
           (1- helixel-mc--post-command-depth)))
   ;; Keep real-region overlay above lazy-highlight during mc mode.
-  (when helixel-multi-cursor-mode
+  (when helixel-mc-mode
     (helixel-mc--update-real-region)))
 
 ;; ── Pre-command hook ──
@@ -1284,12 +1284,12 @@ fresh cache for third-party user-input functions (\=`read-char',
   ;; force-deactivate the mark before undo/redo commands run.  Otherwise
   ;; Emacs' `undo' sees the active region and calls `undo-in-region'
   ;; instead of a full undo, which is never the user's intent in mc mode.
-  (when (and helixel-multi-cursor-mode
+  (when (and helixel-mc-mode
              mark-active
              this-command
              (helixel-mc--undo-command-p this-command))
     (deactivate-mark t))
-  (when (and helixel-multi-cursor-mode
+  (when (and helixel-mc-mode
              (helixel-mc-any-p)
              (not executing-kbd-macro)
              (not defining-kbd-macro)
@@ -1302,8 +1302,8 @@ fresh cache for third-party user-input functions (\=`read-char',
 
 ;; ── Minor mode ──
 
-(defvar helixel-multi-cursor-mode-map (make-sparse-keymap)
-  "Keymap active while `helixel-multi-cursor-mode' is on.
+(defvar helixel-mc-mode-map (make-sparse-keymap)
+  "Keymap active while `helixel-mc-mode' is on.
 Populated by `helixel-keymap'.")
 
 (defvar-local helixel-mc--real-region-ov nil
@@ -1332,15 +1332,15 @@ Clears the overlay when the region is inactive."
       (setq helixel-mc--real-region-ov nil))))
 
 ;;;###autoload
-(define-minor-mode helixel-multi-cursor-mode
+(define-minor-mode helixel-mc-mode
   "Helixel multi-cursor minor mode.
 Activated automatically when at least one fake cursor exists,
 deactivated when the last one is removed."
   :init-value nil
   :lighter (:eval (format helixel-mc-mode-line-indicator
                           (helixel-mc-num-cursors)))
-  :keymap helixel-multi-cursor-mode-map
-  (if helixel-multi-cursor-mode
+  :keymap helixel-mc-mode-map
+  (if helixel-mc-mode
       (progn
         (helixel-mc--ensure-cursor-table)
         (add-hook 'pre-command-hook #'helixel-mc--pre-command 90 t)

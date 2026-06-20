@@ -61,7 +61,7 @@
 ;; last edit once at each cursor's current position" — i.e. the same
 ;; thing `helixel-mc-apply-last-action' does.
 ;;
-;; The override is installed/removed on `helixel-multi-cursor-mode'
+;; The override is installed/removed on `helixel-mc-mode'
 ;; toggle so it doesn't persist when mc is off.
 ;;
 ;; Undo amalgamation is handled by the mc undo-step wrapper
@@ -71,20 +71,20 @@
 
 (defun helixel-mc--repeat-edit-apply-only (raw-prefix)
   "Hook function for `helixel-repeat-edit-override-functions' under mc.
-Return non-nil (handled) when `helixel-multi-cursor-mode' is on AND
+Return non-nil (handled) when `helixel-mc-mode' is on AND
 fake cursors exist; run `helixel-action-replay' once at point
 instead of the full advance + apply loop.  Return nil to fall
 through to the default `.' otherwise.  RAW-PREFIX is ignored in
 the override path — mc dispatches the same edit at each fake."
   (ignore raw-prefix)
-  (when (and (bound-and-true-p helixel-multi-cursor-mode)
+  (when (and (bound-and-true-p helixel-mc-mode)
              (helixel-mc-any-p)
              helixel-last-action)
     (helixel-with-replay-as 'dot
       (helixel-action-replay helixel-last-action))
     t))
 
-;; Install via `helixel-multi-cursor-mode' toggle — no top-level
+;; Install via `helixel-mc-mode' toggle — no top-level
 ;; add-hook needed.
 
 ;; ── Whitelist tweaks ──
@@ -110,7 +110,7 @@ each fake cursor replays the chain (not the pre-chain edit)."
 Assumes the current `helixel-last-action' is a chain transaction
 \(or any replayable edit).  Wraps the batch in one undo step
 via `helixel-mc--undo-step-begin' / `helixel-mc--undo-step-end-cb'."
-  (when (and helixel-multi-cursor-mode helixel-last-action)
+  (when (and helixel-mc-mode helixel-last-action)
     (helixel-mc--with-undo-step
       (helixel-with-replay-as 'mc-batch
         (let ((tx helixel-last-action))
@@ -124,7 +124,7 @@ Hooked into `helixel-action-commit-hook'.  The chain
 end action has by-command=`helixel-repeat-chain-end'.  We only
 broadcast — during recording the per-command dispatch already
 applied every keystroke at every fake cursor live."
-  (when (and helixel-multi-cursor-mode
+  (when (and helixel-mc-mode
              (eq (helixel-action-by-command entry)
                  'helixel-repeat-chain-end))
     (helixel-mc--broadcast-last-event)
@@ -149,8 +149,8 @@ applied every keystroke at every fake cursor live."
 Called from `helixel-mode-off-hook'."
   (dolist (buf (buffer-list))
     (with-current-buffer buf
-      (when helixel-multi-cursor-mode
-        (helixel-multi-cursor-mode -1)))))
+      (when helixel-mc-mode
+        (helixel-mc-mode -1)))))
 
 ;; Mode-off hook deferred to `helixel-mc-integrate--init' (see end of file).
 
@@ -188,7 +188,7 @@ Signals `user-error' when there are no fake cursors."
 (defun helixel-mc--maybe-clear-on-quit ()
   "Clear fake cursors when `keyboard-quit' fires.
 Wired via `helixel-keyboard-quit-functions'."
-  (when helixel-multi-cursor-mode
+  (when helixel-mc-mode
     (helixel-mc-clear-all)))
 
 
@@ -229,7 +229,7 @@ before dispatch can use it."
   (let ((prev helixel-mc--prev-state)
         (curr helixel--current-state))
     (setq helixel-mc--prev-state curr)
-    (when (and helixel-multi-cursor-mode (helixel-mc-any-p))
+    (when (and helixel-mc-mode (helixel-mc-any-p))
       (cond
        ;; Entering visual: activate each fake's mark at its point.
        ((and (eq curr 'visual) (not (eq prev 'visual)))
@@ -382,7 +382,7 @@ of commands from modules `mc-integrate' itself depends on."
 ;; The cache is cleared at the start of every mc undo step
 ;; (`helixel-mc--pre-command'), so each command starts fresh.
 ;; Advice is only active during mc dispatch (`mc-batch' or
-;; `mc-fake' replay context) inside `helixel-multi-cursor-mode'.
+;; `mc-fake' replay context) inside `helixel-mc-mode'.
 
 (defvar-local helixel-mc--input-cache nil
   "Alist of ((FN-NAME . PROMPT) . VALUE) during mc dispatch.
@@ -392,13 +392,13 @@ starts with a fresh cache.")
 (defmacro helixel-mc--def-input-cache (fn-name)
   "Install advice on FN-NAME that caches user input during mc dispatch.
 FN-NAME must take an optional PROMPT as its first argument.
-The advice only intercepts when `helixel-multi-cursor-mode' is
+The advice only intercepts when `helixel-mc-mode' is
 active AND we are inside a fake-cursor dispatch
 \(`helixel-mc--dispatch-in-progress-p')."
   (let ((advice-name (intern (format "helixel-mc--cache-%s" fn-name))))
     `(progn
        (defun ,advice-name (orig-fun &rest args)
-         (if (bound-and-true-p helixel-multi-cursor-mode)
+         (if (bound-and-true-p helixel-mc-mode)
              (let* ((prompt (car-safe args))
                     (key (cons ',fn-name prompt))
                     (cached (cdr (assoc key helixel-mc--input-cache

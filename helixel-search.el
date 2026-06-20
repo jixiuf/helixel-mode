@@ -137,7 +137,7 @@ Called from `helixel-state-change-hook'."
 
 (defvar-local helixel--active-search nil
   "Active repeat target as a `helixel--last-motion' struct.
-Set by \=/, \=?, \=*, \=#, f, F, t, T.
+Set by /, ?, *, #, f, F, t, T.
 Read by n/N commands and `.` / `,` repeat.
 The :dir slot is MUTABLE — N flips it.
 Event-ring entries are immutable snapshots and never store

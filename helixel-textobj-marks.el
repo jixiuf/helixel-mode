@@ -374,6 +374,7 @@ Example:
 
 
 (helixel-register-kind textobj
+  :sel-type 'textobj
   :ctx-schema '(:required (:command :count :delimiter)
                 :optional (:inline-advance))
   :recreate #'helixel--recreate-textobj

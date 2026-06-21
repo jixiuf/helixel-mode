@@ -1127,13 +1127,16 @@ Slots map 1:1 to the keyword properties documented for
 `helixel-register-kind'."
   recreate advance display
   all-buffer-fn all-dir-fn flip-dir-fn mc-spawn-fn
-  ctx-schema)
+  ctx-schema
+  sel-type)
 
 (cl-defmacro helixel-register-kind (kind &rest props)
   "Register selection KIND with protocol PROPS.
 PROPS is a keyword plist supporting:
   :recreate :advance :display
   :all-buffer-fn :all-dir-fn :flip-dir-fn :mc-spawn-fn
+  :sel-type SYMBOL — maps this kind to a `helixel--sel-type' value
+                     (e.g. \='line→\='line, nil for movement).
   :ctx-schema (:required (...) :optional (...))"
   (declare (indent 1))
   `(puthash ',kind (helixel--make-kind ,@props) helixel--kind-registry))
@@ -1188,6 +1191,13 @@ rect, movement, find-char) leave this nil; the repeat engine
 then simply does not flip."
   (when-let* ((k (gethash kind helixel--kind-registry)))
     (helixel-kind-flip-dir-fn k)))
+
+(defun helixel--kind-sel-type (kind)
+  "Return the :sel-type for KIND from the registry, or nil.
+The sel-type determines the return value of `helixel--sel-type'
+for this kind — e.g. \='line→\='line, nil for movement."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-sel-type k)))
 
 
 ;; ----------------------------------------------------------------------
@@ -1488,10 +1498,12 @@ stepping between targets."
 
 (defun helixel--op-set-runner (op runner)
   "Override the :runner for OP in the operator registry to RUNNER.
-Preserves existing :display and :moves-point-p."
-  (let ((entry (gethash op helixel--op-registry)))
-    (when entry
-      (plist-put entry :runner runner))))
+Preserves existing :display and :moves-point-p.
+Stores a fresh copy so callers holding a reference to the old
+plist are not affected by the mutation."
+  (when-let* ((entry (gethash op helixel--op-registry)))
+    (puthash op (plist-put (copy-sequence entry) :runner runner)
+             helixel--op-registry)))
 
 (defun helixel-list-ops ()
   "Display all registered operators with their properties.
@@ -1542,19 +1554,15 @@ Cleared by `helixel-clear-data-internal'.")
 
 (defun helixel--sel-type ()
   "Return the selection type from pending-sel: nil, `line', `rect', `textobj'.
-Derived from `helixel--pending-sel' kind — the single source of truth.
+Looks up :sel-type from the kind registry — extensible by registering
+new kinds with `:sel-type'.  Falls back to nil for unregistered kinds.
 During replay, falls back to `helixel--sel-type-override' which
 `helixel-action-replay' binds from the action's selection kind.
 Pending-sel is NOT popped until `clear-data', so this function returns
 the correct type throughout the operator body."
   (or helixel--sel-type-override
-      (if helixel--pending-sel
-          (pcase (helixel-sel-kind helixel--pending-sel)
-            ('line 'line)
-            ('rect 'rect)
-            ('textobj 'textobj)
-            (_ nil))
-        nil)))
+      (when helixel--pending-sel
+        (helixel--kind-sel-type (helixel-sel-kind helixel--pending-sel)))))
 
 (defvar-local helixel-invisible t
   "Non-nil means helixel treats invisible text as real content to operate on.

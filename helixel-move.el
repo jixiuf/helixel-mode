@@ -1348,6 +1348,7 @@ advance functions to avoid double-moving."
 ;; ── Kind registrations ──
 
 (helixel-register-kind line
+  :sel-type 'line
   :ctx-schema '(:required (:count :dir) :optional (:entry-kind :span))
   :recreate #'helixel--recreate-line
   :advance  #'helixel--repeat-advance-line
@@ -1360,6 +1361,7 @@ advance functions to avoid double-moving."
   :display  "L")
 
 (helixel-register-kind rect
+  :sel-type 'rect
   :ctx-schema '(:required (:count) :optional ())
   :recreate #'helixel--recreate-rect
   :advance  nil

@@ -556,15 +556,16 @@ prefers the inner one (CHAR-B)."
 OPEN-CHAR and CLOSE-CHAR are the delimiter characters.
 CHAR-A is the original `char-after' at point.
 ORIG is the original point before the jump attempt.
-Returns (TARGET . DELIMITER) or nil."
+Returns (TARGET . DELIMITER) or nil.
+
+Stepping inside the opener is handled by `adjust-for-jump' on
+the delimiter struct, so this function does not duplicate it.
+This avoids a double step when the opener is immediately followed
+by another opener (e.g. `((foo ...)'), which would confuse the
+backward delimiter finder."
   (let* ((d (helixel-make-pair-delimiter open-char close-char))
          (on-opener (and char-a (eq char-a open-char)))
          (equalp (eq open-char close-char)))
-    (when on-opener
-      (forward-char)
-      ;; Adjacent pair like \=`()\=': step back inside.
-      (when (and (not equalp) (eq (char-after) close-char))
-        (backward-char)))
     (when-let* ((result (helixel--jump-target-for-delimiter
                          d orig (and on-opener equalp) t)))
       (goto-char (car result))
@@ -674,7 +675,7 @@ Quote chars are excluded so \=`%' ignores them."
     (:category movement :subcat match)
   "Jump between matching delimiters.
 When on or right after a delimiter, jump to its match.
-When not on a delimiter, move to the nearest pair character
+When not on a delimiter, move to the enclosing opening delimiter
 backward then jump to its match.  Only if nothing backward
 does it try the core jump from the current position."
   (let (match-result)
@@ -712,25 +713,42 @@ after major-mode changes.")
 (defun helixel--find-pair-char-dir (dir)
   "Search for nearest non-quote delimiter char in DIR (forward/backward).
 On success, move point and return t.  On failure, return nil.
-Backward search is bounded by the previous blank line — this
-prevents crossing paragraph/block boundaries to find unrelated
-delimiters.  Forward search has no bound (nil).
+
+When DIR is `backward', first tries to find the ENCLOSING open delimiter
+via `syntax-ppss' — this moves to the opening paren of the form that
+contains point (like `C-M-u'), instead of finding a close delimiter of an
+inner form.  Falls back to regex-based search when the enclosing depth is
+zero.  The regex backward search is bounded by the previous blank line.
+
+Forward search has no bound (nil).
 Caches the regexp in `helixel--pair-char-regex' for performance."
-  (when (or (null helixel--pair-char-regex)
-            (not (eq major-mode helixel--pair-char-regex--mode)))
-    (when-let* ((chars (helixel--active-delim-chars :type :pair)))
-      (setq helixel--pair-char-regex
-            (regexp-opt (mapcar #'char-to-string chars))
-            helixel--pair-char-regex--mode major-mode)))
-  (when helixel--pair-char-regex
-    (if (eq dir 'forward)
-        (when (re-search-forward helixel--pair-char-regex nil t)
-          (goto-char (match-beginning 0)))
-      (let ((bound (save-excursion
-                     (when (re-search-backward "^[ \t]*$" nil t)
-                       (line-beginning-position 2)))))
-        (when (re-search-backward helixel--pair-char-regex bound t)
-          (goto-char (match-beginning 0)))))))
+  ;; When searching backward and we're inside a paren structure, use
+  ;; syntax-ppss to jump directly to the enclosing open delimiter.
+  ;; This is more useful than finding the nearest delimiter (which is
+  ;; often a close-paren of an inner form).
+  (or (and (eq dir 'backward)
+           (let* ((ppss (syntax-ppss))
+                  (depth (nth 0 ppss))
+                  (open-pos (nth 1 ppss)))
+             (and (> depth 0) open-pos
+                  (progn (goto-char open-pos) t))))
+      ;; Fall back to regex search when enclosing depth is zero.
+      (when (or (null helixel--pair-char-regex)
+                (not (eq major-mode helixel--pair-char-regex--mode)))
+        (when-let* ((chars (helixel--active-delim-chars :type :pair)))
+          (setq helixel--pair-char-regex
+                (regexp-opt (mapcar #'char-to-string chars))
+                helixel--pair-char-regex--mode major-mode))
+        nil)
+      (when helixel--pair-char-regex
+        (if (eq dir 'forward)
+            (when (re-search-forward helixel--pair-char-regex nil t)
+              (goto-char (match-beginning 0)))
+          (let ((bound (save-excursion
+                         (when (re-search-backward "^[ \t]*$" nil t)
+                           (line-beginning-position 2)))))
+            (when (re-search-backward helixel--pair-char-regex bound t)
+              (goto-char (match-beginning 0))))))))
 
 ;; ── One-level outward navigation (unified for forward/backward) ──
 
@@ -838,7 +856,10 @@ is a close or open delimiter."
 (defun helixel--up-via-syntax-table (d backward-p)
   "Use raw `up-list' with temp syntax-table for BACKWARD-P pair D.
 Returns point on success, nil when no parent pair exists.
-For backward, two `up-list -1' calls (exit child, exit parent).
+For backward, two `up-list -1' calls (exit child, exit parent),
+unless `backward-char' lands on an open delimiter — in that case
+we are already at the parent opener (consecutive `((' case) and
+the second `up-list -1' would overshoot.
 For forward (from at-ce or inside a pair), one `up-list 1' suffices.
 Returns nil if forward lands at eob (no parent)."
   (let* ((open (helixel-delimiter-open d))
@@ -852,7 +873,8 @@ Returns nil if forward lands at eob (no parent)."
           (when backward-p
             (unless (bobp)
               (backward-char)
-              (up-list -1)))
+              (unless (eq (char-after) open)
+                (up-list -1))))
           (if (and (not backward-p) (eobp))
               nil
             (point)))
@@ -863,12 +885,15 @@ Returns nil if forward lands at eob (no parent)."
 BACKWARD-P controls direction."
   (if backward-p
       (pcase-let* ((`(,ob ,_oe ,_cb ,_ce)
-                    (helixel-delimiter-bounds-flat d)))
+                    (helixel-delimiter-bounds-flat d))
+                   (open (helixel-delimiter-open d)))
         ;; When ob is at the buffer start there is no outer pair -
         ;; return ob itself (the opener of the outermost enclosing pair).
         (if (> ob (point-min))
             (progn (goto-char (1- ob))
-                   (car (helixel-delimiter-bounds-flat d)))
+                   (if (eq (char-after) open)
+                       (point)  ; already at parent opener (consecutive '((')
+                     (car (helixel-delimiter-bounds-flat d))))
           ob))
     ;; Go before the current pair's open so the next lookup
     ;; finds the enclosing (parent) pair, not the current one.
@@ -882,7 +907,9 @@ BACKWARD-P controls direction."
         ce))))
 
 (defun helixel--up-raw (backward-p)
-  "Raw `up-list' fallback - two levels outward in BACKWARD-P direction.
+  "Raw `up-list' fallback - two levels outward in BACKWARD-P direction,
+unless `backward-char' lands on an open delimiter (consecutive `((' case),
+in which case we are already at the parent opener.
 If BACKWARD-P is non-nil, move backward; otherwise forward.
 Returns point on success, nil when no parent pair exists."
   (helixel--with-debug-log up-raw
@@ -890,7 +917,11 @@ Returns point on success, nil when no parent pair exists."
         (up-list (if backward-p -1 1))
         (unless (if backward-p (bobp) (eobp))
           (if backward-p (backward-char) (forward-char)))
-        (up-list (if backward-p -1 1))
+        (unless (and backward-p
+                     (not (bobp))
+                     (memq (char-after) (helixel--pair-chars))
+                     (not (memq (char-after) (helixel--close-chars))))
+          (up-list (if backward-p -1 1)))
         (unless backward-p (backward-char))
         (point))
     (error nil)))

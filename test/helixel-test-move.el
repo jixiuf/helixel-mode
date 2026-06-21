@@ -3294,7 +3294,7 @@ Tests that cross-type outward fallback finds the enclosing named block."
         (should (not (= (point) inner-close)))))))
 
 (ert-deftest helixel-test-M-dot-mixed-bracket-block-priority ()
-  ", from pair inside block: parent pair before block."
+  ", from pair inside block: outward one level at a time."
   (with-temp-buffer
     (org-mode)
     (transient-mark-mode 1)
@@ -3305,8 +3305,13 @@ Tests that cross-type outward fallback finds the enclosing named block."
     (goto-char (match-beginning 0))
     (helixel-jump-to-match)
     (should (= (char-after) ?\())
+    ;; First , goes one level out — from (x 1) to the bindings list opener
+    (helixel-repeat-last-motion)
+    (should (= (char-after) ?\())  ;; now at first ( of ((x 1))
+    ;; Second , goes to (let ...)
     (helixel-repeat-last-motion)
     (should (looking-at "(let"))
+    ;; Third , goes to begin_src (point=1)
     (helixel-repeat-last-motion)
     (should (= (point) 1))))
 

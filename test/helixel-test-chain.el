@@ -20,7 +20,7 @@
 
 ;;; Commentary:
 
-;; Tests for helixel-repeat-chain: kmacro recording and dot-repeat.
+;; Tests for helixel-repeat-chain: action-list accumulation and dot-repeat.
 
 ;;; Code:
 
@@ -91,17 +91,17 @@
   (helixel-chain-test-with-buffer "test\n"
     (should-error (helixel-repeat-chain-end))))
 
-(ert-deftest helixel-test-chain-end-without-kmacro ()
-  "Ending chain without kmacro active creates empty chain (graceful)."
+(ert-deftest helixel-test-chain-end-without-actions ()
+  "Ending chain without recorded actions creates empty chain (graceful)."
   (helixel-chain-test-with-buffer "test\n"
     (setq helixel--chain-session (make-helixel-chain-session :active-p t))
     (helixel-repeat-chain-end)
     (should-not (helixel--chain-active-p))))
 
-;; ── Chain: kmacro tx structure ──
+;; ── Chain: compound action structure ──
 
-(ert-deftest helixel-test-chain-records-kmacro ()
-  "Chain stores its action-list in the tx payload."
+(ert-deftest helixel-test-chain-records-action-list ()
+  "Chain stores its action-list in the compound action payload."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (helixel-repeat-chain-start)
@@ -176,7 +176,7 @@
     (forward-line 1)
     (should-not (helixel--blank-line-p))))
 
-(ert-deftest helixel-test-chain-no-record-during-kmacro ()
+(ert-deftest helixel-test-chain-no-record-during-defining-kbd-macro ()
   "helixel-record-action is inhibited during defining-kbd-macro."
   (helixel-chain-test-with-buffer "test\n"
     (let* ((prev-action helixel-last-action)

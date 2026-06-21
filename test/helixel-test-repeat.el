@@ -258,13 +258,13 @@ line's EOL overshoots and selects lines 4-5 instead of 3-4."
                              "line5\nline6foo\nline7\n")))))
 
 (ert-deftest helixel-test-repeat-line-insert-move-forward-dot ()
-  "`. ` after xi<M-f>foo<ESC> replays cursor-movement via kmacro keys.
+  "`. ` after xi<M-f>foo<ESC> replays cursor-movement via recorded keys.
 M-f (meta key) is a non-character integer — must go through
 key-binding dispatch, not insert-char, in `helixel--execute-keys'."
   (helixel-test-with-buffer "line1\nline2\n"
     (goto-char 3)
     ;; Build tx simulating xi + <M-f> + foo + <ESC>
-    ;; :keys captures the full kmacro (M-f + f + o + o).
+    ;; :keys captures the full key sequence (M-f + f + o + o).
     (setq helixel-last-action
           (helixel-action-create 'insert-text
             (helixel-sel-create
@@ -960,7 +960,7 @@ Cursor-offset is set manually in sel ctx to simulate forward-char."
 
 (ert-deftest helixel-test-repeat-search-insert-no-region-n-dot ()
   "i after /hello: search sel with entry-kind and cursor-offset.
-Cursor-offset is set manually; kmacro captures keys in real flow."
+Cursor-offset is set manually; insert-mode recording captures keys in real flow."
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)
     (re-search-forward "hello")
@@ -1432,7 +1432,7 @@ goto-char(nil) when match data was stale, jumping to buffer start."
 (ert-deftest helixel-test-repeat-search-insert-move-forward-dot ()
   "Scenario: /hello<RET> i aa <M-f> bb <esc> .
 Two insertions with cursor-movement gap between.
-With kmacro recording, keys capture the full sequence."
+With insert-mode key recording, keys capture the full sequence."
   :tags '(repeat search)
   (helixel-test-with-buffer "hello world hello"
     (goto-char 1)

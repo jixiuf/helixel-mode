@@ -40,9 +40,6 @@
 (declare-function flymake-goto-prev-error "flymake")
 (declare-function eglot-find-typeDefinition "eglot")
 (declare-function eglot-find-implementation "eglot")
-(declare-function eglot-code-action-quickfix "eglot")
-(declare-function eglot-rename "eglot")
-(declare-function helixel-collapse-selection "helixel-mc-core")
 (require 'helixel-state)
 (require 'helixel-move)
 (require 'helixel-editing)
@@ -153,7 +150,21 @@ Example:
           (helixel--refresh-textobj-overrides)))
     ;; Bind to global state keymap
     (let ((state-keymap (alist-get state helixel-state-map-alist)))
-      (define-key state-keymap key def))))
+      (define-key state-keymap key def)
+      ;; Auto-bind SPC to space-map when user adds a binding
+      (when (eq state 'space)
+        (helixel--space-map-maybe-bind)))))
+
+(defun helixel--space-map-maybe-bind ()
+  "Bind or unbind SPC to `helixel-space-map' based on user bindings.
+If the map has user bindings (beyond `suppress-keymap' defaults),
+bind SPC in `helixel-normal-map'.  Otherwise unbind it."
+  (let ((count 0))
+    (map-keymap (lambda (_k _d) (setq count (1+ count)))
+                helixel-space-map)
+    (if (> count 12)               ; suppress-keymap adds 12 entries
+        (define-key helixel-normal-map " " helixel-space-map)
+      (define-key helixel-normal-map " " nil))))
 
 (defun helixel--keymap-active-p (target active-maps)
   "Return non-nil if TARGET keymap is active in the current buffer.
@@ -541,13 +552,6 @@ If FORCE is non-nil, don't prompt for save when killing Emacs."
   (define-key helixel-goto-map ":" #'goto-char)
   (define-key helixel-goto-map ";" #'goto-line)
   (define-key helixel-view-map "z" #'recenter-top-bottom)
-  (define-key helixel-space-map "f" #'project-find-file)
-  (define-key helixel-space-map "b" #'project-switch-to-buffer)
-  (define-key helixel-space-map "j" #'project-switch-project)
-  (define-key helixel-space-map "/" #'project-find-regexp)
-  (define-key helixel-space-map "a" #'eglot-code-action-quickfix)
-  (define-key helixel-space-map "r" #'eglot-rename)
-  (define-key helixel-space-map "d" #'flymake-show-buffer-diagnostics)
   (define-key helixel-window-map "h" #'windmove-left)
   (define-key helixel-window-map "l" #'windmove-right)
   (define-key helixel-window-map "j" #'windmove-down)
@@ -631,7 +635,6 @@ If FORCE is non-nil, don't prompt for save when killing Emacs."
   (define-key helixel-normal-map "m" helixel-textobj-map)
   (define-key helixel-normal-map "g" helixel-goto-map)
   (define-key helixel-normal-map "z"    helixel-view-map)
-  (define-key helixel-normal-map " "    helixel-space-map)
   (define-key helixel-normal-map "\C-w" helixel-window-map)
   (define-key helixel-normal-map "s" helixel-mc-map)
   (define-key helixel-goto-map   "v" #'helixel-mc-restore-cursors)

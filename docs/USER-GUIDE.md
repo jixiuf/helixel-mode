@@ -1207,6 +1207,24 @@ All configurable options are available via `M-x customize-group RET helixel RET`
 (setq helixel-default-register ?\")
 ```
 
+### Space Leader Key
+
+`helixel-space-map` is a leader keymap bound to SPC in normal state.
+Add bindings via `helixel-define-key' and SPC is automatically enabled:
+
+```elisp
+(helixel-define-key 'space "w" #'my-command)  ; auto-enables SPC
+(helixel-define-key 'space "f" #'find-file)   ; add more bindings
+```
+
+When all user bindings are removed, SPC is automatically unbound.
+
+For a more flexible leader-key experience, consider
+[leadkey](https://github.com/jixiuf/emacs-leadkey).
+leadkey translates leader keys via `key-translation-map', so SPC f
+arrives as `C-c C-f` without any manual rebinding — all your existing
+C-c / C-x / M- bindings work automatically through the leader key.
+
 ### Adding Keybindings
 
 ```elisp

@@ -92,6 +92,11 @@ Entering wdired → normal.  Exiting (save/abort) → motion."
   (advice-add 'wdired-abort-changes :after #'helixel-enter-motion-state)
   (when (fboundp 'wdired-exit)
     (advice-add 'wdired-exit :after #'helixel-enter-motion-state))
+  ;; wdired-finish-edit / -abort-changes exit the mode globally —
+  ;; mc dispatch would run them again at each fake cursor after the
+  ;; mode is already off.
+  (put 'wdired-finish-edit 'multiple-cursors nil)
+  (put 'wdired-abort-changes 'multiple-cursors nil)
   ;; dired-omit-mode hides files via invisible text.
   (add-hook 'dired-mode-hook #'helixel-shims--set-invisible-nil))
 
@@ -103,7 +108,11 @@ Entering grep-edit → normal.  Saving → motion."
   (when (fboundp 'grep-edit-mode)
     (add-hook 'grep-edit-mode-hook #'helixel-enter-normal-state)
     (advice-add 'grep-edit-save-changes
-                :after #'helixel-enter-motion-state))
+                :after #'helixel-enter-motion-state)
+    ;; gre-edit-save-changes exits the mode and saves globally —
+    ;; mc dispatch would run it again at each fake cursor after the
+    ;; mode is already off.  See also occur-cease-edit, wdired-*, wgre-*.
+    (put 'grep-edit-save-changes 'multiple-cursors nil))
   ;; grep/occur results use invisible for filtering (consult-focus-line).
   (add-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil))
 
@@ -114,7 +123,10 @@ Entering grep-edit → normal.  Saving → motion."
 Entering occur-edit → normal.  Ceasing edit → motion."
   (when (fboundp 'occur-edit-mode)
     (add-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
-    (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state))
+    (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state)
+    ;; occur-cease-edit exits the mode globally — must not
+    ;; be dispatched to every fake cursor after the mode is off.
+    (put 'occur-cease-edit 'multiple-cursors nil))
   (add-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil))
 
 ;; ── wgrep (third-party) ──
@@ -132,7 +144,13 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
     (advice-add 'wgrep-save-all-buffers
                 :after #'helixel-enter-motion-state)
     (when (fboundp 'wgrep-exit)
-      (advice-add 'wgrep-exit :after #'helixel-enter-motion-state))))
+      (advice-add 'wgrep-exit :after #'helixel-enter-motion-state))
+    ;; These exit the mode globally and save/abort across buffers —
+    ;; mc dispatch would run them again at each fake cursor after
+    ;; the mode is already gone.
+    (put 'wgrep-finish-edit 'multiple-cursors nil)
+    (put 'wgrep-abort-changes 'multiple-cursors nil)
+    (put 'wgrep-save-all-buffers 'multiple-cursors nil)))
 
 ;; ── Read-only mode keybindings ──
 ;; These modes default to motion state.  Their own keybindings fall

@@ -868,8 +868,12 @@ strips nil and number entries from the step segment, and maintains
 `undo-equiv-table' for proper undo/redo chaining.
 
 If no changes occurred, pops the unused before-marker.
-Distinct from the 1-arg `helixel-mc--undo-step-end-cb' callback
-that `primitive-undo' calls during undo/redo."
+
+If `buffer-undo-list' became t (undo disabled) during the step — e.g.
+a save-buffer or grep-edit-save-changes that resets undo state — the
+step is aborted silently: no undo entries are pushed and the markers
+are released.  Distinct from the 1-arg `helixel-mc--undo-step-end-cb'
+callback that `primitive-undo' calls during undo/redo."
   (when helixel-mc--undo-step-active
     (unwind-protect
         (if (eq buffer-undo-list helixel-mc--undo-list-pointer)
@@ -877,20 +881,22 @@ that `primitive-undo' calls during undo/redo."
             (when (eq (car buffer-undo-list)
                       helixel-mc--undo-boundary-marker)
               (pop buffer-undo-list))
-          ;; Changes happened — finalize the step.
-          (let ((pos (helixel-mc--capture-all-positions)))
-            (push `(apply helixel-mc--undo-step-start-cb ,pos)
-                  buffer-undo-list)
-            (let* ((lst (helixel-mc--undo-skip-leading-nils
-                         buffer-undo-list))
-                   (prev-head (car lst)))
-              (setq lst (helixel-mc--filter-undo-step
-                         lst helixel-mc--undo-list-pointer))
-              (when-let* (((car lst))
-                          (equiv (gethash prev-head undo-equiv-table)))
-                (puthash (car lst) equiv undo-equiv-table))
-              (setq buffer-undo-list lst)
-              (undo-boundary))))
+          ;; buffer-undo-list changed.
+          (unless (eq buffer-undo-list t)
+            ;; Undo still enabled — finalize the step normally.
+            (let ((pos (helixel-mc--capture-all-positions)))
+              (push `(apply helixel-mc--undo-step-start-cb ,pos)
+                    buffer-undo-list)
+              (let* ((lst (helixel-mc--undo-skip-leading-nils
+                           buffer-undo-list))
+                     (prev-head (car lst)))
+                (setq lst (helixel-mc--filter-undo-step
+                           lst helixel-mc--undo-list-pointer))
+                (when-let* (((car lst))
+                            (equiv (gethash prev-head undo-equiv-table)))
+                  (puthash (car lst) equiv undo-equiv-table))
+                (setq buffer-undo-list lst)
+                (undo-boundary)))))
       ;; Cleanup always runs, even if body errors.
       (setq helixel-mc--undo-step-active nil
             helixel-mc--undo-list-pointer nil

@@ -1532,14 +1532,19 @@ Shows operator name, display label, and `moves-point-p' flag."
 
 (defvar-local helixel--sel-type-override nil
   "Override for `helixel--sel-type' during dot-repeat replay.
-Set only by selection-recreate functions to tell operators the
-selection type when `helixel--pending-sel' was already cleared.
+Dynamically bound by `helixel-action-replay' from the action's
+selection kind so operators can dispatch on selection type when
+`helixel--pending-sel' is nil.
+
+Outside of replay, this variable is nil and `helixel--sel-type'
+derives the type from `helixel--pending-sel' as normal.
 Cleared by `helixel-clear-data-internal'.")
 
 (defun helixel--sel-type ()
   "Return the selection type from pending-sel: nil, `line', `rect', `textobj'.
 Derived from `helixel--pending-sel' kind — the single source of truth.
-Falls back to `helixel--sel-type-override' for replay.
+During replay, falls back to `helixel--sel-type-override' which
+`helixel-action-replay' binds from the action's selection kind.
 Pending-sel is NOT popped until `clear-data', so this function returns
 the correct type throughout the operator body."
   (or helixel--sel-type-override
@@ -1644,12 +1649,24 @@ dispatches on struct closures."
 Reads :preposition and :runner from EVENT (a `helixel-action').
 Falls back to the operator registry if :runner is nil but :op is set.
 If neither runner nor op resolves but preposition ran, EVENT is
-treated as a pure positioner (movement commands at fake cursors)."
+treated as a pure positioner (movement commands at fake cursors).
+
+Dynamically binds `helixel--sel-type-override' from the action's
+selection kind so operators can dispatch on selection type during
+replay without relying on `helixel--pending-sel' (which is nil
+by the time the runner fires)."
   (when-let* ((pre (helixel-action-preposition event)))
     (funcall pre event))
   (let* ((op (helixel-action-op event))
          (runner (or (helixel-action-runner event)
-                     (and op (helixel--op-runner op)))))
+                     (and op (helixel--op-runner op))))
+         (helixel--sel-type-override
+          (when-let* ((sel (helixel-action-sel event)))
+            (pcase (helixel-sel-kind sel)
+              ('line 'line)
+              ('rect 'rect)
+              ('textobj 'textobj)
+              (_ nil)))))
     (when runner
       (funcall runner event))))
 

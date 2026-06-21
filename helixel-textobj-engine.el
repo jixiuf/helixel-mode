@@ -876,8 +876,7 @@ Signals errors when no more targets exist."
                    (forward-word -1)
                    (when (= (point) orig)
                      (forward-char -1))))
-               (funcall command cnt))))))))
-  (setq helixel--sel-type-override 'textobj))
+               (funcall command cnt)))))))))
 
 (defun helixel--repeat-advance-textobj (tx)
   "Advance to next target for TX's textobj selection.

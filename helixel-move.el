@@ -1282,8 +1282,7 @@ simple `push-mark' would interact poorly with the rect-mode mark."
     (when span-origin
       (deactivate-mark)
       (push-mark span-origin t t)
-      (activate-mark))
-    (setq helixel--sel-type-override 'rect)))
+      (activate-mark))))
 
 (defun helixel--recreate-movement (ctx)
   "Replay movement selection from CTX.

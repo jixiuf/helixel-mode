@@ -27,8 +27,7 @@
 ;;                               so each fake cursor gets its own
 ;;                               character via the post-command-hook
 ;;                               dispatcher.  Nothing else to do.
-;;   * dot-repeat (\\[helixel-repeat-edit])        — whitelisted ON: each cursor
-;; runs
+;;   * dot-repeat (\\[helixel-repeat-edit]) — whitelisted ON: each cursor runs
 ;;                               `helixel-repeat-edit' with its own
 ;;                               snapshotted `helixel-last-action'.
 ;;   * repeat-selection (\\[helixel-repeat-last-motion])  — same.
@@ -52,7 +51,7 @@
 ;; defined in helixel-last-edit.el (loaded transitively via
 ;; helixel-mc-core → ...; explicit defvar here keeps byte-compile happy).
 
-;; ── \\[helixel-repeat-edit] / \\[helixel-repeat-last-motion] semantics under
+;; ── \\[helixel-repeat-edit] / \\[helixel-repeat-last-motion] under
 ;; multi-cursor ──
 ;;
 ;; Without mc, \\[helixel-repeat-edit] does advance+apply: it moves to the NEXT
@@ -353,7 +352,8 @@ of commands from modules `mc-integrate' itself depends on."
  '(helixel-action-cycle
    helixel-action-cycle-mark-start))
 
-;; ── \\[helixel-action-cycle] and \\[helixel-action-cycle-mark-start] at fakes
+;; ── \\[helixel-action-cycle] and
+;; \\[helixel-action-cycle-mark-start] at fakes
 ;; are handled by the per-fake event
 ;; ring (see `helixel-pc-state' slots `event-ring', `live-action',
 ;; `action-pos', and `jump-cycle-pos').

@@ -53,20 +53,24 @@
 
 (defvar helixel-mc-mode)        ; forward decl — defined below
 (defvar helixel--current-state)           ; from `helixel-state'
-;; Per-cursor state variables that `helixel-mc--pcs-clone' /
-;; `-restore' / `-update-from-globals' read and write.  Defined
-;; in helixel-core / helixel-ring / helixel-state — declared here
-;; so the byte compiler doesn't flag them when this file is built
-;; before those modules are loaded.
+;; Per-cursor state variables that the generated clone / swap-in / swap-out
+;; functions read and write.  Defined in helixel-core / helixel-ring /
+;; helixel-state — declared here so the byte compiler doesn't flag them
+;; when this file is built before those modules are loaded.
+;;
+;; KEEP IN SYNC with `helixel-mc--state-spec' below.
 (defvar helixel--pending-sel)             ; from `helixel-core'
 (defvar helixel-last-action)             ; from `helixel-core'
-(defvar helixel--yank-register-source)    ; from `helixel-core' (mc per-cursor)
+(defvar helixel--yank-register-source)    ; from `helixel-core'
 (defvar helixel--current-register)        ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
 (defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
 (defvar helixel--action-pos)              ; from `helixel-ring'
 (defvar helixel--mark-cycle-pos)          ; from `helixel-ring'
+(defvar helixel--last-motion-cmd)         ; from `helixel-core'
+(defvar helixel--motion-permanent-flip)   ; from `helixel-core'
+(defvar helixel--block-chosen-spec)       ; from `helixel-core'
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
 (declare-function helixel-visual-exit "helixel-state")
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
@@ -145,139 +149,184 @@ Nil disables the check."
 ;;
 ;; Real cursor uses the SAME struct via `helixel-mc--pcs-clone' /
 ;; `-restore' in `helixel-mc--save-main-state'.  One type, one place.
+;;
+;; ── DECLARATIVE SPEC — the single source of truth ──
+;;
+;; The `helixel-mc--define-state' macro below generates the struct,
+;; clone, swap-in, swap-out, release, and create-fresh functions from
+;; the spec entries that follow.  TO ADD A NEW PER-CURSOR VARIABLE,
+;; just add one entry here — the functions update automatically.
+;;
+;; Each entry: (SLOT-NAME . PLIST)
+;;   :var VAR      — buffer-local variable (default clone = VAR,
+;;                   default restore = (setq VAR val))
+;;   :clone FORM   — override clone expression
+;;   :swap-out FORM — override swap-out expression (default = :clone)
+;;   :restore FORM — override restore expression (`val' = slot value)
+;;   :release BOOL — slot is a marker needing set-marker nil on release
+;;   :deep-copy BOOL — wrap clone / swap-out in copy-tree
+;;   :fresh FORM    — override value for create-fresh (default = :clone)
 
-(cl-defstruct (helixel-pc-state
-               (:conc-name helixel-pcs-)
-               (:copier nil))
-  "Snapshot of one cursor's state — used for both real and fake cursors.
-The mc dispatcher restores this struct into globals at fake-cursor
-enter time and snapshots back at leave time.  Real cursor uses the
-same struct in `helixel-mc--save-main-state'.
+(cl-defmacro helixel-mc--define-state (&rest entries)
+  "Generate `helixel-pc-state' struct + clone/swap/release/create-fresh.
 
-Position slots (POINT, MARK) are markers — the same markers live
-for the cursor's lifetime; `set-marker' mutates them in place so
-rendering code that holds the overlay's marker stays valid.
-MARK-ACTIVE is the cursor's region-active flag (per-cursor copy of
-the global `mark-active').
+ENTRIES is a list of (SLOT-NAME . PLIST) forms.  See the comment
+block above for the PLIST keys.
 
-The remaining slots mirror buffer-local Emacs and helixel state so
-each cursor has an independent kill-ring, search, event-ring and
-so on — broadcasts at one cursor never leak into another."
-  point                  ; marker
-  mark                   ; marker
-  mark-active            ; boolean
-  kill-ring              ; list
-  kill-ring-yank-pointer ; sublist of kill-ring
-  mark-ring              ; list of markers
-  pending-sel            ; `helixel-sel' or nil  (helixel--pending-sel)
-  last-action            ; `helixel-action'      (helixel-last-action)
-  yank-register-source   ; swap-source plist     (helixel--yank-register-source)
-  registers-alist        ; list (copy of register-alist)
-  active-search          ; `helixel--last-motion'  (helixel--active-search)
-  event-ring             ; list of `helixel-action' (helixel--action-ring)
-  live-action            ; `helixel-action'      (helixel--live-action)
-  action-pos             ; integer | nil         (helixel--action-pos)
-  jump-cycle-pos         ; integer | nil         (helixel--mark-cycle-pos)
-  last-motion-cmd)       ; `helixel--last-motion' or nil
+Expands to a `progn' containing:
+  - `cl-defstruct' for `helixel-pc-state'
+  - `helixel-mc--pcs-clone'
+  - `helixel-mc--pcs-swap-in'
+  - `helixel-mc--pcs-swap-out'
+  - `helixel-mc--pcs-release'
+  - `helixel-mc--pcs-create-fresh'"
+  (declare (indent 0))
+  (let ((slot-names nil)
+        ;; Clone: separate kw/val lists, interleaved after nreverse
+        (clone-kws nil) (clone-vals nil)
+        ;; Swap-in: interleaved (var accessor-form) for setq
+        (si-vars nil) (si-accs nil)
+        ;; Swap-in specials: (FORM ...) for goto-char / set-marker
+        (si-specials nil)
+        ;; Swap-out: interleaved (accessor-form swap-out-expr) for setf
+        (so-accs nil) (so-vals nil)
+        ;; Swap-out specials: (FORM ...) for set-marker
+        (so-specials nil)
+        ;; Release: (accessor-form ...) for set-marker nil
+        (rel-accs nil)
+        ;; Fresh overrides: interleaved (accessor-form fresh-expr) for setf
+        (fr-accs nil) (fr-vals nil))
+    (dolist (entry entries)
+      (let* ((slot (car entry))
+             (pl   (cdr entry))
+             (acc  (intern (concat "helixel-pcs-" (symbol-name slot))))
+             (accf `(,acc cs))          ; accessor applied to cs
+             (var  (plist-get pl :var))
+             (deep (plist-get pl :deep-copy))
+             (clone
+              (cond ((plist-get pl :clone))
+                    (var var)
+                    (t (error "Slot %s missing :var or :clone" slot))))
+             (clone (if deep `(copy-tree ,clone) clone))
+             (swap-out
+              (cond ((plist-get pl :swap-out))
+                    (t clone)))
+             (restore
+              (cond ((plist-get pl :restore))
+                    (var `(setq ,var val))
+                    (t (error "Slot %s missing :var or :restore" slot))))
+             (fresh
+              (cond ((plist-member pl :fresh) (plist-get pl :fresh))
+                    (t :use-clone)))
+             (release (plist-get pl :release))
+             (is-special (and (not var) (plist-get pl :restore))))
+        (push slot slot-names)
+        ;; Clone: push kw and val separately, interleave after nreverse
+        (push (intern (concat ":" (symbol-name slot))) clone-kws)
+        (push clone clone-vals)
+        (if is-special
+            (push (cl-subst accf 'val restore) si-specials)
+          (push var si-vars)
+          (push accf si-accs))
+        (if (and is-special (plist-member pl :swap-out))
+            (push `(set-marker ,accf ,swap-out) so-specials)
+          (push accf so-accs)
+          (push swap-out so-vals))
+        (when release
+          (push accf rel-accs))
+        (unless (eq fresh :use-clone)
+          (push accf fr-accs)
+          (push fresh fr-vals))))
+    ;; Reverse to spec order, then interleave kw/val pairs.
+    (setq slot-names (nreverse slot-names)
+          clone-kws (nreverse clone-kws) clone-vals (nreverse clone-vals)
+          si-specials (nreverse si-specials)
+          si-vars (nreverse si-vars) si-accs (nreverse si-accs)
+          so-specials (nreverse so-specials)
+          so-accs (nreverse so-accs) so-vals (nreverse so-vals)
+          rel-accs (nreverse rel-accs)
+          fr-accs (nreverse fr-accs) fr-vals (nreverse fr-vals))
+    (let ((clone-kvs (cl-mapcan #'list clone-kws clone-vals))
+          (si-setq (cl-mapcan #'list si-vars si-accs))
+          (so-setf (cl-mapcan #'list so-accs so-vals))
+          (fr-setf (cl-mapcan #'list fr-accs fr-vals)))
+      `(progn
+         ;; ── Struct ──
+         (cl-defstruct (helixel-pc-state
+                         (:conc-name helixel-pcs-)
+                         (:copier nil))
+           "Per-cursor state snapshot.  Slots are auto-generated from
+`helixel-mc--define-state' — see that macro's docstring for the
+full slot manifest."
+           ,@slot-names)
+         ;; ── Clone → fresh struct ──
+         (defun helixel-mc--pcs-clone ()
+           "Capture current cursor state into a fresh `helixel-pc-state'.
+All marker slots get fresh `copy-marker' instances."
+           (apply #'make-helixel-pc-state (list ,@clone-kvs)))
+         ;; ── Create-fresh (fake cursor) ──
+         (defun helixel-mc--pcs-create-fresh ()
+           "Create a `helixel-pc-state' for a NEW fake cursor.
+Like `helixel-mc--pcs-clone' but applies :fresh overrides per the
+state spec (e.g. nil's live-action, deep-copies event-ring)."
+           (let ((cs (helixel-mc--pcs-clone)))
+             ,@(when fr-setf `((setf ,@fr-setf)))
+             cs))
+         ;; ── Swap-in (struct → globals) ──
+         (defun helixel-mc--pcs-swap-in (cs)
+           "Restore cursor state CS into the current globals."
+           ,@si-specials
+           ,@(when si-setq `((setq ,@si-setq)))
+           nil)
+         ;; ── Swap-out (globals → struct) ──
+         (defun helixel-mc--pcs-swap-out (cs)
+           "Update CS in place with current cursor globals."
+           ,@so-specials
+           ,@(when so-setf `((setf ,@so-setf)))
+           nil)
+         ;; ── Release markers ──
+         (defun helixel-mc--pcs-release (cs)
+           "Null the marker slots held by CS.  Idempotent."
+           (when cs
+             ,@(mapcar (lambda (a) `(when-let* ((m ,a)) (set-marker m nil)))
+                       rel-accs)
+             nil))))))
 
-(defun helixel-mc--pcs-clone ()
-  "Capture the current cursor state into a fresh `helixel-pc-state'.
-Markers are FRESH copies (`copy-marker') so the snapshot is
-independent of any later movement of point / mark.
+;; ── THE SINGLE SOURCE OF TRUTH ──
+;; Add new per-cursor variables HERE — the macro above generates
+;; everything else (struct, clone, swap-in, swap-out, release,
+;; create-fresh) from this declaration.
 
-Used by `helixel-mc--save-main-state' and
-`helixel-mc-with-saved-state' — callers that need to snapshot the
-REAL cursor's full state and restore it later.  For fake cursor
-creation, use `helixel-mc--pcs-create-fresh' instead, which nil's
-live-action and registers and deep-copies the event-ring."
-  (make-helixel-pc-state
-   :point          (copy-marker (point) t)
-   :mark           (copy-marker (mark-marker))
-   :mark-active    mark-active
-   :kill-ring                 kill-ring
-   :kill-ring-yank-pointer    kill-ring-yank-pointer
-   :mark-ring                 mark-ring
-   :pending-sel               helixel--pending-sel
-   :last-action               helixel-last-action
-   :yank-register-source      helixel--yank-register-source
-   :registers-alist            (copy-tree register-alist)
-   :active-search             helixel--active-search
-   :event-ring                helixel--action-ring
-   :live-action               helixel--live-action
-   :action-pos                helixel--action-pos
-   :jump-cycle-pos            helixel--mark-cycle-pos
-   :last-motion-cmd           helixel--last-motion-cmd))
-
-(defun helixel-mc--pcs-create-fresh ()
-  "Create a fresh `helixel-pc-state' for a NEW fake cursor.
-Like `helixel-mc--pcs-clone' but clears inherited state that
-should NOT leak from the real cursor into a fake:
-  - event-ring: deep-copied (independent list, not shared ref)
-  - live-action: nil (real cursor's in-progress action belongs
-    to the real cursor; its markers will be released)
-  - registers-alist: nil (fresh fake starts with empty registers)
-Callers override point, mark, and \=`mark-active' to match the
-spawn site."
-  (let ((cs (helixel-mc--pcs-clone)))
-    (setf (helixel-pcs-event-ring cs)
-          (copy-sequence helixel--action-ring))
-    (setf (helixel-pcs-live-action cs) nil)
-    (setf (helixel-pcs-registers-alist cs) nil)
-    cs))
-
-(defun helixel-mc--pcs-swap-in (cs)
-  "Restore cursor state CS into the current globals.
-Moves point and the `mark-marker' to CS's positions, sets
-`mark-active', and copies every helixel per-cursor var."
-  (goto-char (marker-position (helixel-pcs-point cs)))
-  (set-marker (mark-marker) (marker-position (helixel-pcs-mark cs)))
-  (setq mark-active            (helixel-pcs-mark-active cs)
-        kill-ring              (helixel-pcs-kill-ring cs)
-        kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer cs)
-        mark-ring              (helixel-pcs-mark-ring cs)
-        helixel--pending-sel   (helixel-pcs-pending-sel cs)
-        helixel-last-action   (helixel-pcs-last-action cs)
-        helixel--yank-register-source (helixel-pcs-yank-register-source cs)
-        ;; Swap register-alist for per-cursor register isolation.
-        ;; The real cursor's alist is preserved by the outer
-        ;; `helixel-mc--save-main-state' — we just replace the
-        ;; global with the fake's saved copy here.
-        register-alist (helixel-pcs-registers-alist cs)
-        helixel--active-search (helixel-pcs-active-search cs)
-        helixel--action-ring    (helixel-pcs-event-ring cs)
-        helixel--live-action   (helixel-pcs-live-action cs)
-        helixel--action-pos    (helixel-pcs-action-pos cs)
-        helixel--mark-cycle-pos (helixel-pcs-jump-cycle-pos cs)
-        helixel--last-motion-cmd (helixel-pcs-last-motion-cmd cs)))
-
-(defun helixel-mc--pcs-release (cs)
-  "Null the markers held by CS.  Idempotent.
-Called when the cursor a CS belongs to is destroyed, to release
-any buffer text the markers might otherwise pin."
-  (when cs
-    (when-let* ((m (helixel-pcs-point cs))) (set-marker m nil))
-    (when-let* ((m (helixel-pcs-mark cs))) (set-marker m nil))))
-
-(defun helixel-mc--pcs-swap-out (cs)
-  "Update CS in place with current cursor globals.
-Mutates the existing point/mark markers (preserving identity for
-any rendering code that holds them).  Sets the rest by `setf'."
-  (set-marker (helixel-pcs-point cs) (point))
-  (set-marker (helixel-pcs-mark cs) (mark t))
-  (setf (helixel-pcs-mark-active cs)            mark-active
-        (helixel-pcs-kill-ring cs)              kill-ring
-        (helixel-pcs-kill-ring-yank-pointer cs) kill-ring-yank-pointer
-        (helixel-pcs-mark-ring cs)              mark-ring
-        (helixel-pcs-pending-sel cs)            helixel--pending-sel
-        (helixel-pcs-last-action cs)            helixel-last-action
-        (helixel-pcs-yank-register-source cs)   helixel--yank-register-source
-        (helixel-pcs-registers-alist cs)         (copy-tree register-alist)
-        (helixel-pcs-active-search cs)          helixel--active-search
-        (helixel-pcs-event-ring cs)             helixel--action-ring
-        (helixel-pcs-live-action cs)            helixel--live-action
-        (helixel-pcs-action-pos cs)             helixel--action-pos
-        (helixel-pcs-jump-cycle-pos cs)         helixel--mark-cycle-pos
-        (helixel-pcs-last-motion-cmd cs)        helixel--last-motion-cmd))
+(helixel-mc--define-state
+  (point
+   :clone (copy-marker (point) t)
+   :swap-out (point)
+   :restore (goto-char (marker-position val))
+   :release t)
+  (mark
+   :clone (copy-marker (mark-marker))
+   :swap-out (mark t)
+   :restore (set-marker (mark-marker) (marker-position val))
+   :release t)
+  (mark-active            :var mark-active)
+  (kill-ring              :var kill-ring)
+  (kill-ring-yank-pointer :var kill-ring-yank-pointer)
+  (mark-ring              :var mark-ring)
+  (pending-sel            :var helixel--pending-sel)
+  (last-action            :var helixel-last-action)
+  (yank-register-source   :var helixel--yank-register-source)
+  (registers-alist        :var register-alist :deep-copy t
+                          :fresh nil)
+  (active-search          :var helixel--active-search)
+  (event-ring             :var helixel--action-ring
+                          :fresh (copy-sequence helixel--action-ring))
+  (live-action            :var helixel--live-action
+                          :fresh nil)
+  (action-pos             :var helixel--action-pos)
+  (jump-cycle-pos         :var helixel--mark-cycle-pos)
+  (last-motion-cmd        :var helixel--last-motion-cmd)
+  (motion-permanent-flip  :var helixel--motion-permanent-flip)
+  (block-chosen-spec      :var helixel--block-chosen-spec))
 
 ;; ── Cursor accessors (read state via the struct on the overlay) ──
 

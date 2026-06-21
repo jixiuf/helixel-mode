@@ -88,10 +88,16 @@ MUST exist on the struct or the snapshot/restore machinery in
                       helixel-pcs-mark-ring
                       helixel-pcs-pending-sel
                       helixel-pcs-last-action
+                      helixel-pcs-yank-register-source
+                      helixel-pcs-registers-alist
                       helixel-pcs-active-search
                       helixel-pcs-event-ring
                       helixel-pcs-live-action
-                      helixel-pcs-action-pos))
+                      helixel-pcs-action-pos
+                      helixel-pcs-jump-cycle-pos
+                      helixel-pcs-last-motion-cmd
+                      helixel-pcs-motion-permanent-flip
+                      helixel-pcs-block-chosen-spec))
     (should (fboundp accessor))))
 
 (ert-deftest helixel-test-mc-invariant-mark-active-in-struct ()

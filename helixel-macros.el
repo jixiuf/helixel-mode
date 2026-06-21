@@ -115,7 +115,9 @@ BODY is the command's business logic."
           (when (eq cat 'movement)
             `((helixel--track-visual-move ',name))))
          (attach-preposition preposition-fn))
-    `(defun ,name ,(or params ())
+    `(progn
+       (put ',name 'helixel-command t)
+       (defun ,name ,(or params ())
        ,(format "Helixel %s.%s command." cat sub)
        ,interactive-form
        ;; ── Tag this command so `helixel--action-commit' can stamp
@@ -159,7 +161,7 @@ BODY is the command's business logic."
                     helixel--motion-extra)
                    ,@track-visual))
              `(,@rest-body
-               ,@track-visual))))))
+               ,@track-visual)))))))
 
 ;; ── Operator definition macro ──
 

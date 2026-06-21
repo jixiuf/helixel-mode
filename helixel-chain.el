@@ -144,11 +144,12 @@ Called with no arguments before the session is destroyed.")
 (defun helixel--chain-vanilla-exclude-default-p (cmd)
   "Default vanilla-command exclusion predicate.
 Returns non-nil if CMD should NOT be captured as a vanilla entry.
-Excludes self-insert, insert-mode commands, helixel commands, and
+Excludes self-insert, insert-mode commands, helixel commands
+(identified by the `helixel-command' symbol property), and
 chain-control commands."
   (or (eq cmd 'self-insert-command)
       (eq helixel--current-state 'insert)
-      (string-prefix-p "helixel-" (symbol-name cmd))
+      (get cmd 'helixel-command)
       (memq cmd helixel--chain-control-commands)))
 
 ;; ── action-list push helper (unified path for helixel + vanilla) ──

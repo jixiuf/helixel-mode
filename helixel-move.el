@@ -907,9 +907,10 @@ BACKWARD-P controls direction."
         ce))))
 
 (defun helixel--up-raw (backward-p)
-  "Raw `up-list' fallback - two levels outward in BACKWARD-P direction,
-unless `backward-char' lands on an open delimiter (consecutive `((' case),
-in which case we are already at the parent opener.
+  "Move up two levels outward from the current list.
+Works in BACKWARD-P direction, unless `backward-char' lands on
+an open delimiter (consecutive `((' case), in which case we are
+already at the parent opener.
 If BACKWARD-P is non-nil, move backward; otherwise forward.
 Returns point on success, nil when no parent pair exists."
   (helixel--with-debug-log up-raw

@@ -145,7 +145,7 @@ Called with no arguments before the session is destroyed.")
   "Default vanilla-command exclusion predicate.
 Returns non-nil if CMD should NOT be captured as a vanilla entry.
 Excludes self-insert, insert-mode commands, helixel commands
-(identified by the `helixel-command' symbol property), and
+\(identified by the `helixel-command' symbol property), and
 chain-control commands."
   (or (eq cmd 'self-insert-command)
       (eq helixel--current-state 'insert)

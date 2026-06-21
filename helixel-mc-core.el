@@ -870,7 +870,7 @@ strips nil and number entries from the step segment, and maintains
 If no changes occurred, pops the unused before-marker.
 
 If `buffer-undo-list' became t (undo disabled) during the step — e.g.
-a save-buffer or grep-edit-save-changes that resets undo state — the
+a `save-buffer' or `grep-edit-save-changes' that resets undo state — the
 step is aborted silently: no undo entries are pushed and the markers
 are released.  Distinct from the 1-arg `helixel-mc--undo-step-end-cb'
 callback that `primitive-undo' calls during undo/redo."

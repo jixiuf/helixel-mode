@@ -648,19 +648,7 @@ INCLUSIVE indicates whether to include the delimiters."
           (goto-char (if (> dir 0) beg end))
           (if (and wsboth (setq bnd (bounds-of-thing-at-point 'helixel-space)))
               (if (> dir 0) (setq beg (car bnd)) (setq end (cdr bnd)))))))
-      (helixel-range beg end
-                     ;; HACK: fixes #583
-                     ;; When not in visual state, an empty range is
-                     ;; possible.  However, this cannot be achieved with
-                     ;; inclusive ranges, hence we use exclusive ranges
-                     ;; in this case.  In visual state the range must be
-                     ;; inclusive because otherwise the selection would
-                     ;; be wrong.
-                     (if (and helixel-textobj-visual-state-p-function
-                              (funcall helixel-textobj-visual-state-p-function))
-                         'inclusive
-                       'exclusive)
-                     :expanded t))))
+      (helixel-range beg end nil :expanded t))))
 
 (defun helixel-select-quote (quote beg end type count &optional inclusive)
   "Return a range (BEG END) of COUNT quoted text objects.

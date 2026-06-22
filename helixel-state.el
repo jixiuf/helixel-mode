@@ -195,15 +195,6 @@ keymaps include the target keymap.")
 ;; `helixel--pending-sel' holds the selection descriptor (helixel-sel
 ;; struct) created by the selection command.  The operator command
 ;; consumes it.
-;;
-;; `helixel--pending-op' is NOT a vim-style operator-pending state
-;; machine — it's just a marker that the next command should consume
-;; the pending selection.
-
-(defvar-local helixel--pending-op nil
-  "The current pending operator: \='kill | \='change | \='copy | nil.
-Set by operator commands (d, c, y) when awaiting a selection.
-Consumed alongside `helixel--pending-sel'.")
 
 ;; Internal wiring deferred to `helixel-state--init' (see end of file).
 

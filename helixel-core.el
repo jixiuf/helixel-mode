@@ -609,7 +609,6 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
 ;;
 ;; Helixel is selection-first: selection commands push a `helixel-sel'
 ;; descriptor; the next editing command pops and consumes it.
-;; Pairs with `helixel--pending-op' defined in helixel-state.el.
 
 (defvar-local helixel--pending-sel nil
   "The pending selection descriptor (`helixel-sel' struct or nil).

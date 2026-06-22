@@ -684,23 +684,7 @@ Third."
     ;; Function is in helixel-thing-move-no-select-things by default.
     (should (not (use-region-p)))))
 
-;;; Operator-pending (dw) integration test
-
-(ert-deftest helixel-test-word-operator-newline ()
-  "Test that dw at end of line does not eat the newline."
-  (with-temp-buffer
-    (transient-mark-mode 1)
-    (setq helixel--action-ring nil helixel--live-action nil
-          helixel--action-pos nil)
-    (insert "foo bar \nbaz")
-    (goto-char 5)  ; start of "bar"
-    (setq helixel--pending-op 'delete)
-    (helixel-forward-word-start)
-    ;; In operator-pending, the range should exclude \n
-    (should (= (point) 9))              ; at \n (trim to end of line)
-    (should (= (- (region-end) (region-beginning)) 4)) ; "bar "
-    (should (string= (buffer-substring (region-beginning) (region-end))
-                     "bar "))))
+;;; Word in pure whitespace buffer
 
 (ert-deftest helixel-test-word-pure-whitespace-buffer ()
   "Test w in a buffer with only whitespace goes to eob."

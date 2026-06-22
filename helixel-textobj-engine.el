@@ -234,17 +234,11 @@ do not cross the newline; stop at the end of the current THING instead."
                       (line-number-at-pos pt))
                    (not (bobp))
                    (memq thing helixel--single-line-things))
-          (if (bound-and-true-p helixel--pending-op)
-              (progn
-                (goto-char (save-excursion
-                             (goto-char pt)
-                             (line-beginning-position)))
-                (skip-chars-forward "\n"))
-            (let ((bol (save-excursion
-                         (goto-char pt)
-                         (line-beginning-position))))
-              (unless (<= pt (1+ bol))
-                (goto-char (1+ bol))))))
+          (let ((bol (save-excursion
+                       (goto-char pt)
+                       (line-beginning-position))))
+            (unless (<= pt (1+ bol))
+              (goto-char (1+ bol)))))
         (when (< (point) pt) (point)))
     (let ((bnd (bounds-of-thing-at-point thing))
           (pt (point))
@@ -270,19 +264,13 @@ do not cross the newline; stop at the end of the current THING instead."
                                 (not (eq (char-syntax (char-before))
                                          ?\s))))
                        (memq thing helixel--single-line-things))
-              (if (bound-and-true-p helixel--pending-op)
-                  (progn
-                    (goto-char (save-excursion
-                                 (goto-char pt)
-                                 (line-end-position)))
-                    (skip-chars-backward "\n"))
-                (let ((eol (save-excursion
-                             (goto-char pt)
-                             (line-end-position))))
-                  (if (>= pt (1- eol))
-                      nil
-                    (setq skip-post t)
-                    (goto-char eol)))))
+              (let ((eol (save-excursion
+                           (goto-char pt)
+                           (line-end-position))))
+                (if (>= pt (1- eol))
+                    nil
+                  (setq skip-post t)
+                  (goto-char eol))))
             ;; Run the word-beginning post-processing except when
             ;; we trimmed within-line (skip-post=t).
             (unless skip-post
@@ -316,17 +304,11 @@ When BACKWARD-CHAR-P is non-nil, adjust point by one char after motion."
                               (not (eq (char-syntax (char-before))
                                        ?\s))))
                      (memq thing helixel--single-line-things))
-            (if (bound-and-true-p helixel--pending-op)
-                (progn
-                  (goto-char (save-excursion
-                               (goto-char pt)
-                               (line-end-position)))
-                  (skip-chars-backward "\n"))
-              (let ((eol (save-excursion
-                           (goto-char pt)
-                           (line-end-position))))
-                (unless (>= pt (1- eol))
-                  (goto-char eol)))))
+            (let ((eol (save-excursion
+                         (goto-char pt)
+                         (line-end-position))))
+              (unless (>= pt (1- eol))
+                (goto-char eol))))
           (when (and backward-char-p (not (bobp)))
             (backward-char))))
     (unless (bobp) (forward-char -1))
@@ -344,17 +326,11 @@ When BACKWARD-CHAR-P is non-nil, adjust point by one char after motion."
                       (line-number-at-pos pt))
                    (not (bobp))
                    (memq thing helixel--single-line-things))
-          (if (bound-and-true-p helixel--pending-op)
-              (progn
-                (goto-char (save-excursion
-                             (goto-char pt)
-                             (line-beginning-position)))
-                (skip-chars-forward "\n"))
-            (let ((bol (save-excursion
-                         (goto-char pt)
-                         (line-beginning-position))))
-              (unless (<= pt (1+ bol))
-                (goto-char (1+ bol))))))
+          (let ((bol (save-excursion
+                       (goto-char pt)
+                       (line-beginning-position))))
+            (unless (<= pt (1+ bol))
+              (goto-char (1+ bol)))))
         (setq bnd (bounds-of-thing-at-point thing))
         (if bnd
             (prog2 (end-of-thing thing) (point)

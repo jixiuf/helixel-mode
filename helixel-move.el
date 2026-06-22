@@ -1312,7 +1312,6 @@ simple `push-mark' would interact poorly with the rect-mode mark."
   (let ((n (helixel-sel-rect-count ctx))
         (span-origin (when (plist-get ctx :span) (point))))
     (unless rectangle-mark-mode
-      (helixel--switch-state 'visual)
       (push-mark (point) t t)
       (rectangle-mark-mode 1))
     (dotimes (_ (1- n))
@@ -1333,6 +1332,8 @@ When :span is set (from \\[helixel-action-cycle] push),
 \=`; d .' replays the full movement span correctly.
 Signals `user-error' when point does not move (no more targets)."
   ;; :span forces visual-mode accumulation regardless of :normal-mode.
+  ;; Enter visual state for accumulating movements so `clear-highlights'
+  ;; in the funcall'd movement commands don't deactivate the region.
   (unless (and (helixel-sel-movement-normal-mode-p ctx)
                (not (plist-get ctx :span)))
     (setq helixel--current-state 'visual))
@@ -1434,10 +1435,10 @@ No-op during dot-repeat replay, or when no region is active.
 
 When `helixel--pending-sel' holds a non-movement kind (rect/line/
 textobj), this function is a no-op — the selection type is preserved
-for operators (d/y/c).  Such pending-sels only appear in visual mode
-after `helixel-select-rectangle' or `helixel-select-line' followed by
+for operators (d/y/c).  Such pending-sels appear after
+`helixel-select-rectangle' or `helixel-select-line' followed by
 basic motion commands (j/k) that are defined via
-`helixel-define-movement' (which preserves the sel in visual mode).
+`helixel-define-movement' (which preserves the sel).
 Word-movement commands (helixel--with-movement-surround) clear
 non-movement sels, so nil is the only ctx possible there."
   (when (and (not (helixel-replaying-p))

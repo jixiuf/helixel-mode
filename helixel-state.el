@@ -224,11 +224,10 @@ incomplete state that should never survive a state transition."
 
 (defun helixel--clear-highlights ()
   "Clear any active highlight, unless in visual state.
-Since x/X/rect-select no longer enter visual, being in visual always means
-the user pressed v and wants extending behavior — even for line/rect
-regions.  `helixel--pure-visual-state-p' is preserved for textobj
-and search handling.
-Also preserve highlights when `rectangle-mark-mode' is active."
+Visual state keeps the region for extending (v then w w).
+Rectangle-mark-mode keeps its rectangle highlight.
+Line and rect selections are not in visual state, so movements
+replace them naturally."
   (unless (or (eq helixel--current-state 'visual)
               rectangle-mark-mode)
     (deactivate-mark)))
@@ -399,12 +398,10 @@ Safe for use in hooks and `:after' advice."
   (eq helixel--current-state 'visual))
 
 (defun helixel--pure-visual-state-p ()
-  "Return non-nil if in pure visual state (not entered via line/rect).
-Line and rect selections are in `visual' state but should NOT behave
-like pure visual for highlight clearing, textobj expansion, or
-search mark handling."
-  (and (eq helixel--current-state 'visual)
-       (not (memq (helixel--region-type) '(line rect)))))
+  "Return non-nil if genuinely in visual state (entered via `v').
+Line (x) and rect selections no longer enter visual state,
+so `(eq helixel--current-state \='visual)' is sufficient."
+  (eq helixel--current-state 'visual))
 
 ;; ── Motion-state keymap parent patching ──
 ;; Extend major-mode keymaps with `helixel-normal-map' as fallback

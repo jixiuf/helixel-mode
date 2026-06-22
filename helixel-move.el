@@ -163,8 +163,7 @@ automatically, so this macro only does `push-mark' + activate."
      (when (and helixel--pending-sel
                 (not (eq (helixel-sel-kind helixel--pending-sel) 'movement)))
        (setq helixel--pending-sel nil))
-     ;; A general movement also clears any replay override.
-     (setq helixel--sel-type-override nil)
+
      ,@body
      (unless (use-region-p)
        (push-mark current t 'activate))))
@@ -216,7 +215,7 @@ Optional REVERSE-CMD is the opposite-direction command for
                           (not (eq (helixel-sel-kind helixel--pending-sel)
                                    'movement)))
                  (setq helixel--pending-sel nil))
-               (setq helixel--sel-type-override nil)
+
                (,fn ',thing (* ,sign (or count 1))))
            (helixel--with-movement-surround
              (,fn ',thing (* ,sign (or count 1)))))

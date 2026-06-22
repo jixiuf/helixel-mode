@@ -74,7 +74,7 @@
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
     (push-mark (point) t t)
     (end-of-line)
-    (setq helixel--sel-type-override 'line)
+    (helixel-test--mock-sel-type 'line)
     (should (eq (helixel--region-type) 'line))))
 
 (ert-deftest helixel-test-selection-type-line-invalidated ()
@@ -84,7 +84,7 @@
     (goto-char 3)
     (push-mark (point) t t)
     (end-of-line)
-    (setq helixel--sel-type-override 'line)
+    (helixel-test--mock-sel-type 'line)
     (should-not (helixel--region-type))))
 
 ;;; helixel-select-line sets selection type
@@ -92,7 +92,7 @@
 (ert-deftest helixel-test-select-line-sets-type ()
   "Test `helixel-select-line' sets `helixel--sel-type' to line."
   (helixel-test-with-buffer "first line\nsecond line\nthird line"
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (helixel-select-line)
     (should (eq (helixel--sel-type) 'line))
     (should (region-active-p))))
@@ -102,7 +102,7 @@
 (ert-deftest helixel-test-clear-data-resets-type ()
   "Test `helixel-clear-data' resets `helixel--sel-type'."
   (helixel-test-with-buffer "hello"
-    (setq helixel--sel-type-override 'line)
+    (helixel-test--mock-sel-type 'line)
     (helixel-clear-data)
     (should-not (helixel--sel-type))))
 
@@ -165,7 +165,7 @@
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (helixel-kill-ring-save)
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (car kill-ring) "hello")))))
@@ -211,7 +211,7 @@
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (helixel-kill)
       (should-not (helixel--linewise-kill-p (car kill-ring)))
       (should (string= (buffer-string) " world")))))
@@ -290,7 +290,7 @@
     (goto-char 2)
     (push-mark (point) t t)
     (goto-char 5)                    ; select "bcd"
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (helixel-yank)
     (should (string= (buffer-string) "abcdXYZef"))))
 
@@ -301,7 +301,7 @@
     (goto-char 2)
     (push-mark (point) t t)
     (goto-char 5)                    ; select "bcd"
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (helixel-yank-before)
     (should (string= (buffer-string) "aXYZbcdef"))))
 
@@ -341,7 +341,7 @@
     (goto-char 2)
     (push-mark (point) t t)
     (goto-char 5)                    ; select "bcd"
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (helixel-yank 2)
     ;; pastes after selection (region-end), twice
     (should (string= (buffer-string) "abcdXYXYef"))))
@@ -391,8 +391,7 @@
 (ert-deftest helixel-test-replace-sets-mark-region ()
   "After r, the event mark-region covers the replaced text."
   (helixel-test-with-buffer "hello"
-    (let ((helixel-replace-delete-char-p t)
-          (helixel--sel-type-override nil))
+    (let ((helixel-replace-delete-char-p t))
       (kill-new "XY")
       (helixel-replace)
       ;; 'h' deleted, "XY" inserted → "XYello"
@@ -506,7 +505,7 @@ paste line-wise instead of char-wise."
     (kill-new (helixel--linewise-text "REPLACED\n"))
     (push-mark (point) t t)
     (goto-char 6)
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (helixel-replace)
     ;; Line-wise kill should be stripped of trailing newline for inline replace
     (should (string= (buffer-string) "REPLACED world"))))
@@ -516,14 +515,14 @@ paste line-wise instead of char-wise."
   (helixel-test-with-buffer "hello"
     (let ((helixel-replace-delete-char-p t))
       (kill-new "X")
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (helixel-replace)
       (should (string= (buffer-string) "Xello"))))
 
   (helixel-test-with-buffer "hello"
     (let ((helixel-replace-delete-char-p nil))
       (kill-new "X")
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (helixel-replace)
       (should (string= (buffer-string) "Xhello")))))
 
@@ -573,7 +572,7 @@ paste line-wise instead of char-wise."
       ;; Select "brave"
       (push-mark 7 t t)
       (goto-char 12)
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (setq last-command nil)
       (helixel-replace)
       (should (string= (buffer-string) "hello cruel world"))
@@ -783,7 +782,7 @@ mark-position-based bounds detection (not use-region-p)."
     (let ((kill-ring nil))
       (push-mark (point) t t)
       (goto-char 6)
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (helixel-kill)
       (should (string= (car kill-ring) "hello"))
       (should-not (helixel--linewise-kill-p (car kill-ring)))
@@ -793,12 +792,12 @@ mark-position-based bounds detection (not use-region-p)."
 
 ;;; helixel-begin-selection clears line type
 
-(ert-deftest helixel-test-begin-selection-clears-line-type ()
-  "Test that `helixel-begin-selection' clears line selection type."
+(ert-deftest helixel-test-begin-selection-preserves-line-type ()
+  "`helixel-begin-selection' with `preserve-selection' keeps line type."
   (helixel-test-with-buffer "hello"
-    (setq helixel--sel-type-override 'line)
+    (helixel-test--mock-sel-type 'line)
     (helixel-begin-selection)
-    (should-not (helixel--sel-type))))
+    (should (eq (helixel--sel-type) 'line))))
 
 ;;; Direction flip / shrink tests
 

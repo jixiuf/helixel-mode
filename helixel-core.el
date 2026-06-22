@@ -1559,27 +1559,17 @@ Shows operator name, display label, and `self-advancing' flag."
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
 
-(defvar-local helixel--sel-type-override nil
-  "Override for `helixel--sel-type' during dot-repeat replay.
-Dynamically bound by `helixel-action-replay' from the action's
-selection kind so operators can dispatch on selection type when
-`helixel--pending-sel' is nil.
-
-Outside of replay, this variable is nil and `helixel--sel-type'
-derives the type from `helixel--pending-sel' as normal.
-Cleared by `helixel-clear-data-internal'.")
-
 (defsubst helixel--sel-type ()
   "Return the selection type from pending-sel: nil, `line', `rect', `textobj'.
 Looks up :sel-type from the kind registry — extensible by registering
 new kinds with `:sel-type'.  Falls back to nil for unregistered kinds.
-During replay, falls back to `helixel--sel-type-override' which
-`helixel-action-replay' binds from the action's selection kind.
+During replay, `helixel-action-replay' temporarily binds
+`helixel--pending-sel' from the action's stored selection so the
+operator sees the same type it saw during recording.
 Pending-sel is NOT popped until `clear-data', so this function returns
 the correct type throughout the operator body."
-  (or helixel--sel-type-override
-      (when helixel--pending-sel
-        (helixel--kind-sel-type (helixel-sel-kind helixel--pending-sel)))))
+  (when helixel--pending-sel
+    (helixel--kind-sel-type (helixel-sel-kind helixel--pending-sel))))
 
 (defvar-local helixel-invisible t
   "Non-nil means helixel treats invisible text as real content to operate on.
@@ -1676,22 +1666,17 @@ Falls back to the operator registry if :runner is nil but :op is set.
 If neither runner nor op resolves but preposition ran, EVENT is
 treated as a pure positioner (movement commands at fake cursors).
 
-Dynamically binds `helixel--sel-type-override' from the action's
-selection kind so operators can dispatch on selection type during
-replay without relying on `helixel--pending-sel' (which is nil
-by the time the runner fires)."
-  (when-let* ((pre (helixel-action-preposition event)))
-    (funcall pre event))
+Temporarily binds `helixel--pending-sel' from the action's stored
+selection so operators see the same type via `helixel--sel-type'
+as they did during recording (when `helixel--pending-sel' was set)."
   (let* ((op (helixel-action-op event))
          (runner (or (helixel-action-runner event)
                      (and op (helixel--op-runner op))))
-         (helixel--sel-type-override
-          (when-let* ((sel (helixel-action-sel event)))
-            (pcase (helixel-sel-kind sel)
-              ('line 'line)
-              ('rect 'rect)
-              ('textobj 'textobj)
-              (_ nil)))))
+         ;; Restore the pending-sel that was active during recording
+         ;; so `helixel--sel-type' returns the correct type.
+         (helixel--pending-sel (helixel-action-sel event)))
+    (when-let* ((pre (helixel-action-preposition event)))
+      (funcall pre event))
     (when runner
       (funcall runner event))))
 

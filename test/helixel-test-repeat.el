@@ -906,7 +906,7 @@ and back."
     (push-mark (point) t t)
     (goto-char 5)
     (rectangle-mark-mode 1)
-    (setq helixel--sel-type-override 'rect)
+    (helixel-test--mock-sel-type 'rect)
     (setq last-command nil this-command 'helixel-change)
     (helixel-change)
     (insert "X")

@@ -1784,7 +1784,7 @@ Line selections (x) no longer enter visual state."
       (push-mark (point) t t)
       (goto-char 14) ;; col 3 on line 2 (space after "DEF")
       (rectangle-mark-mode 1)
-      (setq helixel--sel-type-override 'rect)
+      (helixel-test--mock-sel-type 'rect)
       (helixel-delete)
       (should (string= (buffer-string) " line1\n line2\nGHI line3"))
       (should-not kill-ring)
@@ -1868,7 +1868,7 @@ Line selections (x) no longer enter visual state."
       (push-mark (point) t t)
       (goto-char 14)
       (rectangle-mark-mode 1)
-      (setq helixel--sel-type-override 'rect)
+      (helixel-test--mock-sel-type 'rect)
       (helixel-change-noyank)
       (should (string= (buffer-string) " line1\n line2\nGHI line3"))
       (should-not kill-ring)
@@ -1901,7 +1901,7 @@ Line selections (x) no longer enter visual state."
       (push-mark (point) t t)
       (goto-char 2)
       (rectangle-mark-mode 1)
-      (setq helixel--sel-type-override 'rect)
+      (helixel-test--mock-sel-type 'rect)
       (helixel-delete)
       (should (string= (buffer-string) "BCDE"))
       (should-not kill-ring)
@@ -2032,13 +2032,14 @@ Line selections (x) no longer enter visual state."
     (helixel--sel-push (helixel-sel-create 'movement '(:moves ((forward-char . 1)))))
     (should (null (helixel--sel-type)))))
 
-(ert-deftest helixel-test-sel-type-override ()
-  "Override wins over pending-sel, cleared by clear-data."
+(ert-deftest helixel-test-clear-data-resets-sel-type ()
+  "`helixel--sel-type' reads from `helixel--pending-sel'.
+Clear-data resets it to nil."
   (helixel-test-with-buffer "hello"
-    (setq helixel--sel-type-override 'rect)
+    (helixel-test--mock-sel-type 'rect)
     (should (eq (helixel--sel-type) 'rect))
     (helixel--sel-push (helixel-sel-create 'line '(:dir forward :count 1)))
-    (should (eq (helixel--sel-type) 'rect))
+    (should (eq (helixel--sel-type) 'line))
     (helixel-clear-data)
     (should (null (helixel--sel-type)))))
 

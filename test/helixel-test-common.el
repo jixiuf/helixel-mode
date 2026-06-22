@@ -94,5 +94,18 @@ Use `helixel-test-simulate' for multi-command sequences."
      (setq last-command nil this-command ',cmd)
      (,cmd ,@args)))
 
+(defun helixel-test--mock-sel-type (type)
+  "Set `helixel--pending-sel' to simulate a TYPE selection for testing.
+TYPE is one of `line', `rect', `textobj', or nil.
+Creates a minimal sel struct of the given kind so `helixel--sel-type'
+returns the corresponding type symbol."
+  (setq helixel--pending-sel
+        (pcase type
+          ('line (helixel-sel-create 'line '(:count 1 :dir forward)))
+          ('rect (helixel-sel-create 'rect '(:count 1)))
+          ('textobj (helixel-sel-create 'textobj
+                       '(:command 'mark-inner-word)))
+          ((pred null) nil))))
+
 (provide 'helixel-test-common)
 ;;; helixel-test-common.el ends here

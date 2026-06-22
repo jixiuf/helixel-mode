@@ -212,14 +212,12 @@ Consumed alongside `helixel--pending-sel'.")
 When PRESERVE-SELECTION is non-nil (used by `helixel-begin-selection'
 to preserve an active region from x/rect-select), skip clearing
 `helixel--pending-sel', `rectangle-mark-mode', and the mark.
-`helixel--sel-type-override' and `helixel--action-pos' are
-always cleared — they represent incomplete state that should
-never survive a state transition."
+`helixel--action-pos' is always cleared — it represents
+incomplete state that should never survive a state transition."
   (unless (eq state helixel--current-state)
     (when-let* ((mode (alist-get helixel--current-state helixel-state-alist)))
       (funcall mode -1))
     ;; Partial data that never survives any state transition.
-    (setq helixel--sel-type-override nil)
     (setq helixel--action-pos nil)
     ;; Selection data — preserved when entering visual from an
     ;; active region (v after x/rect-select).
@@ -283,7 +281,6 @@ to a char selection."
       (setq helixel--pending-sel nil))
     ;; Preserve any active line/char selection when entering visual.
     (helixel--switch-state 'visual t)
-    (setq helixel--sel-type-override nil)
     (unless (use-region-p)
       (push-mark-command t t))))
 

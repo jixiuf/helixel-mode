@@ -1711,14 +1711,15 @@ N word targets, not N+1."
                          :sel sentinel-sel
                          :runner #'ignore
                          :payload '(:keys [?X])))
+           (sentinel-type (helixel-sel-create 'textobj
+                            '(:command 'mark-inner-word)))
            (helixel-last-action sentinel-tx)
-           (helixel--pending-sel sentinel-sel)
-           (helixel--sel-type-override 'textobj))
+           (helixel--pending-sel sentinel-type))
       (helixel-mc--walk-advance (helixel-test-mc--word-sel))
       ;; All globals must be restored exactly — no accumulated count,
       ;; no overwritten command, no flipped sel-type.
       (should (eq helixel-last-action sentinel-tx))
-      (should (eq helixel--pending-sel sentinel-sel))
+      (should (eq helixel--pending-sel sentinel-type))
       (should (eq (helixel--sel-type) 'textobj))
       (should (= 1 (helixel-sel-textobj-count
                     (helixel-action-sel helixel-last-action))))
@@ -1918,7 +1919,7 @@ to be filtered out as a stale read."
   (helixel-test-with-buffer "hello world\nfoo bar\n"
     (helixel-enter-normal-state)
     (goto-char 1)
-    (setq helixel--sel-type-override 'rect)
+    (helixel-test--mock-sel-type 'rect)
     (helixel-forward-word-end)
     (should (null (helixel--sel-type)))))
 
@@ -2957,7 +2958,7 @@ region cursor per line (Helix `Alt-s' semantics)."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 12)
-    (let ((helixel--sel-type-override 'line))
+    (let ((helixel--pending-sel (helixel-sel-create 'line '(:count 1 :dir forward))))
       (helixel-mc-edit-lines (region-beginning) (region-end)))
     (should (= 2 (length (helixel-mc-all-cursors))))
     (let ((texts (sort
@@ -3236,7 +3237,7 @@ Verifies per-cursor isolation — cursor 1's copy does not overwrite cursor 2's.
     (should (= (helixel-mc-num-cursors) 2))
     ;; Each cursor copies its line content (AAA / BBB) as swap source.
     (helixel-mc-with-each-cursor
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (push-mark (pos-eol) t t)
       (goto-char (pos-bol))
       (helixel-kill-ring-save))
@@ -3257,14 +3258,14 @@ Verifies per-cursor isolation — cursor 1's copy does not overwrite cursor 2's.
     (should (= (helixel-mc-num-cursors) 3))
     ;; Each cursor copies first word
     (helixel-mc-with-each-cursor
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
         (helixel-kill-ring-save)))
     ;; Delete first word on each line
     (helixel-mc-with-each-cursor
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
@@ -3287,7 +3288,7 @@ per-cursor register content is independent."
     (should (= (helixel-mc-num-cursors) 3))
     ;; Real cursor copies its word to register a (global).
     (goto-char (pos-bol))
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (let ((w (save-excursion (forward-word) (point))))
       (push-mark w t t)
       (exchange-point-and-mark)
@@ -3296,7 +3297,7 @@ per-cursor register content is independent."
     ;; Fake cursors copy their words to per-cursor register a.
     (helixel-mc-with-each-cursor
       (goto-char (pos-bol))
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
@@ -3331,7 +3332,7 @@ Simulates the interactive dispatch path: real cursor runs first
     ;; Step 1: copy at real cursor (would be `y' interactively).
     ;; Real cursor is at the line nearest to point.
     (goto-char (pos-bol))
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (let ((w (save-excursion (forward-word) (point))))
       (push-mark w t t)
       (exchange-point-and-mark)
@@ -3342,7 +3343,7 @@ Simulates the interactive dispatch path: real cursor runs first
     (helixel-mc-with-each-cursor
       (goto-char (pos-bol))
       (should (eq helixel--current-register ?a))
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (let ((w (save-excursion (forward-word) (point))))
         (push-mark w t t)
         (exchange-point-and-mark)
@@ -3372,7 +3373,7 @@ is responsible for clearing it."
     ;; Set register on real cursor.
     (setq helixel--current-register ?a)
     ;; Simulate real cursor yank.
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (push-mark (pos-eol) t t)
     (exchange-point-and-mark)
     (helixel-kill-ring-save)
@@ -3380,7 +3381,7 @@ is responsible for clearing it."
     (should (eq helixel--current-register ?a))
     ;; Now simulate what post-command does: dispatch then clear.
     (helixel-mc-with-each-cursor
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (push-mark (pos-eol) t t)
       (exchange-point-and-mark)
       (should (eq helixel--current-register ?a))
@@ -3401,7 +3402,7 @@ Cursor 1 copies to register a, cursor 2 to register b."
     ;; Real cursor: copy to register a.
     (goto-char (pos-bol))
     (setq helixel--current-register ?a)
-    (setq helixel--sel-type-override nil)
+    (helixel-test--mock-sel-type nil)
     (push-mark (pos-eol) t t)
     (exchange-point-and-mark)
     (helixel-kill-ring-save)
@@ -3409,7 +3410,7 @@ Cursor 1 copies to register a, cursor 2 to register b."
     (helixel-mc-with-each-cursor
       (goto-char (pos-bol))
       (setq helixel--current-register ?b)
-      (setq helixel--sel-type-override nil)
+      (helixel-test--mock-sel-type nil)
       (push-mark (pos-eol) t t)
       (exchange-point-and-mark)
       (helixel-kill-ring-save))

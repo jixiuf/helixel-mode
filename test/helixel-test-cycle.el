@@ -169,7 +169,7 @@
     (unwind-protect
         (helixel-test-with-buffer "hello world"
           (helixel-forward-word-start)
-          (setq helixel--sel-type-override nil)
+          (helixel-test--mock-sel-type nil)
           (let ((this-command 'helixel-kill-ring-save))
             (helixel-kill-ring-save))
           (goto-char (point-max))
@@ -196,7 +196,7 @@
     (unwind-protect
         (helixel-test-with-buffer "hello world"
           (helixel-forward-word-start)
-          (setq helixel--sel-type-override nil)
+          (helixel-test--mock-sel-type nil)
           (let ((this-command 'helixel-kill-ring-save))
             (helixel-kill-ring-save))
           (goto-char (point-max))
@@ -224,7 +224,7 @@
     (unwind-protect
         (helixel-test-with-buffer "hello world"
           (helixel-forward-word-start)
-          (setq helixel--sel-type-override nil)
+          (helixel-test--mock-sel-type nil)
           (let ((this-command 'helixel-kill-ring-save))
             (helixel-kill-ring-save))
           (goto-char (point-max))
@@ -256,7 +256,7 @@
     (unwind-protect
         (helixel-test-with-buffer "hello world"
           (helixel-forward-word-start)
-          (setq helixel--sel-type-override nil)
+          (helixel-test--mock-sel-type nil)
           (let ((this-command 'helixel-kill-ring-save))
             (helixel-kill-ring-save))
           (goto-char 1)
@@ -324,7 +324,7 @@
         (helixel-test-with-buffer "hello world"
 				  (push-mark (point) t t)
 				  (goto-char 6)
-				  (setq helixel--sel-type-override nil)
+				  (helixel-test--mock-sel-type nil)
 				  (let ((this-command 'helixel-kill-ring-save))
 				    (helixel-kill-ring-save))
 				  (should helixel--action-ring)
@@ -352,7 +352,7 @@
         (helixel-test-with-buffer "hello world"
 				  (push-mark (point) t t)
 				  (goto-char 6)
-				  (setq helixel--sel-type-override nil)
+				  (helixel-test--mock-sel-type nil)
 				  (helixel--tracking-open 'edit 'kill)
 				  (let* ((tx (helixel-action-create 'kill nil
 								    :runner (lambda (_) nil))))

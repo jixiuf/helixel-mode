@@ -1665,11 +1665,11 @@ Second paragraph." :start nil)
     (should helixel--pending-sel)
     (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
 
-(ert-deftest helixel-test-surround-clears-override ()
-  "Surround clears the sel-type override."
+(ert-deftest helixel-test-movement-clears-stale-sel-type ()
+  "Movement clears a stale non-movement pending-sel."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
-    (setq helixel--sel-type-override 'rect)
+    (helixel-test--mock-sel-type 'rect)
     (should (eq (helixel--sel-type) 'rect))
     (helixel-forward-word-start)
     (should (null (helixel--sel-type)))))

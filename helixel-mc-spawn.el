@@ -21,7 +21,8 @@
 ;; High-level multi-cursor user commands.
 ;;
 ;; Target computation (spawn-from-* + advance walk + kind registry
-;; hooks) lives in `helixel-mc-targets'.  This file builds the
+;; hooks) lives in `helixel-mc-core' (see "Target computation"
+;; section).  This file builds the
 ;; interactive layer on top:
 ;;
 ;;   helixel-mc-toggle                — spawn from sel / clear
@@ -45,7 +46,7 @@
 (require 'cl-lib)
 (require 'helixel-core)
 (require 'helixel-mc-core)
-(require 'helixel-mc-targets)
+
 
 (declare-function helixel--recreate-selection "helixel-repeat")
 

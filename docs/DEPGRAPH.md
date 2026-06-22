@@ -34,9 +34,6 @@ graph TD
   helixel-mc-integrate --> helixel-chain
   helixel-mc-spawn --> helixel-core
   helixel-mc-spawn --> helixel-mc-core
-  helixel-mc-spawn --> helixel-mc-targets
-  helixel-mc-targets --> helixel-core
-  helixel-mc-targets --> helixel-mc-core
   helixel-move --> helixel-state
   helixel-move --> helixel-macros
   helixel-repeat --> helixel-core
@@ -91,7 +88,6 @@ graph TD
   helixel --> helixel-swap
   helixel --> helixel-keymap
   helixel --> helixel-mc-core
-  helixel --> helixel-mc-targets
   helixel --> helixel-mc-spawn
   helixel --> helixel-mc-integrate
   helixel --> helixel-shims

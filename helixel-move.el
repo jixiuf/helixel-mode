@@ -83,15 +83,15 @@ the action carries no tx with a runner)."
                             (list :reverse-command ',rev))))
          ;; Clear stale pending-sel so pure motion commands
          ;; (j, gh, etc.) don't inherit a selection from a prior
-       ;; edit (e.g. insert-selection-end from insert-exit).
-       ;; Preserve when pending-sel is a structured kind
-       ;; (line/rect/textobj) so operators (d/y/c) can read the
-       ;; selection type even after a movement (e.g. x j d).
-       (unless (memq (and helixel--pending-sel
-                          (helixel-sel-kind helixel--pending-sel))
-                     '(line rect textobj))
-         (setq helixel--pending-sel nil))
-       (call-interactively #',builtin))
+         ;; edit (e.g. insert-selection-end from insert-exit).
+         ;; Preserve when pending-sel is a structured kind
+         ;; (line/rect/textobj) so operators (d/y/c) can read the
+         ;; selection type even after a movement (e.g. x j d).
+         (unless (memq (and helixel--pending-sel
+                            (helixel-sel-kind helixel--pending-sel))
+                       '(line rect textobj))
+           (setq helixel--pending-sel nil))
+         (call-interactively #',builtin))
        ,@(when rev `((helixel-register-motion-reverse ',name ',rev))))))
 
 (defmacro helixel-define-movements (&rest specs)
@@ -200,9 +200,10 @@ Optional REVERSE-CMD is the opposite-direction command for
     `(progn
        (helixel-define-command ,name
            (:category movement :subcat ,subcat
-            :params (&optional count)
-            ,@(when reverse-cmd
-                `(:motion-extra (list :reverse-command ',reverse-cmd))))
+                      :params (&optional count)
+                      ,@(when reverse-cmd
+                          `(:motion-extra
+                            (list :reverse-command ',reverse-cmd))))
          (interactive "p")
          ;; Skip past a newline before capturing the motion origin,
          ;; so \n is not treated as a separate word.
@@ -218,7 +219,7 @@ Optional REVERSE-CMD is the opposite-direction command for
                (setq helixel--sel-type-override nil)
                (,fn ',thing (* ,sign (or count 1))))
            (helixel--with-movement-surround
-            (,fn ',thing (* ,sign (or count 1)))))
+             (,fn ',thing (* ,sign (or count 1)))))
          (helixel--set-mark-region ',thing ,side))
        ,@(when reverse-cmd
            `((helixel-register-motion-reverse ',name ',reverse-cmd))))))
@@ -275,12 +276,12 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
     `(progn
        (helixel-define-command ,name
            (:category movement :subcat pair :clear-highlights nil
-            :params (&optional count)
-            :motion-extra (list :delim
-                                (lambda () (,factory ,@factory-args))
-                                :delim-inner-p ,inner-p
-                                :delim-forward-p ,forward-p
-                                :reverse-command ',reverse))
+                      :params (&optional count)
+                      :motion-extra (list :delim
+                                          (lambda () (,factory ,@factory-args))
+                                          :delim-inner-p ,inner-p
+                                          :delim-forward-p ,forward-p
+                                          :reverse-command ',reverse))
          (interactive "p")
          (let* ((n (abs (or count 1)))
                 (flipped (< (or count 1) 0))
@@ -481,7 +482,7 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
                          helixel-forward-function-end)
 
 (defun helixel--jump-target-for-delimiter (d orig &optional no-close-backoff
-                                                mark-thing)
+                                             mark-thing)
   "Try to find a jump target using delimiter D.
 ORIG is the original point.  Returns (TARGET . (OB . CE)) on success,
 or nil if no enclosing pair found.
@@ -492,12 +493,12 @@ live event's \=:mark-region for `\;' marking."
     (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
       (funcall adj))
     (helixel--with-debug-log jump-to-match-core
-        (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
-                      (helixel-delimiter-bounds-flat d no-close-backoff)))
-          (when mark-thing
-            (helixel--set-mark-region (cons ob ce)))
-          (cons (if (<= (abs (- orig ob)) (abs (- orig ce))) ce ob)
-                (cons ob ce)))
+      (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                    (helixel-delimiter-bounds-flat d no-close-backoff)))
+        (when mark-thing
+          (helixel--set-mark-region (cons ob ce)))
+        (cons (if (<= (abs (- orig ob)) (abs (- orig ce))) ce ob)
+              (cons ob ce)))
       (error nil))))
 
 (defun helixel--jump-syntax-table (char-a char-b orig)
@@ -507,31 +508,31 @@ CHAR-A and CHAR-B are as in `helixel-jump-to-match'.
 ORIG is the original point before jumping."
   (save-excursion
     (helixel--with-debug-log jump-syntax-table
-        (let ((match-end
-               (progn
-                 (cond
-                  ((and char-a (memq (char-syntax char-a) '(4 ?\( ?\))))
-                   (forward-list 1))
-                  ((and char-b (memq (char-syntax char-b) '(5 ?\( ?\))))
-                   (forward-list -1))
-                  ;; Only attempt up-list when actually inside a list.
-                  ;; When depth is 0 (e.g. at BOB before #+begin_src),
-                  ;; up-list can find spurious close-delimiters from
-                  ;; syntax-propertize (e.g. \=>\=' in org-mode \=>=\=).
-                  ((> (nth 0 (syntax-ppss)) 0)
-                   (up-list 1))
-                  (t
-                   (signal 'scan-error nil)))
-                 (point))))
-          (goto-char match-end)
-          (helixel--with-debug-log jump-syntax-table-backward-list
-              (backward-list 1)
-            (error nil))
-          (let ((b (if (>= match-end (point)) (point) match-end))
-                (e (if (>= match-end (point)) match-end (point))))
-            (helixel--set-mark-region (cons b e))
-            (cons (if (<= (abs (- orig b)) (abs (- orig e))) e b)
-                  (cons b e))))
+      (let ((match-end
+             (progn
+               (cond
+                ((and char-a (memq (char-syntax char-a) '(4 ?\( ?\))))
+                 (forward-list 1))
+                ((and char-b (memq (char-syntax char-b) '(5 ?\( ?\))))
+                 (forward-list -1))
+                ;; Only attempt up-list when actually inside a list.
+                ;; When depth is 0 (e.g. at BOB before #+begin_src),
+                ;; up-list can find spurious close-delimiters from
+                ;; syntax-propertize (e.g. \=>\=' in org-mode \=>=\=).
+                ((> (nth 0 (syntax-ppss)) 0)
+                 (up-list 1))
+                (t
+                 (signal 'scan-error nil)))
+               (point))))
+        (goto-char match-end)
+        (helixel--with-debug-log jump-syntax-table-backward-list
+          (backward-list 1)
+          (error nil))
+        (let ((b (if (>= match-end (point)) (point) match-end))
+              (e (if (>= match-end (point)) match-end (point))))
+          (helixel--set-mark-region (cons b e))
+          (cons (if (<= (abs (- orig b)) (abs (- orig e))) e b)
+                (cons b e))))
       (error nil))))
 
 (defun helixel--pair-chars (&optional type-filter)
@@ -888,18 +889,18 @@ Returns nil if forward lands at eob (no parent)."
          (close (helixel-delimiter-close d))
          forward-sexp-function)
     (helixel--with-debug-log up-via-syntax
-        (with-syntax-table (copy-syntax-table (syntax-table))
-          (modify-syntax-entry open (format "(%c" close))
-          (modify-syntax-entry close (format ")%c" open))
-          (up-list (if backward-p -1 1))
-          (when backward-p
-            (unless (bobp)
-              (backward-char)
-              (unless (eq (char-after) open)
-                (up-list -1))))
-          (if (and (not backward-p) (eobp))
-              nil
-            (point)))
+      (with-syntax-table (copy-syntax-table (syntax-table))
+        (modify-syntax-entry open (format "(%c" close))
+        (modify-syntax-entry close (format ")%c" open))
+        (up-list (if backward-p -1 1))
+        (when backward-p
+          (unless (bobp)
+            (backward-char)
+            (unless (eq (char-after) open)
+              (up-list -1))))
+        (if (and (not backward-p) (eobp))
+            nil
+          (point)))
       (error nil))))
 
 (defun helixel--up-via-bounds (d backward-p)
@@ -924,7 +925,7 @@ BACKWARD-P controls direction."
       (if (> ob (point-min))
           (progn (goto-char (1- ob))
                  (helixel--with-debug-log up-via-bounds-nth
-                     (nth 3 (helixel-delimiter-bounds-flat d))
+                   (nth 3 (helixel-delimiter-bounds-flat d))
                    (error ce)))
         ce))))
 
@@ -936,17 +937,17 @@ already at the parent opener.
 If BACKWARD-P is non-nil, move backward; otherwise forward.
 Returns point on success, nil when no parent pair exists."
   (helixel--with-debug-log up-raw
-      (progn
-        (up-list (if backward-p -1 1))
-        (unless (if backward-p (bobp) (eobp))
-          (if backward-p (backward-char) (forward-char)))
-        (unless (and backward-p
-                     (not (bobp))
-                     (memq (char-after) (helixel--pair-chars))
-                     (not (memq (char-after) (helixel--close-chars))))
-          (up-list (if backward-p -1 1)))
-        (unless backward-p (backward-char))
-        (point))
+    (progn
+      (up-list (if backward-p -1 1))
+      (unless (if backward-p (bobp) (eobp))
+        (if backward-p (backward-char) (forward-char)))
+      (unless (and backward-p
+                   (not (bobp))
+                   (memq (char-after) (helixel--pair-chars))
+                   (not (memq (char-after) (helixel--close-chars))))
+        (up-list (if backward-p -1 1)))
+      (unless backward-p (backward-char))
+      (point))
     (error nil)))
 
 (defun helixel--motion-skip-past (motion)
@@ -1073,11 +1074,11 @@ On user-error restores point to before skip-past so a failing
 ;; `push' adds to the front; the lookup scans sequentially, so
 ;; specific entries are found before the nil-subcat fallback.
 (helixel-register-motion-repeater 'movement nil
-  #'helixel--repeat-movement-motion)
+                                  #'helixel--repeat-movement-motion)
 (helixel-register-motion-repeater 'movement 'match
-  #'helixel--repeat-match-motion)
+                                  #'helixel--repeat-match-motion)
 (helixel-register-motion-repeater 'movement 'pair
-  #'helixel--repeat-pair-motion)
+                                  #'helixel--repeat-pair-motion)
 
 (helixel-define-command helixel-go-beginning-buffer
     (:category movement :subcat goto)
@@ -1093,14 +1094,14 @@ On user-error restores point to before skip-past so a failing
   "Move to end of line, expanding past adjacent invisible text if enabled."
   (if helixel-invisible
       (progn (end-of-line)
-        (while (and (not (eobp)) (invisible-p (1+ (point))))
-          (goto-char (1+ (point)))
-          (let ((invis-end (if (get-text-property (point) 'invisible)
-                               (next-single-property-change
-                                (point) 'invisible nil (point-max))
-                             (next-overlay-change (point)))))
-            (goto-char (max (point-min) (1- invis-end)))
-            (end-of-line))))
+             (while (and (not (eobp)) (invisible-p (1+ (point))))
+               (goto-char (1+ (point)))
+               (let ((invis-end (if (get-text-property (point) 'invisible)
+                                    (next-single-property-change
+                                     (point) 'invisible nil (point-max))
+                                  (next-overlay-change (point)))))
+                 (goto-char (max (point-min) (1- invis-end)))
+                 (end-of-line))))
     (end-of-line)))
 
 (defun helixel--line-beginning-or-invisible ()
@@ -1113,7 +1114,7 @@ On user-error restores point to before skip-past so a failing
          (if (get-text-property (1- (point)) 'invisible)
              (or (previous-single-property-change
                   (point) 'invisible (point-min))
-           (previous-overlay-change (point))))))
+                 (previous-overlay-change (point))))))
       (unless (bolp) (goto-char opoint)))))
 
 (defun helixel-toggle-invisible ()
@@ -1198,7 +1199,7 @@ new direction."
              (dir (if extending
                       (helixel-sel-line-dir helixel--pending-sel)
                     'forward)))
-      (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
+        (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
 
 (helixel-define-command helixel-select-line-up
     (:category movement :subcat lineselect
@@ -1235,7 +1236,7 @@ new direction."
              (dir (if extending
                       (helixel-sel-line-dir helixel--pending-sel)
                     'backward)))
-      (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
+        (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
 
 (helixel-define-command helixel-select-rectangle
     (:category movement :subcat rectselect
@@ -1380,7 +1381,7 @@ advance functions to avoid double-moving."
   (let ((sel (helixel-action-sel tx)))
     (when sel
       (helixel--with-debug-log repeat-advance-movement
-          (progn (helixel--recreate-selection sel) t)
+        (progn (helixel--recreate-selection sel) t)
         (error nil)))))
 
 ;; ── Kind registrations ──
@@ -1465,4 +1466,3 @@ non-movement sels, so nil is the only ctx possible there."
 
 (provide 'helixel-move)
 ;;; helixel-move.el ends here
-

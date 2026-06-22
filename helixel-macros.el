@@ -40,7 +40,7 @@
 ;; ── Full tracking macro: open + body + commit ──
 
 (cl-defmacro helixel-with-action-tracking ((&key op category subcat)
-                                         &body body)
+                                           &body body)
   "Execute BODY with full event tracking (open → body → commit).
 
 OP — operator symbol (nil for movement/search).
@@ -118,50 +118,50 @@ BODY is the command's business logic."
     `(progn
        (put ',name 'helixel-command t)
        (defun ,name ,(or params ())
-       ,(format "Helixel %s.%s command." cat sub)
-       ,interactive-form
-       ;; ── Tag this command so `helixel--action-commit' can stamp
-       ;; `by-command' on committed edits.  `helixel--current-command'
-       ;; is the single source of truth — committed actions use it
-       ;; directly; Emacs's command loop already sets `this-command'
-       ;; to ',name for interactive invocation, so we don't override it.
-       (let ((helixel--current-command ',name))
-         ;; ── Open tracking event (via unified entry point) ──
-         (helixel--tracking-open ',cat ',sub)
-         ;; ── Optional :preposition attachment (for unified replay) ──
-         ;; Attach BEFORE the body so eager record-action commits keep
-         ;; the prepos fn on the committed ring entry.
-         ;; `record-action' preserves :preposition across recording.
-         ,@(when attach-preposition
-             `((unless (helixel-replaying-p)
-                 (when helixel--live-action
-                   ;; Single-write invariant: cl-assert no sibling
-                   ;; :preposition has set this slot already.
-                   (cl-assert
-                    (null (helixel-action-preposition
-                           helixel--live-action))
-                    nil
-                    "helixel: preposition already set (multiple :preposition?)")
-                   (setf (helixel-action-preposition
-                          helixel--live-action)
-                         ,preposition-fn)))))
-         ;; ── Highlight clearing ──
-         ,@(when clear '((helixel--clear-highlights)))
-         ;; ── Body + motion tracking + visual tracking ──
-         ;; Wrap in a let to capture origin so :dir is computed
-         ;; from the actual point movement.  `helixel--motion-extra'
-         ;; is available for the body to `setq' with runtime-discovered
-         ;; data (e.g. matched delimiter from `helixel--jump-to-match-core').
-         ,@(if (eq cat 'movement)
-               `((let ((helixel--motion-origin (point))
-                       (helixel--motion-extra ,motion-extra-form))
-                   ,@rest-body
-                   (helixel--record-movement-motion
-                    ',name ',sub helixel--motion-origin
-                    helixel--motion-extra)
-                   ,@track-visual))
-             `(,@rest-body
-               ,@track-visual)))))))
+         ,(format "Helixel %s.%s command." cat sub)
+         ,interactive-form
+         ;; ── Tag this command so `helixel--action-commit' can stamp
+         ;; `by-command' on committed edits.  `helixel--current-command'
+         ;; is the single source of truth — committed actions use it
+         ;; directly; Emacs's command loop already sets `this-command'
+         ;; to ',name for interactive invocation, so we don't override it.
+         (let ((helixel--current-command ',name))
+           ;; ── Open tracking event (via unified entry point) ──
+           (helixel--tracking-open ',cat ',sub)
+           ;; Optional :preposition attachment (for unified replay)
+           ;; Attach BEFORE the body so eager record-action commits keep
+           ;; the prepos fn on the committed ring entry.
+           ;; `record-action' preserves :preposition across recording.
+           ,@(when attach-preposition
+               `((unless (helixel-replaying-p)
+                   (when helixel--live-action
+                     ;; Single-write invariant: cl-assert no sibling
+                     ;; :preposition has set this slot already.
+                     (cl-assert
+                      (null (helixel-action-preposition
+                             helixel--live-action))
+                      nil
+                      "helixel: preposition already set (multi :preposition?)")
+                     (setf (helixel-action-preposition
+                            helixel--live-action)
+                           ,preposition-fn)))))
+           ;; ── Highlight clearing ──
+           ,@(when clear '((helixel--clear-highlights)))
+           ;; ── Body + motion tracking + visual tracking ──
+           ;; Wrap in a let to capture origin so :dir is computed
+           ;; from the actual point movement.  `helixel--motion-extra'
+           ;; is available for the body to `setq' with runtime-discovered
+           ;; data (e.g. matched delimiter from `helixel--jump-to-match-core').
+           ,@(if (eq cat 'movement)
+                 `((let ((helixel--motion-origin (point))
+                         (helixel--motion-extra ,motion-extra-form))
+                     ,@rest-body
+                     (helixel--record-movement-motion
+                      ',name ',sub helixel--motion-origin
+                      helixel--motion-extra)
+                     ,@track-visual))
+               `(,@rest-body
+                 ,@track-visual)))))))
 
 ;; ── Operator definition macro ──
 
@@ -202,8 +202,8 @@ the edit for \\[helixel-repeat-edit] replay."
        ;; ── Command definition (for action tracking) ──
        (helixel-define-command ,name
            (:category edit :subcat ,subcat
-            ,@(when-let* ((p (plist-get metadata :params)))
-                (list :params p)))
+                      ,@(when-let* ((p (plist-get metadata :params)))
+                          (list :params p)))
          ,@body))))
 
 (provide 'helixel-macros)

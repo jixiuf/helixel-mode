@@ -54,8 +54,8 @@
 
 (defcustom helixel-action-cycle-categories
   '(movement textobj search find-char
-    (edit . copy) (edit . paste-after) (edit . paste-before)
-    (edit . replace) (edit . yank-pop))
+             (edit . copy) (edit . paste-after) (edit . paste-before)
+             (edit . replace) (edit . yank-pop))
   "Event categories that \\[helixel-action-cycle\\] navigates.
 Each element is either a category symbol (matches all subcats)
 or a cons (CATEGORY . SUBCAT) for precise matching.
@@ -282,7 +282,7 @@ found."
              when (and mr (consp mr)
                        (markerp (car mr)) (markerp (cdr mr)))
              do (setq min-pos (min min-pos (marker-position (car mr))))
-                (setq max-pos (max max-pos (marker-position (cdr mr)))))
+             (setq max-pos (max max-pos (marker-position (cdr mr)))))
     (when (< min-pos most-positive-fixnum)
       (cons min-pos max-pos))))
 
@@ -299,7 +299,7 @@ and clears the live state."
          :category 'state
          :subcat 'cancel
          :mark-region (let ((pm (point-marker)))
-                         (cons pm (copy-marker pm t)))
+                        (cons pm (copy-marker pm t)))
          :timestamp (float-time)
          :buffer (current-buffer)))
   (helixel--action-commit))
@@ -368,7 +368,7 @@ Does NOT commit the new event — caller is responsible for eventual commit."
            :by-command (or helixel--current-command
                            (and (symbolp this-command) this-command))
            :mark-region (let ((pm (point-marker)))
-                           (cons pm (copy-marker pm t)))
+                          (cons pm (copy-marker pm t)))
            :start-point (point-marker)
            :timestamp (float-time)
            :buffer (current-buffer)
@@ -433,9 +433,9 @@ Creates independent marker copy; the jump-log entry is lightweight."
            (entry `(:mark-region ,(when (consp src-mr)
                                     (cons (copy-marker (car src-mr))
                                           (copy-marker (cdr src-mr) t)))
-                    :buffer ,buf
-                    :category ,(helixel-action-category event)
-                    :subcat ,(helixel-action-subcat event))))
+                                 :buffer ,buf
+                                 :category ,(helixel-action-category event)
+                                 :subcat ,(helixel-action-subcat event))))
       (unless (helixel--jump-same-content-p
                entry (car helixel--global-jump-log))
         (push entry helixel--global-jump-log)
@@ -524,7 +524,7 @@ Old markers are freed before replacement to prevent leaks."
                        thing-or-bounds
                      (save-excursion
                        (goto-char (car (helixel-action-mark-region
-                                         helixel--live-action)))
+                                        helixel--live-action)))
                        (helixel--compute-mark-bounds
                         thing-or-bounds outer-p)))))
       (when bounds
@@ -543,10 +543,10 @@ Computes the bounding box of all events in the group on-the-fly
 via `helixel--compute-group-span', pushes mark to the start, and
 moves point to the end.  Returns the group-start position."
   (let* ((gpos (helixel--gr-group-start ring pos
-                 #'helixel-action--same-group-p))
+                                        #'helixel-action--same-group-p))
          (grp-event (nth gpos ring))
          (newest-pos (helixel--gr-group-newest ring pos
-                       #'helixel-action--same-group-p))
+                                               #'helixel-action--same-group-p))
          (span (helixel--compute-group-span ring newest-pos gpos)))
     (when span
       (push-mark (car span) t t)
@@ -736,11 +736,11 @@ instead of the movement span start."
     (if (helixel--cycle-mark-thing-p)
         raw-mr
       (cons (or (when-let* ((sp (helixel-action-start-point
-                                (nth gpos ring)))
-                           ((markerp sp)))
-                 (marker-position sp))
-               (helixel--cycle-mark-start event))
-           (cdr raw-mr)))))
+                                 (nth gpos ring)))
+                            ((markerp sp)))
+                  (marker-position sp))
+                (helixel--cycle-mark-start event))
+            (cdr raw-mr)))))
 
 (defun helixel-action--cycle-show (pos ring)
   "Show the group-start entry for the group containing RING[POS].
@@ -750,10 +750,10 @@ using the pre-computed markers (mark-thing on first call).
 If the jump results in no useful region change and no marking
 was performed, automatically advance to the next older event."
   (let* ((gpos (helixel--gr-group-start ring pos
-                 #'helixel-action--same-group-p))
+                                        #'helixel-action--same-group-p))
          (event (nth gpos ring))
          (newest-pos (helixel--gr-group-newest ring pos
-                       #'helixel-action--same-group-p))
+                                               #'helixel-action--same-group-p))
          (multi-event-p (not (= newest-pos gpos)))
          (sel-event (if multi-event-p (nth newest-pos ring) event))
          (first-call (null helixel--action-pos))
@@ -946,7 +946,7 @@ Optional prefix ARG reverses direction (go newer)."
         (helixel--action-pos helixel--mark-cycle-pos))
     ;; helixel--action-pos is let-bound from helixel--mark-cycle-pos
     ;; so the shared cycle logic reads/writes
-;; \\[helixel-action-cycle-mark-start\\]'s own position.
+    ;; \\[helixel-action-cycle-mark-start\\]'s own position.
     (unwind-protect
         (helixel--action-cycle arg)
       (setq helixel--mark-cycle-pos helixel--action-pos))))
@@ -997,7 +997,7 @@ Adds :before advice to record position before SYMBOL runs."
 (defun helixel--jump-goto (pos)
   "Go to the group-start of jump entry at POS, switching buffers as needed."
   (let* ((gpos (helixel--gr-group-start helixel--global-jump-log pos
-                 #'helixel--jump-same-group-p))
+                                        #'helixel--jump-same-group-p))
          (entry (nth gpos helixel--global-jump-log)))
     (while (and (not (helixel--jump-visible-p entry))
                 (> gpos 0)

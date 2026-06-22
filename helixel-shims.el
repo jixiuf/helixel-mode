@@ -310,7 +310,7 @@ doesn't try to call it at fakes) and installs the sync advice."
 
 ;; Defer setup until `completion-preview' loads (Emacs 30.1).
 (helixel-shims--defer-setup 'completion-preview
-                             'helixel-mc--setup-completion-preview)
+                            'helixel-mc--setup-completion-preview)
 
 ;; consult--read — cache during mc dispatch.  Defined at top
 ;; level so the byte-compiler sees `defun' before `advice-add'.

@@ -495,7 +495,7 @@ The default state is determined by `helixel--default-state-for-buffer'."
   (when (and (not (minibufferp)) helixel-global-mode)
     (if (and status (<= status 0))
         (when-let* ((lookup (assq helixel--current-state
-                                 helixel-state-alist)))
+                                  helixel-state-alist)))
           (funcall (cdr lookup) -1))
       (let ((state (helixel--default-state-for-buffer)))
         (setq-local helixel--current-state state)
@@ -558,7 +558,7 @@ is installed at module load (see below).")
       (remove-hook 'after-change-major-mode-hook
                    #'helixel-mode-maybe-activate)
       (run-hooks 'helixel-mode-off-hook))))
-    ;; helixel-action-push-functions removed — event-ring handles this now
+;; helixel-action-push-functions removed — event-ring handles this now
 
 ;; Register xref/eglot jump commands so they push to the jump list.
 (dolist (cmd '(xref-find-definitions

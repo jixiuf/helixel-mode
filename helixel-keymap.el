@@ -413,7 +413,7 @@ used selection management lives here under `s'."
 
 ;; Top-level Helix-style rotation: typically pressed repeatedly
 ;; to cycle through cursors.
-  ; Helix A-,
+                                        ; Helix A-,
 ;; helixel-visual-map (inherits normal-map)
 (set-keymap-parent helixel-visual-map helixel-normal-map)
 ;; helixel-motion-map stays empty (full t, user adds bindings)
@@ -617,7 +617,7 @@ If FORCE is non-nil, don't prompt for save when killing Emacs."
   (define-key helixel-normal-map "\C-o" #'helixel-jump-backward)
   (if (key-valid-p "C-<i>")
       (define-key helixel-normal-map [C-i] #'helixel-jump-forward)
-      (define-key helixel-normal-map "\C-i" #'helixel-jump-forward))
+    (define-key helixel-normal-map "\C-i" #'helixel-jump-forward))
   (define-key helixel-normal-map "\C-f" #'helixel-scroll-up-command)
   (define-key helixel-normal-map "\C-b" #'helixel-scroll-down-command)
   (define-key helixel-normal-map "-" 'negative-argument)
@@ -652,10 +652,10 @@ If FORCE is non-nil, don't prompt for save when killing Emacs."
   (define-key helixel-normal-map "\M-)" #'helixel-mc-rotate-content-forward)
   (define-key helixel-visual-map "v"    #'helixel-visual-exit)
   (define-key helixel-visual-map "o"
-    #'helixel-visual-exchange-point-and-mark)
+              #'helixel-visual-exchange-point-and-mark)
   (define-key helixel-visual-map [escape] #'helixel-visual-exit)
   (define-key helixel-normal-map "\M-;"
-    #'helixel-visual-exchange-point-and-mark)
+              #'helixel-visual-exchange-point-and-mark)
   (define-key helixel-insert-map [escape] #'helixel-insert-exit))
 (helixel-keymap--define-bindings)
 

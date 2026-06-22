@@ -267,8 +267,8 @@ Expands to a `progn' containing:
       `(progn
          ;; ── Struct ──
          (cl-defstruct (helixel-pc-state
-                         (:conc-name helixel-pcs-)
-                         (:copier nil))
+                        (:conc-name helixel-pcs-)
+                        (:copier nil))
            "Per-cursor state snapshot.  Slots are auto-generated from
 `helixel-mc--define-state' — see that macro's docstring for the
 full slot manifest."
@@ -882,8 +882,8 @@ Declared here because `helixel-mc--pre-command' sets it.")
 These commands should never be wrapped in an mc undo step
 because they manipulate `buffer-undo-list' themselves."
   (memq command '(undo undo-redo undo-only
-                  undo-tree-undo undo-tree-redo
-                  undo-fu-only-undo undo-fu-only-redo)))
+                       undo-tree-undo undo-tree-redo
+                       undo-fu-only-undo undo-fu-only-redo)))
 
 (defun helixel-mc--undo-step-begin ()
   "Begin an mc undo step.
@@ -1056,9 +1056,9 @@ state (kill-ring, event-ring, last-action, …)."
                helixel--pending-sel   (helixel-pcs-pending-sel ,cs)
                helixel-last-action   (helixel-pcs-last-action ,cs)
                helixel--yank-register-source
-                 (helixel-pcs-yank-register-source ,cs)
+               (helixel-pcs-yank-register-source ,cs)
                register-alist
-                 (helixel-pcs-registers-alist ,cs)
+               (helixel-pcs-registers-alist ,cs)
                helixel--active-search (helixel-pcs-active-search ,cs)
                helixel--action-ring    (helixel-pcs-event-ring ,cs)
                helixel--live-action   (helixel-pcs-live-action ,cs)
@@ -1623,16 +1623,16 @@ number of walk iterations), breaking dot-repeat at fake cursors."
     (helixel-mc-with-saved-state
       (save-excursion
         (helixel-with-replay-as 'dot
-            (deactivate-mark)
-            (goto-char (point-min))
-            (let ((dummy (helixel-mc--make-dummy-action sel)))
-        (catch 'done
-          (while (< (length targets) limit)
-            (if-let* ((result (helixel-mc--walk-advance-iter
-                               dummy advance-fn targets last-key)))
-                (setq last-key (cdr result)
-                      targets (car result))
-              (throw 'done nil)))))))
+          (deactivate-mark)
+          (goto-char (point-min))
+          (let ((dummy (helixel-mc--make-dummy-action sel)))
+            (catch 'done
+              (while (< (length targets) limit)
+                (if-let* ((result (helixel-mc--walk-advance-iter
+                                   dummy advance-fn targets last-key)))
+                    (setq last-key (cdr result)
+                          targets (car result))
+                  (throw 'done nil)))))))
       (nreverse targets))))
 
 (defun helixel-mc--walk-advance-iter (tx advance-fn targets last-key)

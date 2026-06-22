@@ -227,7 +227,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert
     (:category state :subcat insert
-     :preposition (lambda (_tx) (helixel-mc--prepos-region-begin)))
+               :preposition (lambda (_tx) (helixel-mc--prepos-region-begin)))
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -268,7 +268,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
             (setq tx (helixel-action-with-payload tx :text text))
             (when (memq (helixel-action-op tx) '(change change-noyank))
               (setq tx (helixel-action-with-payload tx
-                                                  :inserted-text text))))
+                                                    :inserted-text text))))
           (helixel--update-last-event tx))))
     (when helixel--change-track-marker
       (set-marker helixel--change-track-marker nil)
@@ -284,7 +284,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-after
     (:category state :subcat insert
-     :preposition (lambda (_tx) (helixel-mc--prepos-region-end)))
+               :preposition (lambda (_tx) (helixel-mc--prepos-region-end)))
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -311,23 +311,23 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-beginning-line
     (:category state :subcat insert
-     :preposition (lambda (_tx) (helixel-mc--prepos-bol)))
+               :preposition (lambda (_tx) (helixel-mc--prepos-bol)))
   (beginning-of-line)
-   (helixel--sel-push
-        (helixel-sel-create 'insert-beginning-line nil))
+  (helixel--sel-push
+   (helixel-sel-create 'insert-beginning-line nil))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-after-end-line
     (:category state :subcat insert
-     :preposition (lambda (_tx) (helixel-mc--prepos-eol)))
+               :preposition (lambda (_tx) (helixel-mc--prepos-eol)))
   (end-of-line)
-   (helixel--sel-push
-        (helixel-sel-create 'insert-end-line nil))
+  (helixel--sel-push
+   (helixel-sel-create 'insert-end-line nil))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-newline
     (:category state :subcat insert
-     :preposition (lambda (_tx) (helixel-mc--prepos-newline-after)))
+               :preposition (lambda (_tx) (helixel-mc--prepos-newline-after)))
   (helixel-record-action 'insert-text)
   (helixel-clear-data)
   (end-of-line)
@@ -336,7 +336,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-prevline
     (:category state :subcat insert
-     :preposition (lambda (_tx) (helixel-mc--prepos-newline-before)))
+               :preposition (lambda (_tx) (helixel-mc--prepos-newline-before)))
   (helixel-record-action 'insert-text)
   (helixel-clear-data)
   (beginning-of-line)
@@ -399,25 +399,26 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 
 ;; Ops with non-trivial runners (need tx payload) → register separately:
 (helixel-register-op change :display "c" :self-advancing t
-  :runner #'helixel--repeat-change-core)
+                     :runner #'helixel--repeat-change-core)
 
 (helixel-register-op change-noyank :display "C" :self-advancing t
-  :runner (lambda (tx) (helixel--repeat-change-core tx t)))
+                     :runner (lambda (tx) (helixel--repeat-change-core tx t)))
 
 (helixel-register-op replace-char :self-advancing nil
-  :display (lambda (tx)
-             (let ((c (helixel-action-char tx)))
-               (if c (format "R[%c]" c) "R")))
-  :runner (lambda (tx)
-            (helixel-replace-char (helixel-action-char tx))))
+                     :display (lambda (tx)
+                                (let ((c (helixel-action-char tx)))
+                                  (if c (format "R[%c]" c) "R")))
+                     :runner (lambda (tx)
+                               (helixel-replace-char (helixel-action-char tx))))
 
 (helixel-register-op insert-text :display "i" :self-advancing nil
-  :runner (lambda (tx)
-            (let ((keys (helixel-action-payload-get tx :keys)))
-              (if keys
-                  (helixel--execute-keys keys)
-                (insert (or (helixel-action-payload-get tx :text)
-                            ""))))))
+                     :runner
+                     (lambda (tx)
+                       (let ((keys (helixel-action-payload-get tx :keys)))
+                         (if keys
+                             (helixel--execute-keys keys)
+                           (insert (or (helixel-action-payload-get tx :text)
+                                       ""))))))
 
 
 ;; ── Kill & Change ──
@@ -582,13 +583,15 @@ instead of `insert-for-yank' — `helixel-replace' passes
   (let ((bounds
          (cond
           ((and helixel--yank-pop-bounds
-                (memq last-command '(helixel-replace helixel-yank-pop
-                                     helixel-yank helixel-yank-before)))
+                (memq last-command
+                      '(helixel-replace helixel-yank-pop
+                                        helixel-yank helixel-yank-before)))
            helixel--yank-pop-bounds)
           ;; After yank or replace: use mark position to find
           ;; the yanked/replaced text even when mark is inactive
           ;; (Emacs 32 yank no longer activates mark).
-          ((and (memq last-command '(helixel-yank helixel-yank-before
+          ((and (memq last-command
+                      '(helixel-yank helixel-yank-before
                                      helixel-replace yank yank-pop))
                 (mark t))
            (let ((m (mark t)) (p (point)))
@@ -605,7 +608,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
                (inhibit-read-only t)
                (text (helixel--current-kill arg))
                (ends-with-newline (and (> end (point-min))
-                                    (char-equal (char-before end) ?\n))))
+                                       (char-equal (char-before end) ?\n))))
           (setq this-command 'helixel-yank-pop)
           (delete-region beg end)
           (goto-char beg)
@@ -618,8 +621,8 @@ instead of `insert-for-yank' — `helixel-replace' passes
           (helixel--set-mark-region (cons beg (point))))
       ;; No bounds available — fall back or browse.
       (if (memq last-command '(helixel-yank helixel-yank-before
-                               helixel-replace yank yank-pop
-                               helixel-yank-pop))
+                                            helixel-replace yank yank-pop
+                                            helixel-yank-pop))
           ;; After a yank/replace with no region, delegate to yank-pop.
           ;; Capture bounds afterward so subsequent
           ;; \\[helixel-yank-pop\\] cycles via the
@@ -785,7 +788,7 @@ that many times (Vim-like 2p, 3P)."
 
 (helixel-define-operator helixel-yank
     (:op paste-after :display "p" :self-advancing nil
-     :params (&optional arg))
+         :params (&optional arg))
   (interactive "*P")
   ;; Paste after: if selection active, go to end of selection.
   ;; For rect selection, stay on same row — only move column
@@ -803,7 +806,7 @@ that many times (Vim-like 2p, 3P)."
 
 (helixel-define-operator helixel-yank-before
     (:op paste-before :display "P" :self-advancing nil
-     :params (&optional arg))
+         :params (&optional arg))
   (interactive "*P")
   ;; Paste before: if selection active, go to beg of selection.
   (when (use-region-p)
@@ -858,33 +861,35 @@ INDENT-SIGN is +1 (right) or -1 (left)."
 
 (helixel-define-operator helixel-indent-left
     (:op indent-left :display "<" :self-advancing nil
-     :params (&optional count))
+         :params (&optional count))
   (interactive "p")
   (helixel--indent-body 'indent-left count -1))
 
 (helixel--op-set-runner 'indent-left
-     (lambda (tx)
-       (let ((helixel--replay-multiplier
-              (or (helixel-action-payload-get tx :multiplier) 1)))
-         (helixel-indent-left))))
+                        (lambda (tx)
+                          (let ((helixel--replay-multiplier
+                                 (or (helixel-action-payload-get
+                                      tx :multiplier) 1)))
+                            (helixel-indent-left))))
 
 (helixel-define-operator helixel-indent-right
     (:op indent-right :display ">" :self-advancing nil
-     :params (&optional count))
+         :params (&optional count))
   (interactive "p")
   (helixel--indent-body 'indent-right count 1))
 
 (helixel--op-set-runner 'indent-right
-     (lambda (tx)
-       (let ((helixel--replay-multiplier
-              (or (helixel-action-payload-get tx :multiplier) 1)))
-         (helixel-indent-right))))
+                        (lambda (tx)
+                          (let ((helixel--replay-multiplier
+                                 (or (helixel-action-payload-get
+                                      tx :multiplier) 1)))
+                            (helixel-indent-right))))
 
 ;; ── Case operations ──
 
 (helixel-define-operator helixel-toggle-case
     (:op toggle-case :display "~" :self-advancing nil
-     :subcat case :params (&optional count))
+         :subcat case :params (&optional count))
   (interactive "p")
   (helixel-record-action 'toggle-case :count (or count 1))
   (if (use-region-p)
@@ -908,7 +913,7 @@ OP, DISPLAY, SUBCAT match `helixel-define-operator's keys.
 REGION-FN takes (beg end), WORD-FN takes COUNT."
   `(helixel-define-operator ,name
        (:op ,op :display ,display :self-advancing nil
-        :subcat ,subcat :params (&optional count))
+            :subcat ,subcat :params (&optional count))
      (interactive "p")
      (helixel-record-action ',op :count (or count 1))
      (if (use-region-p)
@@ -925,7 +930,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 
 (helixel-define-operator helixel-comment-toggle
     (:op comment-toggle :display "gc" :self-advancing nil
-     :subcat comment)
+         :subcat comment)
   (helixel-record-action 'comment-toggle)
   (if (use-region-p)
       (comment-or-uncomment-region (region-beginning) (region-end))
@@ -936,7 +941,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 
 (helixel-define-operator helixel-shell-command
     (:op shell-command :display "!" :self-advancing nil
-     :subcat shell)
+         :subcat shell)
   (helixel-record-action 'shell-command)
   (let ((cmd (read-shell-command "!")))
     (if (use-region-p)
@@ -971,19 +976,20 @@ Like `join-line' but replaces `fixup-whitespace' with
     (delete-char 1)            ;; delete the newline
     (delete-horizontal-space))) ;; delete spaces/tabs, don't add space
 
-(helixel-register-op join-lines :display "J" :self-advancing t
-  :runner (lambda (tx)
-            (let ((n (or (helixel-action-payload-get tx :count) 2))
-                  (no-space (helixel-action-payload-get tx :no-space)))
-              (unwind-protect
-                  (dotimes (_ (1- n))
-                    (if no-space
-                        (helixel--join-line-no-space)
-                      (join-line 1)))
-                ;; Deactivate mark so fake cursor regions are
-                ;; cleaned up after mc dispatch (`update-fake-region'
-                ;; checks mark-active).  Harmless during dot-repeat.
-                (deactivate-mark)))))
+(helixel-register-op join-lines
+  :display "J" :self-advancing t  :runner
+  (lambda (tx)
+    (let ((n (or (helixel-action-payload-get tx :count) 2))
+          (no-space (helixel-action-payload-get tx :no-space)))
+      (unwind-protect
+          (dotimes (_ (1- n))
+            (if no-space
+                (helixel--join-line-no-space)
+              (join-line 1)))
+        ;; Deactivate mark so fake cursor regions are
+        ;; cleaned up after mc dispatch (`update-fake-region'
+        ;; checks mark-active).  Harmless during dot-repeat.
+        (deactivate-mark)))))
 
 (helixel-define-command helixel-join-lines
     (:category edit :subcat join-lines :params (&optional count))

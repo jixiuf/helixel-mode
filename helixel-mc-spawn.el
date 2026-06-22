@@ -55,7 +55,6 @@
 (defvar helixel--pending-sel)
 (defvar helixel-last-action)
 (defvar helixel--live-action)
-; was defvar helixel--sel-type (now a function)
 
 ;; ── High-level entry points ──
 

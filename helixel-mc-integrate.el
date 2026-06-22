@@ -302,19 +302,20 @@ of commands from modules `mc-integrate' itself depends on."
 (helixel-mc-mark-all-for-real-cursor-only
  '(;; info.el
    Info-next Info-prev Info-up Info-top-node Info-directory
-   Info-menu Info-follow-reference Info-search Info-index
-   Info-virtual-index Info-history Info-index-next Info-summary
-   ;; help-mode.el
-   help-go-back help-go-forward help-goto-next-page
-   help-goto-previous-page help-view-source help-goto-info help-customize
-   ;; shortdoc.el
-   shortdoc-next-section shortdoc-previous-section
-   ;; man.el
-   Man-next-manpage Man-previous-manpage
-   ;; woman.el
-   WoMan-next-manpage WoMan-previous-manpage
-   ;; eww.el
-   eww-back-url eww-forward-url eww-reload))
+             Info-menu Info-follow-reference Info-search Info-index
+             Info-virtual-index Info-history Info-index-next Info-summary
+             ;; help-mode.el
+             help-go-back help-go-forward help-goto-next-page
+             help-goto-previous-page help-view-source
+             help-goto-info help-customize
+             ;; shortdoc.el
+             shortdoc-next-section shortdoc-previous-section
+             ;; man.el
+             Man-next-manpage Man-previous-manpage
+             ;; woman.el
+             WoMan-next-manpage WoMan-previous-manpage
+             ;; eww.el
+             eww-back-url eww-forward-url eww-reload))
 
 ;; ── Per-cursor prompt commands (replace-char, surround-*)
 ;;
@@ -412,7 +413,7 @@ active AND we are inside a fake-cursor dispatch
              (let* ((prompt (car-safe args))
                     (key (cons ',fn-name prompt))
                     (cached (cdr (assoc key helixel-mc--input-cache
-                                       (lambda (k1 k2) (equal k1 k2))))))
+                                        (lambda (k1 k2) (equal k1 k2))))))
                (or cached
                    (let ((val (apply orig-fun args)))
                      (push (cons key val) helixel-mc--input-cache)

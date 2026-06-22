@@ -194,13 +194,13 @@ an empty line matching ^$."
   (helixel-forward-nearest
    count
    (lambda (&optional cnt)
-       (let ((word-separating-categories helixel-cjk-word-separating-categories)
-             (word-combining-categories helixel-cjk-word-combining-categories)
-             (pnt (point)))
-         (forward-word cnt)
-         (if (= pnt (point)) cnt 0)))
+     (let ((word-separating-categories helixel-cjk-word-separating-categories)
+           (word-combining-categories helixel-cjk-word-combining-categories)
+           (pnt (point)))
+       (forward-word cnt)
+       (if (= pnt (point)) cnt 0)))
    (lambda (&optional cnt)
-       (helixel-forward-chars "^[:word:]\n\r\t\f " cnt))
+     (helixel-forward-chars "^[:word:]\n\r\t\f " cnt))
    #'helixel--forward-empty-line))
 (put 'helixel-word 'forward-op #'helixel--forward-word)
 
@@ -213,7 +213,7 @@ WORD is a sequence of non-whitespace characters
 '[^\\n\\r\\t\\f ]', or an empty line matching ^$."
   (helixel-forward-nearest count
                            (lambda (&optional cnt)
-                               (helixel-forward-chars "^\n\r\t\f " cnt))
+                             (helixel-forward-chars "^\n\r\t\f " cnt))
                            #'helixel--forward-empty-line))
 (put 'helixel-WORD 'forward-op #'helixel--forward-WORD)
 
@@ -441,7 +441,7 @@ selection."
     (helixel-forward-nearest count
                              (lambda (cnt) (forward-thing thing cnt))
                              (lambda (cnt)
-                                 (helixel-forward-not-thing thing cnt)))
+                               (helixel-forward-not-thing thing cnt)))
     (cons (if (>= count 0) beg (point))
           (if (< count 0) end (point)))))
 
@@ -563,11 +563,11 @@ syntax classes."
   (helixel-forward-nearest
    count
    (lambda (&optional cnt)
-       (helixel-forward-syntax "^w_->" cnt))
+     (helixel-forward-syntax "^w_->" cnt))
    (lambda (&optional cnt)
-       (let ((pnt (point)))
-         (forward-symbol cnt)
-         (if (= pnt (point)) cnt 0)))
+     (let ((pnt (point)))
+       (forward-symbol cnt)
+       (if (= pnt (point)) cnt 0)))
    #'helixel--forward-empty-line))
 (put 'helixel-symbol 'forward-op #'helixel--forward-symbol)
 
@@ -714,7 +714,7 @@ of textobj selections."
       (helixel--sel-push
        (helixel-sel-create
         'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
-                    :inline-advance t)))
+                            :inline-advance t)))
       (run-hook-with-args 'helixel-textobj-after-select-functions))))
 
 
@@ -730,10 +730,10 @@ of textobj selections."
   "Return non-nil if the active region contains non-whitespace chars."
   (and (region-active-p)
        (let ((end (region-end)))
-       (and (< (region-beginning) end)
-            (save-excursion
-              (goto-char (region-beginning))
-              (re-search-forward "[^ \t\n\r\f]" end t))))))
+         (and (< (region-beginning) end)
+              (save-excursion
+                (goto-char (region-beginning))
+                (re-search-forward "[^ \t\n\r\f]" end t))))))
 
 (defun helixel--ensure-point-in-thing ()
   "Adjust point so `bounds-of-thing-at-point' finds the current thing.
@@ -818,13 +818,13 @@ Signals errors when no more targets exist."
           (let ((saved-pending-sel helixel--pending-sel)
                 (saved-mark-active mark-active))
             (helixel--with-debug-log textobj-recreate-position
-                (save-excursion
-                  (funcall command (if forward-p 1 -1))
-                  (when (and (use-region-p)
-                             (<= (region-beginning) (point))
-                             (< (point) (region-end)))
-                    (goto-char (if forward-p (region-end)
-                                 (region-beginning)))))
+              (save-excursion
+                (funcall command (if forward-p 1 -1))
+                (when (and (use-region-p)
+                           (<= (region-beginning) (point))
+                           (< (point) (region-end)))
+                  (goto-char (if forward-p (region-end)
+                               (region-beginning)))))
               (error nil))
             ;; Restore state mutated by the inner funcall.
             ;; `push-mark' with ACTIVATE=t inside
@@ -866,7 +866,7 @@ advance functions to avoid double-moving."
   (let ((sel (helixel-action-sel tx)))
     (when sel
       (helixel--with-debug-log repeat-advance-textobj
-          (progn (helixel--recreate-selection sel) t)
+        (progn (helixel--recreate-selection sel) t)
         (error nil)))))
 
 (provide 'helixel-textobj-engine)

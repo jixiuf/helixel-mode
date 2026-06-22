@@ -366,8 +366,8 @@ Dispatch:
      ;; Op handles its own positioning, or kind has no advance: just recreate.
      ((or (not advance-fn) (helixel--op-self-advancing-p op))
       (helixel--with-debug-log repeat-advance-recreate
-          (progn (helixel-sel-call-recreate (helixel-action-sel effective))
-                 t)
+        (progn (helixel-sel-call-recreate (helixel-action-sel effective))
+               t)
         (error nil)))
      (t (funcall advance-fn effective)))))
 
@@ -564,7 +564,7 @@ Uses TX, SEL, REVERSE-P and `helixel--repeat-line-pass'
 for correct per-line stepping.  Preview always uses the
 \"op left point alone\" stepping algorithm (the operator does not
 run in preview mode, so its `:self-advancing' is moot)."
-     (let* ((dir (if reverse-p -1 1))
+  (let* ((dir (if reverse-p -1 1))
          (start (if (> dir 0) (point-min) (point-max)))
          (cnt 0))
     (save-excursion
@@ -588,7 +588,7 @@ For chain ops, does a single pass from the buffer edge."
          (chain-p (eq op 'chain)))
     (if chain-p
         (let* ((dir (if reverse-p -1
-                     (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
+                      (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
                (start (if (> dir 0) (point-min) (point-max)))
                (cnt 0))
           (save-excursion
@@ -642,7 +642,7 @@ Uses `helixel--repeat-line-pass' for proper cursor advance."
 ;; `helixel-replay.el'.
 
 (defvar-local helixel--repeat-preview-pos nil
-        "Marker for the \\[helixel-repeat-selection] preview position.
+  "Marker for the \\[helixel-repeat-selection] preview position.
 Consumed by \\[helixel-repeat-edit].
 Set by \\[helixel-repeat-selection] at the preview position;
 consumed by \\[helixel-repeat-edit] when point is still there.
@@ -761,32 +761,32 @@ All iterations are amalgamated into a single undo step."
         (set-marker helixel--repeat-preview-pos nil)
         (setq helixel--repeat-preview-pos nil))
       (helixel-with-replay-as 'dot
-       (unwind-protect
-          (condition-case err
-              (undo-amalgamate-change-group
-                (let ((reverse-p (helixel-repeat-prefix-reverse-p prefix)))
-                  (pcase mode
-                    (:all-buffer
-                     (if sel
-                         (helixel--repeat-all-buffer tx prefix reverse-p)
-                       (helixel-action-replay tx)))
-                    (:all-dir
-                     (if sel
-                         (helixel--repeat-all-dir tx reverse-p)
-                       (helixel-action-replay tx)))
-                    (:n-times
-                     (if use-preview
-                         (dotimes (_ (helixel-repeat-prefix-n prefix))
-                           (helixel-action-replay tx))
-                       (helixel--repeat-n tx
-                                          (helixel-repeat-prefix-n prefix)
-                                          reverse-p)))
-                    (:preview
-                     (helixel-action-replay tx)))))
-            ((error quit)
-             (message "helixel-repeat-edit aborted: %s"
-                      (error-message-string err))))
-        (setq helixel--current-state saved-state))))))
+        (unwind-protect
+            (condition-case err
+                (undo-amalgamate-change-group
+                 (let ((reverse-p (helixel-repeat-prefix-reverse-p prefix)))
+                   (pcase mode
+                     (:all-buffer
+                      (if sel
+                          (helixel--repeat-all-buffer tx prefix reverse-p)
+                        (helixel-action-replay tx)))
+                     (:all-dir
+                      (if sel
+                          (helixel--repeat-all-dir tx reverse-p)
+                        (helixel-action-replay tx)))
+                     (:n-times
+                      (if use-preview
+                          (dotimes (_ (helixel-repeat-prefix-n prefix))
+                            (helixel-action-replay tx))
+                        (helixel--repeat-n tx
+                                           (helixel-repeat-prefix-n prefix)
+                                           reverse-p)))
+                     (:preview
+                      (helixel-action-replay tx)))))
+              ((error quit)
+               (message "helixel-repeat-edit aborted: %s"
+                        (error-message-string err))))
+          (setq helixel--current-state saved-state))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Repeat Selection (bound to `M-.`)
@@ -917,6 +917,3 @@ The chosen event's edit data becomes the new `helixel-last-action'."
 
 (provide 'helixel-repeat)
 ;;; helixel-repeat.el ends here
-
-
-

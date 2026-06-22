@@ -112,8 +112,8 @@ Each entry is (MODE (CHAR . (OPEN-STRING . CLOSE-STRING)) ...)."
                (label (replace-regexp-in-string "\\`#\\+begin_" "" label))
                (label (replace-regexp-in-string "\\`#\\+end_" "" label)))
           (push (concat (propertize (format "%c" key)
-                                     'face 'font-lock-keyword-face)
-                            (format ":%s" label))
+                                    'face 'font-lock-keyword-face)
+                        (format ":%s" label))
                 result))))
     (nreverse result)))
 
@@ -213,9 +213,9 @@ Returns position where point should be placed after deletion."
       (insert new-close)
       (push-mark ob nil t)
       (goto-char (+ close-pos
-                     (if (characterp new-close)
-                         1
-                       (length new-close)))))))
+                    (if (characterp new-close)
+                        1
+                      (length new-close)))))))
 
 (defun helixel--surround-replace-generic (d)
   "Replace delimiters described by D by prompting for new delimiter.
@@ -244,12 +244,12 @@ The prompt shows the old delimiter being replaced."
       (user-error "Unknown surround delimiter: %c" new-char))
     (helixel--surround-delete-delimiter d)
     (helixel--surround-add (helixel-delimiter-open new-d)
-                          (helixel-delimiter-close new-d))
+                           (helixel-delimiter-close new-d))
     (helixel--tracking-open 'edit 'surround-replace)
     (helixel-record-action 'surround-replace :new-char new-char)
-     (helixel--sel-push
-          (helixel-sel-create
-           'surround `(:delimiter ,new-d)))))
+    (helixel--sel-push
+     (helixel-sel-create
+      'surround `(:delimiter ,new-d)))))
 
 (defun helixel--surround-replace-tag (new-tag-name d)
   "Replace surrounding XML tags with NEW-TAG-NAME.
@@ -273,8 +273,8 @@ D is the tag delimiter plist used to locate the tags."
       (insert close-tag)
       (push-mark ob nil t)
       (goto-char (+ close-pos
-                     (if nl-before-close 0 1)
-                     (length close-tag))))))
+                    (if nl-before-close 0 1)
+                    (length close-tag))))))
 
 ;; ── Interactive commands ──
 
@@ -374,7 +374,7 @@ so the user can select a target with one keypress."
                  (helixel--surround-replace-tag new-tag d)
                  (helixel--tracking-open 'edit 'surround-replace)
                  (helixel-record-action 'surround-replace :tag new-tag
-                                       :surround-type 'tag)
+                                        :surround-type 'tag)
                  (helixel--sel-push
                   (helixel-sel-create
                    'surround `(:delimiter ,(helixel-make-tag-delimiter))))))
@@ -396,7 +396,7 @@ so the user can select a target with one keypress."
             (when-let* ((char (helixel-action-char tx))
                         (pair (helixel--surround-lookup char)))
               (helixel--surround-add (helixel--surround-entry-open pair)
-                                      (helixel--surround-entry-close pair)))))
+                                     (helixel--surround-entry-close pair)))))
 
 (helixel-register-op surround-add-tag
   :display (lambda (tx)
@@ -407,10 +407,12 @@ so the user can select a target with one keypress."
             (helixel--surround-add-tag
              (helixel-action-payload-get tx :tag))))
 
-(helixel-register-op surround-delete :display "md"
+(helixel-register-op surround-delete
+  :display "md"
   :runner (lambda (tx)
-            (when-let* ((d (helixel-sel-surround-delimiter
-                           (helixel-action-sel tx))))
+            (when-let*
+                ((d (helixel-sel-surround-delimiter
+                     (helixel-action-sel tx))))
               (goto-char (helixel--surround-delete-delimiter d)))))
 
 (helixel-register-op surround-replace

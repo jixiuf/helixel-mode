@@ -451,10 +451,11 @@ by the initial selection context snapshotted at chain-start."
     ;; point the chain action is built with the fully-populated init-ctx.
     (run-hook-with-args 'helixel-chain-end-hook action-list)
     (when had-content
-      (let ((tx (helixel-action-create 'chain init-ctx
-                   :runner #'helixel--repeat-chain-runner
-                   :display (format "chain(%d)" (length action-list))
-                   :action-list action-list)))
+      (let ((tx (helixel-action-create
+                 'chain init-ctx
+                 :runner #'helixel--repeat-chain-runner
+                 :display (format "chain(%d)" (length action-list))
+                 :action-list action-list)))
         (setq helixel-last-action (helixel-action-shallow-copy tx))
         (helixel-with-action-tracking
             (:op 'chain :category 'edit :subcat 'chain)

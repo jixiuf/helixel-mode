@@ -366,43 +366,43 @@ is ignored."
         ;; we need special linewise exclusive selection
         (unless inclusive (setq inclusive 'exclusive-line))
         (let ((thing (lambda (&optional cnt)
-                           (helixel-up-paren open close cnt)))
-                (bnd (or (bounds-of-thing-at-point 'helixel-string)
-                         (bounds-of-thing-at-point 'helixel-comment)
-                         ;; If point is at the opening quote of a string,
-                         ;; this must be handled as if point is within the
-                         ;; string, i.e. the selection must be extended
-                         ;; around the string.  Otherwise
-                         ;; `helixel-select-block' might do the wrong thing
-                         ;; because it accidentally moves point inside the
-                         ;; string (for inclusive selection) when looking
-                         ;; for the current surrounding block. (re #364)
-                         (and (= (point) (or beg (point)))
-                              (save-excursion
-                                (goto-char (1+ (or beg (point))))
-                                (or (bounds-of-thing-at-point
-                                     'helixel-string)
-                                    (bounds-of-thing-at-point
-                                     'helixel-comment)))))))
-            (if (not bnd)
-                (helixel-select-block thing beg end type count inclusive)
-              (or (helixel-with-restriction (car bnd) (cdr bnd)
-                    (ignore-errors
-                      (helixel-select-block thing beg end type count
-                                            inclusive)))
-                  (save-excursion
-                    (setq beg (or beg (point))
-                          end (or end (point)))
-                    (goto-char (car bnd))
-                    (let ((extbeg (min beg (car bnd)))
-                          (extend (max end (cdr bnd))))
-                      (helixel-select-block thing
-                                            extbeg extend
-                                            type
-                                            count
-                                            inclusive
-                                            (or (< extbeg beg) (> extend end))
-                                            t)))))))
+                       (helixel-up-paren open close cnt)))
+              (bnd (or (bounds-of-thing-at-point 'helixel-string)
+                       (bounds-of-thing-at-point 'helixel-comment)
+                       ;; If point is at the opening quote of a string,
+                       ;; this must be handled as if point is within the
+                       ;; string, i.e. the selection must be extended
+                       ;; around the string.  Otherwise
+                       ;; `helixel-select-block' might do the wrong thing
+                       ;; because it accidentally moves point inside the
+                       ;; string (for inclusive selection) when looking
+                       ;; for the current surrounding block. (re #364)
+                       (and (= (point) (or beg (point)))
+                            (save-excursion
+                              (goto-char (1+ (or beg (point))))
+                              (or (bounds-of-thing-at-point
+                                   'helixel-string)
+                                  (bounds-of-thing-at-point
+                                   'helixel-comment)))))))
+          (if (not bnd)
+              (helixel-select-block thing beg end type count inclusive)
+            (or (helixel-with-restriction (car bnd) (cdr bnd)
+                  (ignore-errors
+                    (helixel-select-block thing beg end type count
+                                          inclusive)))
+                (save-excursion
+                  (setq beg (or beg (point))
+                        end (or end (point)))
+                  (goto-char (car bnd))
+                  (let ((extbeg (min beg (car bnd)))
+                        (extend (max end (cdr bnd))))
+                    (helixel-select-block thing
+                                          extbeg extend
+                                          type
+                                          count
+                                          inclusive
+                                          (or (< extbeg beg) (> extend end))
+                                          t)))))))
     (error ; we aren't in the parens, so find next instance
      (save-match-data
        (goto-char (or (if (and count (> 0 count)) end beg)

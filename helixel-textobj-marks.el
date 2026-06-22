@@ -37,21 +37,21 @@
 (require 'helixel-textobj-block)
 
 (declare-function evil-textobj-tree-sitter--range
-              "evil-textobj-tree-sitter-core" t t)
+                  "evil-textobj-tree-sitter-core" t t)
 (declare-function evil-textobj-tree-sitter--message-not-found
-              "evil-textobj-tree-sitter-core" t t)
+                  "evil-textobj-tree-sitter-core" t t)
 (defvar evil-textobj-tree-sitter-use-next-if-not-within)
 
 ;; ── Definition macros (mark-pair, mark-quote, mark-object, …) ──
 
 (declare-function evil-textobj-tree-sitter--range
-              "evil-textobj-tree-sitter-core" t t)
+                  "evil-textobj-tree-sitter-core" t t)
 (declare-function evil-textobj-tree-sitter--message-not-found
-              "evil-textobj-tree-sitter-core" t t)
+                  "evil-textobj-tree-sitter-core" t t)
 (defvar evil-textobj-tree-sitter-use-next-if-not-within)
 
 (defmacro helixel--define-mark-delimited (kind name open close doc inner-p
-                                            &rest meta-kv)
+                                               &rest meta-kv)
   "Internal: define inner/a mark functions for a delimited textobj.
 KIND is `:pair' or `:quote'.  NAME is the object name.
 OPEN and CLOSE are the opening and closing delimiters (characters).
@@ -123,9 +123,9 @@ Optional META-KV is a plist for the surround-pairs entry
   (declare (indent defun))
   `(progn
      (helixel--define-mark-delimited
-      :pair ,name ,open ,close ,doc t ,@meta-kv)
+       :pair ,name ,open ,close ,doc t ,@meta-kv)
      (helixel--define-mark-delimited
-      :pair ,name ,open ,close ,doc nil ,@meta-kv)))
+       :pair ,name ,open ,close ,doc nil ,@meta-kv)))
 
 (defmacro helixel-define-mark-quote (name quote-char doc &rest meta-kv)
   "Define both `mark-inner-NAME' and `mark-a-NAME' for a quote char.
@@ -136,9 +136,9 @@ Optional META-KV is a plist for the surround-pairs entry
   (declare (indent defun))
   `(progn
      (helixel--define-mark-delimited
-      :quote ,name ,quote-char ,quote-char ,doc t ,@meta-kv)
+       :quote ,name ,quote-char ,quote-char ,doc t ,@meta-kv)
      (helixel--define-mark-delimited
-      :quote ,name ,quote-char ,quote-char ,doc nil ,@meta-kv)))
+       :quote ,name ,quote-char ,quote-char ,doc nil ,@meta-kv)))
 
 (defmacro helixel-define-mark-object
     (name thing doc subcat &optional restricted-p)
@@ -368,7 +368,7 @@ Example:
 (helixel-register-kind textobj
   :sel-type 'textobj
   :ctx-schema '(:required (:command :count :delimiter)
-                :optional (:inline-advance))
+                          :optional (:inline-advance))
   :recreate #'helixel--recreate-textobj
   :advance  #'helixel--repeat-advance-textobj
   :flip-dir-fn (lambda (sel)

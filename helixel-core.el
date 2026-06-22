@@ -525,44 +525,50 @@ automatically)."
           `(plist-get (helixel-sel--ctx-ensure obj) ,key)))))
 
 ;;;; line
-(helixel--def-sel-accessor helixel-sel-line-dir   :dir   'forward
-  "Return :dir from line ctx (`forward' or `backward'), default `forward'.")
+(helixel--def-sel-accessor
+ helixel-sel-line-dir   :dir   'forward
+ "Return :dir from line ctx (`forward' or `backward'), default `forward'.")
 (helixel--def-sel-accessor helixel-sel-line-count :count 1
-  "Return :count from line ctx, default 1.")
+                           "Return :count from line ctx, default 1.")
 
 ;;;; rect
 (helixel--def-sel-accessor helixel-sel-rect-count :count 1
-  "Return :count from rect ctx, default 1.")
+                           "Return :count from rect ctx, default 1.")
 
 ;;;; movement
-(helixel--def-sel-accessor helixel-sel-movement-moves :moves nil
-  "Return :moves list from movement ctx ((CMD . COUNT) ...).")
-(helixel--def-sel-accessor helixel-sel-movement-inline-advance-p
-  :inline-advance nil
-  "Return non-nil if movement ctx has :inline-advance set.")
-(helixel--def-sel-accessor helixel-sel-movement-normal-mode-p
-  :normal-mode nil
-  "Return non-nil if movement was recorded in normal mode.
+(helixel--def-sel-accessor
+ helixel-sel-movement-moves :moves nil
+ "Return :moves list from movement ctx ((CMD . COUNT) ...).")
+(helixel--def-sel-accessor
+ helixel-sel-movement-inline-advance-p
+ :inline-advance nil
+ "Return non-nil if movement ctx has :inline-advance set.")
+(helixel--def-sel-accessor
+ helixel-sel-movement-normal-mode-p
+ :normal-mode nil
+ "Return non-nil if movement was recorded in normal mode.
 When set, each movement command resets the selection during
 dot-repeat replay (only the final target is selected).")
 
 ;;;; textobj
 (helixel--def-sel-accessor helixel-sel-textobj-command :command nil
-  "Return :command (symbol) from textobj ctx.")
+                           "Return :command (symbol) from textobj ctx.")
 (helixel--def-sel-accessor helixel-sel-textobj-count   :count   1
-  "Return :count from textobj ctx, default 1.")
+                           "Return :count from textobj ctx, default 1.")
 (helixel--def-sel-accessor helixel-sel-textobj-delimiter :delimiter nil
-  "Return :delimiter (plist) from textobj ctx.")
+                           "Return :delimiter (plist) from textobj ctx.")
 
 ;;;; search
 (helixel--def-sel-accessor helixel-sel-search-pattern :pattern nil
-  "Return :pattern (string) from search ctx.")
+                           "Return :pattern (string) from search ctx.")
 (helixel--def-sel-accessor helixel-sel-search-dir :dir 'forward
-  "Return :dir from search ctx, default `forward'.")
-(helixel--def-sel-accessor helixel-sel-search-entry-kind :entry-kind nil
-  "Return :entry-kind (insert or append) from search ctx, or nil.")
-(helixel--def-sel-accessor helixel-sel-search-cursor-offset :cursor-offset nil
-  "Return :cursor-offset (integer) from search ctx, or nil.")
+                           "Return :dir from search ctx, default `forward'.")
+(helixel--def-sel-accessor
+ helixel-sel-search-entry-kind :entry-kind nil
+ "Return :entry-kind (insert or append) from search ctx, or nil.")
+(helixel--def-sel-accessor
+ helixel-sel-search-cursor-offset :cursor-offset nil
+ "Return :cursor-offset (integer) from search ctx, or nil.")
 (defsubst helixel-sel-search-regexp (obj)
   "Return :regexp from search ctx (t = regexp, nil = literal).
 When the :regexp key is absent from the ctx, defaults to t.
@@ -573,24 +579,28 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
       t)))
 
 ;;;; find-char
-(helixel--def-sel-accessor helixel-sel-find-char-dir :dir 'forward
-  "Return :dir (`forward' or `backward') from find-char ctx.")
-(helixel--def-sel-accessor helixel-sel-find-char-type :type nil
-  "Return :type (`next' or `till') from find-char ctx.")
+(helixel--def-sel-accessor
+ helixel-sel-find-char-dir :dir 'forward
+ "Return :dir (`forward' or `backward') from find-char ctx.")
+(helixel--def-sel-accessor
+ helixel-sel-find-char-type :type nil
+ "Return :type (`next' or `till') from find-char ctx.")
 (helixel--def-sel-accessor helixel-sel-find-char-char :char nil
-  "Return :char (character) from find-char ctx.")
+                           "Return :char (character) from find-char ctx.")
 
 ;;;; surround
 (helixel--def-sel-accessor helixel-sel-surround-delimiter :delimiter nil
-  "Return :delimiter (plist) from surround ctx.")
+                           "Return :delimiter (plist) from surround ctx.")
 
 ;;;; insert-search-offset
-(helixel--def-sel-accessor helixel-sel-insert-offset :offset nil
-  "Return :offset (integer) from insert-search-offset ctx.")
+(helixel--def-sel-accessor
+ helixel-sel-insert-offset :offset nil
+ "Return :offset (integer) from insert-search-offset ctx.")
 
 ;;;; insert-selection-start / insert-selection-end
-(helixel--def-sel-accessor helixel-sel-insert-cursor-offset :cursor-offset nil
-  "Return :cursor-offset (integer) from insert ctx, or nil.")
+(helixel--def-sel-accessor
+ helixel-sel-insert-cursor-offset :cursor-offset nil
+ "Return :cursor-offset (integer) from insert ctx, or nil.")
 
 
 ;; ----------------------------------------------------------------------
@@ -737,7 +747,7 @@ should set this to avoid a false match for equal open/close chars."
             ;; targeted search so nested different-name pairs don't
             ;; steal the match.
             (if-let* ((mc (helixel-delimiter-match-close d))
-                     (tag (match-string 1)))
+                      (tag (match-string 1)))
                 (funcall mc tag)
               (unless (zerop (helixel-delimiter-find d 1))
                 (user-error "No enclosing delimiter")))
@@ -815,7 +825,7 @@ pair's bounds so callers can still move to that closing."
     (let* ((orig-pt (point))
            (cur-bounds (save-excursion
                          (helixel--with-debug-log generic-bounds-next
-                             (helixel--generic-bounds-at d inner-p)
+                           (helixel--generic-bounds-at d inner-p)
                            (error nil))))
            (open-str (helixel--delimiter-open-str d))
            (tag-p (eq (helixel-delimiter-type d) :tag))
@@ -826,19 +836,19 @@ pair's bounds so callers can still move to that closing."
       (when cur-bounds
         (setq cur-bounds
               (helixel--with-debug-log generic-bounds-next-step1
-                  (pcase-let* ((`(,_ob ,_oe ,cb ,ce)
-                                (helixel-delimiter-bounds-flat d))
-                               (at-closing
-                                (and (>= orig-pt cb)
-                                     (not just-exited))))
-                    (if at-closing
-                        (save-excursion
-                          (goto-char ce)
-                          (helixel--generic-bounds-at d inner-p t))
-                      ;; NOT at-closing (or just-exited inner pair):
-                      ;; go to the closer.
-                      (goto-char ce)
-                      cur-bounds))
+                (pcase-let* ((`(,_ob ,_oe ,cb ,ce)
+                              (helixel-delimiter-bounds-flat d))
+                             (at-closing
+                              (and (>= orig-pt cb)
+                                   (not just-exited))))
+                  (if at-closing
+                      (save-excursion
+                        (goto-char ce)
+                        (helixel--generic-bounds-at d inner-p t))
+                    ;; NOT at-closing (or just-exited inner pair):
+                    ;; go to the closer.
+                    (goto-char ce)
+                    cur-bounds))
                 (error nil))))
       ;; Step 2: return enclosing pair's bounds, or search forward
       ;; for the first opening delimiter if not inside any pair.
@@ -873,7 +883,7 @@ equal ce(child) when \=`))\=' are adjacent."
     (let* ((orig-pt (point))
            (cur-bounds (save-excursion
                          (helixel--with-debug-log generic-bounds-previous
-                             (helixel--generic-bounds-at d inner-p)
+                           (helixel--generic-bounds-at d inner-p)
                            (error nil))))
            (open-str (helixel--delimiter-open-str d))
            (tag-p (eq (helixel-delimiter-type d) :tag)))
@@ -882,23 +892,23 @@ equal ce(child) when \=`))\=' are adjacent."
       (when cur-bounds
         (setq cur-bounds
               (helixel--with-debug-log generic-bounds-previous-step1
-                  (pcase-let* ((`(,ob ,oe ,_cb ,_ce)
-                                (helixel-delimiter-bounds-flat d))
-                               (at-opening
-                                (if inner-p
-                                    (= orig-pt oe)
-                                  (<= orig-pt ob))))
-                    (if at-opening
-                        ;; Already at the opener: go to its beginning
-                        ;; and re-find bounds — this finds the parent
-                        ;; pair because at ob we haven't crossed the
-                        ;; opener yet.
-                        (save-excursion
-                          (goto-char ob)
-                          (helixel--generic-bounds-at d inner-p))
-                      ;; NOT at opener: go to current pair's opener.
-                      (goto-char (if inner-p oe ob))
-                      cur-bounds))
+                (pcase-let* ((`(,ob ,oe ,_cb ,_ce)
+                              (helixel-delimiter-bounds-flat d))
+                             (at-opening
+                              (if inner-p
+                                  (= orig-pt oe)
+                                (<= orig-pt ob))))
+                  (if at-opening
+                      ;; Already at the opener: go to its beginning
+                      ;; and re-find bounds — this finds the parent
+                      ;; pair because at ob we haven't crossed the
+                      ;; opener yet.
+                      (save-excursion
+                        (goto-char ob)
+                        (helixel--generic-bounds-at d inner-p))
+                    ;; NOT at opener: go to current pair's opener.
+                    (goto-char (if inner-p oe ob))
+                    cur-bounds))
                 (error cur-bounds))))
       ;; Step 2: search backward for first opening delimiter
       ;; if not inside any pair.
@@ -1062,7 +1072,7 @@ sentence, function subcats) and find-char / search commands.
 Read by `helixel-repeat-last-motion' and its accessors.")
 
 (defvar-local helixel--motion-permanent-flip nil
-            "When non-nil, reverses the motion repeat direction.
+  "When non-nil, reverses the motion repeat direction.
 \\[helixel-repeat-last-motion] repeats the last motion in
 reversed direction.  Toggled by \\=`-,'.
 Analogous to `helixel--repeat-permanent-flip' for
@@ -1604,7 +1614,7 @@ The caller should bind `search-invisible' appropriately."
   (catch 'search-filter-done
     (while t
       (if (helixel--with-debug-log search-filter
-              (funcall search-fn)
+            (funcall search-fn)
             (search-failed nil))
           (if (or helixel-invisible
                   (funcall isearch-filter-predicate

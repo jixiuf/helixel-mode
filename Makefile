@@ -25,7 +25,7 @@ INIT_PACKAGES="(progn \
 
 EMACS_BATCH=${EMACS} -Q -batch -L . --eval ${INIT_PACKAGES}
 
-.PHONY: all  test  lint compile clean depgraph melpazoid
+.PHONY: all  test  lint compile clean depgraph melpazoid format
 all: clean-elc compile lint test
 
 compile: $(ELS)
@@ -93,11 +93,31 @@ column-check:
 	done && echo "OK"
 
 
-lint: compile checkdoc package-lint column-check ctx-lint
+lint: format compile checkdoc package-lint column-check ctx-lint
 
 depgraph:
 	@emacs --batch -Q --script scripts/gen-depgraph.el > docs/DEPGRAPH.md
 	@echo "docs/DEPGRAPH.md regenerated"
+
+# ── format ───────────────────────────────────────────────────────────
+# Reindent all .el source files using emacs-lisp-mode indentation.
+# Converts tabs to spaces and removes trailing whitespace.
+format:
+	@for file in $(FILES); do \
+		echo "Formatting $$file..."; \
+		$(EMACS) -Q --batch -L . \
+		$(addprefix -l ,$(FILES)) \
+		--eval "(progn (find-file \"$$file\") \
+		               (hack-dir-local-variables) \
+		               (untabify (point-min) (point-max)) \
+		               (goto-char (point-min)) \
+		               (while (not (eobp)) \
+		                 (lisp-indent-line) \
+		                 (forward-line 1)) \
+		               (delete-trailing-whitespace) \
+		               (save-buffer) \
+		               (kill-buffer))"; \
+	done
 
 # ── melpazoid ──────────────────────────────────────────────────────────
 # Runs the MELPA package linter (https://github.com/riscy/melpazoid)

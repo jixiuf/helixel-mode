@@ -378,8 +378,7 @@ of commands from modules `mc-integrate' itself depends on."
   (add-hook 'helixel-action-commit-hook
             #'helixel-mc--on-chain-end)
   (add-hook 'helixel-keyboard-quit-functions #'helixel-mc--maybe-clear-on-quit)
-  (add-hook 'helixel-state-change-hook #'helixel-mc--sync-visual-state)
-  (helixel-mc--install-input-cache-advice))
+  (add-hook 'helixel-state-change-hook #'helixel-mc--sync-visual-state))
 ;; helixel-mc-integrate--init registered via `helixel--register-mode-hooks'
 ;; in helixel.el.
 
@@ -419,22 +418,20 @@ active AND we are inside a fake-cursor dispatch
                      (push (cons key val) helixel-mc--input-cache)
                      val)))
            (apply orig-fun args)))
-       (advice-add ',fn-name :around ',advice-name))))
+       (advice-add ',fn-name :around #',advice-name))))
 
-(defun helixel-mc--install-input-cache-advice ()
-  "Install input-cache advice for functions that read user input.
-Safe to call multiple times — `advice-add' is idempotent."
-  (helixel-mc--def-input-cache read-char)
-  (helixel-mc--def-input-cache read-string)
-  (helixel-mc--def-input-cache read-from-kill-ring)
-  (helixel-mc--def-input-cache read-char-from-minibuffer)
-  (helixel-mc--def-input-cache read-char-by-name)
-  (helixel-mc--def-input-cache read-quoted-char)
-  (helixel-mc--def-input-cache register-read-with-preview))
-
-;; Third-party functions that read user input.
-(with-eval-after-load 'consult
-  (helixel-mc--def-input-cache consult--read))
+;; Install advice at top level so the byte-compiler can see each
+;; generated `defun' before its `advice-add' reference — this
+;; allows sharp-quoting (`#\='') which satisfies melpazoid.
+;; `advice-add' is idempotent, so these are safe to call at load
+;; time even if `helixel-mc-integrate--init' re-runs later.
+(helixel-mc--def-input-cache read-char)
+(helixel-mc--def-input-cache read-string)
+(helixel-mc--def-input-cache read-from-kill-ring)
+(helixel-mc--def-input-cache read-char-from-minibuffer)
+(helixel-mc--def-input-cache read-char-by-name)
+(helixel-mc--def-input-cache read-quoted-char)
+(helixel-mc--def-input-cache register-read-with-preview)
 
 (provide 'helixel-mc-integrate)
 ;;; helixel-mc-integrate.el ends here

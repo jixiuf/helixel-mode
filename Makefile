@@ -3,8 +3,8 @@ EMACS ?= emacs
 XDG_CACHE_HOME ?= $(HOME)/.cache
 MELPAZOID_DIR  ?= $(XDG_CACHE_HOME)/melpazoid
 
-FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj-engine.el helixel-textobj-pair.el helixel-textobj-block.el helixel-textobj-marks.el helixel-textobj.el helixel-mc-core.el helixel-mc-targets.el helixel-mc-spawn.el helixel-shims.el helixel-mc-integrate.el helixel.el
-ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj-engine.elc helixel-textobj-pair.elc helixel-textobj-block.elc helixel-textobj-marks.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-targets.elc helixel-mc-spawn.elc helixel-shims.elc helixel-mc-integrate.elc helixel.elc
+FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj-engine.el helixel-textobj-pair.el helixel-textobj-block.el helixel-textobj-marks.el helixel-textobj.el helixel-mc-core.el helixel-mc-targets.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel.el
+ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj-engine.elc helixel-textobj-pair.elc helixel-textobj-block.elc helixel-textobj-marks.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-targets.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 

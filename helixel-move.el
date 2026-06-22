@@ -714,11 +714,12 @@ after major-mode changes.")
   "Search for nearest non-quote delimiter char in DIR (forward/backward).
 On success, move point and return t.  On failure, return nil.
 
-When DIR is `backward', first tries to find the ENCLOSING open delimiter
-via `syntax-ppss' — this moves to the opening paren of the form that
-contains point (like `C-M-u'), instead of finding a close delimiter of an
-inner form.  Falls back to regex-based search when the enclosing depth is
-zero.  The regex backward search is bounded by the previous blank line.
+When DIR is `backward', first tries to find the ENCLOSING open
+delimiter via `syntax-ppss' — this moves to the opening paren of
+the form that contains point (like \\[backward-up-list]), instead of
+finding a close delimiter of an inner form.  Falls back to regex-based
+search when the enclosing depth is zero.  The regex backward search
+is bounded by the previous blank line.
 
 Forward search has no bound (nil).
 Caches the regexp in `helixel--pair-char-regex' for performance."

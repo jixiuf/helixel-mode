@@ -39,6 +39,7 @@
 (require 'helixel-state)
 (require 'helixel-keymap)
 (eval-when-compile (require 'helixel-mc-core))
+(eval-when-compile (require 'helixel-mc-integrate))
 
 ;; ── Declare external functions (byte-compiler) ──
 
@@ -307,10 +308,33 @@ doesn't try to call it at fakes) and installs the sync advice."
     (put cmd 'multiple-cursors nil)
     (advice-add cmd :around #'helixel-mc--completion-preview-sync)))
 
-;; Defer setup until `completion-preview' loads.  The `intern'
-;; indirection keeps package-lint quiet about the Emacs 30.1 feature.
-(funcall (intern "eval-after-load") (intern "completion-preview")
-         (lambda () (helixel-mc--setup-completion-preview)))
+;; Defer setup until `completion-preview' loads (Emacs 30.1).
+(helixel-shims--defer-setup 'completion-preview
+                             'helixel-mc--setup-completion-preview)
+
+;; consult--read — cache during mc dispatch.  Defined at top
+;; level so the byte-compiler sees `defun' before `advice-add'.
+(defun helixel-mc--cache-consult--read (orig-fun &rest args)
+  "Around-advice for `consult--read': cache result during mc dispatch.
+ORIG-FUN is the original `consult--read' function; ARGS are its
+arguments (usually a prompt string)."
+  (if (bound-and-true-p helixel-mc-mode)
+      (let* ((prompt (car-safe args))
+             (key (cons 'consult--read prompt))
+             (cached
+              (cdr (assoc key helixel-mc--input-cache
+                          (lambda (k1 k2) (equal k1 k2))))))
+        (or cached
+            (let ((val (apply orig-fun args)))
+              (push (cons key val) helixel-mc--input-cache)
+              val)))
+    (apply orig-fun args)))
+(declare-function consult--read "ext:consult")
+(defun helixel-shims--setup-consult ()
+  "Advise `consult--read' to cache input during mc dispatch."
+  (advice-add #'consult--read
+              :around #'helixel-mc--cache-consult--read))
+(helixel-shims--defer-setup 'consult 'helixel-shims--setup-consult)
 
 (provide 'helixel-shims)
 ;;; helixel-shims.el ends here

@@ -1145,6 +1145,47 @@ stops cleanly at buffer end."
         (helixel-repeat-edit)
         (should-not (= (point) prev))))))
 
+(ert-deftest helixel-test-search-zw-dot-repeat-symbol-start ()
+  "\\_< symbol-start dot-repeat terminates without hanging."
+  (helixel-test-with-buffer "hello world foo"
+    (helixel-search-test--setup-search-repeat "\\_<" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (goto-char 1)
+    (helixel-repeat-edit)
+    (helixel-repeat-edit)
+    (helixel-repeat-edit)
+    t))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-symbol-end ()
+  "\\_> symbol-end dot-repeat terminates without hanging."
+  (helixel-test-with-buffer "hello world foo"
+    (helixel-search-test--setup-search-repeat "\\_>" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (goto-char 1)
+    (helixel-repeat-edit)
+    (helixel-repeat-edit)
+    (helixel-repeat-edit)
+    t))
+
+(ert-deftest helixel-test-search-zw-pcre-non-word-boundary ()
+  "PCRE \\B dot-repeat terminates without hanging."
+  (skip-unless (fboundp 'rxt-pcre-to-elisp))
+  (let ((helixel-search-pcre t))
+    (helixel-test-with-buffer "abc def ghi"
+      (helixel-search-test--setup-search-repeat "\\B" 'forward)
+      (helixel-repeat-chain-start)
+      (helixel-insert) (insert "X") (helixel-insert-exit)
+      (helixel-repeat-chain-end)
+      (goto-char 1)
+      (helixel-repeat-edit)
+      (helixel-repeat-edit)
+      (helixel-repeat-edit)
+      t)))
+
 (ert-deftest helixel-test-search-zw-pcre-bol ()
   "PCRE ^ dot-repeat works (regression after edge-guard removal)."
   (skip-unless (fboundp 'rxt-pcre-to-elisp))

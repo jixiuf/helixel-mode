@@ -1311,7 +1311,7 @@ mark-region car (which is the pre-edit point)."
      :mark-region (let ((pm (point-marker)))
                     (cons pm (copy-marker pm t))))))
 
-(defsubst helixel-action-copy (event)
+(defsubst helixel-action-shallow-copy (event)
   "Return a shallow copy of EVENT (alias-friendly name)."
   (helixel-action--shallow-copy event))
 
@@ -1445,16 +1445,16 @@ falls through to `helixel--op-display'."
 ;; Each operator entry is a plist with keys:
 ;;   :runner        — function (TX) -> nil for `.` replay
 ;;   :display       — string or function (TX) -> string for history
-;;   :moves-point-p — boolean.  t when the operator moves point
-;;                    itself (kill, change, join-lines); nil when
-;;                    the operator leaves point in place and the
-;;                    repeat engine must auto-advance (insert,
-;;                    replace, paste, indent, surround, …).
+;;   :self-advancing — boolean.  t when the operator handles its
+;;                    own positioning (kill, change, join-lines);
+;;                    nil when the repeat engine must auto-advance
+;;                    (insert, replace, paste, indent, surround, …).
 ;;
 ;;                    Controls two things in one bool:
 ;;                      1. Whether `.` auto-advances after apply.
-;;                         t → no auto-advance (op already moved
-;;                         point); nil → use the kind's :advance fn.
+;;                         t → no auto-advance (op handles
+;;                         positioning); nil → use the kind's
+;;                         :advance fn.
 ;;                      2. The stepping algorithm in line-pass
 ;;                         (all-buffer / all-dir):
 ;;                         nil → simple `forward-line';
@@ -1465,7 +1465,7 @@ falls through to `helixel--op-display'."
 
 (defvar helixel--op-registry (make-hash-table :test #'eq)
   "Hash table mapping operator symbols (e.g. `kill', `change')
-to their property plists (:runner :display :moves-point-p).")
+to their property plists (:runner :display :self-advancing).")
 
 (defmacro helixel-register-op (op &rest props)
   "Register edit operator OP with keyword PROPS.
@@ -1473,8 +1473,8 @@ to their property plists (:runner :display :moves-point-p).")
 PROPS is a plist with keys:
   :runner           — function (TX) -> nil for `.` replay
   :display          — string or function (TX) -> string for history
-  :moves-point-p    — boolean.  t when OP moves point itself
-                       (suppresses auto-advance), nil otherwise.
+  :self-advancing   — boolean.  t when OP handles its own
+                       positioning, nil otherwise.
                        See the comment block above for full semantics.
 
 Stores all props in the internal hash table."
@@ -1496,16 +1496,16 @@ Falls back to `symbol-name'."
      ((functionp d) (or (funcall d tx) (symbol-name op)))
      (t (symbol-name op)))))
 
-(defsubst helixel--op-moves-point-p (op)
-  "Return the :moves-point-p property for OP (boolean).
-Non-nil means OP advances point on its own and the repeat engine
+(defsubst helixel--op-self-advancing-p (op)
+  "Return the :self-advancing property for OP (boolean).
+Non-nil means OP handles its own positioning and the repeat engine
 should NOT auto-advance; nil means the kind's :advance fn drives
 stepping between targets."
-  (plist-get (gethash op helixel--op-registry) :moves-point-p))
+  (plist-get (gethash op helixel--op-registry) :self-advancing))
 
 (defun helixel--op-set-runner (op runner)
   "Override the :runner for OP in the operator registry to RUNNER.
-Preserves existing :display and :moves-point-p.
+Preserves existing :display and :self-advancing.
 Stores a fresh copy so callers holding a reference to the old
 plist are not affected by the mutation."
   (when-let* ((entry (gethash op helixel--op-registry)))
@@ -1514,14 +1514,14 @@ plist are not affected by the mutation."
 
 (defun helixel-list-ops ()
   "Display all registered operators with their properties.
-Shows operator name, display label, and `moves-point-p' flag."
+Shows operator name, display label, and `self-advancing' flag."
   (interactive)
   (let ((buf (get-buffer-create "*helixel-ops*"))
         (ops nil))
     (maphash (lambda (op props)
                (push (list op
                            (plist-get props :display)
-                           (plist-get props :moves-point-p)
+                           (plist-get props :self-advancing)
                            (and (plist-get props :runner) t))
                      ops))
              helixel--op-registry)
@@ -1531,7 +1531,7 @@ Shows operator name, display label, and `moves-point-p' flag."
       (let ((inhibit-read-only t))
         (erase-buffer)
         (insert (format "%-22s %-12s %-12s %s\n"
-                        "Operator" "Display" "MovesPt" "Runner")
+                        "Operator" "Display" "SelfAdv" "Runner")
                 (make-string 60 ?-) "\n")
         (dolist (entry ops)
           (insert (format "%-22s %-12s %-12s %s\n"

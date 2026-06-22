@@ -49,10 +49,10 @@ Centralizes per-operator protocol:
 ```
 :runner            fn(tx) → nil      execute edit at replay time
 :display           string|fn         display string for history
-:moves-point-p    boolean           t = op self-advances, no auto-advance
+:self-advancing    boolean           t = op handles positioning, no auto-advance
 ```
 
-Access: `(helixel--op-runner 'kill)`, `(helixel--op-moves-point-p 'insert-text)`, etc.
+Access: `(helixel--op-runner 'kill)`, `(helixel--op-self-advancing-p 'insert-text)`, etc.
 
 ---
 
@@ -106,7 +106,7 @@ directly from the kind registry.
          (advance-fn (helixel--kind-advance (helixel-sel-kind …))))
     (cond
      ((and (eq op 'chain) (null advance-fn)) t)   ; in-place
-     ((or (not advance-fn) (helixel--op-moves-point-p op))
+     ((or (not advance-fn) (helixel--op-self-advancing-p op))
       (helixel-sel-call-recreate …))              ; recreate only
      (t (funcall advance-fn edit)))))              ; kind drives
 ```

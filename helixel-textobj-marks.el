@@ -42,9 +42,7 @@
               "evil-textobj-tree-sitter-core" t t)
 (defvar evil-textobj-tree-sitter-use-next-if-not-within)
 
-;; ============================================================================
-;; Definition macros (define-mark-pair / -quote / -object / -regex-textobj)
-;; ============================================================================
+;; ── Definition macros (mark-pair, mark-quote, mark-object, …) ──
 
 (declare-function evil-textobj-tree-sitter--range
               "evil-textobj-tree-sitter-core" t t)
@@ -238,9 +236,7 @@ SUBCAT is the textobj subcat symbol (default: \='block)."
           count)))))
 
 
-;; ============================================================================
-;; Tag mark commands
-;; ============================================================================
+;; ── Tag mark commands ──
 
 (defun helixel-mark-inner-tag (&optional count)
   "Select inner tag.
@@ -269,9 +265,7 @@ COUNT is the number of tags to select."
    (helixel-make-tag-delimiter)
    count))
 
-;; ============================================================================
-;; Generic Block Text Objects (org blocks, markdown fences, etc.)
-;; ============================================================================
+;; ── Generic Block Text Objects (org blocks, markdown fences, etc.) ──
 
 
 (defun helixel-mark-inner-block (&optional count)
@@ -340,9 +334,7 @@ Example:
 (helixel-define-mark-object "paragraph" 'helixel-paragraph
                             "paragraph" 'paragraph)
 
-;; ============================================================================
-;; Function Text Objects
-;; ============================================================================
+;; ── Function Text Objects ──
 
 (helixel-define-mark-object "function" 'helixel-function
                             "function" 'function)

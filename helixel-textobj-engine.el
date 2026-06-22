@@ -41,10 +41,7 @@ Called with no arguments.  Use this to chain operations that need
 a textobj selection to be in place (e.g. pending surround ops).")
 
 
-;; ============================================================================
-
-;; Internal Variables and Configuration
-;; ============================================================================
+;; ── Internal Variables and Configuration ──
 
 (defvar helixel-restriction-stack nil
   "List of previous restrictions for `helixel-with-restriction' macro.")
@@ -86,9 +83,7 @@ See the documentation of `word-combining-categories'."
                 :value-type (choice character (const nil)))
   :group 'helixel)
 
-;; ============================================================================
-;; Macro and Helper Functions (copied from evil-common.el)
-;; ============================================================================
+;; ── Macro and Helper Functions ──
 
 (defmacro helixel-motion-loop (spec &rest body)
   "Loop a certain number of times.
@@ -555,13 +550,7 @@ selection."
         (narrow-to-region start end)))
     (helixel-select-a-object thing beg end count)))
 
-;; ============================================================================
-;; Text Object Interactive Commands
-;; ============================================================================
-
-;; ============================================================================
-;; Text Object Interactive Commands (now defined via helixel-define-mark-object)
-;; ============================================================================
+;; ── Text Object Interactive Commands ──
 
 (defun helixel--forward-symbol (&optional count)
   "Move forward COUNT symbols.
@@ -598,9 +587,7 @@ COUNT is the number of sequences to move over."
         (skip-syntax-forward notsyntax)
         (skip-syntax-forward syntax))))))
 
-;; ============================================================================
-;; Sentence Text Objects
-;; ============================================================================
+;; ── Sentence Text Objects ──
 
 (defun helixel--forward-sentence (&optional count)
   "Move forward COUNT sentences.
@@ -612,9 +599,7 @@ NOT be moved over."
     (ignore-errors (forward-sentence dir))))
 (put 'helixel-sentence 'forward-op #'helixel--forward-sentence)
 
-;; ============================================================================
-;; Paragraph Text Objects
-;; ============================================================================
+;; ── Paragraph Text Objects ──
 
 (defun helixel--forward-paragraph (&optional count)
   "Move forward COUNT paragraphs.
@@ -627,9 +612,7 @@ if COUNT is negative.  A paragraph is defined by
      ((not (bobp)) (start-of-paragraph-text) (beginning-of-line)))))
 (put 'helixel-paragraph 'forward-op #'helixel--forward-paragraph)
 
-;; ============================================================================
-;; Parenthesis/Bracket Text Objects
-;; ============================================================================
+;; ── Parenthesis / Bracket Text Objects ──
 (defvar helixel-type-properties nil
   "Specifications made by `helixel-define-type'.
 Entries have the form (TYPE .  PLIST), where PLIST is a property
@@ -683,9 +666,7 @@ a property list."
              properties))))
 
 
-;; ============================================================================
-;; Range Struct (constructor, predicate, accessors)
-;; ============================================================================
+;; ── Range Struct ──
 
 (defun helixel-range-p (object)
   "Whether OBJECT is a range."
@@ -737,9 +718,7 @@ of textobj selections."
       (run-hook-with-args 'helixel-textobj-after-select-functions))))
 
 
-;; ============================================================================
-;; Visual-state / region helpers (used by mark-* commands)
-;; ============================================================================
+;; ── Visual-state / region helpers ──
 
 (defun helixel--use-region-p ()
   "Return non-nil when in visual state and the region is active."
@@ -777,9 +756,7 @@ backward one char."
 
 (defvar helixel--block-chosen-spec)  ; defined in helixel-core.el
 
-;; ============================================================================
-;; Surround / hook plumbing + textobj kind protocol
-;; ============================================================================
+;; ── Surround / hook plumbing + textobj kind protocol ──
 
 (defvar helixel--surround-pairs nil
   "List of `helixel--surround-entry' structs for surround and jump-to-match.

@@ -204,9 +204,9 @@ pure movement/search/state events (~40B per entry negligible).
 
 ;; ── Op Registry ──
 (helixel-register-op op &rest props)
-  ;; props: :runner :display :moves-point-p
+  ;; props: :runner :display :self-advancing
 (helixel--op-runner op)         → fn
-(helixel--op-moves-point-p op)        → boolean
+(helixel--op-self-advancing-p op)        → boolean
 
 ;; ── Repeat ──
 (helixel-record-action op &rest extra)  ; stores action + commits event
@@ -339,7 +339,7 @@ parallel chain applications, all in one undo step.
 CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-field`, `helixel-sel-textobj-command`, etc.).
 
 ### Design notes
-- `:moves-point-p` boolean on ops: t = op moves point itself, suppress auto-advance (kill, change, join-lines); nil = op leaves point alone (insert, replace, paste, indent, surround, ...).
+- `:self-advancing` boolean on ops: t = op handles its own positioning, suppress auto-advance (kill, change, join-lines); nil = op leaves point alone (insert, replace, paste, indent, surround, ...).
 - Insert replay: `pre-command-hook` captures `this-single-command-keys` (key-based replay) with `:text` fallback. No `:commands` layer. No `start-kbd-macro` used.
 - Chain and non-chain share the same `helixel--repeat-advance` dispatch. Chain's `:action-list` runner iterates sub-actions at each advance target.
 - `helixel-repeat-selection` (`M-.`) uses the same advance + preview path (no apply).

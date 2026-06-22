@@ -330,7 +330,7 @@ return EDIT unchanged."
          (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
     (if (and effective-reverse sel flip-fn)
         (let* ((reversed-sel (funcall flip-fn sel))
-               (new-edit (helixel-action-copy edit)))
+               (new-edit (helixel-action-shallow-copy edit)))
           (setf (helixel-action-sel new-edit) reversed-sel)
           new-edit)
       edit)))
@@ -363,8 +363,8 @@ Dispatch:
      ;; Chain edits may have no kind advance (e.g. after J / join-lines
      ;; with no selection); allow in-place repeat.
      ((and (eq op 'chain) (null advance-fn)) t)
-     ;; Op moves point itself, or kind has no advance: just recreate.
-     ((or (not advance-fn) (helixel--op-moves-point-p op))
+     ;; Op handles its own positioning, or kind has no advance: just recreate.
+     ((or (not advance-fn) (helixel--op-self-advancing-p op))
       (helixel--with-debug-log repeat-advance-recreate
           (progn (helixel-sel-call-recreate (helixel-action-sel effective))
                  t)
@@ -497,7 +497,7 @@ The `helixel-define-command' macro handles this automatically."
                       pop-sel
                       :runner runner
                       extra)))
-      (let ((new-action (helixel-action-copy tx)))
+      (let ((new-action (helixel-action-shallow-copy tx)))
         ;; Pre-compute and stash display on the live action (tx-replay
         ;; itself doesn't need display, but the action ring formatter does).
         (when helixel--live-action
@@ -519,16 +519,16 @@ The `helixel-define-command' macro handles this automatically."
 
 ;; ── Flip-dir, all-buffer, line-pass ──
 
-(defun helixel--repeat-line-pass (tx sel op-moves-point start-pos dir cnt
+(defun helixel--repeat-line-pass (tx sel self-advancing start-pos dir cnt
                                      &optional preview-p)
   "Process one line per step from START-POS in direction DIR.
 TX is the edit transaction, SEL the selection descriptor.
-OP-MOVES-POINT is the operator's `:moves-point-p' property
-\(nil when the op keeps point in place, t when it advances on
-its own).  CNT is the starting count.
+SELF-ADVANCING is the operator's `:self-advancing' property
+\(nil when the op leaves point alone, t when it handles its
+own positioning).  CNT is the starting count.
 If PREVIEW-P is non-nil, only recreate selections without executing edits.
 
-OP-MOVES-POINT chooses the stepping algorithm:
+SELF-ADVANCING chooses the stepping algorithm:
   nil → simple `forward-line' (op left point alone, e.g. insert,
         surround, indent).
   t   → bol/eol check before `forward-line' (op may have eaten
@@ -545,12 +545,12 @@ OP-MOVES-POINT chooses the stepping algorithm:
         (unless preview-p
           (helixel-action-replay tx))
         ;; Step to next line.  Two algorithms:
-        ;;   op-moves-point=nil → simple `forward-line'
-        ;;   op-moves-point=t   → skip the step if the op already
+        ;;   self-advancing nil → simple `forward-line'
+        ;;   self-advancing t   → skip the step if the op already
         ;;                        left point at line edge (it ate
         ;;                        the current line)
         (cond
-         ((not op-moves-point)
+         ((not self-advancing)
           (when (/= (forward-line dir) 0)
             (setq done t)))
          (t
@@ -563,8 +563,8 @@ OP-MOVES-POINT chooses the stepping algorithm:
 Uses TX, SEL, REVERSE-P and `helixel--repeat-line-pass'
 for correct per-line stepping.  Preview always uses the
 \"op left point alone\" stepping algorithm (the operator does not
-run in preview mode, so its `:moves-point-p' is moot)."
-  (let* ((dir (if reverse-p -1 1))
+run in preview mode, so its `:self-advancing' is moot)."
+     (let* ((dir (if reverse-p -1 1))
          (start (if (> dir 0) (point-min) (point-max)))
          (cnt 0))
     (save-excursion
@@ -582,7 +582,7 @@ Forward pass then backward pass from the marker position.
 For chain ops, does a single pass from the buffer edge."
   (let* ((sel (helixel-action-sel edit))
          (op (helixel-action-op edit))
-         (op-moves-point (helixel--op-moves-point-p op))
+         (self-advancing (helixel--op-self-advancing-p op))
          (reverse-p (helixel-repeat-prefix-reverse-p prefix))
          (marker (car (helixel-action-mark-region edit)))
          (chain-p (eq op 'chain)))
@@ -609,10 +609,10 @@ For chain ops, does a single pass from the buffer edge."
           (beginning-of-line)
           (setq start-pos (point)))
         (setq cnt (helixel--repeat-line-pass
-                   edit sel op-moves-point
+                   edit sel self-advancing
                    start-pos first-dir cnt))
         (setq cnt (helixel--repeat-line-pass
-                   edit sel op-moves-point
+                   edit sel self-advancing
                    start-pos (- first-dir) cnt))
         (helixel--repeat-echo cnt)))))
 
@@ -622,14 +622,14 @@ Uses `helixel--repeat-line-pass' for proper cursor advance."
   (let* ((sel (helixel-action-sel edit))
          (op (helixel-action-op edit))
          (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
-         ;; In all-dir line replay, even ops that ordinarily move
-         ;; point on their own (kill, change) want the simple
+         ;; In all-dir line replay, even ops that ordinarily handle
+         ;; their own positioning (kill, change) want the simple
          ;; line-stepping algorithm here, because the kill/change
          ;; already happened once before we entered the loop.
-         (op-moves-point (helixel--op-moves-point-p op))
+         (self-advancing (helixel--op-self-advancing-p op))
          (cnt 0))
     (setq cnt (helixel--repeat-line-pass
-               edit sel op-moves-point (point) dir cnt))
+               edit sel self-advancing (point) dir cnt))
     (helixel--repeat-echo cnt)))
 
 ;; ── Search advance scratch ──
@@ -866,10 +866,11 @@ The chosen event's edit data becomes the new `helixel-last-action'."
            (event (cdr (assoc choice items))))
       (when event
         ;; Reconstruct tx from event and set it as `helixel-last-action'.
-        ;; Must use `helixel-action-copy' (not `helixel--update-last-event'
+        ;; Must use `helixel-action-shallow-copy'
+        ;; (not `helixel--update-last-event'
         ;; which only copies the payload, leaving op/sel/runner stale).
         (setq helixel-last-action
-              (helixel-action-copy
+              (helixel-action-shallow-copy
                (apply #'helixel-action-create
                       (helixel-action-op event)
                       (helixel-action-sel event)

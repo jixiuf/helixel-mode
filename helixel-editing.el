@@ -398,20 +398,20 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 ;; below (kill, copy, replace, paste-after, paste-before).
 
 ;; Ops with non-trivial runners (need tx payload) → register separately:
-(helixel-register-op change :display "c" :moves-point-p t
+(helixel-register-op change :display "c" :self-advancing t
   :runner #'helixel--repeat-change-core)
 
-(helixel-register-op change-noyank :display "C" :moves-point-p t
+(helixel-register-op change-noyank :display "C" :self-advancing t
   :runner (lambda (tx) (helixel--repeat-change-core tx t)))
 
-(helixel-register-op replace-char :moves-point-p nil
+(helixel-register-op replace-char :self-advancing nil
   :display (lambda (tx)
              (let ((c (helixel-action-char tx)))
                (if c (format "R[%c]" c) "R")))
   :runner (lambda (tx)
             (helixel-replace-char (helixel-action-char tx))))
 
-(helixel-register-op insert-text :display "i" :moves-point-p nil
+(helixel-register-op insert-text :display "i" :self-advancing nil
   :runner (lambda (tx)
             (let ((keys (helixel-action-payload-get tx :keys)))
               (if keys
@@ -423,20 +423,20 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 ;; ── Kill & Change ──
 
 (helixel-define-operator helixel-kill
-    (:op kill :display "d" :moves-point-p t)
+    (:op kill :display "d" :self-advancing t)
   (helixel-record-action 'kill)
   (helixel-delete-selection)
   (helixel--register-consume)
   (helixel-clear-data))
 
 (helixel-define-operator helixel-delete
-    (:op delete :display "D" :moves-point-p t)
+    (:op delete :display "D" :self-advancing t)
   (helixel-record-action 'delete)
   (helixel-delete-selection t)
   (helixel-clear-data))
 
 (helixel-define-operator helixel-delete-backward-char
-    (:op delete-backward-char :display "BS" :moves-point-p t)
+    (:op delete-backward-char :display "BS" :self-advancing t)
   (helixel-record-action 'delete-backward-char)
   (cond
    ((and (use-region-p) delete-active-region)
@@ -447,7 +447,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
   (helixel-clear-data))
 
 (helixel-define-operator helixel-delete-backward-word
-    (:op delete-backward-word :display "C-BS" :moves-point-p t)
+    (:op delete-backward-word :display "C-BS" :self-advancing t)
   (helixel-record-action 'delete-backward-word)
   (if (and (use-region-p) delete-active-region)
       (helixel-delete-selection t)
@@ -545,7 +545,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
               (cons pop-start (point))))))))
 
 (helixel-define-operator helixel-replace
-    (:op replace :display "r" :moves-point-p nil)
+    (:op replace :display "r" :self-advancing nil)
   (if (and (not (helixel--register-active-p))
            (= 0 (length kill-ring)))
       (message "nothing to yank")
@@ -651,7 +651,7 @@ instead of `insert-for-yank' — `helixel-replace' passes
 ;; ── Copy ──
 
 (helixel-define-operator helixel-kill-ring-save
-    (:op copy :display "y" :moves-point-p nil)
+    (:op copy :display "y" :self-advancing nil)
   (when (and transient-mark-mode mark-active (mark))
     (let ((swap-source
            (list :beg (copy-marker (region-beginning))
@@ -784,7 +784,7 @@ that many times (Vim-like 2p, 3P)."
         (set-marker start nil)))))
 
 (helixel-define-operator helixel-yank
-    (:op paste-after :display "p" :moves-point-p nil
+    (:op paste-after :display "p" :self-advancing nil
      :params (&optional arg))
   (interactive "*P")
   ;; Paste after: if selection active, go to end of selection.
@@ -802,7 +802,7 @@ that many times (Vim-like 2p, 3P)."
   (helixel-record-action 'paste-after))
 
 (helixel-define-operator helixel-yank-before
-    (:op paste-before :display "P" :moves-point-p nil
+    (:op paste-before :display "P" :self-advancing nil
      :params (&optional arg))
   (interactive "*P")
   ;; Paste before: if selection active, go to beg of selection.
@@ -857,7 +857,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
   (helixel-clear-data))
 
 (helixel-define-operator helixel-indent-left
-    (:op indent-left :display "<" :moves-point-p nil
+    (:op indent-left :display "<" :self-advancing nil
      :params (&optional count))
   (interactive "p")
   (helixel--indent-body 'indent-left count -1))
@@ -869,7 +869,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
          (helixel-indent-left))))
 
 (helixel-define-operator helixel-indent-right
-    (:op indent-right :display ">" :moves-point-p nil
+    (:op indent-right :display ">" :self-advancing nil
      :params (&optional count))
   (interactive "p")
   (helixel--indent-body 'indent-right count 1))
@@ -883,7 +883,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
 ;; ── Case operations ──
 
 (helixel-define-operator helixel-toggle-case
-    (:op toggle-case :display "~" :moves-point-p nil
+    (:op toggle-case :display "~" :self-advancing nil
      :subcat case :params (&optional count))
   (interactive "p")
   (helixel-record-action 'toggle-case :count (or count 1))
@@ -907,7 +907,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
 OP, DISPLAY, SUBCAT match `helixel-define-operator's keys.
 REGION-FN takes (beg end), WORD-FN takes COUNT."
   `(helixel-define-operator ,name
-       (:op ,op :display ,display :moves-point-p nil
+       (:op ,op :display ,display :self-advancing nil
         :subcat ,subcat :params (&optional count))
      (interactive "p")
      (helixel-record-action ',op :count (or count 1))
@@ -924,7 +924,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 ;; ── Comment toggle ──
 
 (helixel-define-operator helixel-comment-toggle
-    (:op comment-toggle :display "gc" :moves-point-p nil
+    (:op comment-toggle :display "gc" :self-advancing nil
      :subcat comment)
   (helixel-record-action 'comment-toggle)
   (if (use-region-p)
@@ -935,7 +935,7 @@ REGION-FN takes (beg end), WORD-FN takes COUNT."
 ;; ── Shell command filter ──
 
 (helixel-define-operator helixel-shell-command
-    (:op shell-command :display "!" :moves-point-p nil
+    (:op shell-command :display "!" :self-advancing nil
      :subcat shell)
   (helixel-record-action 'shell-command)
   (let ((cmd (read-shell-command "!")))
@@ -971,7 +971,7 @@ Like `join-line' but replaces `fixup-whitespace' with
     (delete-char 1)            ;; delete the newline
     (delete-horizontal-space))) ;; delete spaces/tabs, don't add space
 
-(helixel-register-op join-lines :display "J" :moves-point-p t
+(helixel-register-op join-lines :display "J" :self-advancing t
   :runner (lambda (tx)
             (let ((n (or (helixel-action-payload-get tx :count) 2))
                   (no-space (helixel-action-payload-get tx :no-space)))

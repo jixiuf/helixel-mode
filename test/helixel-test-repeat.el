@@ -765,7 +765,7 @@ Verifies that event ring head carries the inserted text in its payload."
   "Picked event: reconstructed tx preserves op, sel, runner, not just payload.
 Tests the reconstruction path inside `helixel-repeat-edit-pick'
 \(apply #\='helixel-action-create op sel :display :runner payload).
-This ensures that `helixel-action-copy'+`setq' replaces the
+This ensures that `helixel-action-shallow-copy'+`setq' replaces the
 entire `helixel-last-action', not just the payload."
   (helixel-test-with-buffer "hello world foo"
     (goto-char 1)
@@ -804,7 +804,7 @@ entire `helixel-last-action', not just the payload."
                           :inserted-text)))
       ;; Set as last-tx and replay
       (goto-char 4)
-      (setq helixel-last-action (helixel-action-copy reconstructed))
+      (setq helixel-last-action (helixel-action-shallow-copy reconstructed))
       (helixel-repeat-edit)
       (should (string= (buffer-string) "X X foo")))))
 

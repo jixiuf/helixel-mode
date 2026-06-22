@@ -64,9 +64,7 @@
 Bound by `helixel-surround-delete' / `helixel-surround-replace' when
 the selection lacks surround info.  Cleared after execution.")
 
-;; ============================================================================
-;; Block alist — per-mode string-based surround pairs
-;; ============================================================================
+;; ── Block alist — per-mode string-based surround pairs ──
 
 (defcustom helixel-surround-block-alist
   '((org-mode
@@ -88,9 +86,7 @@ Each entry is (MODE (CHAR . (OPEN-STRING . CLOSE-STRING)) ...)."
                                     (string :tag "Close")))))
   :group 'helixel)
 
-;; ============================================================================
-;; Prompt helpers
-;; ============================================================================
+;; ── Prompt helpers ──
 
 (defun helixel--surround-available-keys ()
   "Return a list of strings describing available surround keys."
@@ -128,9 +124,7 @@ Each entry is (MODE (CHAR . (OPEN-STRING . CLOSE-STRING)) ...)."
             (propertize prefix 'face 'font-lock-type-face)
             (string-join keys " "))))
 
-;; ============================================================================
-;; Lookup helpers
-;; ============================================================================
+;; ── Lookup helpers ──
 
 (defun helixel--surround-block-lookup (char)
   "Look up CHAR in `helixel-surround-block-alist' for current mode.
@@ -150,9 +144,7 @@ Returns a `helixel--surround-entry' struct, or nil if not found."
                :key #'helixel--surround-entry-open)))
 
 
-;; ============================================================================
-;; Core: surround-add (wrap region)
-;; ============================================================================
+;; ── Core: surround-add (wrap region) ──
 
 (defun helixel--surround-add (open close)
   "Wrap the active region with OPEN and CLOSE."
@@ -188,9 +180,7 @@ Returns a `helixel--surround-entry' struct, or nil if not found."
     (goto-char (+ end (length open-tag) (length close-tag)
                   (if nl-before 1 0) (if nl-after 1 0)))))
 
-;; ============================================================================
-;; Core: surround-delete (unified)
-;; ============================================================================
+;; ── Core: surround-delete (unified) ──
 
 (defun helixel--surround-delete-delimiter (d)
   "Delete the delimiters described by D.
@@ -204,9 +194,7 @@ Returns position where point should be placed after deletion."
     (delete-region ob oe)
     ob))
 
-;; ============================================================================
-;; Core: surround-replace helpers
-;; ============================================================================
+;; ── Core: surround-replace helpers ──
 
 (defun helixel--surround-replace-pair (d new-open new-close)
   "Replace delimiters of D with NEW-OPEN and NEW-CLOSE."
@@ -288,9 +276,7 @@ D is the tag delimiter plist used to locate the tags."
                      (if nl-before-close 0 1)
                      (length close-tag))))))
 
-;; ============================================================================
-;; Interactive commands
-;; ============================================================================
+;; ── Interactive commands ──
 
 (defun helixel-surround-add ()
   "Surround the active selection with a delimiter pair."
@@ -396,9 +382,7 @@ so the user can select a target with one keypress."
             (setq deactivate-mark nil))
         (helixel--surround-prompt-target #'helixel-surround-replace "mr")))))
 
-;; ============================================================================
-;; Selection-descriptor method
-;; ============================================================================
+;; ── Selection-descriptor method ──
 
 ;; ---------------------------------------------------------------------------
 ;; Edit-op runners (registry consumers — see `helixel-register-op')
@@ -407,7 +391,7 @@ so the user can select a target with one keypress."
   :display (lambda (tx)
              (let ((c (helixel-action-char tx)))
                (if c (format "ms[%c]" c) "ms")))
-  :moves-point-p nil
+  :self-advancing nil
   :runner (lambda (tx)
             (when-let* ((char (helixel-action-char tx))
                         (pair (helixel--surround-lookup char)))
@@ -418,7 +402,7 @@ so the user can select a target with one keypress."
   :display (lambda (tx)
              (let ((tag (helixel-action-payload-get tx :tag)))
                (if tag (format "mt[%s]" tag) "mt")))
-  :moves-point-p nil
+  :self-advancing nil
   :runner (lambda (tx)
             (helixel--surround-add-tag
              (helixel-action-payload-get tx :tag))))
@@ -454,9 +438,7 @@ so the user can select a target with one keypress."
                         (helixel--surround-entry-open pair)
                         (helixel--surround-entry-close pair))))))))))
 
-;; ============================================================================
-;; Pending surround op — auto-retry after textobj selection
-;; ============================================================================
+;; ── Pending surround op — auto-retry after textobj selection ──
 
 (defun helixel--surround-execute-pending ()
   "Execute pending surround op if a textobj with surround info was selected.

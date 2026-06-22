@@ -197,7 +197,7 @@ form.  Use this when the `.` runner IS the command itself.
 |------------------|-----------------|-------------|
 | `:op`            | symbol          | **(Required)** Operator symbol for `.` repeat |
 | `:display`       | string or fn    | Label for edit history |
-| `:moves-point-p` | boolean         | `t` = op moves point, skip auto-advance |
+| `:self-advancing` | boolean         | `t` = op handles positioning, skip auto-advance |
 | `:subcat`        | symbol          | Action subcategory (default: `:op`) |
 | `:params`        | list            | Function parameter list |
 
@@ -208,7 +208,7 @@ form.  Use this when the `.` runner IS the command itself.
 
 ```elisp
 (helixel-define-operator helixel-kill
-    (:op kill :display "d" :moves-point-p t)
+    (:op kill :display "d" :self-advancing t)
   (helixel-record-action 'kill)
   (helixel-delete-selection)
   (helixel-clear-data))
@@ -237,7 +237,7 @@ Register an edit operator in the global operator registry.  This tells
 |-------------------|-----------------|-------------|
 | `:runner`         | fn `(TX) → nil` | Replays the edit from a transaction |
 | `:display`        | string or fn    | Label for edit history |
-| `:moves-point-p`  | boolean         | Does the op move point? → skip auto-advance |
+| `:self-advancing`  | boolean         | Does the op handle positioning? → skip auto-advance |
 
 **When to use directly:**
 1. Runner needs tx payload access
@@ -247,7 +247,7 @@ Register an edit operator in the global operator registry.  This tells
 **Example — Runner with payload:**
 
 ```elisp
-(helixel-register-op replace-char :moves-point-p nil
+(helixel-register-op replace-char :self-advancing nil
   :display (lambda (tx)
              (let ((c (helixel-action-char tx)))
                (if c (format "R[%c]" c) "R")))

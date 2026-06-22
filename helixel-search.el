@@ -1214,7 +1214,7 @@ using advance+apply without recursion."
       (let* ((reverse-p (helixel-repeat-prefix-reverse-p prefix))
              (forced-dir (if reverse-p 'backward 'forward))
              (forced-sel (helixel-sel-update-ctx sel :dir forced-dir))
-             (forced-action (helixel-action-copy edit)))
+             (forced-action (helixel-action-shallow-copy edit)))
         (setf (helixel-action-sel forced-action) forced-sel)
         ;; Remember the start of the original edit so we can skip the
         ;; already-edited match when the replacement text happens to

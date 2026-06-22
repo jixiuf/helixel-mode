@@ -149,17 +149,6 @@ Returns a `helixel--surround-entry' struct, or nil if not found."
       (cl-find char (helixel--surround-pairs-active)
                :key #'helixel--surround-entry-open)))
 
-(defun helixel--surround-lookup-delimiter (char)
-  "Look up CHAR and return a helixel-delimiter plist, or nil."
-  (if-let* ((block (helixel--surround-block-lookup char)))
-      (helixel-make-block-delimiter
-       (helixel--surround-entry-open block)
-       (helixel--surround-entry-close block))
-    (when-let* ((entry (cl-find char (helixel--surround-pairs-active)
-                                :key #'helixel--surround-entry-open)))
-      (helixel-make-pair-delimiter
-       (helixel--surround-entry-open entry)
-       (helixel--surround-entry-close entry)))))
 
 ;; ============================================================================
 ;; Core: surround-add (wrap region)
@@ -250,7 +239,19 @@ The prompt shows the old delimiter being replaced."
                       (_ (substring (symbol-name old-type) 1))))
          (prompt (format "replace %s ->" old-label))
          (new-char (read-char (helixel--surround-prompt prompt)))
-         (new-d (helixel--surround-lookup-delimiter new-char)))
+         ;; Build delimiter from surround-pair config.
+         (new-d (or (when-let* ((b (helixel--surround-block-lookup new-char)))
+                      (helixel-make-block-delimiter
+                       (helixel--surround-entry-open b)
+                       (helixel--surround-entry-close b)))
+                    (when-let* ((e (cl-find
+                                    new-char
+                                    (helixel--surround-pairs-active)
+                                    :key
+                                    #'helixel--surround-entry-open)))
+                      (helixel-make-pair-delimiter
+                       (helixel--surround-entry-open e)
+                       (helixel--surround-entry-close e))))))
     (unless new-d
       (user-error "Unknown surround delimiter: %c" new-char))
     (helixel--surround-delete-delimiter d)

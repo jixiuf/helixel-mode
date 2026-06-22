@@ -771,6 +771,41 @@ Returns (OPEN-END . CLOSE-BEG)."
   (cons (if (eq (char-after open-end) ?\n) (1+ open-end) open-end)
         (if (eq (char-before close-beg) ?\n) (1- close-beg) close-beg)))
 
+(defsubst helixel--delimiter-open-str (d)
+  "Return the open delimiter of D as a string.
+Converts character open to single-char string."
+  (let ((open (helixel-delimiter-open d)))
+    (and open (if (characterp open) (char-to-string open) open))))
+
+(defun helixel--generic-bounds-just-exited-p (d orig-pt cur-bounds inner-p)
+  "Return non-nil if we just exited an inner pair and landed on parent's cb.
+Detects the case where adjacent closing delimiters like \=`))\='
+would cause a false climb outward.  Only applies to outer-p
+\(non-INNER-P) with character-type close delimiters.
+D is the delimiter, ORIG-PT the starting point,
+CUR-BOUNDS the current enclosing pair's bounds, INNER-P the inner flag."
+  (and (not inner-p)
+       (characterp (helixel-delimiter-close d))
+       cur-bounds
+       (let ((cb cur-bounds))
+         (save-excursion
+           (goto-char orig-pt)
+           (catch 'helixel--just-exited
+             (while (and (> (point) 1)
+                         (= (char-before) (helixel-delimiter-close d)))
+               (backward-char)
+               (let ((bnds (save-excursion
+                             (helixel--with-debug-log
+                                 generic-bounds-next-just-exited
+                               (helixel-delimiter-bounds-flat d)
+                               (error nil)))))
+                 (when (and bnds
+                            (= orig-pt (nth 3 bnds))
+                            (not (equal cb (cons (nth 0 bnds)
+                                                 (nth 3 bnds)))))
+                   (throw 'helixel--just-exited t))))
+             nil)))))
+
 (defun helixel--generic-bounds-next (d &optional inner-p)
   "Skip past current delimiter D, find next, return (BEG . END).
 If INNER-P is non-nil, exclude delimiters from bounds.
@@ -782,54 +817,10 @@ pair's bounds so callers can still move to that closing."
                          (helixel--with-debug-log generic-bounds-next
                              (helixel--generic-bounds-at d inner-p)
                            (error nil))))
-           (open (helixel-delimiter-open d))
-           (close (helixel-delimiter-close d))
-           (open-str (and open (if (characterp open)
-                                   (char-to-string open)
-                                 open)))
+           (open-str (helixel--delimiter-open-str d))
            (tag-p (eq (helixel-delimiter-type d) :tag))
-           ;; Detect when we just exited an inner pair and landed on
-           ;; the parent's cb (adjacent ))).  Only applies to outer-p
-           ;; (non-inner); for inner-p the existing AT-closing logic
-           ;; (goto ce + bounds-at with no-close-backoff) works
-           ;; correctly, stepping one level per press.
-           ;;
-           ;; We walk backward past consecutive close-chars and for
-           ;; each position call `delimiter-bounds-flat' to check
-           ;; whether orig-pt equals the ce of some inner pair.
-           ;; If the inner pair is DIFFERENT from cur-bounds, we
-           ;; just landed on the parent's cb — suppress the climb
-           ;; and go to the parent's ce instead (one level step).
-           ;; If it's the SAME pair (e.g., ((a)) at eob where both
-           ;; cur-bounds and inner-bounds are the same pair), let
-           ;; the normal AT-closing climb proceed to make progress.
-           (just-exited
-            (and (not inner-p)
-                 (characterp close)
-                 cur-bounds
-                 (let ((cb cur-bounds))
-                   (save-excursion
-                     (goto-char orig-pt)
-                     (catch 'helixel--just-exited
-                       (while (and (> (point) 1)
-                                   (= (char-before) close))
-                         (backward-char)
-                         ;; Save-excursion guards against
-                         ;; `delimiter-bounds-flat' moving point
-                         ;; via side effects, which would break
-                         ;; the while loop's position tracking.
-                         (let ((bnds (save-excursion
-                                       (helixel--with-debug-log
-                                           generic-bounds-next-just-exited
-                                         (helixel-delimiter-bounds-flat d)
-                                         (error nil)))))
-                           (when (and bnds
-                                      (= orig-pt (nth 3 bnds))
-                                      (not (equal cb
-                                                  (cons (nth 0 bnds)
-                                                        (nth 3 bnds)))))
-                             (throw 'helixel--just-exited t))))
-                       nil))))))
+           (just-exited (helixel--generic-bounds-just-exited-p
+                         d orig-pt cur-bounds inner-p)))
       ;; Step 1: skip past current enclosing pair (or climb outward
       ;; if already at its closing edge).
       (when cur-bounds
@@ -884,10 +875,7 @@ equal ce(child) when \=`))\=' are adjacent."
                          (helixel--with-debug-log generic-bounds-previous
                              (helixel--generic-bounds-at d inner-p)
                            (error nil))))
-           (open (helixel-delimiter-open d))
-           (open-str (and open (if (characterp open)
-                                   (char-to-string open)
-                                 open)))
+           (open-str (helixel--delimiter-open-str d))
            (tag-p (eq (helixel-delimiter-type d) :tag)))
       ;; Step 1: skip backward to current enclosing pair's opener
       ;; (or climb outward if already at its opening edge).

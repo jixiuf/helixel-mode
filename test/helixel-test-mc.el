@@ -35,8 +35,8 @@
 ;; ── Whitelist ──
 
 (ert-deftest helixel-test-mc-whitelist ()
-  (put 'helixel-test-mc-foo 'multiple-cursors t)
-  (put 'helixel-test-mc-bar 'multiple-cursors nil)
+  (put 'helixel-test-mc-foo 'helixel-multiple-cursors t)
+  (put 'helixel-test-mc-bar 'helixel-multiple-cursors nil)
   (should (helixel-mc--should-run-for-all-p 'helixel-test-mc-foo))
   (should-not (helixel-mc--should-run-for-all-p 'helixel-test-mc-bar))
   ;; Lambdas treated as safe.
@@ -322,7 +322,7 @@ chain-end / chain-cancel / normal-escape."
 
 (ert-deftest helixel-test-mc-bulk-whitelist-covers-all ()
   "Every helixel-* `commandp' symbol must carry an explicit
-`multiple-cursors' property (t or nil) after package load."
+`helixel-multiple-cursors' property (t or nil) after package load."
   (let ((unmarked nil))
     (mapatoms
      (lambda (sym)
@@ -333,7 +333,7 @@ chain-end / chain-cancel / normal-escape."
                   (not (string-prefix-p "helixel-test-"
                                         (symbol-name sym)))
                   (not (plist-member (symbol-plist sym)
-                                     'multiple-cursors)))
+                                     'helixel-multiple-cursors)))
          (push sym unmarked))))
     (should (null unmarked))))
 
@@ -346,8 +346,8 @@ on guard commands (chain, escape, mc management)."
                  helixel-repeat-chain-start
                  helixel-repeat-chain-end
                  helixel-repeat-chain-cancel))
-      (should (plist-member (symbol-plist cmd) 'multiple-cursors))
-      (should (null (get cmd 'multiple-cursors)))))
+      (should (plist-member (symbol-plist cmd) 'helixel-multiple-cursors))
+      (should (null (get cmd 'helixel-multiple-cursors)))))
 
 ;; ── Phase A: Cursor 碰撞/去重 ──────────────────────────────────────
 
@@ -576,7 +576,7 @@ fake then replays the chain TX (not the pre-chain edit)."
   "\\[helixel-action-cycle] is whitelisted for multi-cursor dispatch: each fake
 cycles its OWN per-cursor `helixel--action-ring' built from
 commands dispatched after the fake was spawned."
-  (should (eq t (get 'helixel-action-cycle 'multiple-cursors))))
+  (should (eq t (get 'helixel-action-cycle 'helixel-multiple-cursors))))
 
 (ert-deftest helixel-test-mc-per-fake-event-ring-isolated ()
   "After broadcasting `w' to fakes, each fake's overlay carries
@@ -762,13 +762,13 @@ are no longer written by `helixel-mc--enter/leave-cursor'."
   "C-o / C-i navigate the GLOBAL `helixel--global-jump-log'; same
 argument as \\[helixel-action-cycle] — real-only."
   (dolist (cmd '(helixel-jump-backward helixel-jump-forward))
-    (should (plist-member (symbol-plist cmd) 'multiple-cursors))
-    (should (null (get cmd 'multiple-cursors)))))
+    (should (plist-member (symbol-plist cmd) 'helixel-multiple-cursors))
+    (should (null (get cmd 'helixel-multiple-cursors)))))
 
 (ert-deftest helixel-test-mc-jump-to-match-broadcasts ()
   "`%' (`helixel-jump-to-match') is pure point-local; broadcast
 must send each fake to ITS own matching delimiter."
-  (should (eq t (get 'helixel-jump-to-match 'multiple-cursors)))
+  (should (eq t (get 'helixel-jump-to-match 'helixel-multiple-cursors)))
   (helixel-test-with-buffer "(aa) (bb) (cc)\n"
     (helixel-enter-normal-state)
     (goto-char 1)                       ; on first `('
@@ -789,8 +789,8 @@ must send each fake to ITS own matching delimiter."
 (ert-deftest helixel-test-mc-bracket-movement-broadcasts ()
   "`])' / `[(' / etc. are point-local textobj-end movements;
 broadcast must advance each fake to ITS own next/outer match."
-  (should (eq t (get 'helixel-next-paren-end 'multiple-cursors)))
-  (should (eq t (get 'helixel-outer-paren  'multiple-cursors)))
+  (should (eq t (get 'helixel-next-paren-end 'helixel-multiple-cursors)))
+  (should (eq t (get 'helixel-outer-paren  'helixel-multiple-cursors)))
   (helixel-test-with-buffer "(aa) (bb) (cc) (dd)\n"
     (helixel-enter-normal-state)
     (goto-char 1)
@@ -1371,11 +1371,11 @@ mark on every fake cursor."
   "`helixel-begin-selection' must be real-cursor-only so per-command
 broadcast does not toggle visual off on each fake."
   (should (plist-member (symbol-plist 'helixel-begin-selection)
-                        'multiple-cursors))
-  (should (null (get 'helixel-begin-selection 'multiple-cursors)))
+                        'helixel-multiple-cursors))
+  (should (null (get 'helixel-begin-selection 'helixel-multiple-cursors)))
   (should (plist-member (symbol-plist 'helixel-visual-exit)
-                        'multiple-cursors))
-  (should (null (get 'helixel-visual-exit 'multiple-cursors))))
+                        'helixel-multiple-cursors))
+  (should (null (get 'helixel-visual-exit 'helixel-multiple-cursors))))
 
 (ert-deftest helixel-test-mc-spawn-exits-visual-state ()
   "Spawning a fake cursor (any path) must exit `visual' state so
@@ -2391,19 +2391,19 @@ before real point."
   (unwind-protect
       (progn
         (helixel-mc-mark-all-for-multi-cursors '(my-cmd-1 my-cmd-2))
-        (should (eq t (get 'my-cmd-1 'multiple-cursors)))
-        (should (eq t (get 'my-cmd-2 'multiple-cursors))))
-    (put 'my-cmd-1 'multiple-cursors nil)
-    (put 'my-cmd-2 'multiple-cursors nil)))
+        (should (eq t (get 'my-cmd-1 'helixel-multiple-cursors)))
+        (should (eq t (get 'my-cmd-2 'helixel-multiple-cursors))))
+    (put 'my-cmd-1 'helixel-multiple-cursors nil)
+    (put 'my-cmd-2 'helixel-multiple-cursors nil)))
 
 (ert-deftest helixel-test-mc-mark-all-for-real-cursor-only ()
   "`helixel-mc-mark-all-for-real-cursor-only' sets the symbol property to nil."
   (unwind-protect
       (progn
-        (put 'my-cmd-3 'multiple-cursors t)
+        (put 'my-cmd-3 'helixel-multiple-cursors t)
         (helixel-mc-mark-all-for-real-cursor-only '(my-cmd-3))
-        (should-not (get 'my-cmd-3 'multiple-cursors)))
-    (put 'my-cmd-3 'multiple-cursors nil)))
+        (should-not (get 'my-cmd-3 'helixel-multiple-cursors)))
+    (put 'my-cmd-3 'helixel-multiple-cursors nil)))
 
 ;; ── fake-cursor-p guard ──
 
@@ -3057,7 +3057,7 @@ context so electric-pair inserts the matching `)' there too."
   "Test helper: a command that unconditionally signals `user-error'."
   (interactive)
   (user-error "not applicable here"))
-(put 'helixel-test-mc--always-user-error 'multiple-cursors t)
+(put 'helixel-test-mc--always-user-error 'helixel-multiple-cursors t)
 
 (ert-deftest helixel-test-mc-user-error-at-fake-keeps-cursor ()
   "A whitelisted command that signals `user-error' at a fake cursor
@@ -3149,15 +3149,15 @@ an empty insert to fakes."
   "The completion-preview insert commands must be marked real-only
 so the dispatcher does not try to call them at fakes (which would
 barf with `user-error').  This verifies the setup function attaches
-the correct `multiple-cursors' property to each command in the
+the correct `helixel-multiple-cursors' property to each command in the
 canonical list."
   ;; Setup function does not need completion-preview loaded -- it
   ;; only sets symbol properties and adds advice (advice-add accepts
   ;; unknown symbols, the advice is installed lazily).
   (helixel-mc--setup-completion-preview)
   (dolist (cmd helixel-mc-completion-preview-commands)
-    (should (plist-member (symbol-plist cmd) 'multiple-cursors))
-    (should-not (get cmd 'multiple-cursors))))
+    (should (plist-member (symbol-plist cmd) 'helixel-multiple-cursors))
+    (should-not (get cmd 'helixel-multiple-cursors))))
 
 (ert-deftest helixel-test-mc-fake-regions-cleared-after-J ()
   "After mc dispatch of join-lines, fake cursors have no active regions.

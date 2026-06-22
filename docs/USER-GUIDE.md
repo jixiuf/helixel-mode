@@ -891,11 +891,11 @@ Caveats: fakes have empty history at spawn; `C-o` / `C-i` are real-only.
 
 ### Whitelist
 
-Control dispatch via the `multiple-cursors` symbol property:
+Control dispatch via the `helixel-multiple-cursors` symbol property:
 
 ```elisp
-(put 'my-edit-cmd 'multiple-cursors t)   ;; all cursors
-(put 'my-global-cmd 'multiple-cursors nil) ;; real cursor only
+(put 'my-edit-cmd 'helixel-multiple-cursors t)   ;; all cursors
+(put 'my-global-cmd 'helixel-multiple-cursors nil) ;; real cursor only
 
 ;; Bulk whitelist
 (helixel-mc-mark-all-for-multi-cursors '(cmd1 cmd2))

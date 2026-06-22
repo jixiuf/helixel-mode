@@ -96,8 +96,8 @@ Entering wdired → normal.  Exiting (save/abort) → motion."
   ;; wdired-finish-edit / -abort-changes exit the mode globally —
   ;; mc dispatch would run them again at each fake cursor after the
   ;; mode is already off.
-  (put 'wdired-finish-edit 'multiple-cursors nil)
-  (put 'wdired-abort-changes 'multiple-cursors nil)
+  (put 'wdired-finish-edit 'helixel-multiple-cursors nil)
+  (put 'wdired-abort-changes 'helixel-multiple-cursors nil)
   ;; dired-omit-mode hides files via invisible text.
   (add-hook 'dired-mode-hook #'helixel-shims--set-invisible-nil))
 
@@ -113,7 +113,7 @@ Entering grep-edit → normal.  Saving → motion."
     ;; gre-edit-save-changes exits the mode and saves globally —
     ;; mc dispatch would run it again at each fake cursor after the
     ;; mode is already off.  See also occur-cease-edit, wdired-*, wgre-*.
-    (put 'grep-edit-save-changes 'multiple-cursors nil))
+    (put 'grep-edit-save-changes 'helixel-multiple-cursors nil))
   ;; grep/occur results use invisible for filtering (consult-focus-line).
   (add-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil))
 
@@ -127,7 +127,7 @@ Entering occur-edit → normal.  Ceasing edit → motion."
     (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state)
     ;; occur-cease-edit exits the mode globally — must not
     ;; be dispatched to every fake cursor after the mode is off.
-    (put 'occur-cease-edit 'multiple-cursors nil))
+    (put 'occur-cease-edit 'helixel-multiple-cursors nil))
   (add-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil))
 
 ;; ── wgrep (third-party) ──
@@ -149,9 +149,9 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
     ;; These exit the mode globally and save/abort across buffers —
     ;; mc dispatch would run them again at each fake cursor after
     ;; the mode is already gone.
-    (put 'wgrep-finish-edit 'multiple-cursors nil)
-    (put 'wgrep-abort-changes 'multiple-cursors nil)
-    (put 'wgrep-save-all-buffers 'multiple-cursors nil)))
+    (put 'wgrep-finish-edit 'helixel-multiple-cursors nil)
+    (put 'wgrep-abort-changes 'helixel-multiple-cursors nil)
+    (put 'wgrep-save-all-buffers 'helixel-multiple-cursors nil)))
 
 ;; ── Read-only mode keybindings ──
 ;; These modes default to motion state.  Their own keybindings fall
@@ -275,7 +275,7 @@ Called at top-level when this file is loaded."
             "completion-preview-insert-word"
             "completion-preview-insert-sexp"))
   "Commands whose inserted text should be mirrored to fake cursors.
-Each command runs only at the real cursor (per its `multiple-cursors'
+Each command runs only at the real cursor (per its `helixel-multiple-cursors'
 property), then `helixel-mc--completion-preview-sync' inserts the
 same text at every fake within an mc undo step.")
 
@@ -305,7 +305,7 @@ advance point (preview not active / nothing inserted)."
 Marks each command real-only (so the `post-command-hook' dispatcher
 doesn't try to call it at fakes) and installs the sync advice."
   (dolist (cmd helixel-mc-completion-preview-commands)
-    (put cmd 'multiple-cursors nil)
+    (put cmd 'helixel-multiple-cursors nil)
     (advice-add cmd :around #'helixel-mc--completion-preview-sync)))
 
 ;; Defer setup until `completion-preview' loads (Emacs 30.1).

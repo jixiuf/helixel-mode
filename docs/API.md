@@ -629,14 +629,14 @@ specific major mode.
 ### Whitelist
 
 Control which commands are dispatched to fake cursors via the
-`multiple-cursors` symbol property:
+`helixel-multiple-cursors` symbol property:
 
 ```elisp
 ;; All cursors
-(put 'my-edit-cmd 'multiple-cursors t)
+(put 'my-edit-cmd 'helixel-multiple-cursors t)
 
 ;; Real cursor only
-(put 'my-global-cmd 'multiple-cursors nil)
+(put 'my-global-cmd 'helixel-multiple-cursors nil)
 
 ;; Bulk whitelist
 (helixel-mc-mark-all-for-multi-cursors '(cmd1 cmd2))

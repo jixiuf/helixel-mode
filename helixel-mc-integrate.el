@@ -284,8 +284,8 @@ of commands from modules `mc-integrate' itself depends on."
      (when (and (commandp sym)
                 (string-prefix-p "helixel-" (symbol-name sym))
                 (not (plist-member (symbol-plist sym)
-                                   'multiple-cursors)))
-       (put sym 'multiple-cursors t)))))
+                                   'helixel-multiple-cursors)))
+       (put sym 'helixel-multiple-cursors t)))))
 
 ;; NOTE: do NOT call `helixel-mc--whitelist-helixel-commands' here.
 ;; It must run after every helixel module has loaded — the call

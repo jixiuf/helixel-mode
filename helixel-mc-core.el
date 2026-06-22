@@ -34,9 +34,9 @@
 ;;   helixel-mc-with-each-cursor    macro: run body at every cursor
 ;;
 ;; Whitelist:
-;;   (put 'CMD 'multiple-cursors t)    run for all cursors
-;;   (put 'CMD 'multiple-cursors nil)  run only at real cursor
-;;   absent                            consult `helixel-mc-default-policy'
+;;   (put 'CMD 'helixel-multiple-cursors t)    run for all cursors
+;;   (put 'CMD 'helixel-multiple-cursors nil)  run only at real cursor
+;;   absent                     consult `helixel-mc-default-policy'
 
 ;;; Code:
 
@@ -121,7 +121,7 @@ cursor's selection stands out among fake selections."
 ;; ── Customization ──
 
 (defcustom helixel-mc-default-policy 'all
-  "What to do when a command has no `multiple-cursors' symbol property.
+  "What to do when a command has no `helixel-multiple-cursors' symbol property.
 \=`all'    — run at every cursor (default — recommended for modal use)
 \=`once'   — run at real cursor only
 \=`prompt' — ask once, store decision via `put'."
@@ -756,13 +756,14 @@ fake cursors to match.  Auto-toggles `helixel-mc-mode'."
 
 (defun helixel-mc--should-run-for-all-p (command)
   "Return non-nil if COMMAND should run for every fake cursor.
-Consults the `multiple-cursors' symbol property; falls back to
+Consults the `helixel-multiple-cursors' symbol property; falls back to
 `helixel-mc-default-policy'."
   (cond
    ((not (symbolp command)) t)        ; lambdas — assume safe
-   ((get command 'multiple-cursors-disabled) nil)
+   ((get command 'helixel-multiple-cursors-disabled) nil)
    (t
-    (let ((prop (plist-member (symbol-plist command) 'multiple-cursors)))
+    (let ((prop (plist-member (symbol-plist command)
+                              'helixel-multiple-cursors)))
       (if prop
           (cadr prop)
         (pcase helixel-mc-default-policy
@@ -776,20 +777,20 @@ Consults the `multiple-cursors' symbol property; falls back to
   (let ((decision (ignore-error quit
                     (y-or-n-p (format "Run %S at every fake cursor? "
                                       command)))))
-    (put command 'multiple-cursors decision)
+    (put command 'helixel-multiple-cursors decision)
     decision))
 
 ;;;###autoload
 (defun helixel-mc-mark-all-for-multi-cursors (commands)
   "Mark each symbol in COMMANDS to run at every fake cursor."
   (dolist (c commands)
-    (put c 'multiple-cursors t)))
+    (put c 'helixel-multiple-cursors t)))
 
 ;;;###autoload
 (defun helixel-mc-mark-all-for-real-cursor-only (commands)
   "Mark each symbol in COMMANDS to run only at the real cursor."
   (dolist (c commands)
-    (put c 'multiple-cursors nil)))
+    (put c 'helixel-multiple-cursors nil)))
 
 (cl-defmacro helixel-mc--with-undo-step (&body body)
   "Execute BODY wrapped in an mc undo step with guaranteed cleanup.
@@ -809,12 +810,12 @@ without going through the pre/`post-command-hook' dispatch path
   "Declarative dispatch spec for CMD.
 Keyword options:
   POLICY — `all' or `real' (default `all').  When `real', CMD
-     runs only at the real cursor (sets `multiple-cursors'
+     runs only at the real cursor (sets `helixel-multiple-cursors'
      property to nil).  Any other value sets the property to t."
   (declare (indent 1))
   (let ((real-only (eq policy 'real)))
     `(progn
-       (put ',cmd 'multiple-cursors ,(not real-only))
+       (put ',cmd 'helixel-multiple-cursors ,(not real-only))
        ',cmd)))
 
 ;; ── Undo-step management ──
@@ -1473,7 +1474,7 @@ deactivated when the last one is removed."
    ;; insert-entry command declares a prepos via `:preposition' on its
    ;; `helixel-define-command' form; it lands as a `:preposition'
    ;; payload on the tx and runs at every fake during replay.  So
-   ;; they MUST be whitelisted (multiple-cursors property = t).
+   ;; they MUST be whitelisted (helixel-multiple-cursors property = t).
    ;; `insert-exit' stays whitelisted too — fakes need to leave
    ;; insert state.
    ;; Nothing here.

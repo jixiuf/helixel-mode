@@ -68,7 +68,8 @@ Without highlights clearing:
 Movement commands are replayed at fake cursors via
 \=`call-interactively` (the mc dispatcher falls back to it when
 the action carries no tx with a runner)."
-  (declare (indent 1))
+  (declare (indent 1)
+           (debug (&define name sexp sexp [&rest keywordp sexp] def-body)))
   (let ((clear (if (plist-member options :clear-highlights)
                    (plist-get options :clear-highlights)
                  t))
@@ -151,6 +152,7 @@ sel that was pushed by a prior special-selection command.
 Note: `helixel-define-command' handles `clear-highlights'
 and `track-visual-move'
 automatically, so this macro only does `push-mark' + activate."
+  (declare (indent 0) (debug def-body))
   `(let ((current (point)))
      ;; Clear stale non-movement pending-sel BEFORE the body so
      ;; `helixel--track-visual-move' (injected by the macro) sees
@@ -185,6 +187,8 @@ FWD-FN is one of `forward-beginning' / `forward-end' (interned
 relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner.
 Optional REVERSE-CMD is the opposite-direction command for
 \=`-,' permanent flip support."
+  (declare (indent 0)
+           (debug (&define name sexp sexp sexp sexp sexp &optional sexp)))
   (let* ((fn (intern (format "helixel--%s" fwd-fn)))
          (skip-fn (if (> sign 0)
                       'helixel--skip-newline-forward
@@ -266,7 +270,7 @@ OUTER-P non-nil → outer (a), nil → inner (i).
 FORWARD-P non-nil → forward-to-end (] }), nil → outward-to-open ([ {).
 REVERSE is the opposite-direction command symbol.
 FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
-  (declare (indent defun))
+  (declare (indent defun) (debug (&define name sexp sexp sexp sexp &rest sexp)))
   (let ((inner-p (not outer-p)))
     `(progn
        (helixel-define-command ,name

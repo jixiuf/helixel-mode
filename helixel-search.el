@@ -578,6 +578,7 @@ DIR is the base direction (+1 forward, -1 backward).
 A negative COUNT flips the direction (\\=`-f x' = find backward,
 \\=`-3f x' = find 3rd backward).
 DOC is the docstring."
+  (declare (indent 0) (debug (&define name sexp sexp stringp def-body)))
   `(defun ,name (char &optional count)
      ,doc
      (interactive "c\np")

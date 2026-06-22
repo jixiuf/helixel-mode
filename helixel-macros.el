@@ -48,7 +48,7 @@ CATEGORY + SUBCAT — classification for \\[helixel-action-cycle] and jump-list.
 
 Calls `helixel--tracking-open' for the open phase.  Commits the
 event in an `unwind-protect' so it always finalises even on error."
-  (declare (indent 1))
+  (declare (indent 1) (debug (&rest [keywordp sexp] def-body)))
   `(progn
      (helixel--tracking-open ,category ,subcat ,op)
      (unwind-protect
@@ -98,7 +98,7 @@ For :category movement:
 
 All tracking code is expanded inline at compile time — zero hooks.
 BODY is the command's business logic."
-  (declare (indent 2))
+  (declare (indent 2) (debug (&define name [&rest keywordp sexp] def-body)))
   (let* ((cat (plist-get metadata :category))
          (sub (plist-get metadata :subcat))
          (clear (if (plist-member metadata :clear-highlights)
@@ -186,7 +186,7 @@ Expands to:
 
 The command body SHOULD call (helixel-record-action OP ...) to record
 the edit for \\[helixel-repeat-edit] replay."
-  (declare (indent 2))
+  (declare (indent 2) (debug (&define name [&rest keywordp sexp] def-body)))
   (let* ((op (plist-get metadata :op))
          (display (plist-get metadata :display))
          (moves-point (plist-get metadata :moves-point-p))

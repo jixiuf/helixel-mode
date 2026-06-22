@@ -71,6 +71,166 @@ end of the line of OP and at the beginning of the line of CL."
       (cons beg end)))
    (t (user-error "Unknown selection-type `%s'" selection-type))))
 
+;; ── Block-scan struct ──
+
+(cl-defstruct (helixel--block-scan
+               (:constructor helixel--make-block-scan)
+               (:conc-name helixel--bs-)
+               (:copier nil))
+  "Result of a single scan attempt for a delimited block.
+OP is a cons (BEG . END) of the opening delimiter, or nil.
+CL is a cons (BEG . END) of the closing delimiter, or nil.
+Both nil means the scan failed; both non-nil means success."
+  (op nil :read-only t)
+  (cl nil :read-only t))
+
+(defun helixel--scan-forward-first (thing scan-pos fixedscan)
+  "Scan1: from SCAN-POS forward to find the closer, then backward to opener.
+THING is the finder function (see `helixel-up-block').
+When FIXEDSCAN is nil, scan starts at (1+ SCAN-POS); otherwise at SCAN-POS.
+Returns a `helixel--block-scan' on success, nil on failure.
+Moves point and sets `match-data' as a side effect."
+  (goto-char (if fixedscan scan-pos (1+ scan-pos)))
+  (when (and (zerop (funcall thing +1)) (match-beginning 0))
+    (let ((cl (cons (match-beginning 0) (match-end 0))))
+      (goto-char (car cl))
+      (if (and (zerop (funcall thing -1)) (match-beginning 0))
+          (helixel--make-block-scan
+           :op (cons (match-beginning 0) (match-end 0))
+           :cl cl)
+        nil))))
+
+(defun helixel--scan-forward-closer (thing)
+  "Find the forward closer for THING from point.
+For tag delimiters with a `helixel--match-close' symbol property,
+uses named-close matching so nested different-name pairs don't steal
+the match.  For plain delimiters, calls (funcall thing +1).
+Returns a cons (BEG . END) on success, nil on failure.
+Side-effects: moves point, sets `match-data'."
+  (let ((mc (and (symbolp thing)
+                 (get thing 'helixel--match-close))))
+    (if (and mc (match-string 1))
+        (progn
+          (funcall mc (match-string 1))
+          (when (match-beginning 0)
+            (cons (match-beginning 0) (match-end 0))))
+      (when (and (zerop (funcall thing +1)) (match-beginning 0))
+        (cons (match-beginning 0) (match-end 0))))))
+
+(defun helixel--scan-backward-first (thing scan-pos fixedscan)
+  "Scan2: from SCAN-POS backward to find the opener, then forward to closer.
+THING is the finder function (see `helixel-up-block').
+When FIXEDSCAN is nil, scan starts at (1- SCAN-POS); otherwise at SCAN-POS.
+Returns a `helixel--block-scan' on success, nil on failure.
+Moves point and sets `match-data' as a side effect."
+  (goto-char (if fixedscan scan-pos (1- scan-pos)))
+  (when (and (zerop (funcall thing -1)) (match-beginning 0))
+    (let ((op (cons (match-beginning 0) (match-end 0))))
+      (goto-char (cdr op))
+      (let ((cl (helixel--scan-forward-closer thing)))
+        (when cl
+          (helixel--make-block-scan :op op :cl cl))))))
+
+;; ── Scan resolution ──
+
+(defun helixel--tag-names-match-p (op cl)
+  "Return non-nil if OP and CL have matching XML tag names.
+OP and CL are cons cells (BEG . END) of delimiter bounds.
+When either is nil, returns nil."
+  (and op cl
+       (string= (helixel--xml-tag-name op)
+                (helixel--xml-tag-name cl))))
+
+(defun helixel--resolve-scans (scan1 scan2 beg orig-beg orig-end)
+  "Pick between SCAN1 and SCAN2, both `helixel--block-scan' or nil.
+BEG is the start of the original region (or point).
+ORIG-BEG, ORIG-END are the original caller-provided beg/end (may be nil).
+
+Resolution rules, applied in order when both scans succeeded:
+  1. Tightest containing: prefer the scan whose bounds tightly
+     contain the original region (Bug #607).
+  2. No-region at-opening: when there is no active region and scan1's
+     opener starts at-or-after the scan position, prefer scan2 because
+     scan1 found the next pair rather than the enclosing one.
+  3. Tag mismatch: when scan1's opener/closer tag names don't match
+     but scan2's do, prefer scan2.
+Otherwise defaults to scan1.
+
+Returns the chosen `helixel--block-scan', or nil when both are nil."
+  (cond
+   ((null scan1) scan2)
+   ((null scan2) scan1)
+   (t
+    (let* ((s1-op (helixel--bs-op scan1)) (s1-cl (helixel--bs-cl scan1))
+           (s2-op (helixel--bs-op scan2)) (s2-cl (helixel--bs-cl scan2)))
+      (cond
+       ;; Rule 1: tightest containing (Bug #607).
+       ((and (>= (car s2-op) (car s1-op))
+             (<= (cdr s2-cl) (cdr s1-cl))
+             (<= (car s2-op) beg)
+             (>= (cdr s2-cl) (or orig-end beg)))
+        scan2)
+       ;; Rule 2: no region, scan1 found next instead of enclosing.
+       ((and (not orig-beg) (not orig-end)
+             (>= (car s1-op) beg))
+        scan2)
+       ;; Rule 3: tag name mismatch in scan1, scan2 has a valid pair.
+       ((and (not (helixel--tag-names-match-p s1-op s1-cl))
+             (helixel--tag-names-match-p s2-op s2-cl))
+        scan2)
+       (t scan1))))))
+
+;; ── Expand and build ──
+
+(defun helixel--compute-expand-count (op cl count orig-beg orig-end
+                                         selection-type countcurrent)
+  "Return the number of levels remaining to expand outward.
+OP and CL are the opener/closer bounds of the innermost pair.
+COUNT is the absolute requested count.  ORIG-BEG/ORIG-END are the
+caller-provided region bounds (may be nil).  SELECTION-TYPE determines
+which parts of the block are selected (inclusive, exclusive, etc.).
+When COUNTCURRENT is nil and the current selection already contains
+the delimiters, count is NOT decremented (the current level does not
+count as expansion)."
+  (if (and orig-beg orig-end (not countcurrent))
+      (let ((sel (helixel--get-block-range op cl selection-type)))
+        (if (and (<= orig-beg (car sel))
+                 (>= orig-end (cdr sel)))
+            count
+          (1- count)))
+    (1- count)))
+
+(defun helixel--expand-opener (thing op n)
+  "Find the opener N levels outward from OP by calling THING.
+Returns the new opener bounds or the original OP if not found."
+  (goto-char (car op))
+  (funcall thing n)
+  (if (match-beginning 0)
+      (cons (match-beginning 0) (match-end 0))
+    op))
+
+(defun helixel--expand-closer (thing cl n)
+  "Find the closer N levels outward from CL by calling THING.
+Returns the new closer bounds or the original CL if not found."
+  (goto-char (cdr cl))
+  (funcall thing n)
+  (if (match-beginning 0)
+      (cons (match-beginning 0) (match-end 0))
+    cl))
+
+(defun helixel--block-should-be-linewise-p (op cl type)
+  "Return non-nil if the block from OP to CL should be linewise.
+TYPE must be `inclusive', both OP and CL must be at bol,
+and visual state must not be active."
+  (save-excursion
+    (and (not (and helixel-textobj-visual-state-p-function
+                   (funcall helixel-textobj-visual-state-p-function)))
+         (eq type 'inclusive)
+         (progn (goto-char op) (bolp))
+         (progn (goto-char cl) (bolp)))))
+
+;; ── Main entry ──
+
 (defun helixel-select-block (thing beg end type count
                                    &optional
                                    selection-type
@@ -104,118 +264,49 @@ are the delimiters of a string or comment."
              (orig-end end)
              (beg (or beg (point)))
              (end (or end (point)))
-             (count (abs (or count 1)))
-             op cl op-end cl-end)
-        ;; We always assume at least one selected character.
-        (if (= beg end) (setq end (1+ end)))
-        ;; We scan twice: starting at (1+ beg) forward and at (1- end)
-        ;; backward.  The resulting selection is the smaller one.
-        (goto-char (if fixedscan beg (1+ beg)))
-        (when (and (zerop (funcall thing +1)) (match-beginning 0))
-          (setq cl (cons (match-beginning 0) (match-end 0)))
-          (goto-char (car cl))
-          (when (and (zerop (funcall thing -1)) (match-beginning 0))
-            (setq op (cons (match-beginning 0) (match-end 0)))))
-        ;; start scanning from end
-        (goto-char (if fixedscan end (1- end)))
-        (when (and (zerop (funcall thing -1)) (match-beginning 0))
-          (setq op-end (cons (match-beginning 0) (match-end 0)))
-          (goto-char (cdr op-end))
-          ;; For delimiters with a :match-close method (tags), use
-          ;; targeted forward search so nested different-name pairs
-          ;; don't steal the close.
-          (let ((mc (and (symbolp thing)
-                         (get thing 'helixel--match-close))))
-            (if (and mc (match-string 1))
-                (progn
-                  (funcall mc (match-string 1))
-                  (when (match-beginning 0)
-                    (setq cl-end (cons (match-beginning 0)
-                                       (match-end 0)))))
-              (when (and (zerop (funcall thing +1)) (match-beginning 0))
-                (setq cl-end (cons (match-beginning 0) (match-end 0)))))))
-        ;; Bug #607: use the tightest selection that contains the
-        ;; original selection.  If non selection contains the original,
-        ;; use the larger one.
-        (cond
-         ((and (not op) (not cl-end))
-          (user-error "No surrounding delimiters found"))
-         ((or (not op) ; first not found
-              (and cl-end ; second found
-                   (>= (car op-end) (car op)) ; second smaller
-                   (<= (cdr cl-end) (cdr cl))
-                   (<= (car op-end) beg)      ; second contains orig
-                   (>= (cdr cl-end) end)))
-          (setq op op-end cl cl-end)))
-        ;; When there is no active region and scan 1's opening starts
-        ;; at or after the scan position, prefer scan 2 (backward-first)
-        ;; because scan 1 found the next tag rather than the enclosing
-        ;; one.  This matters when point is between tags.
-        (when (and op-end cl-end
-                   (not orig-beg) (not orig-end)
-                   (>= (car op) beg))
-          (setq op op-end cl cl-end))
-        ;; Validate that op/cl form a matched pair. Scan 1 can produce
-        ;; mismatched tags (e.g., <div> with </p>) when point is between
-        ;; the inner closing tag and the outer closing tag.
-        ;; If mismatched, prefer scan 2 if it forms a valid pair.
-        (when (and op cl op-end cl-end)
-          (let ((op-tag (helixel--xml-tag-name op))
-                (cl-tag (helixel--xml-tag-name cl)))
-            (unless (string= op-tag cl-tag)
-              (let ((op2-tag (helixel--xml-tag-name op-end))
-                    (cl2-tag (helixel--xml-tag-name cl-end)))
-                (when (string= op2-tag cl2-tag)
-                  (setq op op-end cl cl-end))))))
-        (setq op-end op cl-end cl) ; store copy
-        ;; if the current selection contains the surrounding
-        ;; delimiters, they do not count as new selection
-        (let ((cnt (if (and orig-beg orig-end (not countcurrent))
-                       (let ((sel (helixel--get-block-range op cl
-                                                            selection-type)))
-                         (if (and (<= orig-beg (car sel))
-                                  (>= orig-end (cdr sel)))
-                             count
-                           (1- count)))
-                     (1- count))))
-          ;; When there is no active region and the selected pair
-          ;; does not contain the cursor (e.g., cursor between
-          ;; </div> and </p>), expand one level outward so the
-          ;; enclosing tag is found.
-          (when (and (or (not orig-beg) (not orig-end))
-                     (or (< beg (car op))
-                         (> beg (cdr cl))))
-            (setq cnt 1))
-          ;; starting from the innermost surrounding delimiters
-          ;; increase selection
-          (when (> cnt 0)
-            (setq op (progn
-                       (goto-char (car op-end))
-                       (funcall thing (- cnt))
-                       (if (match-beginning 0)
-                           (cons (match-beginning 0) (match-end 0))
-                         op))
-                  cl (progn
-                       (goto-char (cdr cl-end))
-                       (funcall thing cnt)
-                       (if (match-beginning 0)
-                           (cons (match-beginning 0) (match-end 0))
-                         cl)))))
-        (let ((sel (helixel--get-block-range op cl selection-type)))
-          (setq op (car sel)
-                cl (cdr sel)))
-        (cond
-         ((and (equal op orig-beg) (equal cl orig-end)
-               (or (not countcurrent) (/= count 1)))
-          (user-error "No surrounding delimiters found"))
-         ((save-excursion
-            (and (not (and helixel-textobj-visual-state-p-function
-                           (funcall helixel-textobj-visual-state-p-function)))
-                 (eq type 'inclusive)
-                 (progn (goto-char op) (bolp))
-                 (progn (goto-char cl) (bolp))))
-          (helixel-range op cl 'line :expanded t))
-         (t (helixel-range op cl type :expanded t)))))))
+             (count (abs (or count 1))))
+        ;; Ensure at least one selected character so scans don't
+        ;; start and end at the same position when beg==end.
+        (when (= beg end)
+          (setq end (1+ end)))
+        ;; Phase 1: dual-direction scan.
+        (let* ((scan1 (helixel--scan-forward-first thing beg fixedscan))
+               (scan2 (helixel--scan-backward-first thing end fixedscan))
+               ;; Phase 2: resolve which scan to prefer.
+               (chosen (helixel--resolve-scans
+                        scan1 scan2 beg orig-beg orig-end)))
+          (unless (and chosen
+                       (helixel--bs-op chosen)
+                       (helixel--bs-cl chosen))
+            (user-error "No surrounding delimiters found"))
+          (let* ((op  (helixel--bs-op chosen))
+                 (cl  (helixel--bs-cl chosen))
+                 ;; Phase 3: compute how many levels to expand.
+                 (cnt (helixel--compute-expand-count
+                       op cl count orig-beg orig-end
+                       selection-type countcurrent)))
+            ;; Special case: cursor outside the selected pair
+            ;; (e.g. between </div> and </p>).  Expand one level
+            ;; outward so the enclosing tag is found.
+            (when (and (or (not orig-beg) (not orig-end))
+                       (or (< beg (car op))
+                           (> beg (cdr cl))))
+              (setq cnt 1))
+            ;; Phase 4: expand outward.
+            (when (> cnt 0)
+              (setq op (helixel--expand-opener thing op (- cnt))
+                    cl (helixel--expand-closer thing cl cnt)))
+            ;; Phase 5: compute final range.
+            (let ((sel (helixel--get-block-range op cl selection-type)))
+              (setq op (car sel)
+                    cl (cdr sel)))
+            (cond
+             ((and (equal op orig-beg) (equal cl orig-end)
+                   (or (not countcurrent) (/= count 1)))
+              (user-error "No surrounding delimiters found"))
+             ((helixel--block-should-be-linewise-p op cl type)
+              (helixel-range op cl 'line :expanded t))
+             (t (helixel-range op cl type :expanded t)))))))))
 
 ;; ── Paren selection ──
 

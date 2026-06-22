@@ -95,37 +95,41 @@ Each (REL-BEG INS NDEL) triplet records one after-change event:
 Pushed in reverse order; finalized (nreverse) by
 `helixel--insert-finish'.")
 
-(defvar-local helixel--insert-cmd-keys nil
-  "Key vector captured at `pre-command-hook' for the current command.")
+(cl-defstruct (helixel--insert-cmd (:type vector))
+  "Per-command insert-mode recording state.
+Captured at `pre-command-hook', consumed at `post-command-hook'."
+  keys       ; Key vector captured for the current command.
+  start-point ; Point (integer) at command start.
+  events)     ; List of (BEG END LEN) triples from `after-change-functions'.
 
-(defvar-local helixel--insert-cmd-start-point nil
-  "Point (integer) at `pre-command-hook' time of the current command.")
-
-(defvar-local helixel--insert-cmd-events nil
-  "List of (BEG END LEN) triples from `after-change-functions'.
-Accumulated during the current command; consumed by
-`helixel--insert-classify-segment'.")
+(defvar-local helixel--insert-cmd nil
+  "`helixel--insert-cmd' struct for the current command.
+Nil between commands; bound during `helixel--on-insert-command'.")
 
 ;; ── after-change-functions ──
 
 (defun helixel--insert-after-change (beg end len)
-  "Push (BEG END LEN) onto `helixel--insert-cmd-events'."
-  (push (list beg end len) helixel--insert-cmd-events))
+  "Push (BEG END LEN) onto the current command's events.
+No-op when `helixel--insert-cmd' is nil (e.g. outside insert mode)."
+  (when helixel--insert-cmd
+    (push (list beg end len) (helixel--insert-cmd-events helixel--insert-cmd))))
 
 ;; ── pre / post-command hooks ──
 
 (defun helixel--on-insert-command ()
-  "Pre-command-hook: snapshot key + reset per-command change tracking.
+  "Pre-command-hook: create a fresh `helixel--insert-cmd' struct.
 Skips `helixel-insert-exit'."
   (unless (eq this-command 'helixel-insert-exit)
-    (setq helixel--insert-cmd-keys        (helixel--keyrec-capture)
-          helixel--insert-cmd-start-point (point)
-          helixel--insert-cmd-events      nil)))
+    (setq helixel--insert-cmd
+          (make-helixel--insert-cmd
+           :keys (helixel--keyrec-capture)
+           :start-point (point)
+           :events nil))))
 
 (defun helixel--insert-classify-segment ()
   "Return the segment plist for the just-finished command.
-Reads `helixel--insert-cmd-events' along with the pre-command
-snapshot of point.  Returns one of:
+Reads events and start-point from `helixel--insert-cmd'.
+Returns one of:
   (:keys VEC)
   (:changes ((REL-BEG INS NDEL) ...) :rel-point R)
 or nil for an effectively empty change.
@@ -140,10 +144,11 @@ replayed at its own relative position.
 
 Falls back to :keys if any event's span is invalid in the final
 buffer (e.g. fully reverted change)."
-  (let ((events helixel--insert-cmd-events)
-        (start helixel--insert-cmd-start-point))
+  (let ((events (helixel--insert-cmd-events helixel--insert-cmd))
+        (start (helixel--insert-cmd-start-point helixel--insert-cmd))
+        (keys (helixel--insert-cmd-keys helixel--insert-cmd)))
     (if (null events)
-        (list :keys helixel--insert-cmd-keys)
+        (list :keys keys)
       (let* ((chrono-events (nreverse events))
              (changes
               (cl-loop for (beg end len) in chrono-events
@@ -158,7 +163,7 @@ buffer (e.g. fully reverted change)."
                                      len)))
              (rel-point (- (point) start)))
         (if (eq changes :invalid)
-            (list :keys helixel--insert-cmd-keys)
+            (list :keys keys)
           (let ((net-delta 0))
             ;; Filter out no-op changes (empty insert, zero delete)
             (dolist (ch changes)
@@ -167,29 +172,25 @@ buffer (e.g. fully reverted change)."
                      (cl-every (lambda (c) (string-empty-p (nth 1 c)))
                                changes))
                 ;; Pure no-op: replay keys
-                (list :keys helixel--insert-cmd-keys)
+                (list :keys keys)
               (list :changes changes :rel-point rel-point))))))))
 
 (defun helixel--insert-post-command ()
   "Post-command-hook: build a segment for the just-finished command."
-  (when (and helixel--insert-cmd-keys
+  (when (and helixel--insert-cmd
              (not (eq this-command 'helixel-insert-exit)))
     (let ((seg (helixel--insert-classify-segment)))
       (when seg
         (push seg helixel--insert-segments)))
-    (setq helixel--insert-cmd-keys        nil
-          helixel--insert-cmd-events      nil
-          helixel--insert-cmd-start-point nil)))
+    (setq helixel--insert-cmd nil)))
 
 ;; ── Public lifecycle ──
 
 (defun helixel--insert-begin ()
   "Start insert-mode recording.
 Installs pre/post-command hooks + an after-change hook."
-  (setq helixel--insert-segments         nil
-        helixel--insert-cmd-keys         nil
-        helixel--insert-cmd-events       nil
-        helixel--insert-cmd-start-point  nil)
+  (setq helixel--insert-segments nil
+        helixel--insert-cmd       nil)
   (add-hook 'pre-command-hook       #'helixel--on-insert-command nil t)
   (add-hook 'post-command-hook      #'helixel--insert-post-command nil t)
   (add-hook 'after-change-functions #'helixel--insert-after-change nil t))
@@ -201,7 +202,7 @@ Installs pre/post-command hooks + an after-change hook."
   (remove-hook 'after-change-functions #'helixel--insert-after-change t)
   (let ((segs (nreverse helixel--insert-segments)))
     (setq helixel--insert-segments nil
-          helixel--insert-cmd-keys nil)
+          helixel--insert-cmd      nil)
     segs))
 
 ;; ── Replay ──

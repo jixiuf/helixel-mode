@@ -246,8 +246,8 @@ Reads character, looks up new delimiter, deletes old, adds new.
 The prompt shows the old delimiter being replaced."
   (let* ((old-type (helixel-delimiter-type d))
          (old-label (pcase old-type
-                      ('pair (format "%c" (helixel-delimiter-open d)))
-                      (_ (symbol-name old-type))))
+                      (:pair (format "%c" (helixel-delimiter-open d)))
+                      (_ (substring (symbol-name old-type) 1))))
          (prompt (format "replace %s ->" old-label))
          (new-char (read-char (helixel--surround-prompt prompt)))
          (new-d (helixel--surround-lookup-delimiter new-char)))
@@ -380,7 +380,7 @@ so the user can select a target with one keypress."
       (if (and sel-ctx (setq d (helixel-sel-surround-delimiter sel-ctx)))
           (let ((type (helixel-delimiter-type d)))
             (pcase type
-              ('tag
+              (:tag
                (let ((new-tag (read-string "Tag: ")))
                  (when (use-region-p)
                    (goto-char (/ (+ (region-beginning) (region-end)) 2)))
@@ -443,7 +443,7 @@ so the user can select a target with one keypress."
                    (tag (helixel-action-payload-get tx :tag)))
               (when d
                 (pcase type
-                  ('tag
+                  (:tag
                    (when tag (helixel--surround-replace-tag tag d)))
                   (_
                    (when new-char
@@ -474,7 +474,11 @@ Clears `helixel--pending-surround-op' regardless."
   :advance  nil
   :display  (lambda (ctx)
               (if-let* ((d (helixel-sel-surround-delimiter ctx)))
-                  (format "@%s" (helixel-delimiter-type d))
+                  (format "@%s"
+                          (substring
+                           (symbol-name
+                            (helixel-delimiter-type d))
+                           1))
                 "surround")))
 
 (defun helixel-surround--init ()

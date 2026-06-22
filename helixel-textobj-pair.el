@@ -1039,31 +1039,34 @@ Handles backslash-escaped quotes via `helixel--preceded-by-odd-backslashes-p'."
         1))))
 
 (defun helixel-make-pair-delimiter (open close)
-  "Create a pair delimiter for OPEN and CLOSE characters."
+  "Create a pair delimiter for OPEN and CLOSE characters.
+Returns a `helixel-delimiter' struct with type :pair.
+When OPEN equals CLOSE (quote-style), no adjust-for-jump is set."
   (let ((equal-p (= open close)))
-    (list :type 'pair
-          :open open :close close
-          :finder (if equal-p
-                      `(lambda (dir)
-                         (helixel--find-quote-pair ,open dir))
-                    `(lambda (dir) (helixel-up-paren ,open ,close dir)))
-          :adjust-for-jump
-          (unless equal-p
-            `(lambda () (when (eq (char-after) ,open) (forward-char))))
-          :nl-p nil)))
+    (helixel--make-delimiter-raw
+     :type :pair
+     :open open :close close
+     :finder (if equal-p
+                 `(lambda (dir)
+                    (helixel--find-quote-pair ,open dir))
+               `(lambda (dir) (helixel-up-paren ,open ,close dir)))
+     :adjust-for-jump
+     (unless equal-p
+       `(lambda () (when (eq (char-after) ,open) (forward-char)))))))
 
 (defun helixel-make-tag-delimiter ()
-  "Create a tag delimiter."
-  (list :type 'tag
-        :open "<"
-        :finder (lambda (dir)
-                  (helixel--tag-move-past-markup dir)
-                  (if (< dir 0)
-                      (helixel--tag-find-opener-backward)
-                    (helixel-up-xml-tag dir)))
-        :match-close #'helixel--find-matching-tag-close
-        :adjust-for-jump #'helixel--tag-adjust-for-jump
-        :nl-p t))
+  "Create a tag delimiter.
+Returns a `helixel-delimiter' struct with type :tag."
+  (helixel--make-delimiter-raw
+   :type :tag
+   :open "<"
+   :finder (lambda (dir)
+             (helixel--tag-move-past-markup dir)
+             (if (< dir 0)
+                 (helixel--tag-find-opener-backward)
+               (helixel-up-xml-tag dir)))
+   :match-close #'helixel--find-matching-tag-close
+   :adjust-for-jump #'helixel--tag-adjust-for-jump))
 
 
 (provide 'helixel-textobj-pair)

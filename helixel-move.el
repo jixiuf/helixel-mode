@@ -77,7 +77,9 @@ the action carries no tx with a runner)."
        (helixel-define-command ,name
            (:category movement :subcat ,type
                       :clear-highlights ,clear
-                      ,@(when rev `(:motion-extra (list :reverse-command ',rev))))
+                      ,@(when rev
+                          `(:motion-extra
+                            (list :reverse-command ',rev))))
          ;; Clear stale pending-sel so pure motion commands
          ;; (j, gh, etc.) don't inherit a selection from a prior
        ;; edit (e.g. insert-selection-end from insert-exit).
@@ -794,7 +796,7 @@ a fenced block."
     (setq target (save-excursion
                    (goto-char search-pos)
                    (cond
-                    ((and d (eq (helixel-delimiter-type d) 'pair))
+                    ((and d (eq (helixel-delimiter-type d) :pair))
                      (helixel--up-via-syntax-table d backward-p))
                     ((and d (helixel-delimiter-type d))
                      (helixel--up-via-bounds d backward-p)))))

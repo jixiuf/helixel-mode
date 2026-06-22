@@ -61,17 +61,19 @@
 ;;     The command did NOT modify the buffer (pure motion, no-op, ...).
 ;;     Replay via `execute-kbd-macro' / `insert-char'.
 ;;
-;;   (:text STR :delete-before N :offset O)
-;;     The command DID modify the buffer (self-insert, electric-pair
-;;     pair insertion, completion-preview accept, snippet expand, ...).
-;;     STR is the net inserted substring (the post-state buffer text
-;;     within the command's change span).  N is the number of characters
-;;     to delete BEFORE the insertion site at replay time.  O is the
-;;     offset of point from the END of the insertion at recording time.
-;;     Replay = `(delete-char -N)' then `(insert STR)' then
-;;     `(goto-char (+ (point) O))'.  `post-self-insert-hook' is NOT
-;;     re-fired, because STR already reflects whatever the hook
-;;     produced live — re-firing would double-insert pairs.
+;;   (:changes ((REL-BEG INS NDEL) ...) :rel-point R)
+;;     The command DID modify the buffer.  Each (REL-BEG INS NDEL)
+;;     triplet is one after-change event, recorded independently
+;;     (Evil-style):
+;;       REL-BEG — position relative to pre-command point
+;;       INS     — text inserted (from final buffer state)
+;;       NDEL    — exact deleted char count (len from
+;;                 `after-change-functions')
+;;       R       — final point relative to pre-command base.
+;;     Replay iterates the triplets: goto base+REL-BEG, delete
+;;     NDEL chars, insert INS, then goto base+R.
+;;     `post-self-insert-hook' is NOT re-fired — INS already
+;;     contains whatever the hook produced live.
 ;;
 ;; Public API (consumed by helixel-state, helixel-editing,
 ;; helixel-repeat):
@@ -84,7 +86,12 @@
   "List of insert-mode segments captured during the current insert session.
 Each element is one of:
   (:keys VEC)
-  (:text STR :delete-before N :offset O)
+  (:changes ((REL-BEG INS NDEL) ...) :rel-point R)
+Each (REL-BEG INS NDEL) triplet records one after-change event:
+  REL-BEG — position relative to pre-command point
+  INS     — inserted text (buffer-substring from final state)
+  NDEL    — exact deleted char count (len from `after-change-functions')
+  :rel-point R — final point relative to pre-command base.
 Pushed in reverse order; finalized (nreverse) by
 `helixel--insert-finish'.")
 
@@ -120,33 +127,48 @@ Skips `helixel-insert-exit'."
 Reads `helixel--insert-cmd-events' along with the pre-command
 snapshot of point.  Returns one of:
   (:keys VEC)
-  (:text STR :delete-before N :offset O)
-or nil for an effectively empty change."
-  (let ((events helixel--insert-cmd-events))
+  (:changes ((REL-BEG INS NDEL) ...) :rel-point R)
+or nil for an effectively empty change.
+
+Each after-change event is recorded as an independent
+\(REL-BEG INS NDEL) triplet (Evil-style, precise):
+  REL-BEG = beg - pre-cmd-start  (relative position)
+  INS     = buffer-substring(beg, end) at post-command time
+  NDEL    = len (exact deleted count from `after-change-functions')
+Disjoint changes DON'T corrupt each other — each triplet is
+replayed at its own relative position.
+
+Falls back to :keys if any event's span is invalid in the final
+buffer (e.g. fully reverted change)."
+  (let ((events helixel--insert-cmd-events)
+        (start helixel--insert-cmd-start-point))
     (if (null events)
-        ;; No buffer modification: replay the keystroke verbatim.
         (list :keys helixel--insert-cmd-keys)
-      (let* ((mn (apply #'min (mapcar #'car  events)))
-             (mx (apply #'max (mapcar #'cadr events)))
-             (span (- mx mn)))
-        (cond
-         ;; Span collapsed to empty range — pure deletion or fully
-         ;; reverted change.  Safest replay is the keystroke.
-         ((<= span 0)
-          (list :keys helixel--insert-cmd-keys))
-         (t
-          (let* ((str   (buffer-substring-no-properties mn mx))
-                 (offset (- (point) mx))
-                 ;; `delete-before' — chars to remove just-before the
-                 ;; insertion site at replay time.  Approximation:
-                 ;; how many chars BEFORE the post-state insertion
-                 ;; site existed pre-command and were eaten by the
-                 ;; replace-style change.
-                 (start helixel--insert-cmd-start-point)
-                 (delete-before (max 0 (- start mn))))
-            (list :text str
-                  :delete-before delete-before
-                  :offset offset))))))))
+      (let* ((chrono-events (nreverse events))
+             (changes
+              (cl-loop for (beg end len) in chrono-events
+                       for rel = (- beg start)
+                       ;; Guard: if the span doesn't exist in the final
+                       ;; buffer (fully reverted), fall back to keys.
+                       for valid = (and (>= beg (point-min))
+                                        (<= end (point-max)))
+                       if (not valid) return :invalid
+                       collect (list rel
+                                     (buffer-substring-no-properties beg end)
+                                     len)))
+             (rel-point (- (point) start)))
+        (if (eq changes :invalid)
+            (list :keys helixel--insert-cmd-keys)
+          (let ((net-delta 0))
+            ;; Filter out no-op changes (empty insert, zero delete)
+            (dolist (ch changes)
+              (cl-incf net-delta (- (length (nth 1 ch)) (nth 2 ch))))
+            (if (and (zerop net-delta)
+                     (cl-every (lambda (c) (string-empty-p (nth 1 c)))
+                               changes))
+                ;; Pure no-op: replay keys
+                (list :keys helixel--insert-cmd-keys)
+              (list :changes changes :rel-point rel-point))))))))
 
 (defun helixel--insert-post-command ()
   "Post-command-hook: build a segment for the just-finished command."
@@ -191,18 +213,17 @@ Installs pre/post-command hooks + an after-change hook."
 (defun helixel--execute-keys (keys-or-segments)
   "Execute insert-mode replay payload KEYS-OR-SEGMENTS.
 
-Accepted shapes:
-  * Segment list: each element is (:keys VEC) or
-    (:text STR :delete-before N :offset O).  Produced by
-    `helixel--insert-finish'.
-  * Raw key vector / string: hand-built payloads.  Replayed
-    char-by-char with `post-self-insert-hook' firing so
-    `electric-pair-mode' works.
+KEYS-OR-SEGMENTS is either a segment list (produced by
+`helixel--insert-finish') where each element is \=`(:keys VEC)
+or \=`(:changes ((REL-BEG INS NDEL) ...) :rel-point R), or a
+raw key vector/string.
 
-A `:text' segment is replayed by deleting N chars before point
-\(if N > 0\), inserting STR, and moving point by O.  The
-`post-self-insert-hook' is NOT re-fired — STR already contains
-whatever the hook produced live."
+`:changes' replay: for each (REL-BEG INS NDEL), goto base+REL-BEG,
+delete NDEL chars, insert INS.  Then goto base+:rel-point.
+`post-self-insert-hook' is NOT re-fired.
+
+Raw key vectors replay char-by-char with `post-self-insert-hook'
+firing (for `electric-pair-mode')."
   (helixel-with-replay-as 'dot
     (cond
      ;; Empty payload.
@@ -217,19 +238,23 @@ whatever the hook produced live."
            (keywordp (caar keys-or-segments)))
       (dolist (seg keys-or-segments)
         (cond
-         ((plist-member seg :text)
-          (let* ((str    (plist-get seg :text))
-                 (del    (or (plist-get seg :delete-before) 0))
-                 (offset (or (plist-get seg :offset) 0))) ; ctx-lint-ok
-            (when (> del 0)
-              (delete-char (- (min del (- (point) (point-min))))))
-            (when (stringp str)
-              (insert str))
-            (unless (zerop offset)
-              (goto-char (+ (point) offset)))))
+         ((plist-member seg :changes)
+          (let* ((changes (plist-get seg :changes))
+                 (rel-point (or (plist-get seg :rel-point) 0))
+                 (base (point)))
+            (dolist (ch changes)
+              (let ((rel-beg (nth 0 ch))
+                    (ins     (nth 1 ch))
+                    (ndel    (nth 2 ch)))
+                (goto-char (+ base rel-beg))
+                (when (> ndel 0)
+                  (delete-char (min ndel (- (point-max) (point)))))
+                (when (and (stringp ins) (not (string-empty-p ins)))
+                  (insert ins))))
+            (goto-char (+ base rel-point))))
          ((plist-member seg :keys)
           (helixel--execute-keys-vector (plist-get seg :keys))))))
-     ;; Legacy raw key vector OR key string (`kbd' returns a string).
+     ;; Raw key vector or key string (`kbd' returns a string).
      ((or (vectorp keys-or-segments) (stringp keys-or-segments))
       (helixel--execute-keys-vector
        (if (stringp keys-or-segments)

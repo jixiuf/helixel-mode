@@ -1599,7 +1599,7 @@ The leading newline is part of content so mt adds newline only before close."
 ;; ── Segment-based insert recording (text-chunk path) ──
 
 (ert-deftest helixel-test-insert-record-text-segment-electric-pair ()
-  "Insert-mode recording captures `()' as one :text segment when
+  "Insert-mode recording captures `()' as :changes segment when
 `electric-pair-mode' is active.  Replay re-inserts the literal
 `()' (no double-pair) and lands point between the parens."
   (helixel-test-with-buffer ""
@@ -1614,11 +1614,13 @@ The leading newline is part of content so mt adds newline only before close."
             (call-interactively 'self-insert-command)
             (run-hooks 'post-command-hook))
           (let ((segs (helixel--insert-finish)))
-            ;; One segment, text "()", point-offset -1.
+            ;; One :changes segment.  Exact event count depends on
+            ;; how electric-pair-mode works in this Emacs version
+            ;; (may produce 2-4 after-change events — some with
+            ;; intermediate delete+reinsert).  What matters is that
+            ;; replay reproduces the correct final result.
             (should (= 1 (length segs)))
-            (should (equal :text (caar segs)))
-            (should (equal "()" (plist-get (car segs) :text)))
-            (should (= -1 (plist-get (car segs) :offset)))
+            (should (equal :changes (caar segs)))
             ;; Replay into a fresh buffer: re-inserts `()' verbatim.
             (erase-buffer)
             (helixel--execute-keys segs)
@@ -1629,7 +1631,7 @@ The leading newline is part of content so mt adds newline only before close."
 
 (ert-deftest helixel-test-insert-record-text-segment-completion ()
   "Insert-mode recording captures completion-style insertion as a
-:text segment (the FULL inserted string), regardless of which
+:changes segment (the FULL inserted string), regardless of which
 command performed it.  Models `completion-preview-insert' / snippet
 expansion / any non-self-insert insertion command."
   (helixel-test-with-buffer ""
@@ -1648,8 +1650,11 @@ expansion / any non-self-insert insertion command."
       (run-hooks 'post-command-hook))
     (let ((segs (helixel--insert-finish)))
       (should (= 3 (length segs)))
-      (should (equal :text (caar (last segs))))
-      (should (equal "obar" (plist-get (car (last segs)) :text)))
+      (should (equal :changes (caar (last segs))))
+      (let ((changes (plist-get (car (last segs)) :changes)))
+        (should (= 1 (length changes)))
+        (should (equal "obar" (nth 1 (nth 0 changes))))
+        (should (= 0 (nth 2 (nth 0 changes)))))
       ;; Replay in a fresh buffer reproduces `foobar'.
       (erase-buffer)
       (helixel--execute-keys segs)
@@ -1672,9 +1677,9 @@ insertions."
       (ignore-errors (call-interactively 'forward-char))
       (run-hooks 'post-command-hook))
     (let ((segs (helixel--insert-finish)))
-      ;; First segment :text "a"; second segment :keys (motion).
+      ;; First segment :changes (a); second segment :keys (motion).
       (should (= 2 (length segs)))
-      (should (equal :text (caar segs)))
+      (should (equal :changes (caar segs)))
       (should (equal :keys (caar (cdr segs)))))))
 
 ;; ── Visual exit on edit ──

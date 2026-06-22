@@ -496,10 +496,10 @@ returns t (allowing in-place repeat) instead of nil."
 
 (ert-deftest helixel-test-chain-insert-electric-pair-replay ()
   "A chain whose `:action-list' contains an insert-text tx with a
-multi-char `:text' segment replays the segment verbatim at the
-new position — the pattern produced when `electric-pair-mode' is
-on and user types `(' inside a chain (captured as a single `()'
-segment).
+multi-char `:changes' segment replays each change triplet at its
+relative position — the pattern produced when `electric-pair-mode' is
+on and user types `(' inside a chain (captured as two insertion
+events).
 
 We build the chain tx by hand rather than driving the full
 `pre/post-command-hook' pipeline (batch mode does not auto-run
@@ -508,9 +508,9 @@ chain-runner → insert-text-runner replay path, not capture."
   (helixel-chain-test-with-buffer "abc\nxyz\n"
     (let* ((insert-action (helixel-action-create 'insert-text nil
                         :runner (helixel--op-runner 'insert-text)
-                        :keys (list (list :text "()"
-                                          :delete-before 0
-                                          :offset -1))))
+                        :keys (list (list :changes
+                                          '((0 "(" 0) (1 ")" 0))
+                                          :rel-point 1))))
            (chain-action  (helixel-action-create 'chain nil
                         :runner #'helixel--repeat-chain-runner
                         :display "chain"
@@ -528,12 +528,11 @@ chain-runner → insert-text-runner replay path, not capture."
 
 (ert-deftest helixel-test-insert-record-composition-multi-event ()
   "Two after-change events in one command (e.g. composition / IME)
-are collapsed into a single `:text' segment carrying the
-MIN..MAX buffer substring.
+are recorded as independent (REL-BEG INS NDEL) triplets in a
+`:changes' segment.
 
 Simulates a composition that fires (BEG END 0) then
-(BEG END+2 0) within one command — covered by min/max span
-collapse in `helixel--insert-classify-segment'."
+(BEG END+2 0) within one command."
   (helixel-test-with-buffer ""
     (helixel--insert-begin)
     ;; Simulate a custom "composition" command that fires two
@@ -545,14 +544,16 @@ collapse in `helixel--insert-classify-segment'."
       (run-hooks 'post-command-hook))
     (let ((segs (helixel--insert-finish)))
       (should (= 1 (length segs)))
-      (should (eq :text (caar segs)))
-      (should (equal "a明天" (plist-get (car segs) :text))))))
+      (should (eq :changes (caar segs)))
+      (let* ((changes (plist-get (car segs) :changes))
+             (ins-text (mapconcat (lambda (c) (nth 1 c)) changes "")))
+        (should (equal "a明天" ins-text))))))
 
 (ert-deftest helixel-test-insert-record-replace-with-delete-before ()
   "A command that DELETES some prefix then INSERTS new text
 (`completion-preview-insert' replacing `fo' → `foo') is captured
-as a single `:text' segment with `:delete-before' set, so replay
-deletes the prefix before inserting."
+as a `:changes' segment with precise NDEL from
+`after-change-functions'."
   (helixel-test-with-buffer "fo"
     (goto-char (point-max))
     (helixel--insert-begin)
@@ -566,9 +567,15 @@ deletes the prefix before inserting."
     (let* ((segs (helixel--insert-finish))
            (seg  (car segs)))
       (should (= 1 (length segs)))
-      (should (eq :text (car seg)))
-      (should (equal "foo" (plist-get seg :text)))
-      (should (= 2 (plist-get seg :delete-before)))
+      (should (eq :changes (car seg)))
+      (let ((changes (plist-get seg :changes)))
+        (should (= 2 (length changes)))
+        ;; First change: deletion of "fo" (ndel=2, no insert)
+        (should (= 2 (nth 2 (nth 0 changes))))
+        (should (string-empty-p (nth 1 (nth 0 changes))))
+        ;; Second change: insertion of "foo" (ndel=0, 3 chars)
+        (should (= 0 (nth 2 (nth 1 changes))))
+        (should (equal "foo" (nth 1 (nth 1 changes)))))
       ;; Replay in a buffer with the same prefix typed.
       (helixel-test-with-buffer "fo"
         (goto-char (point-max))

@@ -29,10 +29,6 @@
 (require 'ert)
 (require 'helixel)
 
-
-(require 'ert)
-(require 'helixel)
-
 ;;; Line selection auto-advance for `.` repeat
 
 (ert-deftest helixel-test-repeat-line-advance-insert ()
@@ -539,8 +535,6 @@ than call-interactively (which triggers mode-specific side effects)."
 
 ;;; Code:
 
-(require 'ert)
-(require 'helixel)
 (require 'helixel-search)
 
 

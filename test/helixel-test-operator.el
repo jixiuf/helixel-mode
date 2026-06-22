@@ -30,8 +30,6 @@
 (require 'helixel)
 
 
-(require 'ert)
-(require 'helixel)
 
 ;;; New operators: case, comment, shell, fill
 

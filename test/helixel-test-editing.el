@@ -29,10 +29,6 @@
 (require 'ert)
 (require 'helixel)
 
-
-(require 'ert)
-(require 'helixel)
-
 ;;; Repeat Edit tests
 
 ;; ---------------------------------------------------------------------------

@@ -28,468 +28,415 @@
 
 (require 'ert)
 (require 'helixel)
+(require 'helixel-test-common)
 
-
-(require 'ert)
-(require 'helixel)
 
 ;;; Word text object tests
 
 (ert-deftest helixel-test-textobj-word-basic ()
   "Test basic word text object selection."
-  (with-temp-buffer
-    (insert ";; This buffer is for notes.")
-    (goto-char 4) ; at "T" of "This"
+  (helixel-test-with-buffer '(:text ";; This buffer is for notes." :start 4)
     (call-interactively #'helixel-mark-inner-word)
     (should (eql (region-beginning) 4))
-    (should (eql (region-end) 8)))
-  (with-temp-buffer
-    (insert ";; This buffer is for notes.")
-    (goto-char 4)
+    (should (eql (region-end) 8))
+)
+  (helixel-test-with-buffer '(:text ";; This buffer is for notes." :start 4)
     (call-interactively #'helixel-mark-a-word)
     (should (eql (region-beginning) 4))
-    (should (eql (region-end) 9))))
+    (should (eql (region-end) 9))
+))
 
 (ert-deftest helixel-test-textobj-word-select-first ()
   "Test selecting first word in buffer."
-  (with-temp-buffer
-    (insert "(a)")
-    (goto-char 2) ; inside the parens, on "a"
+  (helixel-test-with-buffer '(:text "(a)" :start 2)
     (call-interactively #'helixel-mark-inner-word)
     (should (eql (region-beginning) 2))
-    (should (eql (region-end) 3))))
+    (should (eql (region-end) 3))
+))
 
 (ert-deftest helixel-test-textobj-word-whitespace-line-bound ()
   "Test selecting word when surrounded by whitespace."
-  (with-temp-buffer
-    (insert "foo\n  bar")
-    (goto-char 7)
+  (helixel-test-with-buffer '(:text "foo
+  bar" :start 7)
     (call-interactively #'helixel-mark-inner-word)
-    (should (= (region-beginning) 7))))
+    (should (= (region-beginning) 7))
+))
 
 (ert-deftest helixel-test-textobj-WORD-basic ()
   "Test basic WORD text object selection."
-  (with-temp-buffer
-    (insert ";; This buffer is for notes.")
-    (goto-char 4)
+  (helixel-test-with-buffer '(:text ";; This buffer is for notes." :start 4)
     (call-interactively #'helixel-mark-inner-WORD)
     (should (= (region-beginning) 4))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 (ert-deftest helixel-test-textobj-word-cjk ()
   "Test word text object with CJK characters."
-  (with-temp-buffer
-    (insert "abc漢字")
-    (goto-char 1)
+  (helixel-test-with-buffer "abc漢字"
     (call-interactively #'helixel-mark-inner-word)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 4))))
+    (should (= (region-end) 4))
+))
 
 ;;; Symbol text object tests
 
 (ert-deftest helixel-test-textobj-symbol-basic ()
   "Test basic symbol text object selection."
-  (with-temp-buffer
-    (insert ";; This buffer is for notes.")
-    (goto-char 4) ; at "T" of "This"
+  (helixel-test-with-buffer '(:text ";; This buffer is for notes." :start 4)
     (call-interactively #'helixel-mark-inner-symbol)
     (should (= (region-beginning) 4))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 (ert-deftest helixel-test-textobj-eob-symbol ()
   "Test inner symbol at end of buffer selects last symbol."
-  (with-temp-buffer
-    (insert "hello world")
-    (goto-char (point-max)) ; EOB after "world"
+  (helixel-test-with-buffer '(:text "hello world" :start (point-max))
     (call-interactively #'helixel-mark-inner-symbol)
-    (should (= (region-beginning) 7))  ; start of "world"
-    (should (= (region-end) 12))))     ; end of "world"
+    (should (= (region-beginning) 7))
+    (should (= (region-end) 12))
+))     ; end of "world"
 
 (ert-deftest helixel-test-textobj-eob-word ()
   "Test inner word at end of buffer selects last word."
-  (with-temp-buffer
-    (insert "hello world")
-    (goto-char (point-max))
+  (helixel-test-with-buffer '(:text "hello world" :start (point-max))
     (call-interactively #'helixel-mark-inner-word)
     (should (= (region-beginning) 7))
-    (should (= (region-end) 12))))
+    (should (= (region-end) 12))
+))
 
 (ert-deftest helixel-test-textobj-eob-a-symbol ()
   "Test a-symbol at end of buffer selects last symbol with leading ws."
-  (with-temp-buffer
-    (insert "hello world")
-    (goto-char (point-max))
+  (helixel-test-with-buffer '(:text "hello world" :start (point-max))
     (call-interactively #'helixel-mark-a-symbol)
-    ;; a-variant includes leading whitespace when no trailing ws
     (should (= (region-beginning) 6))
-    (should (= (region-end) 12))))
+    (should (= (region-end) 12))
+))
 
 (ert-deftest helixel-test-textobj-eob-trailing-ws ()
   "Test inner symbol at EOB with trailing whitespace skips ws."
-  (with-temp-buffer
-    (insert "hello world   \n\n")
-    (goto-char (point-max))
+  (helixel-test-with-buffer '(:text "hello world   
+
+" :start (point-max))
     (call-interactively #'helixel-mark-inner-symbol)
     (should (= (region-beginning) 7))
-    (should (= (region-end) 12))))
+    (should (= (region-end) 12))
+))
 
 (ert-deftest helixel-test-textobj-eob-multiline ()
   "Test inner symbol at EOB in multiline buffer selects last symbol."
-  (with-temp-buffer
-    (insert "worldworld\nhello hello\nhello\nhello\nhello world")
-    (goto-char (point-max)) ; EOB after 'd' in last "world"
+  (helixel-test-with-buffer '(:text "worldworld
+hello hello
+hello
+hello
+hello world" :start (point-max))
     (call-interactively #'helixel-mark-inner-symbol)
-    (let ((last-line-start (save-excursion
-                             (goto-char (point-min))
-                             (forward-line 4)
-                             (point))))
-      (should (= (region-beginning) (+ last-line-start 6)))
-      (should (= (region-end) (point-max))))))
+    (let ((last-line-start (save-excursion (goto-char (point-min)) (forward-line 4) (point)))) (should (= (region-beginning) (+ last-line-start 6))) (should (= (region-end) (point-max))))
+))
 
 ;;; Sentence text object tests
 
 (ert-deftest helixel-test-textobj-sentence-basic ()
   "Test basic sentence text object selection."
-  (with-temp-buffer
-    (insert "This is sentence one. This is sentence two.")
-    (goto-char 1)
+  (helixel-test-with-buffer "This is sentence one. This is sentence two."
     (call-interactively #'helixel-mark-inner-sentence)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 44))))
+    (should (= (region-end) 44))
+))
 
 (ert-deftest helixel-test-textobj-sentence-select ()
   "Test selecting sentence from middle."
-  (with-temp-buffer
-    (insert "This is sentence one. This is sentence two.")
-    (goto-char 10)
+  (helixel-test-with-buffer '(:text "This is sentence one. This is sentence two." :start 10)
     (call-interactively #'helixel-mark-inner-sentence)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 44))))
+    (should (= (region-end) 44))
+))
 
 ;;; Paragraph text object tests
 
 (ert-deftest helixel-test-textobj-paragraph-basic ()
   "Test basic paragraph text object selection."
-  (with-temp-buffer
-    (insert ";; This buffer is for notes,
+  (helixel-test-with-buffer ";; This buffer is for notes,
 ;; and for Lisp evaluation.
 
-;; Another paragraph here.")
-    (goto-char 1)
+;; Another paragraph here."
     (call-interactively #'helixel-mark-inner-paragraph)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 58))))
+    (should (= (region-end) 58))
+))
 
 (ert-deftest helixel-test-textobj-paragraph-select ()
   "Test selecting paragraph at different positions."
-  (with-temp-buffer
-    (insert "First paragraph.
+  (helixel-test-with-buffer "First paragraph.
 
-Second paragraph.")
-    (goto-char 1)
+Second paragraph."
     (call-interactively #'helixel-mark-inner-paragraph)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 18))))
+    (should (= (region-end) 18))
+))
 
 ;;; Outer (a) text object tests
 
 (ert-deftest helixel-test-textobj-a-word ()
   "Test a-word text object selection."
-  (with-temp-buffer
-    (insert ";; This buffer is for notes.")
-    (goto-char 4)
+  (helixel-test-with-buffer '(:text ";; This buffer is for notes." :start 4)
     (call-interactively #'helixel-mark-a-word)
     (should (= (region-beginning) 4))
-    (should (= (region-end) 9))))
+    (should (= (region-end) 9))
+))
 
 (ert-deftest helixel-test-textobj-a-symbol ()
   "Test a-symbol text object selection."
-  (with-temp-buffer
-    (insert ";; This buffer is for notes.")
-    (goto-char 4)
+  (helixel-test-with-buffer '(:text ";; This buffer is for notes." :start 4)
     (call-interactively #'helixel-mark-a-symbol)
     (should (= (region-beginning) 4))
-    (should (= (region-end) 9))))
+    (should (= (region-end) 9))
+))
 
 (ert-deftest helixel-test-textobj-a-sentence ()
   "Test a-sentence text object selection."
-  (with-temp-buffer
-    (insert "This is sentence one. This is sentence two.")
-    (goto-char 1)
+  (helixel-test-with-buffer "This is sentence one. This is sentence two."
     (call-interactively #'helixel-mark-a-sentence)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 44))))
+    (should (= (region-end) 44))
+))
 
 (ert-deftest helixel-test-textobj-a-paragraph ()
   "Test a-paragraph text object selection."
-  (with-temp-buffer
-    (insert ";; This buffer is for notes,
+  (helixel-test-with-buffer ";; This buffer is for notes,
 ;; and for Lisp evaluation.
 
-;; Another paragraph here.")
-    (goto-char 1)
+;; Another paragraph here."
     (call-interactively #'helixel-mark-a-paragraph)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 58))))
+    (should (= (region-end) 58))
+))
 
 ;;; Paren text object tests
 
  (ert-deftest helixel-test-textobj-paren-inner ()
   "Test inner paren text object."
-  (with-temp-buffer
-    (insert "(hello)")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "(hello)" :start 2)
     (call-interactively #'helixel-mark-inner-paren)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
  (ert-deftest helixel-test-textobj-paren-outer ()
   "Test outer paren text object."
-  (with-temp-buffer
-    (insert "(hello)")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "(hello)" :start 2)
     (call-interactively #'helixel-mark-a-paren)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 ;;; Bracket text object tests
 
  (ert-deftest helixel-test-textobj-bracket-inner ()
   "Test inner bracket text object."
-  (with-temp-buffer
-    (insert "[hello]")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "[hello]" :start 2)
     (call-interactively #'helixel-mark-inner-bracket)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
  (ert-deftest helixel-test-textobj-bracket-outer ()
   "Test outer bracket text object."
-  (with-temp-buffer
-    (insert "[hello]")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "[hello]" :start 2)
     (call-interactively #'helixel-mark-a-bracket)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 ;;; Brace text object tests
 
  (ert-deftest helixel-test-textobj-brace-inner ()
   "Test inner brace text object."
-  (with-temp-buffer
-    (insert "{hello}")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "{hello}" :start 2)
     (call-interactively #'helixel-mark-inner-brace)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
  (ert-deftest helixel-test-textobj-brace-outer ()
   "Test outer brace text object."
-  (with-temp-buffer
-    (insert "{hello}")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "{hello}" :start 2)
     (call-interactively #'helixel-mark-a-brace)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 ;;; Angle bracket text object tests
 
  (ert-deftest helixel-test-textobj-angle-inner ()
   "Test inner angle bracket text object."
-  (with-temp-buffer
-    (insert "<hello>")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "<hello>" :start 2)
     (call-interactively #'helixel-mark-inner-angle)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
  (ert-deftest helixel-test-textobj-angle-outer ()
   "Test outer angle bracket text object."
-  (with-temp-buffer
-    (insert "<hello>")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "<hello>" :start 2)
     (call-interactively #'helixel-mark-a-angle)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 ;;; Paren core-correctness tests
 
 (ert-deftest helixel-test-textobj-paren-nested-inner ()
   "mi( selects innermost paren pair in ((inner) outer)."
-  (with-temp-buffer
-    (insert "((inner) outer)")
-    (goto-char 4)                  ; on 'n' of inner
+  (helixel-test-with-buffer '(:text "((inner) outer)" :start 4)
     (call-interactively #'helixel-mark-inner-paren)
     (should (= (region-beginning) 3))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 (ert-deftest helixel-test-textobj-paren-nested-2count ()
   "2mi( selects the outer paren pair in ((inner) outer)."
-  (with-temp-buffer
-    (insert "((inner) outer)")
-    (goto-char 4)                  ; on 'n' of inner
-    (call-interactively (lambda () (interactive)
-                           (helixel-mark-inner-paren 2)))
-    ;; Outer exclusive range: (cdr op . car cl) = (2 . 15)
-    ;; after outer ( at pos 1, includes inner ( at pos 2
+  (helixel-test-with-buffer '(:text "((inner) outer)" :start 4)
+    (call-interactively (lambda nil (interactive) (helixel-mark-inner-paren 2)))
     (should (= (region-beginning) 2))
-    (should (= (region-end) 15))))
+    (should (= (region-end) 15))
+))
 
 (ert-deftest helixel-test-textobj-paren-cursor-on-delimiter ()
   "mi( with cursor on '(' selects inner content."
-  (with-temp-buffer
-    (insert "(hello)")
-    (goto-char 1)                  ; on '('
+  (helixel-test-with-buffer "(hello)"
     (call-interactively #'helixel-mark-inner-paren)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
 (ert-deftest helixel-test-textobj-paren-cursor-on-close-delimiter ()
   "mi( with cursor on ')' selects inner content."
-  (with-temp-buffer
-    (insert "(hello)")
-    (goto-char 7)                  ; on ')'
+  (helixel-test-with-buffer '(:text "(hello)" :start 7)
     (call-interactively #'helixel-mark-inner-paren)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
 (ert-deftest helixel-test-textobj-paren-multiline ()
   "mi( works across multiple lines."
-  (with-temp-buffer
-    (insert "(\nhello\nworld\n)")
-    (goto-char 4)
+  (helixel-test-with-buffer '(:text "(
+hello
+world
+)" :start 4)
     (call-interactively #'helixel-mark-inner-paren)
-    ;; inner = content between ( and ), exclusive
     (should (= (region-beginning) 3))
-    (should (= (region-end) 15))))
+    (should (= (region-end) 15))
+))
 
 (ert-deftest helixel-test-textobj-paren-empty ()
   "mi( on empty parens () returns zero-width selection."
-  (with-temp-buffer
-    (insert "()")
-    (goto-char 1)                  ; on '('
+  (helixel-test-with-buffer "()"
     (call-interactively #'helixel-mark-inner-paren)
-    ;; inner selection is empty: region-beginning == region-end
     (should (= (region-beginning) (region-end)))
-    (should (= (region-beginning) 2))))
+    (should (= (region-beginning) 2))
+))
 
 ;;; Quote edge-case tests
 
 (ert-deftest helixel-test-textobj-quote-escaped ()
   "Quoted string with escaped inner quotes is selected correctly."
-  (with-temp-buffer
-    (insert "\"hello \\\"world\\\"!\"")
-    (goto-char 4)
+  (helixel-test-with-buffer '(:text "\"hello \\\"world\\\"!\"" :start 4)
     (call-interactively #'helixel-mark-inner-double-quote)
-    ;; inner content: hello \"world\"! (between outer quotes)
     (should (= (region-beginning) 2))
-    ;; End should be at the position before the closing "
-    (should (char-equal (char-before (region-end)) ?!))))
+    (should (char-equal (char-before (region-end)) 33))
+))
 
 ;;; Quote text object tests
 
 (ert-deftest helixel-test-textobj-single-quote-inner ()
   "Test inner single-quote text object."
-  (with-temp-buffer
-    (insert "'hello'")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "'hello'" :start 2)
     (call-interactively #'helixel-mark-inner-single-quote)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
 (ert-deftest helixel-test-textobj-single-quote-outer ()
   "Test outer single-quote text object."
-  (with-temp-buffer
-    (insert "'hello'")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "'hello'" :start 2)
     (call-interactively #'helixel-mark-a-single-quote)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 (ert-deftest helixel-test-textobj-double-quote-inner ()
   "Test inner double-quote text object."
-  (with-temp-buffer
-    (insert "\"hello\"")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "\"hello\"" :start 2)
     (call-interactively #'helixel-mark-inner-double-quote)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
 (ert-deftest helixel-test-textobj-double-quote-outer ()
   "Test outer double-quote text object."
-  (with-temp-buffer
-    (insert "\"hello\"")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "\"hello\"" :start 2)
     (call-interactively #'helixel-mark-a-double-quote)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 (ert-deftest helixel-test-textobj-back-quote-inner ()
   "Test inner back-quote text object."
-  (with-temp-buffer
-    (insert "`hello`")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "`hello`" :start 2)
     (call-interactively #'helixel-mark-inner-back-quote)
     (should (= (region-beginning) 2))
-    (should (= (region-end) 7))))
+    (should (= (region-end) 7))
+))
 
 (ert-deftest helixel-test-textobj-back-quote-outer ()
   "Test outer back-quote text object."
-  (with-temp-buffer
-    (insert "`hello`")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "`hello`" :start 2)
     (call-interactively #'helixel-mark-a-back-quote)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 8))))
+    (should (= (region-end) 8))
+))
 
 ;;; Tag text object edge-case tests
 
 (ert-deftest helixel-test-textobj-tag-with-attrs ()
   "Tag textobj works with attributes like <div class='x'>."
-  (with-temp-buffer
-    (insert "<div class=\"foo\">bar</div>")
-    (goto-char 10)
+  (helixel-test-with-buffer '(:text "<div class=\"foo\">bar</div>" :start 10)
     (call-interactively #'helixel-mark-inner-tag)
-    ;; inner content = "bar" (between > and </)
     (should (= (region-beginning) 18))
-    (should (= (region-end) 21))))
+    (should (= (region-end) 21))
+))
 
 (ert-deftest helixel-test-textobj-tag-nested ()
   "mit inside <div><p>text</p></div> selects innermost <p>."
-  (with-temp-buffer
-    (insert "<div><p>text</p></div>")
-    (goto-char 10)                 ; on 't' of text
+  (helixel-test-with-buffer '(:text "<div><p>text</p></div>" :start 10)
     (call-interactively #'helixel-mark-inner-tag)
-    ;; inner <p> content = "text"
     (should (= (region-beginning) 9))
-    (should (= (region-end) 13))))
+    (should (= (region-end) 13))
+))
 
 (ert-deftest helixel-test-textobj-tag-mismatched ()
   "mit on <div>text</span> should error (mismatched tags)."
-  (with-temp-buffer
-    (insert "<div>text</span>")
-    (goto-char 3)
-    (should-error (call-interactively #'helixel-mark-inner-tag))))
+  (helixel-test-with-buffer '(:text "<div>text</span>" :start 3)
+    (should-error (call-interactively #'helixel-mark-inner-tag))
+))
 
 ;;; Tag text object tests
 
 (ert-deftest helixel-test-textobj-tag-inner ()
   "Test inner tag text object."
-  (with-temp-buffer
-    (insert "<foo>bar</foo>")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "<foo>bar</foo>" :start 2)
     (call-interactively #'helixel-mark-inner-tag)
     (should (= (region-beginning) 6))
-    (should (= (region-end) 9))))
+    (should (= (region-end) 9))
+))
 
 (ert-deftest helixel-test-textobj-tag-outer ()
   "Test outer tag text object."
-  (with-temp-buffer
-    (insert "<foo>bar</foo>")
-    (goto-char 2)
+  (helixel-test-with-buffer '(:text "<foo>bar</foo>" :start 2)
     (call-interactively #'helixel-mark-a-tag)
     (should (= (region-beginning) 1))
-    (should (= (region-end) 15))))
+    (should (= (region-end) 15))
+))
 
 ;;; Text object non-expansion tests
 
@@ -621,114 +568,103 @@ Second paragraph.")
 
 (ert-deftest helixel-test-up-regex-block-counter-same ()
   "Test counter-based up-regex-block with same begin/end (markdown fence)."
-  (with-temp-buffer
-    (insert "before\n```\ncode\n```\nafter\n```\nmore\n```\ndone")
-    (goto-char 1)
-    (let ((mb (save-excursion
-                (should (= (helixel-up-regex-block "^```" "^```" 1 nil) 0))
-                (match-beginning 0))))
-      (should mb)
-      (goto-char mb)
-      (should (looking-at "```$")))))
+  (helixel-test-with-buffer "before
+```
+code
+```
+after
+```
+more
+```
+done"
+    (let ((mb (save-excursion (should (= (helixel-up-regex-block "^```" "^```" 1 nil) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "```$")))
+))
 
 (ert-deftest helixel-test-up-regex-block-counter-diff ()
   "Test counter-based up-regex-block with different begin/end."
-  (with-temp-buffer
-    (insert "before\n#+begin\na\n#+begin\nb\n#+end\nc\n#+end\nafter")
-    (goto-char (point-min))
+  (helixel-test-with-buffer '(:text "before
+#+begin
+a
+#+begin
+b
+#+end
+c
+#+end
+after" :start (point-min))
     (search-forward "a")
-    (let ((mb (save-excursion
-                (should (= (helixel-up-regex-block "^#\\+begin" "^#\\+end" 1 nil) 0))
-                (match-beginning 0))))
-      (should mb)
-      (goto-char mb)
-      (should (looking-at "^#\\+end$")))))
+    (let ((mb (save-excursion (should (= (helixel-up-regex-block "^#\\+begin" "^#\\+end" 1 nil) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "^#\\+end$")))
+))
 
 ;; --- helixel-up-regex-block: name-based (org blocks) ---
 
 (ert-deftest helixel-test-up-regex-block-named-forward ()
   "Test named up-regex-block forward (org block)."
-  (with-temp-buffer
-    (insert "#+begin_src emacs-lisp\ncode\n#+end_src\nafter")
-    (goto-char (point-min))
-    (let ((mb (save-excursion
-                (should (= (helixel-up-regex-block "^#\\+begin_\\([^ \n\r]+\\)"
-                                                   "^#\\+end_\\([^ \n\r]+\\)"
-                                                   1 1) 0))
-                (match-beginning 0))))
-      (should mb)
-      (goto-char mb)
-      (should (looking-at "^#\\+end_src")))))
+  (helixel-test-with-buffer '(:text "#+begin_src emacs-lisp
+code
+#+end_src
+after" :start (point-min))
+    (let ((mb (save-excursion (should (= (helixel-up-regex-block "^#\\+begin_\\([^ 
+]+\\)" "^#\\+end_\\([^ 
+]+\\)" 1 1) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "^#\\+end_src")))
+))
 
 (ert-deftest helixel-test-up-regex-block-named-nested ()
   "Test named up-regex-block with nested org blocks."
-  (with-temp-buffer
-    (insert "#+begin_src emacs-lisp\nouter\n#+begin_example\ninner\n#+end_example\nmore\n#+end_src")
-    (goto-char (point-min))
-    (let ((mb (save-excursion
-                (should (= (helixel-up-regex-block "^#\\+begin_\\([^ \n\r]+\\)"
-                                                   "^#\\+end_\\([^ \n\r]+\\)"
-                                                   1 1) 0))
-                (match-beginning 0))))
-      (should mb)
-      (goto-char mb)
-      (should (looking-at "^#\\+end_src")))))
+  (helixel-test-with-buffer '(:text "#+begin_src emacs-lisp
+outer
+#+begin_example
+inner
+#+end_example
+more
+#+end_src" :start (point-min))
+    (let ((mb (save-excursion (should (= (helixel-up-regex-block "^#\\+begin_\\([^ 
+]+\\)" "^#\\+end_\\([^ 
+]+\\)" 1 1) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "^#\\+end_src")))
+))
 
 ;; --- helixel-select-regex-block integration ---
 
 (ert-deftest helixel-test-select-regex-block-inner-fence ()
   "Test select inner markdown fence block."
-  (with-temp-buffer
-    (transient-mark-mode 1)
-    (insert "```python\nprint('hello')\n```")
-    (goto-char 14)
-    (let ((range (helixel-select-regex-block "^```.+$" "^```[ \t]*$"
-                                              nil nil nil 1 nil)))
-      (should range)
-      (should (> (nth 0 range) 1))
-      (should (< (nth 0 range) 14))
-      (should (> (nth 1 range) (nth 0 range)))
-      (should (< (nth 1 range) (point-max))))))
+  (helixel-test-with-buffer '(:text "```python
+print('hello')
+```" :start 14)
+    (let ((range (helixel-select-regex-block "^```.+$" "^```[ 	]*$" nil nil nil 1 nil))) (should range) (should (> (nth 0 range) 1)) (should (< (nth 0 range) 14)) (should (> (nth 1 range) (nth 0 range))) (should (< (nth 1 range) (point-max))))
+))
 
 (ert-deftest helixel-test-select-regex-block-around-fence ()
   "Test select around markdown fence block."
-  (with-temp-buffer
-    (transient-mark-mode 1)
-    (insert "```python\nprint('hello')\n```")
-    (goto-char 14)
-    (let ((range (helixel-select-regex-block "^```.+$" "^```[ \t]*$"
-                                              nil nil nil 1 t)))
-      (should range)
-      (should (= (nth 0 range) 1))
-      (should (> (nth 1 range) 1)))))
+  (helixel-test-with-buffer '(:text "```python
+print('hello')
+```" :start 14)
+    (let ((range (helixel-select-regex-block "^```.+$" "^```[ 	]*$" nil nil nil 1 t))) (should range) (should (= (nth 0 range) 1)) (should (> (nth 1 range) 1)))
+))
 
 (ert-deftest helixel-test-select-regex-block-inner-org ()
   "Test select inner org block."
-  (with-temp-buffer
-    (transient-mark-mode 1)
-    (insert "#+begin_src emacs-lisp\n(message \"hi\")\n#+end_src\n")
-    (goto-char 32)
-    (let ((range (helixel-select-regex-block
-                  "^#\\+begin_\\([^ \n\r]+\\)[^\n]*" "^#\\+end_\\([^ \n\r]+\\)[^\n]*"
-                  nil nil nil 1 nil 1)))
-      (should range)
-      (should (> (nth 0 range) 1))
-      (should (< (nth 0 range) 32))
-      (should (> (nth 1 range) (nth 0 range)))
-      (should (< (nth 1 range) (point-max))))))
+  (helixel-test-with-buffer '(:text "#+begin_src emacs-lisp
+(message \"hi\")
+#+end_src
+" :start 32)
+    (let ((range (helixel-select-regex-block "^#\\+begin_\\([^ 
+]+\\)[^
+]*" "^#\\+end_\\([^ 
+]+\\)[^
+]*" nil nil nil 1 nil 1))) (should range) (should (> (nth 0 range) 1)) (should (< (nth 0 range) 32)) (should (> (nth 1 range) (nth 0 range))) (should (< (nth 1 range) (point-max))))
+))
 
 (ert-deftest helixel-test-select-regex-block-around-org ()
   "Test select around org block."
-  (with-temp-buffer
-    (transient-mark-mode 1)
-    (insert "#+begin_src emacs-lisp\n(message \"hi\")\n#+end_src\n")
-    (goto-char 32)
-    (let ((range (helixel-select-regex-block
-                  "^#\\+begin_\\([^ \n\r]+\\)[^\n]*" "^#\\+end_\\([^ \n\r]+\\)[^\n]*"
-                  nil nil nil 1 t 1)))
-      (should range)
-      (should (= (nth 0 range) 1))
-      (should (> (nth 1 range) 1)))))
+  (helixel-test-with-buffer '(:text "#+begin_src emacs-lisp
+(message \"hi\")
+#+end_src
+" :start 32)
+    (let ((range (helixel-select-regex-block "^#\\+begin_\\([^ 
+]+\\)[^
+]*" "^#\\+end_\\([^ 
+]+\\)[^
+]*" nil nil nil 1 t 1))) (should range) (should (= (nth 0 range) 1)) (should (> (nth 1 range) 1)))
+))
 
 ;; --- helixel-up-block-at-point dispatch ---
 

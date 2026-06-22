@@ -30,8 +30,6 @@
 (require 'helixel)
 
 
-(require 'ert)
-(require 'helixel)
 
 ;;; helixel-define-key tests
 

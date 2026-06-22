@@ -267,22 +267,13 @@ FORWARD-P non-nil → forward-to-end (] }), nil → outward-to-open ([ {).
 REVERSE is the opposite-direction command symbol.
 FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
   (declare (indent defun))
-  (let ((inner-p (not outer-p))
-        (delim-open (car factory-args))
-        (delim-close (cadr factory-args))
-        ;; Determine delimiter type from factory name.
-        (delim-type
-         (cl-case factory
-           (helixel-make-pair-delimiter 'pair)
-           (helixel-make-tag-delimiter 'tag)
-           (helixel-make-block-delimiter 'regex))))
+  (let ((inner-p (not outer-p)))
     `(progn
        (helixel-define-command ,name
            (:category movement :subcat pair :clear-highlights nil
             :params (&optional count)
-            :motion-extra (list :delim-open ,delim-open
-                                :delim-close ,delim-close
-                                :delim-type ',delim-type
+            :motion-extra (list :delim
+                                (lambda () (,factory ,@factory-args))
                                 :delim-inner-p ,inner-p
                                 :delim-forward-p ,forward-p
                                 :reverse-command ',reverse))
@@ -294,9 +285,8 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
                 (eff-bounds-fn (if eff-forward-p
                                    'helixel--generic-bounds-next
                                  'helixel--generic-bounds-previous))
-                (eff-motion-extra (list :delim-open ,delim-open
-                                        :delim-close ,delim-close
-                                        :delim-type ',delim-type
+                (eff-motion-extra (list :delim
+                                        (lambda () (,factory ,@factory-args))
                                         :delim-inner-p eff-inner-p
                                         :delim-forward-p eff-forward-p)))
            (when (and helixel--pending-sel
@@ -783,6 +773,16 @@ Caches the regexp in `helixel--pair-char-regex' for performance."
 
 ;; ── One-level outward navigation (unified for forward/backward) ──
 
+(defun helixel--delimiter-outer-target (d backward-p)
+  "Return the outer target position for delimiter D.
+Calls `helixel-delimiter-bounds-flat' to locate the enclosing pair.
+BACKWARD-P non-nil → return opener (ob).
+nil → return closer (ce).
+Returns nil when no enclosing pair is found."
+  (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
+                (helixel-delimiter-bounds-flat d)))
+    (if backward-p ob ce)))
+
 (defun helixel--up-list-once (dir &optional delim)
   "Move one nesting level outward in DIR (:backward or :forward).
 DELIM is the delimiter plist to use for the outward lookup.
@@ -829,23 +829,21 @@ a fenced block."
                    (helixel--up-raw backward-p)))
             (block
              (helixel--with-debug-log up-multi-block
-               (let ((helixel--block-no-bracket-fallback t)
-                     (block-d (helixel-make-block-delimiter)))
+               (let ((helixel--block-no-bracket-fallback t))
                  (save-excursion
                    (goto-char search-pos)
-                   (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
-                                 (helixel-delimiter-bounds-flat block-d)))
-                     (when-let* ((tgt (if backward-p ob ce)))
-                       (cons (abs (- tgt orig)) tgt)))))))
+                   (when-let* ((tgt (helixel--delimiter-outer-target
+                                     (helixel-make-block-delimiter)
+                                     backward-p)))
+                     (cons (abs (- tgt orig)) tgt))))))
             (tag
              (helixel--with-debug-log up-multi-tag
-               (let ((tag-d (helixel-make-tag-delimiter)))
-                 (save-excursion
-                   (goto-char search-pos)
-                   (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
-                                 (helixel-delimiter-bounds-flat tag-d)))
-                     (when-let* ((tgt (if backward-p ob ce)))
-                       (cons (abs (- tgt orig)) tgt))))))))
+               (save-excursion
+                 (goto-char search-pos)
+                 (when-let* ((tgt (helixel--delimiter-outer-target
+                                   (helixel-make-tag-delimiter)
+                                   backward-p)))
+                   (cons (abs (- tgt orig)) tgt))))))
         ;; Pick the closest (lowest distance) valid candidate.
         (let ((best (car (sort (delq nil (list raw block tag))
                                (lambda (a b)
@@ -863,17 +861,6 @@ a fenced block."
       (goto-char orig)
       nil)))
 
-(defun helixel--rebuild-delimiter (motion)
-  "Reconstruct the delimiter plist from MOTION.
-Returns a plist suitable for `helixel-delimiter-bounds-flat'
-etc., or nil if MOTION carries insufficient info."
-  (pcase (helixel--last-motion-delim-type motion)
-    ('pair (when-let* ((open (helixel--last-motion-delim-open motion))
-                       (close (helixel--last-motion-delim-close motion)))
-             (helixel-make-pair-delimiter open close)))
-    ('tag (helixel-make-tag-delimiter))
-    ('regex (helixel-make-block-delimiter))
-    (_ nil)))
 
 (defun helixel--step-off-delimiter ()
   "If point is on a delimiter, step inside the pair.
@@ -961,49 +948,22 @@ Returns point on success, nil when no parent pair exists."
 (defun helixel--motion-skip-past (motion)
   "Advance point past the current boundary for MOTION's subcat.
 
-For pair subcat (backward only):
-  Forward pair motions land on CE where `bounds-next' handles
-  one-level stepping inherently (AT-closing climb or
-  search-forward for sibling pairs).
-  Backward motions land on the opener; \=`up-list -1' from
-  there jumps to BEFORE the pair.  Step inside, then move to
-  (1- OB) so `bounds-previous' finds the previous pair.
-
 For paragraph/sentence/function: skips past newline/whitespace.
+For other subcats (match handled by dedicated repeater, pair by
+its own repeater): no-op.  Skip-past is best-effort.
 
 MOTION is a `helixel--last-motion' struct."
   (let ((sub (helixel--last-motion-subcat motion))
         (dir (helixel--last-motion-dir motion)))
     (condition-case nil
         (pcase sub
-          ('pair
-           (when-let* ((dir)
-                       (d (helixel--rebuild-delimiter motion)))
-             ;; Forward: bounds-next handles one-level step from ce
-             ;; inherently (AT-closing climb or search-forward).
-             ;; Skip-past is redundant and causes double-jumps.
-             ;; Backward: up-list -1 from ON the opener jumps to
-             ;; BEFORE the pair; step inside so bounds-flat finds
-             ;; this pair, then move to (1- ob) so bounds-previous
-             ;; finds the previous pair.
-             (unless (eq dir 'forward)
-               (let ((start (point)))
-                 (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
-                   (funcall adj))
-                 (helixel--step-off-delimiter)
-                 (condition-case _err
-                     (let ((flat (helixel-delimiter-bounds-flat d)))
-                       (goto-char (max (point-min)
-                                       (1- (nth 0 flat))))
-                       (skip-chars-backward " \t\n\r"))
-                   (error
-                    (goto-char start)))))))
-          ('match nil)              ; handled by forward/backward-match
           ((or 'paragraph 'sentence 'function)
            (when dir
              (if (eq dir 'forward)
-                 (progn (forward-char) (skip-chars-forward " \t\n\r"))
-               (progn (backward-char) (skip-chars-backward " \t\n\r")))))
+                 (progn (forward-char)
+                        (skip-chars-forward " \t\n\r"))
+               (progn (backward-char)
+                      (skip-chars-backward " \t\n\r")))))
           (_ nil))
       (scan-error
        ;; Skip-past is best-effort; leave point unchanged.
@@ -1020,6 +980,45 @@ MOTION is a `helixel--last-motion' struct."
   "Move to the opener of the enclosing parent pair."
   (unless (helixel--up-list-once :backward)
     (message "No enclosing bracket")))
+
+(defun helixel--repeat-pair-motion (rec)
+  "Replay a pair delimiter motion (] [ } {) from REC.
+For backward motions: steps to before the current pair so the
+re-executed command finds the previous pair.
+For forward motions: no skip-past needed — `bounds-next' handles
+one-level stepping inherently.
+On user-error restores point so a failing repeat doesn't strand
+the cursor."
+  (let* ((cmd (helixel--last-motion-command rec))
+         (dir (helixel--last-motion-dir rec))
+         (effective-cmd (if helixel--motion-permanent-flip
+                            (or (helixel--last-motion-reverse-command rec)
+                                (helixel--motion-reverse-lookup cmd)
+                                cmd)
+                          cmd))
+         (orig (point)))
+    ;; Backward skip-past: step inside current pair, then to (1- ob)
+    ;; so bounds-previous finds the previous (parent) pair.
+    (unless (eq dir 'forward)
+      (when-let* ((d (funcall (helixel--last-motion-delim rec))))
+        (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
+          (funcall adj))
+        (helixel--step-off-delimiter)
+        (condition-case _err
+            (let ((flat (helixel-delimiter-bounds-flat d)))
+              (goto-char (max (point-min)
+                              (1- (nth 0 flat))))
+              (skip-chars-backward " \t\n\r"))
+          (error
+           (goto-char orig)))))
+    (unless (commandp effective-cmd)
+      (user-error "No motion command to repeat"))
+    (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
+      (condition-case err
+          (call-interactively effective-cmd)
+        (user-error
+         (goto-char orig)
+         (user-error (cadr err)))))))
 
 ;; Motion repeaters registered via `helixel-register-motion-repeater'
 
@@ -1066,13 +1065,15 @@ On user-error restores point to before skip-past so a failing
          (goto-char orig)
          (user-error (cadr err)))))))
 
-;; Register: specific (movement match) before general (movement nil).
-;; `push' adds to the front; the lookup scans sequentially, so the
-;; specific entry is found before the nil-subcat fallback.
+;; Register: specific subcats before general fallback.
+;; `push' adds to the front; the lookup scans sequentially, so
+;; specific entries are found before the nil-subcat fallback.
 (helixel-register-motion-repeater 'movement nil
   #'helixel--repeat-movement-motion)
 (helixel-register-motion-repeater 'movement 'match
   #'helixel--repeat-match-motion)
+(helixel-register-motion-repeater 'movement 'pair
+  #'helixel--repeat-pair-motion)
 
 (helixel-define-command helixel-go-beginning-buffer
     (:category movement :subcat goto)

@@ -1004,7 +1004,9 @@ Slots:
   REGEXP      — (search) non-nil when search is regexp-based.
   DELIM-OPEN  — (pair) opener character.
   DELIM-CLOSE — (pair) closer character.
-  DELIM-TYPE  — (pair) :pair, :tag, or :regex.
+  DELIM         — (pair) function () → delimiter struct.
+                  Captured at macro-expansion time; call at repeat
+                  time to rebuild the delimiter for bounds queries.
   DELIM-INNER-P — (pair) non-nil for inner.
   DELIM-FORWARD-P — (pair) non-nil for forward.
   LAST-MATCH-DELIMITER — (match) delimiter plist from % jump.
@@ -1013,7 +1015,7 @@ Slots:
   category subcat dir command prefix-arg
   char type pattern entry-kind
   (regexp t)
-  delim-open delim-close delim-type delim-inner-p delim-forward-p
+  delim delim-inner-p delim-forward-p
   last-match-delimiter
   reverse-command)
 
@@ -1070,8 +1072,8 @@ Analogous to `helixel--repeat-permanent-flip' for
   "Record CMD as the last motion, with EXTRA-KV as keyword arguments.
 
 EXTRA-KV accepts: :category :subcat :dir :char :type :pattern
-:entry-kind :delim-open :delim-close :delim-type :delim-inner-p
-:delim-forward-p :last-match-delimiter :reverse-command.
+:entry-kind :delim :delim-inner-p :delim-forward-p
+:last-match-delimiter :reverse-command.
 
 Respects `helixel-motion-repeat-categories': when :category and
 :subcat don't match, recording is silently skipped.

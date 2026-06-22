@@ -289,8 +289,16 @@ After `helixel-select-line`, point is on the LAST selected line. `line-beginning
 ### transient-mark-mode and region extension
 When `transient-mark-mode` is on, `helixel-select-line-up`/`helixel-select-line` detect an active region and enter "extending" mode. Call `(deactivate-mark)` before recreate to ensure a fresh region.
 
-### Zero-width search patterns ($, ^) and infinite loops
-`helixel--repeat-advance` (via the kind's advance fn) uses `helixel-replay` struct fields (`search-edge-seen`, `search-last-pos`) to prevent infinite loops with zero-width patterns at buffer edges. Each new `helixel-with-replay` binding provides a fresh scratch area.
+### Zero-width search patterns ($, ^, \b, \B, \<, \>) and infinite loops
+`helixel-search--guard-repeat-advance` runs two guards in order:
+  1. **Repeat guard** — steps past same-position zero-width matches
+     and re-searches (handles \b, \B, \<, \> at fixed positions).
+  2. **Edge guard** — blocks any second zero-width match at
+     point-min/point-max (handles \=`$' at shifting point-max).
+The order is deliberate: repeat-first ensures word-boundary patterns
+at point-min don't trigger false edge-guard blocks.
+`search-last-pos` and `search-edge-seen` are fields on the
+`helixel-replay` struct, reset per `helixel-with-replay` binding.
 
 ### Strategy all-buffer-fn recursion
 `helixel--repeat-all-buffer` for non-entry-kind search must NOT recurse via `:all-buffer-fn` (would loop). Instead it does the scan inline via `helixel--repeat-advance`.
@@ -344,7 +352,7 @@ CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use r
 - Chain and non-chain share the same `helixel--repeat-advance` dispatch. Chain's `:action-list` runner iterates sub-actions at each advance target.
 - `helixel-repeat-selection` (`M-.`) uses the same advance + preview path (no apply).
 - Kind-specific all-buffer/all-dir logic lives in `helixel-repeat.el` via `:all-buffer-fn`/`:all-dir-fn` in the kind registry.
-- `helixel--advance-search-last-pos` and `helixel--advance-search-edge-seen` are now fields on the `helixel-replay` struct (per-session scratch), reset implicitly by each new `helixel-with-replay` binding.
+- `search-last-pos` and `search-edge-seen` are fields on the `helixel-replay` struct (per-session scratch), reset implicitly by each new `helixel-with-replay` binding. The repeat guard runs first so word-boundary patterns (\b, \B, \<, \>) at point-min don't trigger false edge-guard blocks.
 
 ### Naming Convention for `helixel-sel` Accessors
 

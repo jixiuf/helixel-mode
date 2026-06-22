@@ -2255,9 +2255,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--action-pos nil
           helixel--inhibit-repeat-record nil
           helixel--inhibit-action-track nil
-          helixel--search-advance-done nil
-          helixel--advance-search-last-pos nil
-          helixel--advance-search-edge-seen nil
           helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "hello world foo bar baz qux")
@@ -2292,9 +2289,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--action-pos nil
           helixel--inhibit-repeat-record nil
           helixel--inhibit-action-track nil
-          helixel--search-advance-done nil
-          helixel--advance-search-last-pos nil
-          helixel--advance-search-edge-seen nil
           helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "x hello y hello z hello w")
@@ -2344,9 +2338,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--pending-sel nil helixel--action-pos nil
           helixel--inhibit-repeat-record nil
           helixel--inhibit-action-track nil
-          helixel--search-advance-done nil
-          helixel--advance-search-last-pos nil
-          helixel--advance-search-edge-seen nil
           helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil
           helixel--active-search nil)
@@ -2381,9 +2372,6 @@ kill naturally moved point — use a single xd prefix for bulk kill."
           helixel--pending-sel nil helixel--action-pos nil
           helixel--inhibit-repeat-record nil
           helixel--inhibit-action-track nil
-          helixel--search-advance-done nil
-          helixel--advance-search-last-pos nil
-          helixel--advance-search-edge-seen nil
           helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "hello world foo bar baz qux")
@@ -2514,9 +2502,6 @@ the selection on each word."
           helixel--action-pos nil
           helixel--inhibit-repeat-record nil
           helixel--inhibit-action-track nil
-          helixel--search-advance-done nil
-          helixel--advance-search-last-pos nil
-          helixel--advance-search-edge-seen nil
           helixel--repeat-preview-pos nil
           helixel--repeat-permanent-flip nil)
     (insert "hello world foo bar baz qux")

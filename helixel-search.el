@@ -1139,17 +1139,18 @@ Signals `search-failed' at buffer edge."
   "Guard against zero-width / repeated-match infinite loops.
 Signals `search-failed' on deadlock; advances past zero-width repeats.
 PAT and DIR are the current search pattern and direction.
-REGEXP controls `isearch-regexp', forwarded to `helixel-search--search'."
+REGEXP controls `isearch-regexp', forwarded to `helixel-search--search'.
+
+Order matters: repeat guard runs FIRST — it steps past same-position
+zero-width matches (e.g. \\b at a fixed position).  Edge guard runs
+SECOND on whatever `match-data' remains (possibly clobbered by the
+step-and-re-search).  This prevents false positives where \\b at
+point-min would be incorrectly blocked by the edge guard, while
+still catching \=`$' at a shifting point-max (the only case where
+the edge guard is essential)."
   (let ((m-beg (match-beginning 0))
         (m-end (match-end 0)))
-    ;; Zero-width pattern at buffer edge: allow first match only.
-    (when (and (= m-beg m-end)
-               (or (= m-beg (point-min))
-                   (= m-beg (point-max))))
-      (if (helixel--search-advance-edge-seen-p)
-          (signal 'search-failed nil)
-        (helixel--search-advance-edge-seen-set t)))
-    ;; Repeated match at same position.
+    ;; Repeated match at same position (runs first).
     (when (equal m-beg (helixel--search-advance-last-pos))
       (if (= m-beg m-end)
           ;; Zero-width: step over and re-search.
@@ -1157,7 +1158,18 @@ REGEXP controls `isearch-regexp', forwarded to `helixel-search--search'."
             (helixel-search--advance-past-zero-width dir)
             (helixel-search--search pat dir nil nil regexp))
         ;; Non-zero-width repeated match — true deadlock.
-        (signal 'search-failed nil)))))
+        (signal 'search-failed nil)))
+    ;; Zero-width pattern at buffer edge: allow first match only.
+    ;; Uses whatever match-data is current (may have been updated by
+    ;; the repeat guard's re-search above).
+    (let ((m-beg (match-beginning 0))
+          (m-end (match-end 0)))
+      (when (and (= m-beg m-end)
+                 (or (= m-beg (point-min))
+                     (= m-beg (point-max))))
+        (if (helixel--search-advance-edge-seen-p)
+            (signal 'search-failed nil)
+          (helixel--search-advance-edge-seen-set t))))))
 
 (defun helixel--allbuffer-search-insert (tx sel start-pos dir)
   "Insert TX payload text at every SEL match from START-POS in DIR.

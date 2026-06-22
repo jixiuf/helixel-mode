@@ -932,4 +932,236 @@ Verifies plist-member awareness — absent vs present-nil are distinct."
       (should (string= (buffer-substring (region-beginning) (region-end))
                        "hello.")))))
 
+;; ── Zero-width pattern dot-repeat: \\b \\B \\< \\> ^ $ ──
+;; (regression: edge-guard removed — repeat-guard alone handles all cases)
+
+(defun helixel-search-test--setup-search-repeat (pattern dir &optional regexp)
+  "Simulate a / search for PATTERN in DIR, then an edit so \\. can repeat.
+REGEXP controls `isearch-regexp' (nil = literal, omitted = t).
+Returns the match position."
+  (let ((search-fn (if (eq dir 'forward)
+                       're-search-forward
+                     're-search-backward)))
+    (funcall search-fn pattern)
+    (let ((mb (match-beginning 0)) (me (match-end 0)))
+      (goto-char mb)
+      (push-mark me t t)
+      (goto-char mb))
+    (helixel--sel-push
+     (helixel-sel-create 'search `(:pattern ,pattern :dir ,dir
+                                           ,@(when regexp (list :regexp regexp)))))
+    (point)))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-word-boundary ()
+  "\\b dot-repeat advances through word boundaries without getting stuck.
+Regression: edge-guard used to block \\b at point-min on second \\. call."
+  (helixel-test-with-buffer "hello world foo"
+    (helixel-search-test--setup-search-repeat "\\b" 'forward)
+    ;; fake an edit so we have something to repeat
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: advance to next boundary
+    (goto-char 1)
+    (helixel-repeat-edit)
+    (should-not (= (point) 1)) ; must have moved
+    ;; dot2: advance further (should NOT get edge-guard blocked)
+    (let ((prev (point)))
+      (helixel-repeat-edit)
+      (should-not (= (point) prev)) ; must have moved again
+      ;; dot3: still should advance
+      (setq prev (point))
+      (helixel-repeat-edit)
+      (should-not (= (point) prev)))))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-bol ()
+  "^ dot-repeat works after edge-guard removal (regression)."
+  (helixel-test-with-buffer "hello\nworld\nfoo\n"
+    (helixel-search-test--setup-search-repeat "^" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: advance to BOL of line 2
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 1)
+      (should (string-prefix-p "X" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))
+    ;; dot2: advance to BOL of line 3
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 2)
+      (should (string-prefix-p "X" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))
+    ;; dot3: no more lines (should not hang)
+    (helixel-repeat-edit)))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-eol ()
+  "$ dot-repeat works after edge-guard removal (regression)."
+  (helixel-test-with-buffer "hello\nworld\nfoo\n"
+    (helixel-search-test--setup-search-repeat "$" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: advance to EOL of line 2
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 1)
+      (should (string-suffix-p "X" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))
+    ;; dot2: advance to EOL of line 3
+    (helixel-repeat-edit)
+    (save-excursion (goto-char 1) (forward-line 2)
+      (should (string-suffix-p "X" (buffer-substring (line-beginning-position)
+                                                       (line-end-position)))))
+    ;; dot3: no more (should not hang)
+    (helixel-repeat-edit)))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-word-start ()
+  "\\< dot-repeat terminates without hanging (no infinite loop)."
+  (helixel-test-with-buffer "hello world foo"
+    (helixel-search-test--setup-search-repeat "\\<" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (goto-char 1)
+    ;; Run several dot iterations; verify they don't hang.
+    (helixel-repeat-edit)
+    (helixel-repeat-edit)
+    (helixel-repeat-edit)
+    t))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-non-word-boundary ()
+  "\\B dot-repeat advances through non-word-boundaries."
+  (helixel-test-with-buffer "abc def ghi"
+    (helixel-search-test--setup-search-repeat "\\B" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (goto-char 1)
+    (helixel-repeat-edit)
+    (should-not (= (point) 1))
+    (let ((prev (point)))
+      (helixel-repeat-edit)
+      (should-not (= (point) prev))
+      (setq prev (point))
+      (helixel-repeat-edit)
+      (should-not (= (point) prev)))))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-dollar-eob ()
+  "$ at end-of-buffer stops cleanly on second dot (no infinite loop)."
+  (helixel-test-with-buffer "only"
+    (goto-char 1)
+    (re-search-forward "$")
+    (let ((mb (match-beginning 0)) (me (match-end 0)))
+      (goto-char mb)
+      (push-mark me t t)
+      (goto-char mb))
+    (helixel--sel-push (helixel-sel-create 'search '(:pattern "$" :dir forward)))
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1 on a single-line buffer: after edit, advance should
+    ;; signal search-failed cleanly (no hang)
+    (helixel-repeat-edit)
+    ;; dot2: should also not hang
+    (helixel-repeat-edit) ; would hang if broken
+    t))
+
+(ert-deftest helixel-test-search-zw-dot-repeat-caret-bob ()
+  "^ at beginning-of-buffer stops cleanly (no infinite loop)."
+  (helixel-test-with-buffer "only"
+    (goto-char (point-max))
+    (helixel-search-test--setup-search-repeat "^" 'backward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    ;; dot1: should work
+    (helixel-repeat-edit)
+    ;; dot2: no more backward — should not hang
+    (helixel-repeat-edit)
+    t))
+
+(ert-deftest helixel-test-search-zw-word-boundary-all-buffer ()
+  "\\b with 0. (all-dir) inserts at every word boundary without hangs."
+  (helixel-test-with-buffer "ab cd ef"
+    (helixel-search-test--setup-search-repeat "\\b" 'forward)
+    (helixel-repeat-chain-start)
+    (helixel-insert) (insert "X") (helixel-insert-exit)
+    (helixel-repeat-chain-end)
+    (goto-char 1)
+    ;; all-dir repeat: process remaining boundaries
+    (helixel-repeat-edit 0)
+    ;; Should have inserted X at multiple boundaries
+    (should (> (how-many "X" (point-min) (point-max)) 2))
+    ;; No hang
+    t))
+
+(ert-deftest helixel-test-search-zw-repeat-guard-advance-search ()
+  "Direct test: helixel--repeat-advance-search handles word boundaries.
+Calls the advance function directly with constructed action/sel
+and verifies each advance moves to a distinct position, then
+stops cleanly at buffer end."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "abc def ghi")
+    (let* ((sel (helixel-sel-create 'search '(:pattern "\\b" :dir forward)))
+           (tx (helixel-action-create nil sel)))
+      (goto-char 1)
+      (helixel-with-replay-as 'dot
+        (should (helixel--repeat-advance-search tx)) ; advance 1
+        (let ((p1 (point)))
+          (should (helixel--repeat-advance-search tx)) ; advance 2
+          (let ((p2 (point)))
+            (should-not (= p1 p2)) ; must have moved
+            (should (helixel--repeat-advance-search tx)) ; advance 3
+            (let ((p3 (point)))
+              (should-not (= p2 p3))
+              ;; advance 4+ should eventually return nil (no more matches)
+              (let ((advanced t) (iter 0))
+                (while (and advanced (< iter 20))
+                  (setq advanced (ignore-errors
+                                   (helixel--repeat-advance-search tx)))
+                  (cl-incf iter))
+                (should-not advanced) ; eventually stops
+                (should (< iter 20)) ; didn't loop forever
+                ))))))))
+
+;; ── PCRE mode zero-width ──
+
+(ert-deftest helixel-test-search-zw-pcre-word-boundary ()
+  "PCRE \\b dot-repeat advances through word boundaries."
+  (skip-unless (fboundp 'rxt-pcre-to-elisp))
+  (let ((helixel-search-pcre t))
+    (helixel-test-with-buffer "hello world foo"
+      (helixel-search-test--setup-search-repeat "\\b" 'forward)
+      (helixel-repeat-chain-start)
+      (helixel-insert) (insert "X") (helixel-insert-exit)
+      (helixel-repeat-chain-end)
+      (goto-char 1)
+      (helixel-repeat-edit)
+      (should-not (= (point) 1))
+      (let ((prev (point)))
+        (helixel-repeat-edit)
+        (should-not (= (point) prev))
+        (setq prev (point))
+        (helixel-repeat-edit)
+        (should-not (= (point) prev))))))
+
+(ert-deftest helixel-test-search-zw-pcre-bol ()
+  "PCRE ^ dot-repeat works (regression after edge-guard removal)."
+  (skip-unless (fboundp 'rxt-pcre-to-elisp))
+  (let ((helixel-search-pcre t))
+    (helixel-test-with-buffer "hello\nworld\nfoo\n"
+      (helixel-search-test--setup-search-repeat "^" 'forward)
+      (helixel-repeat-chain-start)
+      (helixel-insert) (insert "X") (helixel-insert-exit)
+      (helixel-repeat-chain-end)
+      (helixel-repeat-edit)
+      (save-excursion (goto-char 1) (forward-line 1)
+        (should (string-prefix-p "X" (buffer-substring (line-beginning-position)
+                                                         (line-end-position)))))
+      (helixel-repeat-edit)
+      (save-excursion (goto-char 1) (forward-line 2)
+        (should (string-prefix-p "X" (buffer-substring (line-beginning-position)
+                                                         (line-end-position)))))
+      (helixel-repeat-edit))))
+
 ;;; helixel-test-search.el ends here

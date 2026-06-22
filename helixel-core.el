@@ -1017,12 +1017,15 @@ Slots:
   DELIM-TYPE  — (pair) :pair, :tag, or :regex.
   DELIM-INNER-P — (pair) non-nil for inner.
   DELIM-FORWARD-P — (pair) non-nil for forward.
-  LAST-MATCH-DELIMITER — (match) delimiter plist from % jump."
+  LAST-MATCH-DELIMITER — (match) delimiter plist from % jump.
+  REVERSE-COMMAND — (movement) the opposite-direction command for
+                     \=`-,' permanent flip, or nil."
   category subcat dir command prefix-arg
   char type pattern entry-kind
   (regexp t)
   delim-open delim-close delim-type delim-inner-p delim-forward-p
-  last-match-delimiter)
+  last-match-delimiter
+  reverse-command)
 
 (defcustom helixel-motion-repeat-categories
   '((movement . pair) (movement . match) (movement . paragraph)
@@ -1078,7 +1081,7 @@ Analogous to `helixel--repeat-permanent-flip' for
 
 EXTRA-KV accepts: :category :subcat :dir :char :type :pattern
 :entry-kind :delim-open :delim-close :delim-type :delim-inner-p
-:delim-forward-p :last-match-delimiter.
+:delim-forward-p :last-match-delimiter :reverse-command.
 
 Respects `helixel-motion-repeat-categories': when :category and
 :subcat don't match, recording is silently skipped.
@@ -1103,6 +1106,9 @@ with its recorded direction."
 Determines :dir from (point) vs ORIGIN — captures direction
 from actual cursor movement.  MOTION-EXTRA is an optional plist
 of extra keys passed directly by the caller.
+Keys commonly found in MOTION-EXTRA:
+  :reverse-command    — opposite-direction command for \=`-,' flip.
+  Other pair-specific keys for delimiter movements.
 
 Called from the code injected by `helixel-define-command'
 for :category movement commands."
@@ -1114,12 +1120,16 @@ for :category movement commands."
 ;; ── Motion Repeater Registry ──
 ;;
 ;; Extensible dispatch for `helixel-repeat-last-motion'.
-;; ── Motion Repeater Property ──
+;; ── Motion Repeater Registry ──
 ;;
-;; Motion repeaters are stored as subalists on each category
-;; symbol's `helixel-motion-repeater' property — no global alist.
-;; Third-party packages register repeater functions for custom
-;; categories; the lookup reads the property directly.
+;; Motion repeaters are stored in a private hash table (same pattern
+;; as kind/op registries).  Third-party packages register repeater
+;; functions for custom categories via `helixel-register-motion-repeater'.
+
+(defvar helixel--motion-repeater-registry (make-hash-table :test #'eq)
+  "Hash table: category symbol → subcat→fn alist for motion replay.
+Used by `helixel-register-motion-repeater' and
+`helixel--lookup-motion-repeater'.")
 
 (defun helixel-register-motion-repeater (category subcat fn)
   "Store FN as the motion repeater for (CATEGORY . SUBCAT).
@@ -1127,43 +1137,50 @@ CATEGORY is a symbol like \='movement, \='search, or \='find-char.
 SUBCAT is a symbol like \='pair, \='match, or nil for \='any subcat\='.
 FN receives the `helixel--last-motion' struct and should replay it.
 
-Stored on CATEGORY's `helixel-motion-repeater' symbol property as a
-subcat→fn alist.  Later registrations (specific subcat) push to the
+Stored in `helixel--motion-repeater-registry' as a subcat→fn alist
+per category.  Later registrations (specific subcat) push to the
 front; `assq' finds the first match, so specific entries take priority
 over nil-subcat fallbacks."
-  (let ((entry (cons subcat fn)))
-    (put category 'helixel-motion-repeater
-         (cons entry (get category 'helixel-motion-repeater)))))
+  (let* ((alist (gethash category helixel--motion-repeater-registry))
+         (entry (cons subcat fn)))
+    (puthash category (cons entry alist)
+             helixel--motion-repeater-registry)))
 
 (defsubst helixel--lookup-motion-repeater (rec)
   "Return the repeater function for motion REC, or nil.
-Reads the `helixel-motion-repeater' symbol property on REC's category.
 Looks up SUBCAT first (specific), then falls back to nil (any)."
   (let* ((cat (helixel--last-motion-category rec))
          (sub (helixel--last-motion-subcat rec))
-         (alist (get cat 'helixel-motion-repeater)))
+         (alist (gethash cat helixel--motion-repeater-registry)))
     (cdr (or (assq sub alist)
              (assq nil alist)))))
 
-;; ── Motion Reverse-Command Property ──
+;; ── Command-reverse property ──
 ;;
 ;; When \=`-,', permanently flips the direction, the movement
-;; motion repeater consults the 'helixel-motion-reverse symbol
-;; property on the recorded command to find its counterpart.
-;; Only movement commands need this — search, find-char, and match
-;; repeater functions already read direction from the struct.
+;; motion repeater reads the `helixel-command-reverse' property
+;; on each command to find its opposite-direction counterpart.
+;; Only movement commands carry this property — it is set by the
+;; movement-definition macros alongside `helixel-command'.
+;; Search, find-char, and match repeater functions already read
+;; direction from the struct and don't need reverse commands.
+;;
+;; For motion-repeat (\[helixel-repeat-last-motion]), the reverse
+;; command is carried directly on `helixel--last-motion' as the
+;; `:reverse-command' slot — no lookup needed.
+;; For dot-repeat flip-dir, the `flip-dir-fn' lambda reads
+;; `(get cmd 'helixel-command-reverse)' from each movement command.
 
 (defun helixel-register-motion-reverse (cmd reverse-cmd)
   "Store REVERSE-CMD as the direction-flipped counterpart of CMD.
 Both are command symbols.  Called by movement definition macros.
-Sets the `helixel-motion-reverse' symbol property on CMD so
-`helixel--motion-reverse-lookup' can find it via `get'."
-  (put cmd 'helixel-motion-reverse reverse-cmd))
+Sets the `helixel-command-reverse' symbol property on CMD."
+  (put cmd 'helixel-command-reverse reverse-cmd))
 
 (defsubst helixel--motion-reverse-lookup (cmd)
   "Return the reverse command for CMD, or nil if not registered.
-Reads the `helixel-motion-reverse' symbol property."
-  (get cmd 'helixel-motion-reverse))
+Reads the `helixel-command-reverse' symbol property."
+  (get cmd 'helixel-command-reverse))
 
 ;; ── Unified delimiter-char query ──
 ;; All delimiter-char enumeration uses this single function.

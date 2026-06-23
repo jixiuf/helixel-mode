@@ -2393,9 +2393,9 @@ kill naturally moved point — use a single xd prefix for bulk kill."
     (helixel-kill)
     ;; After: " bar baz qux" (hello world foo deleted)
     (should (string= (buffer-string) " bar baz qux"))
-    ;; . — textobj count=3 + span → deletes "bar baz qux"
+    ;; . — textobj count=3 + span → deletes all 3 words plus leading space
     (helixel-repeat-edit)
-    (should (string= (buffer-string) " qux"))))
+    (should (string= (buffer-string) ""))))
 
 ;; ── , all-buffer reverse preview (C-u - ,) ──
 

@@ -414,10 +414,8 @@ selection."
       (when (or (not end) (> (cdr bnd) end)) (setq end (cdr bnd)))
       (setq count (if (> count 0) (1- count) (1+ count))))
     (goto-char (if (< count 0) beg end))
-    (helixel-forward-nearest count
-                             (lambda (cnt) (forward-thing thing cnt))
-                             (lambda (cnt)
-                               (helixel-forward-not-thing thing cnt)))
+    (helixel-motion-loop (dir count)
+      (forward-thing thing dir))
     (cons (if (>= count 0) beg (point))
           (if (< count 0) end (point)))))
 

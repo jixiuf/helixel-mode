@@ -1771,8 +1771,8 @@ past the char); for `:type till' each cursor lands ON the char.
 No mark / region — the user typically follows up with their own
 motion or operator."
   (let* ((ctx (helixel-sel-ctx sel))
-         (char (plist-get ctx :char))
-         (type (or (plist-get ctx :type) 'next))
+         (char (helixel-sel-find-char-char ctx))
+         (type (helixel-sel-find-char-type ctx))
          (case-fold-search (if (and char (char-uppercase-p char))
                                nil case-fold-search))
          (needle (and char (char-to-string char)))

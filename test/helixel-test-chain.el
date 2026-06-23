@@ -146,7 +146,7 @@
     (should helixel-last-action)
     (let ((sel (helixel-action-sel helixel-last-action)))
       (should sel)
-      (should (eq (helixel-sel-search-entry-kind sel) 'insert)))))
+      (should (eq (helixel-sel-entry-kind sel) 'insert)))))
 
 (ert-deftest helixel-test-chain-in-edit-ring ()
   "Chain tx is pushed onto the event ring."

@@ -1205,4 +1205,75 @@ stops cleanly at buffer end."
                                                          (line-end-position)))))
       (helixel-repeat-edit))))
 
+(ert-deftest helixel-test-search-initial-n-count-zero ()
+  "Initial search (/pattern RET) should store :n-count 0, not 1.
+Regression: commit 437cef5 changed helixel-sel-n-count default
+from nil to 0, breaking the truthiness check (if prev-n ...) in
+helixel-search--set-sel-ctx when helixel--pending-sel was nil."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--pending-sel nil
+          helixel--active-search nil)
+    (insert "hello hello hello")
+    (goto-char 1)
+    (re-search-forward "hello")
+    ;; Simulate /hello RET — set up isearch state
+    (let ((isearch-success t)
+          (isearch-string "hello")
+          (isearch-regexp nil)
+          (isearch-forward t)
+          (isearch-other-end (match-beginning 0)))
+      (setq helixel--active-search
+            (make-helixel--last-motion
+             :category 'search :pattern "hello"
+             :dir 'forward :regexp nil))
+      (helixel-search--set-sel-ctx))
+    ;; After set-sel-ctx, :n-count must be 0
+    (should helixel--pending-sel)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'search))
+    (should (equal (plist-get (helixel-sel-ctx helixel--pending-sel)
+                              :n-count)
+                   0))))
+
+(ert-deftest helixel-test-sel-n-count-nil-obj ()
+  "helixel-sel-n-count on nil should return nil (key absent)."
+  (should (eq (helixel-sel-n-count nil) nil)))
+
+(ert-deftest helixel-test-search-n-count-after-n ()
+  "After /hello RET n, :n-count should become 1.
+Verifies the increment logic works correctly after the initial fix."
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (setq helixel--pending-sel nil
+          helixel--active-search nil)
+    (insert "hello hello hello")
+    (goto-char 1)
+    ;; First: /hello RET
+    (re-search-forward "hello")
+    (let ((isearch-success t)
+          (isearch-string "hello")
+          (isearch-regexp nil)
+          (isearch-forward t)
+          (isearch-other-end (match-beginning 0)))
+      (setq helixel--active-search
+            (make-helixel--last-motion
+             :category 'search :pattern "hello"
+             :dir 'forward :regexp nil))
+      (helixel-search--set-sel-ctx))
+    ;; Should be 0 initially
+    (should (equal (plist-get (helixel-sel-ctx helixel--pending-sel)
+                              :n-count)
+                   0))
+    ;; Second: n (next match)
+    (re-search-forward "hello")
+    (let ((isearch-success t)
+          (isearch-string "hello")
+          (isearch-other-end (match-beginning 0)))
+      (helixel-search--handle-done nil)
+      (helixel-search--set-sel-ctx))
+    ;; After first n, n-count should be 1
+    (should (equal (plist-get (helixel-sel-ctx helixel--pending-sel)
+                              :n-count)
+                   1))))
+
 ;;; helixel-test-search.el ends here

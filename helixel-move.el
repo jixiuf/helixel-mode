@@ -1273,7 +1273,7 @@ at the appropriate offset on the selected line:
   :entry-kind append \=`region-end' + cursor-offset
 When :span is set, extends region back to the pre-recreate origin."
   (let ((n (helixel-sel-line-count ctx))
-        (entry-kind (plist-get ctx :entry-kind)))
+        (entry-kind (helixel-sel-entry-kind ctx)))
     (helixel--with-span ctx
       (if (eq (helixel-sel-line-dir ctx) 'backward)
           (helixel-select-line-up n)
@@ -1310,7 +1310,7 @@ NOTE: Does NOT use `helixel--with-span' because `push-mark' inside
 rectangle mark, push the span origin, then reactivate.  The macro's
 simple `push-mark' would interact poorly with the rect-mode mark."
   (let ((n (helixel-sel-rect-count ctx))
-        (span-origin (when (plist-get ctx :span) (point))))
+        (span-origin (when (helixel-sel-span-p ctx) (point))))
     (unless rectangle-mark-mode
       (push-mark (point) t t)
       (rectangle-mark-mode 1))
@@ -1335,7 +1335,7 @@ Signals `user-error' when point does not move (no more targets)."
   ;; Enter visual state for accumulating movements so `clear-highlights'
   ;; in the funcall'd movement commands don't deactivate the region.
   (unless (and (helixel-sel-movement-normal-mode-p ctx)
-               (not (plist-get ctx :span)))
+               (not (helixel-sel-span-p ctx)))
     (setq helixel--current-state 'visual))
   (helixel--with-span ctx
     (let ((saved-pos (point)))
@@ -1358,7 +1358,7 @@ Deactivates any prior region so `helixel-select-line-up' starts
 fresh rather than extending a stale mark."
   (let* ((sel (helixel-action-sel tx))
          (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
-         (entry-kind (plist-get (helixel-sel-ctx sel) :entry-kind))
+         (entry-kind (helixel-sel-entry-kind sel))
          (count (if (eq entry-kind 'append) 1
                   (helixel-sel-line-count sel)))
          (lines-left count))

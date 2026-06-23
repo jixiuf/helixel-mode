@@ -214,7 +214,7 @@ already positioned point and the runner handles the rest."
               (kind (helixel-sel-kind edit-sel)))
     (when (or (eq kind 'movement)
               (and (eq kind 'line)
-                   (plist-get (helixel-sel-ctx edit-sel) :entry-kind)))
+                   (helixel-sel-entry-kind edit-sel)))
       (deactivate-mark)
       (condition-case nil
           (helixel-sel-call-recreate edit-sel)

@@ -564,11 +564,14 @@ dot-repeat replay (only the final target is selected).")
 (helixel--def-sel-accessor helixel-sel-search-dir :dir 'forward
                            "Return :dir from search ctx, default `forward'.")
 (helixel--def-sel-accessor
- helixel-sel-search-entry-kind :entry-kind nil
- "Return :entry-kind (insert or append) from search ctx, or nil.")
+ helixel-sel-entry-kind :entry-kind nil
+ "Return :entry-kind (insert or append) from the ctx, or nil.
+This key is shared by `line' and `search' kinds.")
+
 (helixel--def-sel-accessor
  helixel-sel-search-cursor-offset :cursor-offset nil
  "Return :cursor-offset (integer) from search ctx, or nil.")
+
 (defsubst helixel-sel-search-regexp (obj)
   "Return :regexp from search ctx (t = regexp, nil = literal).
 When the :regexp key is absent from the ctx, defaults to t.
@@ -583,10 +586,25 @@ OBJ is a `helixel-sel' struct or raw ctx plist."
  helixel-sel-find-char-dir :dir 'forward
  "Return :dir (`forward' or `backward') from find-char ctx.")
 (helixel--def-sel-accessor
- helixel-sel-find-char-type :type nil
- "Return :type (`next' or `till') from find-char ctx.")
+ helixel-sel-find-char-type :type 'next
+ "Return :type (`next' or `till') from find-char ctx, default `next'.")
 (helixel--def-sel-accessor helixel-sel-find-char-char :char nil
                            "Return :char (character) from find-char ctx.")
+(helixel--def-sel-accessor
+ helixel-sel-find-char-n-count :n-count nil
+ "Return :n-count (integer) from find-char ctx, or nil if absent.
+Callers that need a numeric default wrap with \=`(or ... 0)'.")
+
+;;;; shared keys (used by multiple kinds)
+(helixel--def-sel-accessor
+ helixel-sel-n-count :n-count nil
+ "Return :n-count (integer) from ctx, or nil if absent.
+This key is shared by `search' and `find-char' kinds.
+Callers that need a numeric default wrap with \=`(or ... 0)'.")
+(helixel--def-sel-accessor
+ helixel-sel-span-p :span nil
+ "Return non-nil if ctx has :span (from \\[helixel-action-cycle] push).
+This key is shared by `line', `rect', `movement', `search', and `find-char'.")
 
 ;;;; surround
 (helixel--def-sel-accessor helixel-sel-surround-delimiter :delimiter nil

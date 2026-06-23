@@ -271,9 +271,7 @@ respect toggle \\[isearch-toggle-regexp] the."
               (pat (helixel-search--safe-pattern))
               (dir (helixel-search--current-dir)))
     ;; Read previous n-count from existing pending-sel and increment.
-    (let* ((prev-n (plist-get (helixel-sel-ctx
-                               helixel--pending-sel)
-                              :n-count))
+    (let* ((prev-n (helixel-sel-n-count helixel--pending-sel))
            (n-count (if prev-n (1+ prev-n) 0))
            (regexp (helixel--last-motion-regexp s)))
       (helixel--push-selection
@@ -468,8 +466,7 @@ Tracks how many times n was pressed so . repeats the full sequence."
          (prev-n (when (and prev-pending
                             (eq (helixel-sel-kind prev-pending)
                                 'find-char))
-                   (plist-get (helixel-sel-ctx prev-pending)
-                              :n-count)))
+                   (helixel-sel-n-count prev-pending)))
          (n-count (if prev-n (1+ prev-n) 0)))
     (helixel--sel-push
      (helixel-sel-create 'find-char
@@ -645,7 +642,7 @@ Returns t if a skip was performed, nil otherwise."
   "Advance :n-count extra matches per CTX using SEARCH-FN.
 SEARCH-FN is a zero-arg function called once per extra match.
 Stops silently on `search-failed'."
-  (when-let* ((n (plist-get ctx :n-count))
+  (when-let* ((n (or (helixel-sel-n-count ctx) 0))
               ((> n 0)))
     (helixel--with-debug-log search-advance-n-count
       (dotimes (_ n)
@@ -683,7 +680,7 @@ Uses :regexp from CTX to respect the \\=`M-r' toggle."
           (helixel--search-advance-done-set nil)
         ;; Internal search — only run when advance wasn't already done.
         (when (helixel-search--skip-current-match
-               pat dir (helixel-sel-search-entry-kind ctx)
+               pat dir (helixel-sel-entry-kind ctx)
                regexp)
           (when (or (= (point) pre-skip-pos)
                     (and (eq dir 'forward) (eobp))
@@ -698,7 +695,7 @@ Uses :regexp from CTX to respect the \\=`M-r' toggle."
        ctx (lambda () (helixel-search--search pat dir nil nil regexp)))
       (push-mark (match-beginning 0) t t)
       (goto-char (match-end 0)))
-    (when-let* ((entry-kind (helixel-sel-search-entry-kind ctx)))
+    (when-let* ((entry-kind (helixel-sel-entry-kind ctx)))
       (let* ((base (if (eq entry-kind 'append)
                        (match-end 0)
                      (match-beginning 0)))
@@ -710,7 +707,7 @@ Uses :regexp from CTX to respect the \\=`M-r' toggle."
 Does :n-count extra searches after finding the char, so . repeats
 the full f x n n sequence.  Extends region back to origin when
 :span is set (from ; push)."
-  (let ((n (or (plist-get ctx :n-count) 0))
+  (let ((n (or (helixel-sel-n-count ctx) 0))
         (dir (or (helixel-sel-find-char-dir ctx)
                  (helixel-search--current-dir))))
     (helixel-with-replay-as 'dot
@@ -1109,7 +1106,7 @@ a search context), fall back to recreating the selection in-place."
           (progn (helixel-sel-call-recreate sel) t)
           (error nil))
       (let* ((dir (helixel-sel-search-dir sel))
-             (entry-kind (helixel-sel-search-entry-kind sel))
+             (entry-kind (helixel-sel-entry-kind sel))
              (regexp (helixel-sel-search-regexp sel)))
         (helixel-search--skip-current-match pat dir entry-kind regexp)
         (unless entry-kind
@@ -1178,7 +1175,7 @@ Uses :regexp from SEL to respect the \\=`M-r' toggle."
   (save-excursion
     (goto-char start-pos)
     (let* ((pat (helixel-sel-search-pattern sel))
-           (entry-kind (helixel-sel-search-entry-kind sel))
+           (entry-kind (helixel-sel-entry-kind sel))
            (regexp (helixel-sel-search-regexp sel))
            (txt (or (helixel-action-payload-get tx :inserted-text)
                     (helixel-action-payload-get tx :text)
@@ -1214,7 +1211,7 @@ For entry-kind searches, inserts text at every match from
 buffer edge.  For non-entry-kind, scans from point-min
 using advance+apply without recursion."
   (let* ((sel (helixel-action-sel edit))
-         (entry-kind (helixel-sel-search-entry-kind sel)))
+         (entry-kind (helixel-sel-entry-kind sel)))
     (if entry-kind
         (let ((start-pos (if (helixel-repeat-prefix-reverse-p prefix)
                              (point-max) (point-min)))

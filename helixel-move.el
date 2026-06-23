@@ -1016,13 +1016,17 @@ On user-error restores point to before skip-past so a failing
              (while (and (not (eobp))
                          (invisible-p (1+ (point)))
                          ;; When at EOL, expand into the next line only
-                         ;; if it's fully invisible (not just an
-                         ;; invisible prefix like vc-annotate).
+                         ;; if the invisible text covers the line's
+                         ;; content (not just a prefix like vc-annotate).
+                         ;; Check the last content char before EOL/EOB.
                          ;; Mid-line always expands (same line).
                          (or (not (eolp))
                              (save-excursion
                                (goto-char (1+ (point)))
-                               (invisible-p (line-end-position)))))
+                               (let ((eol (line-end-position)))
+                                 (if (> eol (point))
+                                     (invisible-p (1- eol))
+                                   (invisible-p eol))))))
                (goto-char (1+ (point)))
                (let ((invis-end (if (get-text-property (point) 'invisible)
                                     (next-single-property-change

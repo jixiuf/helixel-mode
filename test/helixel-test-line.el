@@ -1423,6 +1423,19 @@ Simulates an org-mode heading with body text folded on the same line."
     (should (= (region-end) 16))  ; through line 2 EOL
     (should (eq (helixel--sel-type) 'line))))
 
+(ert-deftest helixel-test-line-end-or-invisible-no-trailing-newline ()
+  "line-end-or-invisible works when invisible line has no trailing newline.
+When the buffer ends without a final newline after invisible text,
+line-end-position returns point-max; must still expand correctly."
+  (helixel-test-with-buffer "headXXXXX"
+    (setq-local helixel-invisible t)
+    (put-text-property 5 10 'invisible 'outline)
+    (goto-char 1)
+    (goto-char 5)  ; mid-line, before invisible text
+    (helixel--line-end-or-invisible)
+    (should (= (point) 10))  ; includes invisible XXXXX
+    (should (eobp))))
+
 
 ;;; Integration: select → kill → paste on folded content
 

@@ -117,6 +117,12 @@ Example:
                          :reverse helixel-previous-line)
 (helixel-define-movement helixel-previous-line previous-line line
                          :reverse helixel-next-line)
+(helixel-define-movement helixel-next-logical-line next-logical-line
+                         logical-line
+                         :reverse helixel-previous-logical-line)
+(helixel-define-movement helixel-previous-logical-line
+  previous-logical-line logical-line
+  :reverse helixel-next-logical-line)
 (helixel-define-movement helixel-go-beginning-line beginning-of-line goto)
 (helixel-define-movement helixel-go-end-line end-of-line goto)
 (helixel-define-movement helixel-go-first-nonwhitespace

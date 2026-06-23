@@ -300,126 +300,62 @@ DELIM-EXPR is an expression that evaluates to a `helixel-delimiter' struct."
 
 ;; ── Pair delimiters (parens, brackets, braces, angle, quotes) ──
 
-(helixel--define-delimiter-movement helixel-outer-paren t nil
-  helixel-next-paren-end
-  (helixel-make-pair-delimiter ?\( ?\)))
-(helixel--define-delimiter-movement helixel-next-paren-end t t
-  helixel-outer-paren
-  (helixel-make-pair-delimiter ?\( ?\)))
-(helixel--define-delimiter-movement helixel-inner-outer-paren nil nil
-  helixel-inner-next-paren-end
-  (helixel-make-pair-delimiter ?\( ?\)))
-(helixel--define-delimiter-movement helixel-inner-next-paren-end nil t
-  helixel-inner-outer-paren
-  (helixel-make-pair-delimiter ?\( ?\)))
+(defmacro helixel--define-pair-delimiter-family (stem open close)
+  "Define the 4 outer/inner movement commands for a delimiter pair.
+STEM is the name fragment (e.g. paren, bracket, brace).
+OPEN and CLOSE are the delimiter characters.
+Generates commands: helixel-outer-STEM, helixel-next-STEM-end,
+helixel-inner-outer-STEM, helixel-inner-next-STEM-end."
+  (declare (indent 1))
+  (let ((outer-cmd (intern (format "helixel-outer-%s" stem)))
+        (next-end-cmd (intern (format "helixel-next-%s-end" stem)))
+        (inner-outer-cmd (intern (format "helixel-inner-outer-%s" stem)))
+        (inner-next-end-cmd
+         (intern (format "helixel-inner-next-%s-end" stem)))
+        (delim-form `(helixel-make-pair-delimiter ,open ,close)))
+    `(progn
+       (helixel--define-delimiter-movement ,outer-cmd t nil
+         ,next-end-cmd ,delim-form)
+       (helixel--define-delimiter-movement ,next-end-cmd t t
+         ,outer-cmd ,delim-form)
+       (helixel--define-delimiter-movement ,inner-outer-cmd nil nil
+         ,inner-next-end-cmd ,delim-form)
+       (helixel--define-delimiter-movement ,inner-next-end-cmd nil t
+         ,inner-outer-cmd ,delim-form))))
 
-(helixel--define-delimiter-movement helixel-outer-bracket t nil
-  helixel-next-bracket-end
-  (helixel-make-pair-delimiter ?\[ ?\]))
-(helixel--define-delimiter-movement helixel-next-bracket-end t t
-  helixel-outer-bracket
-  (helixel-make-pair-delimiter ?\[ ?\]))
-(helixel--define-delimiter-movement helixel-inner-outer-bracket nil nil
-  helixel-inner-next-bracket-end
-  (helixel-make-pair-delimiter ?\[ ?\]))
-(helixel--define-delimiter-movement helixel-inner-next-bracket-end nil t
-  helixel-inner-outer-bracket
-  (helixel-make-pair-delimiter ?\[ ?\]))
+(helixel--define-pair-delimiter-family paren ?\( ?\))
+(helixel--define-pair-delimiter-family bracket ?\[ ?\])
+(helixel--define-pair-delimiter-family brace ?{ ?})
+(helixel--define-pair-delimiter-family angle ?< ?>)
+(helixel--define-pair-delimiter-family double-quote ?\" ?\")
+(helixel--define-pair-delimiter-family single-quote ?' ?')
+(helixel--define-pair-delimiter-family back-quote ?` ?`)
 
-(helixel--define-delimiter-movement helixel-outer-brace t nil
-  helixel-next-brace-end
-  (helixel-make-pair-delimiter ?{ ?}))
-(helixel--define-delimiter-movement helixel-next-brace-end t t
-  helixel-outer-brace
-  (helixel-make-pair-delimiter ?{ ?}))
-(helixel--define-delimiter-movement helixel-inner-outer-brace nil nil
-  helixel-inner-next-brace-end
-  (helixel-make-pair-delimiter ?{ ?}))
-(helixel--define-delimiter-movement helixel-inner-next-brace-end nil t
-  helixel-inner-outer-brace
-  (helixel-make-pair-delimiter ?{ ?}))
+;; ── Tag / Block delimiter movement ──
 
-(helixel--define-delimiter-movement helixel-outer-angle t nil
-  helixel-next-angle-end
-  (helixel-make-pair-delimiter ?< ?>))
-(helixel--define-delimiter-movement helixel-next-angle-end t t
-  helixel-outer-angle
-  (helixel-make-pair-delimiter ?< ?>))
-(helixel--define-delimiter-movement helixel-inner-outer-angle nil nil
-  helixel-inner-next-angle-end
-  (helixel-make-pair-delimiter ?< ?>))
-(helixel--define-delimiter-movement helixel-inner-next-angle-end nil t
-  helixel-inner-outer-angle
-  (helixel-make-pair-delimiter ?< ?>))
+(defmacro helixel--define-singleton-delimiter-family (stem factory-form)
+  "Define 4 movement commands for a zero-arg delimiter like tag/block.
+STEM is the name fragment.  FACTORY-FORM produces the delimiter."
+  (declare (indent 1))
+  (let ((outer-cmd (intern (format "helixel-outer-%s" stem)))
+        (next-end-cmd (intern (format "helixel-next-%s-end" stem)))
+        (inner-outer-cmd (intern (format "helixel-inner-outer-%s" stem)))
+        (inner-next-end-cmd
+         (intern (format "helixel-inner-next-%s-end" stem))))
+    `(progn
+       (helixel--define-delimiter-movement ,outer-cmd t nil
+         ,next-end-cmd ,factory-form)
+       (helixel--define-delimiter-movement ,next-end-cmd t t
+         ,outer-cmd ,factory-form)
+       (helixel--define-delimiter-movement ,inner-outer-cmd nil nil
+         ,inner-next-end-cmd ,factory-form)
+       (helixel--define-delimiter-movement ,inner-next-end-cmd nil t
+         ,inner-outer-cmd ,factory-form))))
 
-(helixel--define-delimiter-movement helixel-outer-double-quote t nil
-  helixel-next-double-quote-end
-  (helixel-make-pair-delimiter ?\" ?\"))
-(helixel--define-delimiter-movement helixel-next-double-quote-end t t
-  helixel-outer-double-quote
-  (helixel-make-pair-delimiter ?\" ?\"))
-(helixel--define-delimiter-movement helixel-inner-outer-double-quote nil nil
-  helixel-inner-next-double-quote-end
-  (helixel-make-pair-delimiter ?\" ?\"))
-(helixel--define-delimiter-movement helixel-inner-next-double-quote-end nil t
-  helixel-inner-outer-double-quote
-  (helixel-make-pair-delimiter ?\" ?\"))
-
-(helixel--define-delimiter-movement helixel-outer-single-quote t nil
-  helixel-next-single-quote-end
-  (helixel-make-pair-delimiter ?' ?'))
-(helixel--define-delimiter-movement helixel-next-single-quote-end t t
-  helixel-outer-single-quote
-  (helixel-make-pair-delimiter ?' ?'))
-(helixel--define-delimiter-movement helixel-inner-outer-single-quote nil nil
-  helixel-inner-next-single-quote-end
-  (helixel-make-pair-delimiter ?' ?'))
-(helixel--define-delimiter-movement helixel-inner-next-single-quote-end nil t
-  helixel-inner-outer-single-quote
-  (helixel-make-pair-delimiter ?' ?'))
-
-(helixel--define-delimiter-movement helixel-outer-back-quote t nil
-  helixel-next-back-quote-end
-  (helixel-make-pair-delimiter ?` ?`))
-(helixel--define-delimiter-movement helixel-next-back-quote-end t t
-  helixel-outer-back-quote
-  (helixel-make-pair-delimiter ?` ?`))
-(helixel--define-delimiter-movement helixel-inner-outer-back-quote nil nil
-  helixel-inner-next-back-quote-end
-  (helixel-make-pair-delimiter ?` ?`))
-(helixel--define-delimiter-movement helixel-inner-next-back-quote-end nil t
-  helixel-inner-outer-back-quote
-  (helixel-make-pair-delimiter ?` ?`))
-
-;; ── Tag delimiter movement ──
-
-(helixel--define-delimiter-movement helixel-outer-tag t nil
-  helixel-next-tag-end
-  (helixel-make-tag-delimiter))
-(helixel--define-delimiter-movement helixel-next-tag-end t t
-  helixel-outer-tag
-  (helixel-make-tag-delimiter))
-(helixel--define-delimiter-movement helixel-inner-outer-tag nil nil
-  helixel-inner-next-tag-end
-  (helixel-make-tag-delimiter))
-(helixel--define-delimiter-movement helixel-inner-next-tag-end nil t
-  helixel-inner-outer-tag
-  (helixel-make-tag-delimiter))
-
-;; ── Block delimiter movement ──
-
-(helixel--define-delimiter-movement helixel-outer-block t nil
-  helixel-next-block-end
-  (helixel-make-block-delimiter))
-(helixel--define-delimiter-movement helixel-next-block-end t t
-  helixel-outer-block
-  (helixel-make-block-delimiter))
-(helixel--define-delimiter-movement helixel-inner-outer-block nil nil
-  helixel-inner-next-block-end
-  (helixel-make-block-delimiter))
-(helixel--define-delimiter-movement helixel-inner-next-block-end nil t
-  helixel-inner-outer-block
-  (helixel-make-block-delimiter))
+(helixel--define-singleton-delimiter-family
+    tag (helixel-make-tag-delimiter))
+(helixel--define-singleton-delimiter-family
+    block (helixel-make-block-delimiter))
 
 ;; `helixel--generic-bounds-at' / `helixel--generic-bounds-next'
 ;; are defined in helixel-core.el.

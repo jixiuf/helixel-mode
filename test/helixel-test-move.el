@@ -2909,3 +2909,41 @@ quux" :start nil)
     (should-not (helixel--jump-to-match-core))
     (should (= (point) 10))
 ))
+
+;; --- helixel--skip-newline ---
+
+(ert-deftest helixel-test-skip-newline-forward ()
+  "skip-newline forward jumps past \n."
+  (helixel-test-with-buffer '(:text "foo\nbar" :start nil :mode text-mode)
+    (goto-char 4)                 ; at \n
+    (helixel--skip-newline 1)
+    (should (eql (char-after) ?b))))
+
+(ert-deftest helixel-test-skip-newline-backward ()
+  "skip-newline backward jumps onto \n from position after it."
+  (helixel-test-with-buffer '(:text "foo\nbar" :start nil :mode text-mode)
+    (goto-char 5)                 ; at b after \n
+    (helixel--skip-newline -1)
+    (should (eql (char-after) ?\n))))
+
+(ert-deftest helixel-test-skip-newline-noop-eob ()
+  "skip-newline forward at eob is a no-op."
+  (helixel-test-with-buffer '(:text "x" :start nil :mode text-mode)
+    (goto-char (point-max))
+    (let ((pos (point)))
+      (helixel--skip-newline 1)
+      (should (eql (point) pos)))))
+
+;; --- helixel--clear-non-movement-pending-sel ---
+
+(ert-deftest helixel-test-clear-non-movement-pending-sel-clears-line ()
+  "Clears a line pending-sel."
+  (let ((helixel--pending-sel (helixel-sel-create 'line '(:dir forward :count 1))))
+    (helixel--clear-non-movement-pending-sel)
+    (should-not helixel--pending-sel)))
+
+(ert-deftest helixel-test-clear-non-movement-pending-sel-keeps-movement ()
+  "Keeps a movement pending-sel."
+  (let ((helixel--pending-sel (helixel-sel-create 'movement '(:moves ((forward-word . 1))))))
+    (helixel--clear-non-movement-pending-sel)
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))

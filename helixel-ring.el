@@ -144,27 +144,32 @@ Only categories listed here are shown when pressing
 ;; State variables
 ;; ----------------------------------------------------------------------
 
+(cl-defstruct (helixel-cycle-state (:constructor helixel-cycle-state--create)
+                                   (:copier nil))
+  "Per-cycle state for \=`;\=' and \=`C-;\=' commands.
+POS is the current ring index (nil = live, 0 = newest, N = older).
+JUMP-CYCLE-P is t for \=`C-;\=' (mark to start-point), nil for \=`;\='
+  (mark-thing).
+AUTO-ADVANCE-DEPTH is the recursion guard (max 16)."
+  (pos nil)
+  (jump-cycle-p nil)
+  (auto-advance-depth 0))
+
+(defsubst helixel-cycle-state-mark-thing-p (state)
+  "Return non-nil if STATE is in mark-thing mode (\=`;\=' not \=`C-;\=')."
+  (not (helixel-cycle-state-jump-cycle-p state)))
+
 (defvar-local helixel--action-pos nil
-  "Ring position for \\[helixel-action-cycle\\] cycling.
-nil = live event.  0 = newest ring entry.  N = older.")
-
-(defvar helixel--cycle-jump-p nil
-  "Non-nil during \\[helixel-action-cycle-mark-start\\].
-Disables the mark-thing path internally.
-Internal dynvar — see `helixel-action-cycle-mark-start'.")
-
-(defsubst helixel--cycle-mark-thing-p ()
-  "Return non-nil if the current cycle mode should select the full span.
-Returns t for \\[helixel-action-cycle\\] (mark-thing), nil for
-\\[helixel-action-cycle-mark-start\\] (jump cycle).
-Delegates to the inverse of `helixel--cycle-jump-p'."
-  (not helixel--cycle-jump-p))
+  "Persistent ring position for \=`;\=' cycling.
+nil = live event.  0 = newest ring entry.  N = older.
+Loaded into `helixel-cycle-state' on each \=`;\=' invocation.")
 
 (defvar-local helixel--mark-cycle-pos nil
-  "Ring position for \\[helixel-action-cycle-mark-start\\] cycling.
+  "Persistent ring position for \=`C-;\=' cycling.
 nil = not cycling.  0 = newest ring entry.  N = older.
-\\[helixel-action-cycle\\] and \\[helixel-action-cycle-mark-start\\]
-use separate positions so the two navigation modes are independent.")
+Loaded into `helixel-cycle-state' on each \=`C-;\=' invocation.
+\=`;\=' and \=`C-;\=' use separate positions so the two navigation
+modes are independent.")
 
 ;; ----------------------------------------------------------------------
 ;; Buffer-local event ring
@@ -553,7 +558,6 @@ moves point to the end.  Returns the group-start position."
       (activate-mark))
     (message "%s" (helixel-action--cycle-display grp-event gpos ring))
     gpos))
-
 (defun helixel-action--newest-for-mark-p (event)
   "Return non-nil if EVENT should use the newest event for ; marking.
 Consults `helixel-action-cycle-newest-for-mark'."
@@ -664,46 +668,49 @@ to session-start, matching \\[helixel-action-cycle\\]'s behaviour."
 
 ;; ── Shared fallback helpers ──
 
-(defun helixel--action-cycle-show-live ()
+(defun helixel--action-cycle-show-live (state)
   "Show the current live action for forward-cycle at newest.
 Pushes mark to the live action's start-position and displays
-\"[live]\" message.  Sets `helixel--action-pos' to nil (live state)."
-  (setq helixel--action-pos nil)
-  (push-mark (helixel--cycle-mark-start helixel--live-action) t t)
+\"[live]\" message.  Sets STATE's pos to nil (live state).
+STATE is a `helixel-cycle-state' struct."
+  (setf (helixel-cycle-state-pos state) nil)
+  (push-mark (helixel--cycle-mark-start state helixel--live-action) t t)
   (message "[live] %s"
            (helixel--action-display-format helixel--live-action)))
 
-(defun helixel--action-cycle-no-more-fallback (ring pos)
+(defun helixel--action-cycle-no-more-fallback (state ring pos)
   "Handle the case when no older entries exist beyond RING[POS].
+STATE is a `helixel-cycle-state' struct.
 If newest-for-mark applies, marks the full group span.
 Otherwise pushes mark to the group-start marker and displays position.
 POS is the index into RING of the current event."
   (let* ((gpos (helixel--gr-group-start
                 ring pos #'helixel-action--same-group-p))
          (grp-event (nth gpos ring)))
-    (if (and (helixel--cycle-mark-thing-p)
+    (if (and (helixel-cycle-state-mark-thing-p state)
              (helixel-action--newest-for-mark-p grp-event))
-        (setq helixel--action-pos
+        (setf (helixel-cycle-state-pos state)
               (helixel-action--cycle-mark-group-span ring pos))
       (let ((mr (helixel-action-mark-region grp-event)))
-        (push-mark (if (helixel--cycle-mark-thing-p)
+        (push-mark (if (helixel-cycle-state-mark-thing-p state)
                        (car mr)
-                     (helixel--cycle-mark-start grp-event))
+                     (helixel--cycle-mark-start state grp-event))
                    t t)
         (message "%s" (helixel-action--cycle-display
                        grp-event gpos ring))))))
 
-(defun helixel-action--cycle-mark-region (event mr first-call)
+(defun helixel-action--cycle-mark-region (state event mr first-call)
   "Mark the region during \\[helixel-action-cycle\\] cycling.
+STATE is a `helixel-cycle-state' struct.
 Uses mark-region MR from EVENT.
 MR is a cons (START . END) of two markers or two integers.
 If FIRST-CALL is non-nil, MR is non-degenerate,
-`helixel--cycle-mark-thing-p' returns non-nil, and EVENT matches
+`helixel-cycle-state-mark-thing-p' returns non-nil, and EVENT matches
 `helixel-semicolon-mark-thing', activate a real region pointing at
 the far edge from point (mark-thing) and return t (did-mark).
 Otherwise just push the mark to the begin marker and return nil.
 
-When `helixel--cycle-mark-thing-p' returns nil (from
+When STATE's jump-cycle-p is t (from
 \\[helixel-action-cycle-mark-start\\]), the
 mark-thing path is skipped entirely — every call is non-mark-thing."
   (let* ((a (if (markerp (car mr))
@@ -713,7 +720,7 @@ mark-thing path is skipped entirely — every call is non-mark-thing."
                 (marker-position (cdr mr))
               (cdr mr)))
          (degenerate (= a b)))
-    (if (and (helixel--cycle-mark-thing-p)
+    (if (and (helixel-cycle-state-mark-thing-p state)
              (helixel--semicolon-mark-thing-p event)
              first-call
              (not degenerate))
@@ -734,8 +741,9 @@ mark-thing path is skipped entirely — every call is non-mark-thing."
       nil)))
 
 (defun helixel-action--cycle-compute-mark-region
-    (ring gpos newest-pos event mark-event multi-event-p use-newest)
+    (state ring gpos newest-pos event mark-event multi-event-p use-newest)
   "Compute the mark-region for cycle-show at RING[GPOS].
+STATE is a `helixel-cycle-state' struct.
 RING is the action ring, GPOS the group-start index, NEWEST-POS
 the newest index in the group, EVENT the group-start action,
 MARK-EVENT the event whose mark-region to use, MULTI-EVENT-P
@@ -749,8 +757,8 @@ uses the newest event's own mark-region (select just the last
 paste).  For other cases, computes the full group span on-the-fly
 via `helixel--compute-group-span'.
 
-When `helixel--cycle-mark-thing-p' returns nil (jump-cycle mode),
-replaces the START with the group-start event's `start-point'
+When STATE's jump-cycle-p is t (\\[helixel-action-cycle-mark-start\\]
+mode), replaces the START with the group-start event's `start-point'
 marker — pushing mark to the original pre-motion cursor position
 instead of the movement span start."
   (let* ((own-mr (helixel--non-degenerate-mark-region mark-event))
@@ -767,17 +775,18 @@ instead of the movement span start."
            (t
             (or group-mr
                 (helixel-action-mark-region mark-event))))))
-    (if (helixel--cycle-mark-thing-p)
+    (if (helixel-cycle-state-mark-thing-p state)
         raw-mr
       (cons (or (when-let* ((sp (helixel-action-start-point
                                  (nth gpos ring)))
                             ((markerp sp)))
                   (marker-position sp))
-                (helixel--cycle-mark-start event))
+                (helixel--cycle-mark-start state event))
             (cdr raw-mr)))))
 
-(defun helixel-action--cycle-show (pos ring)
+(defun helixel-action--cycle-show (state pos ring)
   "Show the group-start entry for the group containing RING[POS].
+STATE is a `helixel-cycle-state' struct.
 If the event has a non-degenerate :mark-region, mark the region
 using the pre-computed markers (mark-thing on first call).
 
@@ -790,32 +799,33 @@ was performed, automatically advance to the next older event."
                                                #'helixel-action--same-group-p))
          (multi-event-p (not (= newest-pos gpos)))
          (sel-event (if multi-event-p (nth newest-pos ring) event))
-         (first-call (null helixel--action-pos))
+         (first-call (null (helixel-cycle-state-pos state)))
          (use-newest (and multi-event-p
                           (helixel-action--newest-for-mark-p event)))
          (mark-event (if use-newest sel-event event))
          (mr (helixel-action--cycle-compute-mark-region
-              ring gpos newest-pos event mark-event
+              state ring gpos newest-pos event mark-event
               multi-event-p use-newest)))
     ;; For newest-for-mark categories with multiple events, set
     ;; action-pos to newest-pos so the next ; walks within the
     ;; same group (marking the full span) before going older.
-    (setq helixel--action-pos
+    (setf (helixel-cycle-state-pos state)
           (if use-newest newest-pos gpos))
     (let ((did-mark (helixel-action--cycle-mark-region
-                     mark-event mr first-call)))
+                     state mark-event mr first-call)))
       (helixel-action--push-sel-from-event sel-event)
       (message "%s" (helixel-action--cycle-display event gpos ring))
-      (helixel-action--cycle-auto-advance did-mark first-call))))
+      (helixel-action--cycle-auto-advance state did-mark first-call))))
 
-(defun helixel--cycle-mark-start (event)
+(defun helixel--cycle-mark-start (state event)
   "Return the start marker/position for EVENT based on cycle mode.
-When `helixel--cycle-mark-thing-p' returns nil
+STATE is a `helixel-cycle-state' struct.
+When STATE's jump-cycle-p is t
 \\(\\[helixel-action-cycle-mark-start\\] mode), returns
 EVENT's start-point (the original pre-motion cursor position).
 Otherwise returns the car of EVENT's mark-region.
 Falls back to mark-region car when start-point is nil."
-  (if (helixel--cycle-mark-thing-p)
+  (if (helixel-cycle-state-mark-thing-p state)
       (car-safe (helixel-action-mark-region event))
     (let ((sp (helixel-action-start-point event)))
       (if (and sp (markerp sp) (marker-buffer sp))
@@ -830,30 +840,25 @@ category and subcat."
        (eq (helixel-action-category a) (helixel-action-category b))
        (eq (helixel-action-subcat a) (helixel-action-subcat b))))
 
-(defvar-local helixel--cycle-auto-advance-depth 0
-  "Recursion guard for `helixel-action--cycle-auto-advance'.
-Incremented each time auto-advance triggers, reset to 0 when
-the user presses \; or C-; interactively.  Prevents infinite
-loops from degenerate ring entries.")
-
-(defun helixel-action--cycle-auto-advance (did-mark first-call)
+(defun helixel-action--cycle-auto-advance (state did-mark first-call)
   "Auto-advance the action cycle to skip dead spots.
 Called when \\[helixel-action-cycle\\] produced no useful change.
+STATE is a `helixel-cycle-state' struct.
 DID-MARK is non-nil when mark-thing selected a region.
 FIRST-CALL is non-nil when this is the first
 \\[helixel-action-cycle\\] after a movement.
 
 When the current event doesn't change point or the region, skip
 forward to the next older event to avoid cycling through dead spots.
-Bounded by `helixel--cycle-auto-advance-depth' to prevent infinite
+Bounded by STATE's auto-advance-depth to prevent infinite
 recursion (safety limit: 16)."
   (when (and (not (use-region-p))
              (not did-mark)
              (not first-call)
-             (< helixel--cycle-auto-advance-depth 16))
-    (let ((helixel--cycle-auto-advance-depth
-           (1+ helixel--cycle-auto-advance-depth)))
-      (helixel--action-cycle-backward))))
+             (< (helixel-cycle-state-auto-advance-depth state) 16))
+    (setf (helixel-cycle-state-auto-advance-depth state)
+          (1+ (helixel-cycle-state-auto-advance-depth state)))
+    (helixel--action-cycle-backward state)))
 
 (defun helixel-action-cycle (&optional arg)
   "Cycle through `helixel--action-ring' entries.
@@ -865,68 +870,89 @@ Subsequent presses cycle to older events.
 Optional prefix ARG is passed to the underlying commands."
   (interactive "P")
   (unless (eq last-command 'helixel-action-cycle)
-    (setq helixel--action-pos nil
-          helixel--cycle-auto-advance-depth 0))
-  (helixel--action-cycle arg))
+    (setq helixel--action-pos nil))
+  (let ((state (helixel-cycle-state--create
+                :pos helixel--action-pos)))
+    (helixel--action-cycle state arg)
+    (setq helixel--action-pos (helixel-cycle-state-pos state))))
 
-(defun helixel--action-cycle (&optional arg)
+(defun helixel--action-cycle (&optional state arg)
   "Internal: cycle logic without `last-command' guard.
 Called by `helixel-action-cycle' and recursive auto-advance.
+STATE is a `helixel-cycle-state' struct.  When non-nil but not a
+struct, it is treated as the prefix ARG (backward compatibility
+with callers that pass only the prefix arg).
 Optional prefix ARG is passed to the underlying commands."
-  (if arg
-      (helixel--action-cycle-forward)
-    (helixel--action-cycle-backward)))
+  ;; Backward compat: if first arg is not a cycle-state struct,
+  ;; treat it as the prefix ARG (the old single-arg signature).
+  (when (and state (not (helixel-cycle-state-p state)))
+    (setq arg state
+          state nil))
+  (let ((owns-state (not state)))
+    (unless state
+      (setq state (helixel-cycle-state--create
+                   :pos helixel--action-pos)))
+    (prog1 (if arg
+               (helixel--action-cycle-forward state)
+             (helixel--action-cycle-backward state))
+      ;; Save back for backward-compat callers that don't own a state.
+      (when owns-state
+        (setq helixel--action-pos (helixel-cycle-state-pos state))))))
 
-(defun helixel--action-cycle-forward ()
+(defun helixel--action-cycle-forward (state)
   "Step forward (newer) in `helixel--action-ring'.
+STATE is a `helixel-cycle-state' struct.
 Used by \\[universal-argument] \\[helixel-action-cycle\]."
-  (cond
-   ((and helixel--action-pos (> helixel--action-pos 0))
-    ;; Inside history: jump to entry before the current group's newest.
-    (if-let* ((prev (helixel--gr-step-prev-group
-                     helixel--action-ring helixel--action-pos
-                     #'helixel-action--same-group-p
-                     #'helixel-action--cycle-visible-p)))
-        (helixel-action--cycle-show prev helixel--action-ring)
-      (message "At newest")))
-   ((eq helixel--action-pos 0)
-    (if helixel--live-action
-        (helixel--action-cycle-show-live)
-      (message "At newest")))
-   (t (message "At newest"))))
-
-(defun helixel--action-cycle-backward ()
+  (let ((pos (helixel-cycle-state-pos state)))
+    (cond
+     ((and pos (> pos 0))
+      ;; Inside history: jump to entry before the current group's newest.
+      (if-let* ((prev (helixel--gr-step-prev-group
+                       helixel--action-ring pos
+                       #'helixel-action--same-group-p
+                       #'helixel-action--cycle-visible-p)))
+          (helixel-action--cycle-show state prev helixel--action-ring)
+        (message "At newest")))
+     ((eq pos 0)
+      ;; At newest ring entry: show live action if any.
+      (if helixel--live-action
+          (helixel--action-cycle-show-live state)
+        (message "At newest")))
+     (t (message "At newest")))))
+(defun helixel--action-cycle-backward (state)
   "Step backward (older) in `helixel--action-ring'.
+STATE is a `helixel-cycle-state' struct.
 Used by \\[helixel-action-cycle\] and auto-advance."
-  (cond
-   (helixel--action-pos
-    (let ((pos (helixel--gr-find
-                helixel--action-ring helixel--action-pos 1
-                #'helixel-action--cycle-visible-p)))
-      (if pos
-          (if (and (helixel--cycle-mark-thing-p)
+  (let ((pos (helixel-cycle-state-pos state)))
+    (cond
+     (pos
+      ;; Already cycling: find next older visible entry.
+      (if-let* ((next (helixel--gr-find
+                       helixel--action-ring pos 1
+                       #'helixel-action--cycle-visible-p)))
+          ;; Found a visible entry.  Check newest-for-mark group span.
+          (if (and (helixel-cycle-state-mark-thing-p state)
                    (helixel-action--newest-for-mark-p
-                    (nth helixel--action-pos helixel--action-ring))
+                    (nth pos helixel--action-ring))
                    (helixel-action--same-group-p
-                    (nth helixel--action-pos helixel--action-ring)
-                    (nth pos helixel--action-ring)))
-              (setq helixel--action-pos
+                    (nth pos helixel--action-ring)
+                    (nth next helixel--action-ring)))
+              (setf (helixel-cycle-state-pos state)
                     (helixel-action--cycle-mark-group-span
-                     helixel--action-ring pos))
-            (helixel-action--cycle-show pos helixel--action-ring))
+                     helixel--action-ring next))
+            (helixel-action--cycle-show state next helixel--action-ring))
         ;; No older visible entries: show group-start fallback.
         (helixel--action-cycle-no-more-fallback
-         helixel--action-ring helixel--action-pos))))
-   ;; First press: commit live action and start cycling from newest.
-   ((or helixel--live-action helixel--action-ring)
-    (when helixel--live-action (helixel--action-commit))
-    (if-let* ((pos (helixel--gr-visible-index
-                    helixel--action-ring 0
-                    #'helixel-action--cycle-visible-p)))
-        (helixel-action--cycle-show pos helixel--action-ring)
-      (message "No saved actions")))
-   (t (message "No saved actions"))))
-
+         state helixel--action-ring pos)))
+     ;; First press: commit live action and start cycling from newest.
+     ((or helixel--live-action helixel--action-ring)
+      (when helixel--live-action (helixel--action-commit))
+      (if-let* ((first (helixel--gr-visible-index
+                        helixel--action-ring 0
+                        #'helixel-action--cycle-visible-p)))
+          (helixel-action--cycle-show state first helixel--action-ring)
+        (message "No saved actions")))
+     (t (message "No saved actions")))))
 ;; ── Jump cycle (\\[helixel-action-cycle-mark-start\\]) ──
 ;;
 ;; \\[helixel-action-cycle-mark-start\\] shares the full
@@ -936,12 +962,11 @@ Used by \\[helixel-action-cycle\] and auto-advance."
 ;; It uses the same ring, visibility, and grouping as
 ;; \\[helixel-action-cycle\\].  The two
 ;; differences are:
-;;   1. Marking: `helixel--cycle-mark-thing-p' returns nil, disabling
-;;      the mark-thing path.  Every press pushes mark to the
-;;      thing-start (non-mark-thing).
-;;   2. Position: `helixel--action-pos' is let-bound from
-;;      `helixel--mark-cycle-pos' so the two commands track their
-;;      cycle positions independently.
+;;   1. Marking: STATE's jump-cycle-p is t, disabling the mark-thing
+;;      path.  Every press pushes mark to the start-point.
+;;   2. Position: `helixel--mark-cycle-pos' persists the C-; position;
+;;      `helixel--action-pos' persists the ; position.  Each creates a
+;;      `helixel-cycle-state' on invocation.
 
 (defun helixel-action-cycle-mark-start (&optional arg)
   "Cycle through event history, pushing mark to each event's start position.
@@ -958,15 +983,12 @@ Optional prefix ARG reverses direction (go newer)."
   (interactive "P")
   (unless (eq last-command 'helixel-action-cycle-mark-start)
     (setq helixel--mark-cycle-pos nil))
-  (let ((helixel--cycle-jump-p t)
-        (helixel--action-pos helixel--mark-cycle-pos))
-    ;; helixel--action-pos is let-bound from helixel--mark-cycle-pos
-    ;; so the shared cycle logic reads/writes
-    ;; \\[helixel-action-cycle-mark-start\\]'s own position.
-    (unwind-protect
-        (helixel--action-cycle arg)
-      (setq helixel--mark-cycle-pos helixel--action-pos))))
-
+  (let ((state (helixel-cycle-state--create
+                :pos helixel--mark-cycle-pos
+                :jump-cycle-p t)))
+    (helixel--action-cycle state arg)
+    (setq helixel--mark-cycle-pos
+          (helixel-cycle-state-pos state))))
 ;; ----------------------------------------------------------------------
 ;; Global jump list (\\[helixel-jump-backward\\] / \\[helixel-jump-forward\\])
 ;; ----------------------------------------------------------------------

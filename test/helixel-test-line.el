@@ -1154,6 +1154,315 @@ x x x: continue extending forward."
     (helixel-toggle-invisible)
     (should-not helixel-invisible)))
 
+
+;;; helixel--line-end-or-invisible unit tests
+
+(ert-deftest helixel-test-line-end-or-invisible-no-invis ()
+  "line-end-or-invisible at EOL with visible next line stays at EOL."
+  (helixel-test-with-buffer "line1\nline2\n"
+    (setq-local helixel-invisible t)
+    (goto-char 1)
+    (helixel--line-end-or-invisible)
+    (should (= (point) 6))  ; EOL of line1
+    (should (eolp))))
+
+(ert-deftest helixel-test-line-end-or-invisible-next-line-fully-invis ()
+  "line-end-or-invisible expands through next line when it is entirely invisible."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\n"
+    (setq-local helixel-invisible t)
+    ;; Make lines 2-3 entirely invisible (including newlines).
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 3) (point))))
+      (put-text-property start end 'invisible 'outline))
+    (goto-char 1)
+    (helixel--line-end-or-invisible)
+    ;; Should expand through lines 2-3 and stop at EOL of line 3.
+    (should (= (point) 18))
+    (should (eolp))))
+
+(ert-deftest helixel-test-line-end-or-invisible-next-line-prefix-only ()
+  "line-end-or-invisible stops when next line has invisible prefix only.
+Simulates vc-annotate: each line has an invisible annotation prefix
+followed by visible code.  Must NOT expand into the next line."
+  (helixel-test-with-buffer
+      "AAAAAline1\nBBBBBline2\nCCCCCline3\n"
+    (setq-local helixel-invisible t)
+    ;; Invisible prefixes on each line (positions 1-5, 12-16, 23-27).
+    (put-text-property 1 6 'invisible 'outline)
+    (put-text-property 12 17 'invisible 'outline)
+    (put-text-property 23 28 'invisible 'outline)
+    (goto-char 1)
+    (helixel--line-end-or-invisible)
+    ;; Must stay at EOL of line 1, not expand into line 2.
+    (should (= (point) 11))
+    (should (eolp))))
+
+(ert-deftest helixel-test-line-end-or-invisible-mid-line-invis ()
+  "line-end-or-invisible when mid-line (not eolp) always expands.
+Invisible text on the same line after point should be traversed."
+  (helixel-test-with-buffer "visibleXXXXX\n"
+    (setq-local helixel-invisible t)
+    ;; Make "XXXXX" (positions 8-12) invisible.
+    (put-text-property 8 13 'invisible 'outline)
+    (goto-char 1)
+    ;; Simulate mid-line: point after "visible" but before "XXXXX".
+    (goto-char 8)
+    (helixel--line-end-or-invisible)
+    (should (= (point) 13))  ; newline after XXXXX
+    (should (eolp))))
+
+(ert-deftest helixel-test-line-end-or-invisible-invis-nil ()
+  "line-end-or-invisible with helixel-invisible nil just calls end-of-line."
+  (helixel-test-with-buffer "line1\nline2\n"
+    ;; Make next line fully invisible.
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 2) (point))))
+      (put-text-property start end 'invisible 'outline))
+    ;; BUT helixel-invisible is nil → no expansion.
+    (setq-local helixel-invisible nil)
+    (goto-char 1)
+    (helixel--line-end-or-invisible)
+    (should (= (point) 6))  ; EOL of line1 only
+    (should (eolp))))
+
+(ert-deftest helixel-test-line-end-or-invisible-invis-auto ()
+  "line-end-or-invisible with helixel-invisible=auto follows search-invisible."
+  (helixel-test-with-buffer "line1\nline2\n"
+    (setq-local helixel-invisible 'auto)
+    ;; When search-invisible is nil, no expansion.
+    (let ((search-invisible nil))
+      (let ((start (save-excursion (forward-line 1) (point)))
+            (end (save-excursion (forward-line 2) (point))))
+        (put-text-property start end 'invisible 'outline))
+      (goto-char 1)
+      (helixel--line-end-or-invisible)
+      (should (= (point) 6))  ; no expansion
+      (should (eolp)))
+    ;; When search-invisible is t, expansion happens.
+    (let ((search-invisible t))
+      (goto-char 1)
+      (helixel--line-end-or-invisible)
+      (should (= (point) 12))  ; expanded through invisible line2
+      (should (eolp)))))
+
+
+;;; helixel-select-line with invisible prefixes (vc-annotate style)
+
+(ert-deftest helixel-test-line-select-prefix-no-expand ()
+  "x selects one line when invisible text is a per-line prefix.
+Simulates vc-annotate buffers where each line starts with invisible
+annotation text followed by visible source code.  x must not expand
+through subsequent invisible prefixes."
+  (helixel-test-with-buffer
+      "AAAAAline1\nBBBBBline2\nCCCCCline3\n"
+    (setq-local helixel-invisible t)
+    (put-text-property 1 6 'invisible 'outline)
+    (put-text-property 12 17 'invisible 'outline)
+    (put-text-property 23 28 'invisible 'outline)
+    (goto-char 1)
+    (helixel-select-line)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 11))
+    (should (eq (helixel--sel-type) 'line))))
+
+(ert-deftest helixel-test-line-select-prefix-extend ()
+  "xx extends by one line when lines have invisible prefixes."
+  (helixel-test-with-buffer
+      "AAAAAline1\nBBBBBline2\nCCCCCline3\nDDDDDline4\n"
+    (setq-local helixel-invisible t)
+    (put-text-property 1 6 'invisible 'outline)
+    (put-text-property 12 17 'invisible 'outline)
+    (put-text-property 23 28 'invisible 'outline)
+    (put-text-property 34 39 'invisible 'outline)
+    (goto-char 1)
+    (helixel-select-line)   ; x     → line 1
+    (helixel-select-line)   ; x     → lines 1-2
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 22))
+    (helixel-select-line)   ; x     → lines 1-3
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 33))
+    (should (eq (helixel--sel-type) 'line))))
+
+(ert-deftest helixel-test-line-select-prefix-count-3 ()
+  "3x selects three lines with invisible prefixes."
+  (helixel-test-with-buffer
+      "AAAAAline1\nBBBBBline2\nCCCCCline3\nDDDDDline4\n"
+    (setq-local helixel-invisible t)
+    (put-text-property 1 6 'invisible 'outline)
+    (put-text-property 12 17 'invisible 'outline)
+    (put-text-property 23 28 'invisible 'outline)
+    (put-text-property 34 39 'invisible 'outline)
+    (goto-char 1)
+    (helixel-select-line 3)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 33))
+    (should (eq (helixel--sel-type) 'line))))
+
+(ert-deftest helixel-test-line-select-prefix-standalone ()
+  "x on a middle line selects only that line with invisible prefix.
+Start on line 2, not line 1 — avoids any BOB edge-cases."
+  (helixel-test-with-buffer
+      "AAAAAline1\nBBBBBline2\nCCCCCline3\n"
+    (setq-local helixel-invisible t)
+    (put-text-property 1 6 'invisible 'outline)
+    (put-text-property 12 17 'invisible 'outline)
+    (put-text-property 23 28 'invisible 'outline)
+    (goto-char 12)
+    (helixel-select-line)
+    (should (= (region-beginning) 12))
+    (should (= (region-end) 22))
+    (should (eq (helixel--sel-type) 'line))))
+
+(ert-deftest helixel-test-line-select-prefix-extend-from-middle ()
+  "xx from a middle line extends downward with invisible prefixes."
+  (helixel-test-with-buffer
+      "AAAAAline1\nBBBBBline2\nCCCCCline3\nDDDDDline4\n"
+    (setq-local helixel-invisible t)
+    (put-text-property 1 6 'invisible 'outline)
+    (put-text-property 12 17 'invisible 'outline)
+    (put-text-property 23 28 'invisible 'outline)
+    (put-text-property 34 39 'invisible 'outline)
+    (goto-char 12)
+    (helixel-select-line)   ; x     → line 2
+    (helixel-select-line)   ; x     → lines 2-3
+    (should (= (region-beginning) 12))
+    (should (= (region-end) 33))
+    (should (eq (helixel--sel-type) 'line))))
+
+(ert-deftest helixel-test-line-select-prefix-shrink ()
+  "Negative count shrinks line selection with invisible prefixes."
+  (helixel-test-with-buffer
+      "AAAAAline1\nBBBBBline2\nCCCCCline3\nDDDDDline4\n"
+    (setq-local helixel-invisible t)
+    (put-text-property 1 6 'invisible 'outline)
+    (put-text-property 12 17 'invisible 'outline)
+    (put-text-property 23 28 'invisible 'outline)
+    (put-text-property 34 39 'invisible 'outline)
+    ;; Select lines 1-3 first.
+    (goto-char 1)
+    (helixel-select-line 3)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 33))
+    ;; Shrink by 1 (negative count).
+    (helixel-select-line -1)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 22))
+    (should (eq (helixel--sel-type) 'line))))
+
+(ert-deftest helixel-test-line-select-prefix-variable-lengths ()
+  "x works with invisible prefixes of different lengths per line."
+  (helixel-test-with-buffer
+      "AAline1\nBBBBBline2\nCCCline3\n"
+    (setq-local helixel-invisible t)
+    ;; Line 1: 2-char invisible prefix (positions 1-2)
+    ;; Line 2: 5-char invisible prefix (positions 9-13)
+    ;; Line 3: 3-char invisible prefix (positions 20-22)
+    (put-text-property 1 3 'invisible 'outline)
+    (put-text-property 9 14 'invisible 'outline)
+    (put-text-property 20 23 'invisible 'outline)
+    (goto-char 1)
+    (helixel-select-line)
+    ;; Line 1: AAline1\n = positions 1-8
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 8))
+    (helixel-select-line)   ; extend to line 2
+    ;; Lines 1-2: positions 1-19
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 19))
+    (should (eq (helixel--sel-type) 'line))))
+
+
+;;; helixel-select-line with invisible block (org-fold style)
+
+(ert-deftest helixel-test-line-select-block-extend ()
+  "x on fully-invisible next lines expands and extends correctly."
+  (helixel-test-with-buffer "line1\nline2\nline3\nline4\nline5\n"
+    (setq-local helixel-invisible t)
+    ;; Make lines 2-4 entirely invisible.
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 4) (point))))
+      (put-text-property start end 'invisible 'outline))
+    (goto-char 1)
+    (helixel-select-line)
+    ;; Should expand through lines 2-4.
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 24))
+    (helixel-select-line)   ; extend by 1 more visible line
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 30))
+    (should (eq (helixel--sel-type) 'line))))
+
+
+;;; helixel-select-line with mid-line invisible (org-body same line)
+
+(ert-deftest helixel-test-line-select-mid-line-invis ()
+  "x expands through invisible text on the same line.
+Simulates an org-mode heading with body text folded on the same line."
+  (helixel-test-with-buffer "headXXXXX\n"
+    (setq-local helixel-invisible t)
+    ;; "XXXXX" (positions 5-9) is invisible body on same line.
+    (put-text-property 5 10 'invisible 'outline)
+    (goto-char 1)
+    (helixel-select-line)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 10))  ; includes XXXXX
+    (should (eq (helixel--sel-type) 'line))))
+
+(ert-deftest helixel-test-line-select-mid-line-invis-extend ()
+  "x extends from a line with invisible tail."
+  (helixel-test-with-buffer "headXXXXX\nline2\n"
+    (setq-local helixel-invisible t)
+    (put-text-property 5 10 'invisible 'outline)
+    (goto-char 1)
+    (helixel-select-line)
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 10))
+    (helixel-select-line)   ; extend to line 2
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 16))  ; through line 2 EOL
+    (should (eq (helixel--sel-type) 'line))))
+
+
+;;; Integration: select → kill → paste on folded content
+
+(ert-deftest helixel-test-line-select-kill-folded ()
+  "x d on folded content kills the entire section including hidden text."
+  (helixel-test-with-buffer
+      "* Heading\nline 1\nline 2\n* Next\n"
+    (setq-local helixel-invisible t)
+    ;; Make the body (lines 2-3) entirely invisible.
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 3) (point))))
+      (put-text-property start end 'invisible 'outline))
+    (goto-char 1)
+    (helixel-select-line)
+    ;; Verify full section is selected.
+    (should (= (region-beginning) 1))
+    (should (= (region-end) 24))  ; through line 3
+    ;; Kill (d).
+    (helixel-kill)
+    (should (string= (buffer-string) "* Next\n"))
+    (should (string= (car kill-ring)
+                     "* Heading\nline 1\nline 2\n"))))
+
+(ert-deftest helixel-test-line-select-copy-folded ()
+  "x y on folded content copies the entire section."
+  (helixel-test-with-buffer
+      "* Heading\nline 1\nline 2\n* Next\n"
+    (setq-local helixel-invisible t)
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 3) (point))))
+      (put-text-property start end 'invisible 'outline))
+    (goto-char 1)
+    (helixel-select-line)
+    ;; Copy (y).
+    (helixel-kill-ring-save)
+    (should (string= (car kill-ring)
+                     "* Heading\nline 1\nline 2\n"))
+    ;; Buffer should still be intact.
+    (should (string= (buffer-string)
+                     "* Heading\nline 1\nline 2\n* Next\n"))))
 
 
 (provide 'helixel-test-line)

@@ -1013,7 +1013,16 @@ On user-error restores point to before skip-past so a failing
   "Move to end of line, expanding past adjacent invisible text if enabled."
   (if (helixel--invisible-effective)
       (progn (end-of-line)
-             (while (and (not (eobp)) (invisible-p (1+ (point))))
+             (while (and (not (eobp))
+                         (invisible-p (1+ (point)))
+                         ;; When at EOL, expand into the next line only
+                         ;; if it's fully invisible (not just an
+                         ;; invisible prefix like vc-annotate).
+                         ;; Mid-line always expands (same line).
+                         (or (not (eolp))
+                             (save-excursion
+                               (goto-char (1+ (point)))
+                               (invisible-p (line-end-position)))))
                (goto-char (1+ (point)))
                (let ((invis-end (if (get-text-property (point) 'invisible)
                                     (next-single-property-change

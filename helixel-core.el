@@ -1961,6 +1961,16 @@ if no further visible entry exists in that direction."
              when (funcall visible-p (nth i list))
              return i)))
 
+(defun helixel--gr-step-prev-group (list pos same-group-p visible-p)
+  "Return index of first visible entry before the group containing POS.
+Finds the newest entry in POS's group, then returns the first visible
+entry at or after (1- newest).  Returns nil when at the newest group
+\(newest = 0).
+LIST is the ring, SAME-GROUP-P and VISIBLE-P are the usual predicates."
+  (let ((newest (helixel--gr-group-newest list pos same-group-p)))
+    (and (> newest 0)
+         (helixel--gr-visible-index list (1- newest) visible-p))))
+
 
 ;; ── Replay context ──
 

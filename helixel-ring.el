@@ -882,16 +882,13 @@ Optional prefix ARG is passed to the underlying commands."
 Used by \\[universal-argument] \\[helixel-action-cycle\]."
   (cond
    ((and helixel--action-pos (> helixel--action-pos 0))
-    (let* ((newest (helixel--gr-group-newest
-                    helixel--action-ring helixel--action-pos
-                    #'helixel-action--same-group-p))
-           (prev (when (> newest 0)
-                   (helixel--gr-visible-index
-                    helixel--action-ring (1- newest)
-                    #'helixel-action--cycle-visible-p))))
-      (if prev
-          (helixel-action--cycle-show prev helixel--action-ring)
-        (message "At newest"))))
+    ;; Inside history: jump to entry before the current group's newest.
+    (if-let* ((prev (helixel--gr-step-prev-group
+                     helixel--action-ring helixel--action-pos
+                     #'helixel-action--same-group-p
+                     #'helixel-action--cycle-visible-p)))
+        (helixel-action--cycle-show prev helixel--action-ring)
+      (message "At newest")))
    ((eq helixel--action-pos 0)
     (if helixel--live-action
         (helixel--action-cycle-show-live)
@@ -1073,14 +1070,13 @@ Updates `helixel--jump-pos' as it skips dead entries."
     ;; The new entry shifts indices by 1, so adjust saved-pos.
     (helixel-register-jump 'jump 'return)
     (setq helixel--jump-pos (if saved-pos (1+ saved-pos) nil))
-    (let* ((start (or helixel--jump-pos 0))
-           (pos helixel--jump-pos)  ;; capture for closure
+    (let* ((pos (or helixel--jump-pos 0))
            (found
             (helixel--jump-navigate
              (lambda ()
                (setq pos (helixel--gr-find
                           helixel--global-jump-log
-                          (or pos start) 1
+                          pos 1
                           #'helixel--jump-visible-p))))))
       (unless found
         (message (if helixel--jump-pos "At oldest"
@@ -1095,18 +1091,13 @@ Updates `helixel--jump-pos' as it skips dead entries."
              (found
               (helixel--jump-navigate
                (lambda ()
-                 ;; Jump to the entry before the current group's newest.
-                 (setq newest
-                       (helixel--gr-group-newest
+                 (setq pos
+                       (helixel--gr-step-prev-group
                         helixel--global-jump-log newest
-                        #'helixel--jump-same-group-p))
-                 (when (> newest 0)
-                   (setq pos
-                         (helixel--gr-visible-index
-                          helixel--global-jump-log (1- newest)
-                          #'helixel--jump-visible-p))
-                   (when pos (setq newest pos))
-                   pos)))))
+                        #'helixel--jump-same-group-p
+                        #'helixel--jump-visible-p))
+                 (when pos (setq newest pos))
+                 pos))))
         (unless found
           (message "At newest")))
     (message "At newest")))

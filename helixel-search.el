@@ -1276,7 +1276,7 @@ using advance+apply without recursion."
 (helixel-register-kind find-char
   :ctx-schema '(:required (:char :type :dir) :optional (:inline-advance))
   :recreate #'helixel--recreate-find-char
-  :advance  #'helixel--repeat-advance-movement
+  :advance  #'helixel--advance-by-recreate
   :flip-dir-fn (lambda (sel)
                  (helixel-sel-update-ctx
                   sel :dir (helixel--flip-dir

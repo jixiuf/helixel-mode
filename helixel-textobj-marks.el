@@ -140,6 +140,33 @@ Optional META-KV is a plist for the surround-pairs entry
      (helixel--define-mark-delimited
        :quote ,name ,quote-char ,quote-char ,doc nil ,@meta-kv)))
 
+(defun helixel--region-has-content-p ()
+  "Return non-nil if the active region contains non-whitespace chars."
+  (and (region-active-p)
+       (let ((end (region-end)))
+         (and (< (region-beginning) end)
+              (save-excursion
+                (goto-char (region-beginning))
+                (re-search-forward "[^ \t\n\r\f]" end t))))))
+
+(defun helixel--ensure-point-in-thing ()
+  "Adjust point so `bounds-of-thing-at-point' finds the current thing.
+If region is active with content and point is at or past `region-end',
+move point into the region content.  Otherwise if point is at
+end-of-buffer or on whitespace, skip whitespace backward then
+backward one char."
+  (cond
+   ((and (region-active-p) (>= (point) (region-end))
+         (helixel--region-has-content-p))
+    (goto-char (region-end))
+    (skip-chars-backward " \t\n\r\f")
+    (when (and (not (bobp)) (> (point) (region-beginning)))
+      (backward-char)))
+   ((or (eobp) (looking-at "[ \t\n\r\f]"))
+    (skip-chars-backward " \t\n\r\f")
+    (unless (bobp)
+      (backward-char)))))
+
 (defmacro helixel-define-mark-object
     (name thing doc subcat &optional restricted-p)
   "Define mark inner/a functions for a text object.
@@ -370,7 +397,7 @@ Example:
   :ctx-schema '(:required (:command :count :delimiter)
                           :optional (:inline-advance))
   :recreate #'helixel--recreate-textobj
-  :advance  #'helixel--repeat-advance-textobj
+  :advance  #'helixel--advance-by-recreate
   :flip-dir-fn (lambda (sel)
                  (helixel-sel-update-ctx
                   sel :count (- (helixel-sel-field sel :count))))

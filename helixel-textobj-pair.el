@@ -141,6 +141,26 @@ When either is nil, returns nil."
        (string= (helixel--xml-tag-name op)
                 (helixel--xml-tag-name cl))))
 
+(defun helixel--find-enclosing-pair (thing beg end &optional fixedscan
+                                           orig-beg orig-end)
+  "Find the enclosing pair around a region via dual-direction scan.
+THING is a thing-fn (see `helixel-up-block').
+BEG starts the forward-first scan (1+ shift unless FIXEDSCAN).
+END starts the backward-first scan (1- shift unless FIXEDSCAN).
+The two scans are resolved via `helixel--resolve-scans'.
+Returns cons (OP . CL) on success, signals `user-error' on failure.
+OP and CL are cons cells (BEG . END) of delimiter bounds."
+  (let* ((scan1 (helixel--scan-forward-first thing beg fixedscan))
+         (scan2 (helixel--scan-backward-first thing end fixedscan))
+         (chosen (helixel--resolve-scans
+                  scan1 scan2 beg orig-beg orig-end)))
+    (unless (and chosen
+                 (helixel--bs-op chosen)
+                 (helixel--bs-cl chosen))
+      (user-error "No surrounding delimiters found"))
+    (cons (helixel--bs-op chosen)
+          (helixel--bs-cl chosen))))
+
 (defun helixel--resolve-scans (scan1 scan2 beg orig-beg orig-end)
   "Pick between SCAN1 and SCAN2, both `helixel--block-scan' or nil.
 BEG is the start of the original region (or point).
@@ -269,44 +289,37 @@ are the delimiters of a string or comment."
         ;; start and end at the same position when beg==end.
         (when (= beg end)
           (setq end (1+ end)))
-        ;; Phase 1: dual-direction scan.
-        (let* ((scan1 (helixel--scan-forward-first thing beg fixedscan))
-               (scan2 (helixel--scan-backward-first thing end fixedscan))
-               ;; Phase 2: resolve which scan to prefer.
-               (chosen (helixel--resolve-scans
-                        scan1 scan2 beg orig-beg orig-end)))
-          (unless (and chosen
-                       (helixel--bs-op chosen)
-                       (helixel--bs-cl chosen))
+        ;; Phase 1: dual-direction scan + resolve.
+        (let* ((pair (helixel--find-enclosing-pair
+                      thing beg end fixedscan orig-beg orig-end))
+               (op (car pair))
+               (cl (cdr pair))
+               ;; Phase 3: compute how many levels to expand.
+               (cnt (helixel--compute-expand-count
+                     op cl count orig-beg orig-end
+                     selection-type countcurrent)))
+          ;; Special case: cursor outside the selected pair
+          ;; (e.g. between </div> and </p>).  Expand one level
+          ;; outward so the enclosing tag is found.
+          (when (and (or (not orig-beg) (not orig-end))
+                     (or (< beg (car op))
+                         (> beg (cdr cl))))
+            (setq cnt 1))
+          ;; Phase 4: expand outward.
+          (when (> cnt 0)
+            (setq op (helixel--expand-opener thing op (- cnt))
+                  cl (helixel--expand-closer thing cl cnt)))
+          ;; Phase 5: compute final range.
+          (let ((sel (helixel--get-block-range op cl selection-type)))
+            (setq op (car sel)
+                  cl (cdr sel)))
+          (cond
+           ((and (equal op orig-beg) (equal cl orig-end)
+                 (or (not countcurrent) (/= count 1)))
             (user-error "No surrounding delimiters found"))
-          (let* ((op  (helixel--bs-op chosen))
-                 (cl  (helixel--bs-cl chosen))
-                 ;; Phase 3: compute how many levels to expand.
-                 (cnt (helixel--compute-expand-count
-                       op cl count orig-beg orig-end
-                       selection-type countcurrent)))
-            ;; Special case: cursor outside the selected pair
-            ;; (e.g. between </div> and </p>).  Expand one level
-            ;; outward so the enclosing tag is found.
-            (when (and (or (not orig-beg) (not orig-end))
-                       (or (< beg (car op))
-                           (> beg (cdr cl))))
-              (setq cnt 1))
-            ;; Phase 4: expand outward.
-            (when (> cnt 0)
-              (setq op (helixel--expand-opener thing op (- cnt))
-                    cl (helixel--expand-closer thing cl cnt)))
-            ;; Phase 5: compute final range.
-            (let ((sel (helixel--get-block-range op cl selection-type)))
-              (setq op (car sel)
-                    cl (cdr sel)))
-            (cond
-             ((and (equal op orig-beg) (equal cl orig-end)
-                   (or (not countcurrent) (/= count 1)))
-              (user-error "No surrounding delimiters found"))
-             ((helixel--block-should-be-linewise-p op cl type)
-              (helixel-range op cl 'line :expanded t))
-             (t (helixel-range op cl type :expanded t)))))))))
+           ((helixel--block-should-be-linewise-p op cl type)
+            (helixel-range op cl 'line :expanded t))
+           (t (helixel-range op cl type :expanded t))))))))
 
 ;; ── Paren selection ──
 
@@ -785,12 +798,10 @@ preceeding (or following) whitespace is added to the range."
                               beg end type
                               count
                               inclusive)))))
-        (let ((helixel-forward-quote-char quote)
-              (helixel--bounds-quote-char quote))
-          (helixel-select-quote-thing 'helixel-quote
-                                      beg end type
-                                      count
-                                      inclusive)))))
+        (helixel-select-quote-thing 'helixel-quote
+                                    beg end type
+                                    count
+                                    inclusive))))
 
 ;; ── XML / SGML tag selection ──
 

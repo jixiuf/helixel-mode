@@ -160,9 +160,7 @@ automatically, so this macro only does `push-mark' + activate."
      ;; pending-sel in sync with sel-type (both nil).
      ;; Note: do NOT gate on `use-region-p' - highlight clearing
      ;; may have deactivated the mark before we run.
-     (when (and helixel--pending-sel
-                (not (eq (helixel-sel-kind helixel--pending-sel) 'movement)))
-       (setq helixel--pending-sel nil))
+     (helixel--clear-non-movement-pending-sel)
 
      ,@body
      (unless (use-region-p)
@@ -189,9 +187,6 @@ Optional REVERSE-CMD is the opposite-direction command for
   (declare (indent 0)
            (debug (&define name sexp sexp sexp sexp sexp &optional sexp)))
   (let* ((fn (intern (format "helixel--%s" fwd-fn)))
-         (skip-fn (if (> sign 0)
-                      'helixel--skip-newline-forward
-                    'helixel--skip-newline-backward))
          ;; Only skip newlines for single-line things (word/WORD/symbol).
          ;; Multi-line things like paragraph/sentence/function naturally
          ;; span lines and should not have newlines skipped.
@@ -206,15 +201,12 @@ Optional REVERSE-CMD is the opposite-direction command for
          (interactive "p")
          ;; Skip past a newline before capturing the motion origin,
          ;; so \n is not treated as a separate word.
-         ,@(when single-line-p `((,skip-fn)))
+         ,@(when single-line-p `((helixel--skip-newline ,sign)))
          (if (memq ',thing helixel-thing-move-no-select-things)
              (progn
                ;; Clean up stale state (same as with-movement-surround)
                ;; but skip the visual selection (push-mark + activate).
-               (when (and helixel--pending-sel
-                          (not (eq (helixel-sel-kind helixel--pending-sel)
-                                   'movement)))
-                 (setq helixel--pending-sel nil))
+               (helixel--clear-non-movement-pending-sel)
 
                (,fn ',thing (* ,sign (or count 1))))
            (helixel--with-movement-surround
@@ -263,21 +255,19 @@ Optional REVERSE-CMD is the opposite-direction command for
                          helixel-forward-symbol-end)
 
 (defmacro helixel--define-delimiter-movement (name outer-p forward-p
-                                                   reverse
-                                                   factory &rest factory-args)
+                                                   reverse delim-expr)
   "Define a delimiter movement command NAME.
 OUTER-P non-nil → outer (a), nil → inner (i).
 FORWARD-P non-nil → forward-to-end (] }), nil → outward-to-open ([ {).
 REVERSE is the opposite-direction command symbol.
-FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
-  (declare (indent defun) (debug (&define name sexp sexp sexp sexp &rest sexp)))
+DELIM-EXPR is an expression that evaluates to a `helixel-delimiter' struct."
+  (declare (indent defun) (debug (&define name sexp sexp sexp form)))
   (let ((inner-p (not outer-p)))
     `(progn
        (helixel-define-command ,name
            (:category movement :subcat pair :clear-highlights nil
                       :params (&optional count)
-                      :motion-extra (list :delim
-                                          (lambda () (,factory ,@factory-args))
+                      :motion-extra (list :delim (lambda () ,delim-expr)
                                           :delim-inner-p ,inner-p
                                           :delim-forward-p ,forward-p
                                           :reverse-command ',reverse))
@@ -289,14 +279,10 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
                 (eff-bounds-fn (if eff-forward-p
                                    'helixel--generic-bounds-next
                                  'helixel--generic-bounds-previous))
-                (eff-motion-extra (list :delim
-                                        (lambda () (,factory ,@factory-args))
+                (eff-motion-extra (list :delim (lambda () ,delim-expr)
                                         :delim-inner-p eff-inner-p
                                         :delim-forward-p eff-forward-p)))
-           (when (and helixel--pending-sel
-                      (not (eq (helixel-sel-kind helixel--pending-sel)
-                               'movement)))
-             (setq helixel--pending-sel nil))
+           (helixel--clear-non-movement-pending-sel)
            (deactivate-mark)
            ;; Override the motion-extra recorded by
            ;; helixel-define-command with our flipped version
@@ -304,7 +290,7 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
            ;; see the actual direction used.
            (setq helixel--motion-extra eff-motion-extra)
            (dotimes (_ n)
-             (let* ((d (,factory ,@factory-args))
+             (let* ((d ,delim-expr)
                     (b (funcall eff-bounds-fn d eff-inner-p)))
                (when b
                  (helixel--set-mark-region b)
@@ -316,124 +302,124 @@ FACTORY is a function called with FACTORY-ARGS to produce the delimiter."
 
 (helixel--define-delimiter-movement helixel-outer-paren t nil
   helixel-next-paren-end
-  helixel-make-pair-delimiter ?\( ?\))
+  (helixel-make-pair-delimiter ?\( ?\)))
 (helixel--define-delimiter-movement helixel-next-paren-end t t
   helixel-outer-paren
-  helixel-make-pair-delimiter ?\( ?\))
+  (helixel-make-pair-delimiter ?\( ?\)))
 (helixel--define-delimiter-movement helixel-inner-outer-paren nil nil
   helixel-inner-next-paren-end
-  helixel-make-pair-delimiter ?\( ?\))
+  (helixel-make-pair-delimiter ?\( ?\)))
 (helixel--define-delimiter-movement helixel-inner-next-paren-end nil t
   helixel-inner-outer-paren
-  helixel-make-pair-delimiter ?\( ?\))
+  (helixel-make-pair-delimiter ?\( ?\)))
 
 (helixel--define-delimiter-movement helixel-outer-bracket t nil
   helixel-next-bracket-end
-  helixel-make-pair-delimiter ?\[ ?\])
+  (helixel-make-pair-delimiter ?\[ ?\]))
 (helixel--define-delimiter-movement helixel-next-bracket-end t t
   helixel-outer-bracket
-  helixel-make-pair-delimiter ?\[ ?\])
+  (helixel-make-pair-delimiter ?\[ ?\]))
 (helixel--define-delimiter-movement helixel-inner-outer-bracket nil nil
   helixel-inner-next-bracket-end
-  helixel-make-pair-delimiter ?\[ ?\])
+  (helixel-make-pair-delimiter ?\[ ?\]))
 (helixel--define-delimiter-movement helixel-inner-next-bracket-end nil t
   helixel-inner-outer-bracket
-  helixel-make-pair-delimiter ?\[ ?\])
+  (helixel-make-pair-delimiter ?\[ ?\]))
 
 (helixel--define-delimiter-movement helixel-outer-brace t nil
   helixel-next-brace-end
-  helixel-make-pair-delimiter ?{ ?})
+  (helixel-make-pair-delimiter ?{ ?}))
 (helixel--define-delimiter-movement helixel-next-brace-end t t
   helixel-outer-brace
-  helixel-make-pair-delimiter ?{ ?})
+  (helixel-make-pair-delimiter ?{ ?}))
 (helixel--define-delimiter-movement helixel-inner-outer-brace nil nil
   helixel-inner-next-brace-end
-  helixel-make-pair-delimiter ?{ ?})
+  (helixel-make-pair-delimiter ?{ ?}))
 (helixel--define-delimiter-movement helixel-inner-next-brace-end nil t
   helixel-inner-outer-brace
-  helixel-make-pair-delimiter ?{ ?})
+  (helixel-make-pair-delimiter ?{ ?}))
 
 (helixel--define-delimiter-movement helixel-outer-angle t nil
   helixel-next-angle-end
-  helixel-make-pair-delimiter ?< ?>)
+  (helixel-make-pair-delimiter ?< ?>))
 (helixel--define-delimiter-movement helixel-next-angle-end t t
   helixel-outer-angle
-  helixel-make-pair-delimiter ?< ?>)
+  (helixel-make-pair-delimiter ?< ?>))
 (helixel--define-delimiter-movement helixel-inner-outer-angle nil nil
   helixel-inner-next-angle-end
-  helixel-make-pair-delimiter ?< ?>)
+  (helixel-make-pair-delimiter ?< ?>))
 (helixel--define-delimiter-movement helixel-inner-next-angle-end nil t
   helixel-inner-outer-angle
-  helixel-make-pair-delimiter ?< ?>)
+  (helixel-make-pair-delimiter ?< ?>))
 
 (helixel--define-delimiter-movement helixel-outer-double-quote t nil
   helixel-next-double-quote-end
-  helixel-make-pair-delimiter ?\" ?\")
+  (helixel-make-pair-delimiter ?\" ?\"))
 (helixel--define-delimiter-movement helixel-next-double-quote-end t t
   helixel-outer-double-quote
-  helixel-make-pair-delimiter ?\" ?\")
+  (helixel-make-pair-delimiter ?\" ?\"))
 (helixel--define-delimiter-movement helixel-inner-outer-double-quote nil nil
   helixel-inner-next-double-quote-end
-  helixel-make-pair-delimiter ?\" ?\")
+  (helixel-make-pair-delimiter ?\" ?\"))
 (helixel--define-delimiter-movement helixel-inner-next-double-quote-end nil t
   helixel-inner-outer-double-quote
-  helixel-make-pair-delimiter ?\" ?\")
+  (helixel-make-pair-delimiter ?\" ?\"))
 
 (helixel--define-delimiter-movement helixel-outer-single-quote t nil
   helixel-next-single-quote-end
-  helixel-make-pair-delimiter ?' ?')
+  (helixel-make-pair-delimiter ?' ?'))
 (helixel--define-delimiter-movement helixel-next-single-quote-end t t
   helixel-outer-single-quote
-  helixel-make-pair-delimiter ?' ?')
+  (helixel-make-pair-delimiter ?' ?'))
 (helixel--define-delimiter-movement helixel-inner-outer-single-quote nil nil
   helixel-inner-next-single-quote-end
-  helixel-make-pair-delimiter ?' ?')
+  (helixel-make-pair-delimiter ?' ?'))
 (helixel--define-delimiter-movement helixel-inner-next-single-quote-end nil t
   helixel-inner-outer-single-quote
-  helixel-make-pair-delimiter ?' ?')
+  (helixel-make-pair-delimiter ?' ?'))
 
 (helixel--define-delimiter-movement helixel-outer-back-quote t nil
   helixel-next-back-quote-end
-  helixel-make-pair-delimiter ?` ?`)
+  (helixel-make-pair-delimiter ?` ?`))
 (helixel--define-delimiter-movement helixel-next-back-quote-end t t
   helixel-outer-back-quote
-  helixel-make-pair-delimiter ?` ?`)
+  (helixel-make-pair-delimiter ?` ?`))
 (helixel--define-delimiter-movement helixel-inner-outer-back-quote nil nil
   helixel-inner-next-back-quote-end
-  helixel-make-pair-delimiter ?` ?`)
+  (helixel-make-pair-delimiter ?` ?`))
 (helixel--define-delimiter-movement helixel-inner-next-back-quote-end nil t
   helixel-inner-outer-back-quote
-  helixel-make-pair-delimiter ?` ?`)
+  (helixel-make-pair-delimiter ?` ?`))
 
 ;; ── Tag delimiter movement ──
 
 (helixel--define-delimiter-movement helixel-outer-tag t nil
   helixel-next-tag-end
-  helixel-make-tag-delimiter)
+  (helixel-make-tag-delimiter))
 (helixel--define-delimiter-movement helixel-next-tag-end t t
   helixel-outer-tag
-  helixel-make-tag-delimiter)
+  (helixel-make-tag-delimiter))
 (helixel--define-delimiter-movement helixel-inner-outer-tag nil nil
   helixel-inner-next-tag-end
-  helixel-make-tag-delimiter)
+  (helixel-make-tag-delimiter))
 (helixel--define-delimiter-movement helixel-inner-next-tag-end nil t
   helixel-inner-outer-tag
-  helixel-make-tag-delimiter)
+  (helixel-make-tag-delimiter))
 
 ;; ── Block delimiter movement ──
 
 (helixel--define-delimiter-movement helixel-outer-block t nil
   helixel-next-block-end
-  helixel-make-block-delimiter)
+  (helixel-make-block-delimiter))
 (helixel--define-delimiter-movement helixel-next-block-end t t
   helixel-outer-block
-  helixel-make-block-delimiter)
+  (helixel-make-block-delimiter))
 (helixel--define-delimiter-movement helixel-inner-outer-block nil nil
   helixel-inner-next-block-end
-  helixel-make-block-delimiter)
+  (helixel-make-block-delimiter))
 (helixel--define-delimiter-movement helixel-inner-next-block-end nil t
   helixel-inner-outer-block
-  helixel-make-block-delimiter)
+  (helixel-make-block-delimiter))
 
 ;; `helixel--generic-bounds-at' / `helixel--generic-bounds-next'
 ;; are defined in helixel-core.el.
@@ -985,6 +971,26 @@ MOTION is a `helixel--last-motion' struct."
   (unless (helixel--up-list-once :backward)
     (message "No enclosing bracket")))
 
+(defsubst helixel--motion-eff-cmd (cmd rec)
+  "Compute the effective CMD for REC's motion repeat.
+Respects `helixel--motion-permanent-flip'."
+  (if helixel--motion-permanent-flip
+      (or (helixel--last-motion-reverse-command rec)
+          (helixel--motion-reverse-lookup cmd)
+          cmd)
+    cmd))
+
+(defun helixel--motion-invoke (rec effective-cmd orig)
+  "Invoke EFFECTIVE-CMD with REC's prefix arg, restoring ORIG on error."
+  (unless (commandp effective-cmd)
+    (user-error "No motion command to repeat"))
+  (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
+    (condition-case err
+        (call-interactively effective-cmd)
+      (user-error
+       (goto-char orig)
+       (user-error (cadr err))))))
+
 (defun helixel--repeat-pair-motion (rec)
   "Replay a pair delimiter motion (] [ } {) from REC.
 For backward motions: steps to before the current pair so the
@@ -995,11 +1001,7 @@ On user-error restores point so a failing repeat doesn't strand
 the cursor."
   (let* ((cmd (helixel--last-motion-command rec))
          (dir (helixel--last-motion-dir rec))
-         (effective-cmd (if helixel--motion-permanent-flip
-                            (or (helixel--last-motion-reverse-command rec)
-                                (helixel--motion-reverse-lookup cmd)
-                                cmd)
-                          cmd))
+         (effective-cmd (helixel--motion-eff-cmd cmd rec))
          (orig (point)))
     ;; Backward skip-past: step inside current pair, then to (1- ob)
     ;; so bounds-previous finds the previous (parent) pair.
@@ -1015,14 +1017,7 @@ the cursor."
               (skip-chars-backward " \t\n\r"))
           (error
            (goto-char orig)))))
-    (unless (commandp effective-cmd)
-      (user-error "No motion command to repeat"))
-    (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
-      (condition-case err
-          (call-interactively effective-cmd)
-        (user-error
-         (goto-char orig)
-         (user-error (cadr err)))))))
+    (helixel--motion-invoke rec effective-cmd orig)))
 
 ;; Motion repeaters registered via `helixel-register-motion-repeater'
 
@@ -1054,20 +1049,9 @@ On user-error restores point to before skip-past so a failing
 \\[helixel-repeat-last-motion] doesn't leave the cursor stranded."
   (let* ((cmd (helixel--last-motion-command rec))
          (orig (point))
-         (effective-cmd (if helixel--motion-permanent-flip
-                            (or (helixel--last-motion-reverse-command rec)
-                                (helixel--motion-reverse-lookup cmd)
-                                cmd)
-                          cmd)))
+         (effective-cmd (helixel--motion-eff-cmd cmd rec)))
     (helixel--motion-skip-past rec)
-    (unless (commandp effective-cmd)
-      (user-error "No motion command to repeat"))
-    (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
-      (condition-case err
-          (call-interactively effective-cmd)
-        (user-error
-         (goto-char orig)
-         (user-error (cadr err)))))))
+    (helixel--motion-invoke rec effective-cmd orig)))
 
 ;; Register: specific subcats before general fallback.
 ;; `push' adds to the front; the lookup scans sequentially, so
@@ -1381,20 +1365,6 @@ fresh rather than extending a stale mark."
       (helixel--recreate-selection sel)
       t)))
 
-(defun helixel--repeat-advance-movement (tx)
-  "Advance to next target for TX's movement selection.
-Calls the selection's recreate function from the current cursor
-position.  The recreate IS the advance (inline - movement commands
-inherently create the region).  Returns t on success, nil when
-point does not move.
-The strategy skips the separate `recreate-selection' call for inline
-advance functions to avoid double-moving."
-  (let ((sel (helixel-action-sel tx)))
-    (when sel
-      (helixel--with-debug-log repeat-advance-movement
-        (progn (helixel--recreate-selection sel) t)
-        (error nil)))))
-
 ;; ── Kind registrations ──
 
 (helixel-register-kind line
@@ -1420,7 +1390,7 @@ advance functions to avoid double-moving."
 (helixel-register-kind movement
   :ctx-schema '(:required (:moves) :optional (:inline-advance :normal-mode))
   :recreate #'helixel--recreate-movement
-  :advance  #'helixel--repeat-advance-movement
+  :advance  #'helixel--advance-by-recreate
   :flip-dir-fn (lambda (sel)
                  (helixel-sel-update-ctx
                   sel :moves

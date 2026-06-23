@@ -308,6 +308,25 @@ Slots map 1:1 to the keyword properties documented for
   ctx-schema
   sel-type)
 
+;; ── Registered kinds (single source of truth) ──
+;;
+;;  kind                      file                   sel-type
+;;  ----                      ----                   --------
+;;  line                      helixel-move.el        line
+;;  rect                      helixel-move.el        rect
+;;  movement                  helixel-move.el        —
+;;  search                    helixel-search.el      —
+;;  find-char                 helixel-search.el      —
+;;  textobj                   helixel-textobj-marks  —
+;;  surround                  helixel-surround.el    —
+;;  insert-selection-start    helixel-editing.el     —
+;;  insert-selection-end      helixel-editing.el     —
+;;  insert-beginning-line     helixel-editing.el     —
+;;  insert-end-line           helixel-editing.el     —
+;;  insert-search-offset      helixel-editing.el     —
+;;
+;;  — = movement/selection-only kinds (no sel-type mapping)
+
 (cl-defmacro helixel-register-kind (kind &rest props)
   "Register selection KIND with protocol PROPS.
 PROPS is a keyword plist supporting:
@@ -654,6 +673,15 @@ Returns the created sel."
   (let ((sel (helixel-sel-create kind ctx)))
     (helixel--sel-push sel)
     sel))
+
+(defsubst helixel--clear-non-movement-pending-sel ()
+  "Clear `helixel--pending-sel' unless it is of kind \='movement.
+When a command creates a fresh movement/visual selection, any
+stale line/rect/textobj pending-sel from a prior selection command
+must be discarded so it doesn't leak into dot-repeat."
+  (when (and helixel--pending-sel
+             (not (eq (helixel-sel-kind helixel--pending-sel) 'movement)))
+    (setq helixel--pending-sel nil)))
 
 
 ;; ----------------------------------------------------------------------
@@ -1711,6 +1739,19 @@ Thin wrapper around `helixel-sel-call-recreate' —
 dispatches on struct closures."
   (when sel-ctx
     (helixel-sel-call-recreate sel-ctx)))
+
+(defsubst helixel--advance-by-recreate (tx)
+  "Advance past the current target by recreating TX's selection.
+For selection kinds whose recreate IS the advance (movement,
+textobj), this is the preferred advance function.  Calls
+`helixel--recreate-selection' inside `helixel--with-debug-log'
+to catch user-errors silently.  Returns t on success, nil when
+recreate fails with a user-error (e.g. no more targets)."
+  (let ((sel (helixel-action-sel tx)))
+    (when sel
+      (helixel--with-debug-log advance-by-recreate
+        (progn (helixel--recreate-selection sel) t)
+        (error nil)))))
 
 (defun helixel-action-replay (event)
   "Execute replay data in EVENT: preposition (if any) then runner.

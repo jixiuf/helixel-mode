@@ -42,7 +42,7 @@ clean-elc:
 clean: clean-elc
 
 run:
-	emacs -Q -L . -l helixel.el --eval '(helixel-mode)'
+	emacs -Q -L . -l helixel.el --eval '(progn (helixel-mode) (which-key-mode))'
 
 TEST_SELECTOR ?= t
 test:

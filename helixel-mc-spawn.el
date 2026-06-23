@@ -239,13 +239,13 @@ Filters invisible matches via `isearch-filter-predicate' when
                  (string-match-p "[[:upper:]]" text))
                nil
              case-fold-search))
-          (search-invisible helixel-invisible)
+          (search-invisible (helixel--invisible-effective))
           (search-fn (if (> dir 0) #'search-forward #'search-backward)))
       (catch 'found
         (while t
           ;; search-forward with noerror=t returns nil on failure.
           (if (funcall search-fn text nil t)
-              (if (or helixel-invisible
+              (if (or (helixel--invisible-effective)
                       (funcall isearch-filter-predicate
                                (match-beginning 0) (match-end 0)))
                   (throw 'found
@@ -909,7 +909,7 @@ disabled."
   (helixel-mc--push-history)
   (let (count)
     (helixel-mc-with-regions regions
-      (let ((search-invisible helixel-invisible)
+      (let ((search-invisible (helixel--invisible-effective))
             (new-specs
              (cl-loop
               for (b e fwd) in regions
@@ -917,7 +917,7 @@ disabled."
                        (goto-char b)
                        (cl-loop while (re-search-forward regex e t)
                                 when (and (> (match-end 0) (match-beginning 0))
-                                          (or helixel-invisible
+                                          (or (helixel--invisible-effective)
                                               (funcall isearch-filter-predicate
                                                        (match-beginning 0)
                                                        (match-end 0))))

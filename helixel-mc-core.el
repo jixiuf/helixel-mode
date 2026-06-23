@@ -1809,10 +1809,10 @@ motion or operator."
       (user-error "Find-char selection has no :char"))
     (save-excursion
       (goto-char (point-min))
-      (let ((search-invisible helixel-invisible)
-            (isearch-invisible helixel-invisible))
+      (let ((search-invisible (helixel--invisible-effective))
+            (isearch-invisible (helixel--invisible-effective)))
         (while (search-forward needle nil t)
-          (when (or helixel-invisible
+          (when (or (helixel--invisible-effective)
                     ;; search-forward doesn't call isearch-filter-predicate.
                     ;; Filter overlay-invisible matches ourselves.
                     (funcall isearch-filter-predicate

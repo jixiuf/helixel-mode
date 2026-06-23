@@ -704,6 +704,28 @@ when the event's sel has no pattern in its ctx (fallback path)."
     (helixel--with-invisible-search
       (should (eq search-invisible t)))))
 
+(ert-deftest helixel-test-search-invisible-open-matches ()
+  "helixel-invisible \='open matches invisible text via filter loop.
+Covers the find-char / filter-loop path where `search-forward'
+is wrapped by `helixel--search-filter-loop'.  When
+`helixel-invisible' is \='open, matches inside invisible text
+should be accepted (not skipped) and the invisible overlays
+should be opened."
+  (helixel-test-with-buffer "aa\nbb\ncc"
+    (setq-local helixel-invisible 'open)
+    (let ((start (save-excursion (forward-line 1) (point)))
+          (end (save-excursion (forward-line 2) (point))))
+      (put-text-property start end (quote invisible) (quote outline)))
+    (goto-char 1)
+    ;; The filter loop with helixel-invisible='open should accept
+    ;; matches inside invisible text.
+    (let ((result
+           (helixel--search-filter-loop
+            (lambda () (search-forward "bb" nil t))
+            t)))
+      (should result)
+      ;; Match should be at the invisible "bb" text (position 4).
+      (should (= result 4)))))
 
 
 ;;; Regexp-toggle (M-r) tests — verify literal/regexp mode flows

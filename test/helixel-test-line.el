@@ -1139,11 +1139,18 @@ x x x: continue extending forward."
     (should (eq (helixel--sel-type) 'line))))
 
 (ert-deftest helixel-test-line-toggle ()
-  "helixel-toggle-invisible flips the variable."
+  "helixel-toggle-invisible cycles \='auto → nil → t → \='open → \='auto."
   (with-temp-buffer
-    (setq-local helixel-invisible nil)
+    (setq-local helixel-invisible 'auto)
     (helixel-toggle-invisible)
-    (should helixel-invisible)
+    (should-not helixel-invisible)   ; auto → nil
+    (helixel-toggle-invisible)
+    (should (eq helixel-invisible t)) ; nil → t
+    (helixel-toggle-invisible)
+    (should (eq helixel-invisible 'open)) ; t → open
+    (helixel-toggle-invisible)
+    (should (eq helixel-invisible 'auto)) ; open → auto
+    ;; Full cycle back to nil.
     (helixel-toggle-invisible)
     (should-not helixel-invisible)))
 

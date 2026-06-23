@@ -1091,7 +1091,7 @@ On user-error restores point to before skip-past so a failing
 
 (defun helixel--line-end-or-invisible ()
   "Move to end of line, expanding past adjacent invisible text if enabled."
-  (if helixel-invisible
+  (if (helixel--invisible-effective)
       (progn (end-of-line)
              (while (and (not (eobp)) (invisible-p (1+ (point))))
                (goto-char (1+ (point)))
@@ -1106,7 +1106,7 @@ On user-error restores point to before skip-past so a failing
 (defun helixel--line-beginning-or-invisible ()
   "Move to beginning of line, expanding past invisible text if enabled."
   (beginning-of-line)
-  (when helixel-invisible
+  (when (helixel--invisible-effective)
     (let ((opoint (point)))
       (while (and (not (bobp)) (invisible-p (1- (point))))
         (goto-char
@@ -1117,11 +1117,22 @@ On user-error restores point to before skip-past so a failing
       (unless (bolp) (goto-char opoint)))))
 
 (defun helixel-toggle-invisible ()
-  "Toggle `helixel-invisible'."
+  "Toggle `helixel-invisible'.
+Cycles \='auto → nil → t → \='open → \='auto."
   (interactive)
-  (setq helixel-invisible (not helixel-invisible))
+  (setq helixel-invisible
+        (pcase helixel-invisible
+          ('auto nil)
+          ('nil t)
+          ('t 'open)
+          ('open 'auto)
+          (_ nil)))
   (message "helixel: line expand invisible %s"
-           (if helixel-invisible "on" "off")))
+           (pcase helixel-invisible
+             ('auto "auto")
+             ('nil "off")
+             ('open "open")
+             (_ "on"))))
 
 (defun helixel--extend-line-in-dir (dir)
   "Extend or shrink a linewise selection by one line in direction DIR.

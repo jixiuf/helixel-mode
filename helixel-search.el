@@ -217,10 +217,11 @@ Let-bound by `helixel-search--at-point'.")
 
 (defmacro helixel--with-invisible-search (&rest body)
   "Run BODY with invisible-search vars set from `helixel-invisible'.
-Binds `search-invisible' and `isearch-invisible' to `helixel-invisible'."
+Binds `search-invisible' and `isearch-invisible' to the effective
+invisible mode (via `helixel--invisible-effective')."
   (declare (indent 0) (debug t))
-  `(let ((search-invisible helixel-invisible)
-         (isearch-invisible helixel-invisible))
+  `(let ((search-invisible (helixel--invisible-effective))
+         (isearch-invisible (helixel--invisible-effective)))
      ,@body))
 
 
@@ -248,7 +249,7 @@ we bridge that via `helixel--search-filter-loop'."
     (let ((isearch-string pattern)
           (isearch-regexp regexp)
           (isearch-forward (eq dir 'forward)))
-      (if helixel-invisible
+      (if (helixel--invisible-effective)
           (isearch-search-string pattern bound noerror)
         (or (helixel--search-filter-loop
              (lambda () (isearch-search-string pattern bound t))

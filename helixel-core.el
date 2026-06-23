@@ -1588,17 +1588,49 @@ the correct type throughout the operator body."
   (when helixel--pending-sel
     (helixel--kind-sel-type (helixel-sel-kind helixel--pending-sel))))
 
-(defvar-local helixel-invisible t
-  "Non-nil means helixel treats invisible text as real content to operate on.
-In buffers like `org-mode', invisible text is folded content —
-\"x\"/\"X\" selections expand into it, and search finds matches inside.
-In buffers like `grep-mode' with `consult-focus-line', set this to nil
-so invisible text is treated as filtered-out content to ignore.
-Default t, matching Emacs' `line-move-ignore-invisible'.
+(defvar-local helixel-invisible 'auto
+  "How helixel handles invisible text during search and movement.
+Defaults to \='auto, which dynamically follows `search-invisible'
+\(typically \='open).
+
+Value \='open (default):  like t, but also temporarily reveal
+  invisible text when a search or find-char match lands inside
+  it, matching Emacs' `search-invisible' = \='open behavior
+  (e.g. unfolding folded sections in `org-mode' during
+  \[helixel-search-repeat-next] or \[helixel-repeat-last-motion]).
+Value t:  treat invisible text as real content — \"x\"/\"X\"
+  selections expand into it, and search finds matches inside,
+  but invisible text is NOT revealed (stays folded).
+Value nil:  skip invisible matches entirely — use this in
+  buffers like `grep-mode' with `consult-focus-line' where
+  invisible text is filtered-out content to ignore.
+
 Set per-buffer via `setq-local' or dir-locals.
 Toggle with \[helixel-toggle-invisible].")
 
+(defsubst helixel--invisible-effective ()
+  "Return the effective invisible-handling mode.
+If `helixel-invisible' is \='auto (never explicitly set), follow
+`search-invisible' so new buffers inherit the user's Emacs preference.
+Otherwise return `helixel-invisible' as-is (explicit user choice)."
+  (if (eq helixel-invisible 'auto)
+      search-invisible
+    helixel-invisible))
+
 ;; ── Search filter loop ──
+
+(defun helixel--open-invisible-at (beg end)
+  "Open invisible overlays covering BEG..END.
+
+Calls `isearch-open-overlay-temporary' on each overlay that has an
+`invisible' property and is not already opened (no `isearch-invisible'
+flag).  This temporarily reveals hidden text (e.g. folded sections in
+`org-mode') when a search or find-char match lands inside it, matching
+the `search-invisible' = \='open behavior."
+  (dolist (ov (overlays-in beg end))
+    (when (and (overlay-get ov 'invisible)
+               (not (overlay-get ov 'isearch-invisible)))
+      (isearch-open-overlay-temporary ov))))
 
 (defsubst helixel--search-advance-one (forwardp)
   "Advance one char past a zero-width match, or throw done.
@@ -1623,10 +1655,14 @@ The caller should bind `search-invisible' appropriately."
       (if (helixel--with-debug-log search-filter
             (funcall search-fn)
             (search-failed nil))
-          (if (or helixel-invisible
+          (if (or (helixel--invisible-effective)
                   (funcall isearch-filter-predicate
                            (match-beginning 0) (match-end 0)))
-              (throw 'search-filter-done (match-beginning 0))
+              (progn
+                (when (eq (helixel--invisible-effective) 'open)
+                  (helixel--open-invisible-at (match-beginning 0)
+                                              (match-end 0)))
+                (throw 'search-filter-done (match-beginning 0)))
             ;; Invisible — advance past match and retry.
             (if (= (match-beginning 0) (match-end 0))
                 (helixel--search-advance-one forwardp)

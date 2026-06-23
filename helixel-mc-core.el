@@ -90,6 +90,12 @@
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
                   (raw-prefix))
 
+;; Third-party undo packages — declared for the undo-tree timer
+;; defence in `helixel-mc--undo-step-begin' / `-finish'.
+(defvar undo-tree-timer)
+(defvar undo-tree-mode)
+(defvar undo-tree-limit)
+
 (defsubst helixel-mc--dispatch-in-progress-p ()
   "Return non-nil when an mc dispatch is in progress.
 Covers both `mc-batch' (outer broadcast loop) and `mc-fake'
@@ -872,6 +878,10 @@ Set by `helixel-mc--undo-step-begin' for later comparison in
 Used by `helixel-mc--undo-step-finish' to detect no-op steps:
 if no text changes occurred, this entry is popped from
 `buffer-undo-list'.")
+(defvar-local helixel-mc--undo-tree-timer-was-active nil
+  "Non-nil when we cancelled `undo-tree-timer' in `undo-step-begin'.
+Restored in `undo-step-finish' so undo-tree's periodic transfer
+resumes after the step.")
 
 (defvar helixel-mc--input-cache nil
   "See `helixel-mc--def-input-cache' in helixel-mc-integrate.el.
@@ -889,10 +899,22 @@ because they manipulate `buffer-undo-list' themselves."
   "Begin an mc undo step.
 Captures cursor positions and pushes a before-marker into
 `buffer-undo-list'.  Guards against double-wrapping and
-disabled undo lists."
+disabled undo lists.
+
+If `undo-tree-mode' is active, its idle timer is cancelled for
+the duration of the step so that `undo-list-transfer-to-tree'
+cannot fire between the before-marker push and the after-marker
+push - which would orphan `helixel-mc--undo-list-pointer' and
+cause `filter-undo-step' to loop forever."
   (unless (or helixel-mc--undo-step-active
               (eq buffer-undo-list t))
     (setq helixel-mc--undo-step-active t)
+    ;; Defend against undo-tree idle timer firing mid-step.
+    (when (and (bound-and-true-p undo-tree-mode)
+               (boundp 'undo-tree-timer)
+               (timerp undo-tree-timer))
+      (cancel-timer undo-tree-timer)
+      (setq helixel-mc--undo-tree-timer-was-active t))
     (let ((pos (helixel-mc--capture-all-positions)))
       (setq helixel-mc--undo-boundary-marker
             `(apply helixel-mc--undo-step-end-cb ,pos))
@@ -906,9 +928,14 @@ Returns the (possibly new) head of LIST.
 
 Nil entries are undo boundaries; number entries are point-movement
 records that `primitive-undo' would otherwise use to move point
-between fake cursors — we handle cursor positions ourselves."
-  (let ((tail list) head)
-    (while (and tail (not (eq tail pointer)))
+between fake cursors — we handle cursor positions ourselves.
+
+Includes a safety limit (100 000 iterations) to guard against
+infinite loops when POINTER is unreachable — e.g. when
+`undo-tree's idle timer has replaced `buffer-undo-list' mid-step."
+  (let ((tail list) head (safety 100000))
+    (while (and tail (not (eq tail pointer)) (cl-plusp safety))
+      (cl-decf safety)
       (if (or (numberp (car tail)) (null (car tail)))
           (progn
             (setq tail (cdr tail))
@@ -917,6 +944,9 @@ between fake cursors — we handle cursor positions ourselves."
               (setq list tail)))
         (setq head tail
               tail (cdr tail))))
+    (unless (cl-plusp safety)
+      (message "helixel-mc: filter-undo-step safety limit; aborting step")
+      (setq list nil))
     list))
 
 (defun helixel-mc--undo-skip-leading-nils (lst)
@@ -964,12 +994,21 @@ callback that `primitive-undo' calls during undo/redo."
       ;; Cleanup always runs, even if body errors.
       (setq helixel-mc--undo-step-active nil
             helixel-mc--undo-list-pointer nil
-            helixel-mc--undo-boundary-marker nil))))
+            helixel-mc--undo-boundary-marker nil)
+      ;; Restart undo-tree idle timer if we cancelled it.
+      (when helixel-mc--undo-tree-timer-was-active
+        (setq helixel-mc--undo-tree-timer-was-active nil)
+        (when (and (bound-and-true-p undo-tree-mode)
+                   (null (bound-and-true-p undo-tree-limit)))
+          (setq undo-tree-timer
+                (run-with-idle-timer 5 'repeat
+                                     'undo-list-transfer-to-tree)))))))
 
 ;; ── Undo-step callbacks — called by `primitive-undo' via `apply' ──
 ;;
 ;; These are the 1-argument functions whose names appear in the
 ;; `apply' entries pushed into `buffer-undo-list'.  They must NOT
+;; be called directly — only `primitive-undo' processes them.
 ;; The `-cb' suffix distinguishes these 1-arg callbacks from the
 ;; 0-arg hook functions `helixel-mc--undo-step-begin' / `-finish'.
 
@@ -1425,7 +1464,8 @@ deactivated when the last one is removed."
     ;; Clean up lingering undo-step state.
     (setq helixel-mc--undo-step-active nil
           helixel-mc--undo-list-pointer nil
-          helixel-mc--undo-boundary-marker nil)
+          helixel-mc--undo-boundary-marker nil
+          helixel-mc--undo-tree-timer-was-active nil)
     (when helixel-mc--cursors-by-id
       (clrhash helixel-mc--cursors-by-id))
     (helixel-mc-clear-all)

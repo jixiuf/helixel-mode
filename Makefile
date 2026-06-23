@@ -8,7 +8,8 @@ ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-repeat.elc h
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
-DEPS = package-lint
+# deps for test
+DEPS = package-lint undo-fu undo-tree pcre2el
 
 INIT_PACKAGES="(progn \
   (require 'package) \

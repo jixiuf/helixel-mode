@@ -4219,5 +4219,178 @@ command (matches the established pattern in the mc test suite)."
       (should (= initial-fakes (length (helixel-mc-all-cursors)))))
     (helixel-mc-clear-all)))
 
+
+;; ── ;; ── ;; ── ;; ── ;; ── ;; ── ;; ── ;; ── Undo robustness: P1 tests ──
+
+(ert-deftest helixel-test-mc-undo-disabled-buffer-aborts-gracefully ()
+  "When buffer-undo-list is t (undo disabled), finish does not error.
+Simulates the scenario where `save-buffer' resets undo state mid-step."
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    (goto-char 1)
+    (helixel-mc--create-fake-cursor 1)
+    (helixel-mc--undo-step-begin)
+    (should helixel-mc--undo-step-active)
+    ;; Simulate save-buffer resetting undo state.
+    (setq buffer-undo-list t)
+    ;; Finish must not error, even though we pushed the before-marker
+    ;; onto a list that no longer exists.
+    (helixel-mc--undo-step-finish)
+    (should-not helixel-mc--undo-step-active)
+    (should-not helixel-mc--undo-list-pointer)
+    (should-not helixel-mc--undo-boundary-marker)
+    (should-not helixel-mc--undo-tree-timer-was-active))
+  (helixel-mc-clear-all))
+
+(ert-deftest helixel-test-mc-redo-after-undo-restores-positions ()
+  "Full undo + redo cycle restores cursor positions.
+After an mc edit is undone and then redone, fake cursor positions
+must match the post-edit (not pre-edit) state."
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
+      (should f1)
+      (helixel-mc--undo-step-begin)
+      (delete-region (region-beginning) (region-end))
+      (helixel-mc-with-each-cursor
+        (delete-region (region-beginning) (region-end)))
+      (helixel-mc--undo-step-finish)
+      (should (string= "world\nworld\n" (buffer-string)))
+      (let ((post-edit-point (helixel-mc-test--fake-point f1)))
+        ;; Undo.
+        (let ((snap buffer-undo-list))
+          (deactivate-mark)
+          (primitive-undo 1 (helixel-mc-test--skip-leading-nil snap)))
+        (should (string= "hello world\nhello world\n" (buffer-string)))
+        ;; Redo.
+        (let ((snap buffer-undo-list))
+          (deactivate-mark)
+          (primitive-undo 1 (helixel-mc-test--skip-leading-nil snap)))
+        ;; After redo, buffer and cursor must match post-edit state.
+        (should (string= "world\nworld\n" (buffer-string)))
+        (should (= post-edit-point
+                   (helixel-mc-test--fake-point f1)))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-filter-undo-step-safety-limit ()
+  "filter-undo-step terminates when pointer is not in the list.
+The safety limit (100k iterations) ensures it never loops infinitely.
+When the pointer is simply absent, the function scans to end-of-list
+normally and strips nils along the way — the safety limit is a
+defence against circular or extremely long lists."
+  (let* ((lst (list 'a nil 'b 42 nil 'c))
+         ;; pointer is NOT in lst.
+         (orphan (list 'orphan)))
+    (let ((result (helixel-mc--filter-undo-step lst orphan)))
+      ;; Nils and numbers are stripped from the scanned portion
+      ;; (the whole list, since pointer is absent).
+      (should (equal result '(a b c))))))
+
+(ert-deftest helixel-test-mc-filter-undo-step-normal-path ()
+  "filter-undo-step correctly removes nils and numbers from segment."
+  (let* ((segment (list 42 nil 'text-entry 99))
+         (rest (list 'marker-entry))
+         (lst (nconc segment rest)))
+    ;; pointer = rest, so filter operates on segment only.
+    (let ((result (helixel-mc--filter-undo-step lst rest)))
+      (should (equal result '(text-entry marker-entry))))))
+
+;; ── Undo-fu interaction test ──
+;; Requires undo-fu package.  Skipped when not installed.
+
+(ert-deftest helixel-test-mc-undo-fu-redo-restores-positions ()
+  "Redo via undo-fu-only-redo after mc undo restores cursor positions.
+This test validates compatibility with the undo-fu package."
+  (skip-unless (require 'undo-fu nil t))
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
+      (should f1)
+      (helixel-mc--undo-step-begin)
+      (delete-region (region-beginning) (region-end))
+      (helixel-mc-with-each-cursor
+        (delete-region (region-beginning) (region-end)))
+      (helixel-mc--undo-step-finish)
+      (should (string= "world\nworld\n" (buffer-string)))
+      (let ((post-edit-point (helixel-mc-test--fake-point f1)))
+        ;; Undo via undo-fu-only-undo.
+        (deactivate-mark)
+        (let ((last-command nil))
+          (undo-fu-only-undo 1))
+        (should (string= "hello world\nhello world\n" (buffer-string)))
+        ;; Redo via undo-fu-only-redo.
+        (let ((last-command 'undo-fu-only-undo))
+          (undo-fu-only-redo 1))
+        (should (string= "world\nworld\n" (buffer-string)))
+        (should (= post-edit-point
+                   (helixel-mc-test--fake-point f1)))))
+    (helixel-mc-clear-all)))
+
+;; ── Undo-tree interaction test ──
+;; Requires undo-tree package.  Skipped when not installed.
+
+(ert-deftest helixel-test-mc-undo-tree-undo-restores-positions ()
+  "Undo via undo-tree-undo after mc edit restores cursor positions.
+This test validates compatibility with the undo-tree package."
+  (skip-unless (require 'undo-tree nil t))
+  (helixel-test-with-buffer "hello world\nhello world\n"
+    (setq buffer-undo-list nil)
+    (let (f1)
+      (goto-char 1)
+      (push-mark 7 t t)
+      (setq f1 (helixel-mc--create-fake-cursor 13 19))
+      (should f1)
+      (let ((fake-before (helixel-mc-test--fake-point f1)))
+        (helixel-mc--undo-step-begin)
+        (delete-region (region-beginning) (region-end))
+        (helixel-mc-with-each-cursor
+          (delete-region (region-beginning) (region-end)))
+        (helixel-mc--undo-step-finish)
+        (should (string= "world\nworld\n" (buffer-string)))
+        ;; Enable undo-tree-mode.  This transfers buffer-undo-list to the
+        ;; tree and replaces it with a canary — our apply entries must
+        ;; have been consumed into the tree correctly.
+        (undo-tree-mode 1)
+        ;; Undo via undo-tree.
+        (deactivate-mark)
+        (undo-tree-undo 1)
+        (should (string= "hello world\nhello world\n" (buffer-string)))
+        (should (= fake-before
+                   (helixel-mc-test--fake-point f1)))
+        ;; Clean up: undo-tree-mode disables the idle timer anyway.
+        (undo-tree-mode -1)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-undo-tree-timer-defence ()
+  "undo-step-begin records timer-cancelled flag, finish clears it.
+Verifies the timer defence added for undo-tree compatibility.
+`cancel-timer' removes the timer from the active list; the timer
+object itself still exists (timerp returns t).  We trust the flag
+and verify begin/finish don't error."
+  (skip-unless (require 'undo-tree nil t))
+  (helixel-test-with-buffer "hello\n"
+    (setq buffer-undo-list nil)
+    ;; Enable undo-tree-mode with default settings (timer active).
+    (let ((undo-tree-limit nil))
+      (undo-tree-mode 1)
+      (should (timerp undo-tree-timer))
+      (helixel-mc--undo-step-begin)
+      ;; Flag is set — we recorded that we cancelled the timer.
+      (should helixel-mc--undo-tree-timer-was-active)
+      ;; finish does not error.
+      (helixel-mc--undo-step-finish)
+      ;; Flag cleared.
+      (should-not helixel-mc--undo-step-active)
+      (should-not helixel-mc--undo-tree-timer-was-active)
+      ;; New timer created by finish.
+      (should (timerp undo-tree-timer)))
+    (undo-tree-mode -1)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

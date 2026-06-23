@@ -604,8 +604,10 @@ code
 #+end_src
 after" :start (point-min))
     (let ((mb (save-excursion (should (= (helixel-up-regex-block "^#\\+begin_\\([^ 
-]+\\)" "^#\\+end_\\([^ 
-]+\\)" 1 1) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "^#\\+end_src")))
+
+]+\\)" "^#\\+end_\\([^ 
+
+]+\\)" 1 1) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "^#\\+end_src")))
 ))
 
 (ert-deftest helixel-test-up-regex-block-named-nested ()
@@ -618,8 +620,10 @@ inner
 more
 #+end_src" :start (point-min))
     (let ((mb (save-excursion (should (= (helixel-up-regex-block "^#\\+begin_\\([^ 
-]+\\)" "^#\\+end_\\([^ 
-]+\\)" 1 1) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "^#\\+end_src")))
+
+]+\\)" "^#\\+end_\\([^ 
+
+]+\\)" 1 1) 0)) (match-beginning 0)))) (should mb) (goto-char mb) (should (looking-at "^#\\+end_src")))
 ))
 
 ;; --- helixel-select-regex-block integration ---
@@ -647,9 +651,11 @@ print('hello')
 #+end_src
 " :start 32)
     (let ((range (helixel-select-regex-block "^#\\+begin_\\([^ 
-]+\\)[^
+
+]+\\)[^
 ]*" "^#\\+end_\\([^ 
-]+\\)[^
+
+]+\\)[^
 ]*" nil nil nil 1 nil 1))) (should range) (should (> (nth 0 range) 1)) (should (< (nth 0 range) 32)) (should (> (nth 1 range) (nth 0 range))) (should (< (nth 1 range) (point-max))))
 ))
 
@@ -660,9 +666,11 @@ print('hello')
 #+end_src
 " :start 32)
     (let ((range (helixel-select-regex-block "^#\\+begin_\\([^ 
-]+\\)[^
+
+]+\\)[^
 ]*" "^#\\+end_\\([^ 
-]+\\)[^
+
+]+\\)[^
 ]*" nil nil nil 1 t 1))) (should range) (should (= (nth 0 range) 1)) (should (> (nth 1 range) 1)))
 ))
 
@@ -720,5 +728,61 @@ print('hello')
       ;; inner = content between parens, excluding parens
       (should (= (region-beginning) 9))   ; after (
       (should (= (region-end) 14)))))     ; at )
+
+;; --- helixel--find-enclosing-pair ---
+
+(ert-deftest helixel-test-find-enclosing-pair-inside ()
+  "find-enclosing-pair inside balanced parens returns the pair."
+  (helixel-test-with-buffer '(:text "(foo bar)" :start 3 :mode text-mode)
+    (let ((pair (helixel--find-enclosing-pair
+                 #'helixel-up-block-at-point
+                 (point) (point))))
+      (should pair)
+      (should (eql (caar pair) 1))   ; opener begins at 1
+      (should (eql (cdar pair) 2))   ; opener ends at 2
+      (should (eql (cadr pair) 9))   ; closer begins at 9
+      (should (eql (cddr pair) 10))))); closer ends at 10
+
+(ert-deftest helixel-test-find-enclosing-pair-no-match ()
+  "find-enclosing-pair signals user-error when no pair exists."
+  (helixel-test-with-buffer '(:text "no delimiters here" :start 5 :mode text-mode)
+    (should-error
+     (helixel--find-enclosing-pair
+      #'helixel-up-block-at-point
+      (point) (point))
+     :type 'user-error)))
+
+(ert-deftest helixel-test-find-enclosing-pair-on-opener ()
+  "find-enclosing-pair right before opener finds the pair."
+  (helixel-test-with-buffer '(:text "(x)" :start 1 :mode text-mode)
+    (let ((pair (helixel--find-enclosing-pair
+                 #'helixel-up-block-at-point
+                 (point) (point))))
+      (should pair)
+      (should (eql (caar pair) 1))
+      (should (eql (cddr pair) 4)))))   ; closer at 3-4
+
+;; --- helixel--trim-line-crossing ---
+
+(ert-deftest helixel-test-trim-line-crossing-forward ()
+  "trim-line-crossing stops at eol when crossing line forward."
+  (helixel-test-with-buffer
+      '(:text "foo\nbar baz" :start 2 :mode text-mode)
+    (goto-char 2)                 ; at first \='o'
+    (let ((orig (point)))
+      (forward-word 1)            ; jumps to line 2
+      (helixel--trim-line-crossing 'word orig)
+      (should (<= (point) (save-excursion
+                             (goto-char orig)
+                             (line-end-position)))))))
+
+(ert-deftest helixel-test-trim-line-crossing-no-cross ()
+  "trim-line-crossing is no-op when no line crossing occurred."
+  (helixel-test-with-buffer
+      '(:text "foo bar baz" :start 2 :mode text-mode)
+    (goto-char 2)
+    (let ((orig (point)))
+      (forward-word 1)
+      (should-not (helixel--trim-line-crossing 'word orig)))))
 
 ;;; helixel-test-textobj.el ends here

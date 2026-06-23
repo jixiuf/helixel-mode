@@ -1180,16 +1180,6 @@ struct, re-snap the fake's point/mark, and repaint its overlay."
      cursor (marker-position (helixel-pcs-point cs)))
     (helixel-mc--update-fake-region cursor)))
 
-(defun helixel-mc--execute-for-all-cursors (command)
-  "Call COMMAND interactively for real cursor, then for every fake one.
-This is the entry point intended for `post-command-hook' or for
-external code that wants to manually trigger a batch operation
-without going through the command loop."
-  (helixel-mc--call-interactively command)
-  (when (helixel-mc-any-p)
-    (helixel-mc-with-each-cursor
-      (helixel-mc--call-interactively command))))
-
 ;; ── Edit-replay dispatch ──
 ;;
 ;; If `this-command' produced a new `helixel-action' (stamped via the

@@ -11,6 +11,7 @@
 (require 'helixel-mc-spawn)
 (require 'helixel-mc-integrate)
 (require 'helixel-test-common)
+(require 'org)
 
 ;; ── Core: create / clear / mode lifecycle ──
 
@@ -2195,23 +2196,6 @@ every fake cursor independently."
       (dotimes (i 10)
         (helixel-mc--create-fake-cursor (+ 1 i)))
       (should (= 10 (length (helixel-mc-all-cursors)))))
-    (helixel-mc-clear-all)))
-
-;; ── execute-for-all-cursors entry point ──
-
-(ert-deftest helixel-test-mc-execute-for-all-cursors ()
-  "`helixel-mc--execute-for-all-cursors' runs a command at real + every fake."
-  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
-    (helixel-mc--create-fake-cursor 5)
-    (helixel-mc--create-fake-cursor 9)
-    (goto-char 1)
-    (helixel-mc--execute-for-all-cursors #'forward-char)
-    (should (= 2 (point)))
-    (let ((positions
-           (sort (mapcar (lambda (ov) (marker-position
-                                   (helixel-mc-cursor-point ov)))
-                         (helixel-mc-all-cursors)) #'<)))
-      (should (equal '(6 10) positions)))
     (helixel-mc-clear-all)))
 
 ;; ── toggle error paths ──

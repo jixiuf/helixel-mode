@@ -607,6 +607,17 @@ category and subcat."
 ;; ; cycling — session jump within buffer
 ;; ----------------------------------------------------------------------
 
+(defsubst helixel--non-degenerate-mark-region (event)
+  "Return EVENT's mark-region cons if non-degenerate, else nil.
+A degenerate mark-region has car and cdr at the same position."
+  (when-let* ((mr (helixel-action-mark-region event))
+              ((consp mr))
+              ((markerp (car mr)))
+              ((markerp (cdr mr)))
+              ((not (= (marker-position (car mr))
+                       (marker-position (cdr mr))))))
+    mr))
+
 (defun helixel-action--cycle-visible-p (event)
   "Return non-nil if EVENT is visible during cycle.
 Checks \\[helixel-action-cycle\\] cycling visibility.
@@ -650,6 +661,37 @@ to session-start, matching \\[helixel-action-cycle\\]'s behaviour."
       (setq sel (helixel-sel-update-ctx sel :span t))
       (helixel--sel-push sel))
     sel))
+
+;; ── Shared fallback helpers ──
+
+(defun helixel--action-cycle-show-live ()
+  "Show the current live action for forward-cycle at newest.
+Pushes mark to the live action's start-position and displays
+\"[live]\" message.  Sets `helixel--action-pos' to nil (live state)."
+  (setq helixel--action-pos nil)
+  (push-mark (helixel--cycle-mark-start helixel--live-action) t t)
+  (message "[live] %s"
+           (helixel--action-display-format helixel--live-action)))
+
+(defun helixel--action-cycle-no-more-fallback (ring pos)
+  "Handle the case when no older entries exist beyond RING[POS].
+If newest-for-mark applies, marks the full group span.
+Otherwise pushes mark to the group-start marker and displays position.
+POS is the index into RING of the current event."
+  (let* ((gpos (helixel--gr-group-start
+                ring pos #'helixel-action--same-group-p))
+         (grp-event (nth gpos ring)))
+    (if (and (helixel--cycle-mark-thing-p)
+             (helixel-action--newest-for-mark-p grp-event))
+        (setq helixel--action-pos
+              (helixel-action--cycle-mark-group-span ring pos))
+      (let ((mr (helixel-action-mark-region grp-event)))
+        (push-mark (if (helixel--cycle-mark-thing-p)
+                       (car mr)
+                     (helixel--cycle-mark-start grp-event))
+                   t t)
+        (message "%s" (helixel-action--cycle-display
+                       grp-event gpos ring))))))
 
 (defun helixel-action--cycle-mark-region (event mr first-call)
   "Mark the region during \\[helixel-action-cycle\\] cycling.
@@ -711,27 +753,20 @@ When `helixel--cycle-mark-thing-p' returns nil (jump-cycle mode),
 replaces the START with the group-start event's `start-point'
 marker — pushing mark to the original pre-motion cursor position
 instead of the movement span start."
-  (let* ((own-mr (helixel-action-mark-region mark-event))
-         (own-mr (and own-mr
-                      (not (= (marker-position (car own-mr))
-                              (marker-position (cdr own-mr))))
-                      own-mr))
-         (group-mr (when multi-event-p
-                     (helixel--compute-group-span
-                      ring newest-pos gpos)))
+  (let* ((own-mr (helixel--non-degenerate-mark-region mark-event))
+         (group-mr (and multi-event-p
+                        (helixel--compute-group-span
+                         ring newest-pos gpos)))
          (raw-mr
-          (if multi-event-p
-              (if use-newest
-                  (or own-mr group-mr
-                      (let ((fallback (helixel-action-mark-region
-                                       event)))
-                        (and fallback
-                             (not (= (marker-position (car fallback))
-                                     (marker-position (cdr fallback))))
-                             fallback)))
-                (or group-mr
-                    (helixel-action-mark-region mark-event)))
-            (helixel-action-mark-region mark-event))))
+          (cond
+           ((not multi-event-p)
+            (helixel-action-mark-region mark-event))
+           (use-newest
+            (or own-mr group-mr
+                (helixel--non-degenerate-mark-region event)))
+           (t
+            (or group-mr
+                (helixel-action-mark-region mark-event))))))
     (if (helixel--cycle-mark-thing-p)
         raw-mr
       (cons (or (when-let* ((sp (helixel-action-start-point
@@ -795,6 +830,12 @@ category and subcat."
        (eq (helixel-action-category a) (helixel-action-category b))
        (eq (helixel-action-subcat a) (helixel-action-subcat b))))
 
+(defvar-local helixel--cycle-auto-advance-depth 0
+  "Recursion guard for `helixel-action--cycle-auto-advance'.
+Incremented each time auto-advance triggers, reset to 0 when
+the user presses \; or C-; interactively.  Prevents infinite
+loops from degenerate ring entries.")
+
 (defun helixel-action--cycle-auto-advance (did-mark first-call)
   "Auto-advance the action cycle to skip dead spots.
 Called when \\[helixel-action-cycle\\] produced no useful change.
@@ -803,11 +844,16 @@ FIRST-CALL is non-nil when this is the first
 \\[helixel-action-cycle\\] after a movement.
 
 When the current event doesn't change point or the region, skip
-forward to the next older event to avoid cycling through dead spots."
+forward to the next older event to avoid cycling through dead spots.
+Bounded by `helixel--cycle-auto-advance-depth' to prevent infinite
+recursion (safety limit: 16)."
   (when (and (not (use-region-p))
              (not did-mark)
-             (not first-call))
-    (helixel--action-cycle-backward)))
+             (not first-call)
+             (< helixel--cycle-auto-advance-depth 16))
+    (let ((helixel--cycle-auto-advance-depth
+           (1+ helixel--cycle-auto-advance-depth)))
+      (helixel--action-cycle-backward))))
 
 (defun helixel-action-cycle (&optional arg)
   "Cycle through `helixel--action-ring' entries.
@@ -819,7 +865,8 @@ Subsequent presses cycle to older events.
 Optional prefix ARG is passed to the underlying commands."
   (interactive "P")
   (unless (eq last-command 'helixel-action-cycle)
-    (setq helixel--action-pos nil))
+    (setq helixel--action-pos nil
+          helixel--cycle-auto-advance-depth 0))
   (helixel--action-cycle arg))
 
 (defun helixel--action-cycle (&optional arg)
@@ -847,13 +894,7 @@ Used by \\[universal-argument] \\[helixel-action-cycle\]."
         (message "At newest"))))
    ((eq helixel--action-pos 0)
     (if helixel--live-action
-        (progn
-          (setq helixel--action-pos nil)
-          (push-mark (helixel--cycle-mark-start
-                      helixel--live-action)
-                     t t)
-          (message "[live] %s"
-                   (helixel--action-display-format helixel--live-action)))
+        (helixel--action-cycle-show-live)
       (message "At newest")))
    (t (message "At newest"))))
 
@@ -869,45 +910,24 @@ Used by \\[helixel-action-cycle\] and auto-advance."
           (if (and (helixel--cycle-mark-thing-p)
                    (helixel-action--newest-for-mark-p
                     (nth helixel--action-pos helixel--action-ring))
-                   (funcall #'helixel-action--same-group-p
-                            (nth helixel--action-pos helixel--action-ring)
-                            (nth pos helixel--action-ring)))
+                   (helixel-action--same-group-p
+                    (nth helixel--action-pos helixel--action-ring)
+                    (nth pos helixel--action-ring)))
               (setq helixel--action-pos
                     (helixel-action--cycle-mark-group-span
                      helixel--action-ring pos))
             (helixel-action--cycle-show pos helixel--action-ring))
-        ;; No older visible group: jump to current group-start marker.
-        (let* ((gpos (helixel--gr-group-start
-                      helixel--action-ring helixel--action-pos
-                      #'helixel-action--same-group-p))
-               (grp-event (nth gpos helixel--action-ring)))
-          (if (and (helixel--cycle-mark-thing-p)
-                   (helixel-action--newest-for-mark-p grp-event))
-              (setq helixel--action-pos
-                    (helixel-action--cycle-mark-group-span
-                     helixel--action-ring helixel--action-pos))
-            (let ((mr (helixel-action-mark-region grp-event)))
-              (push-mark (if (helixel--cycle-mark-thing-p)
-                             (car mr)
-                           (helixel--cycle-mark-start grp-event))
-                         t t)
-              (message "%s" (helixel-action--cycle-display
-                             grp-event gpos helixel--action-ring))))))))
-   (helixel--live-action
-    (helixel--action-commit)
-    (let ((pos (helixel--gr-visible-index
-                helixel--action-ring 0
-                #'helixel-action--cycle-visible-p)))
-      (if pos
-          (helixel-action--cycle-show pos helixel--action-ring)
-        (message "No saved actions"))))
-   (helixel--action-ring
-    (let ((pos (helixel--gr-visible-index
-                helixel--action-ring 0
-                #'helixel-action--cycle-visible-p)))
-      (if pos
-          (helixel-action--cycle-show pos helixel--action-ring)
-        (message "No saved actions"))))
+        ;; No older visible entries: show group-start fallback.
+        (helixel--action-cycle-no-more-fallback
+         helixel--action-ring helixel--action-pos))))
+   ;; First press: commit live action and start cycling from newest.
+   ((or helixel--live-action helixel--action-ring)
+    (when helixel--live-action (helixel--action-commit))
+    (if-let* ((pos (helixel--gr-visible-index
+                    helixel--action-ring 0
+                    #'helixel-action--cycle-visible-p)))
+        (helixel-action--cycle-show pos helixel--action-ring)
+      (message "No saved actions")))
    (t (message "No saved actions"))))
 
 ;; ── Jump cycle (\\[helixel-action-cycle-mark-start\\]) ──
@@ -1021,46 +1041,73 @@ Adds :before advice to record position before SYMBOL runs."
             (funcall helixel-jump-cleanup-function))
           t)))))
 
+;; ── Shared jump navigation ──
+;;
+;; Backward and forward share the same find-next-visible-then-goto
+;; loop.  The only difference is how they compute the starting position
+;; and direction before entering the loop.
+
+(defun helixel--jump-navigate (find-fn)
+  "Navigate jump log entries using FIND-FN.
+FIND-FN is called with no arguments and must return the next position
+to try \(an index into `helixel--global-jump-log'), or nil when
+no more entries exist.
+
+Returns non-nil if a jump was performed, nil otherwise.
+Updates `helixel--jump-pos' as it skips dead entries."
+  (let (pos found)
+    (setq pos (funcall find-fn))
+    (while pos
+      (if (helixel--jump-goto pos)
+          (setq found t pos nil)
+        ;; Entry was non-visible or buffer dead: skip it.
+        (setq helixel--jump-pos pos
+              pos (funcall find-fn))))
+    found))
+
 (defun helixel-jump-backward ()
   "Jump to previous (older) position in `helixel--global-jump-log'."
   (interactive)
   (let* ((saved-pos helixel--jump-pos))
+    ;; Push a return-point entry so C-i can navigate back.
+    ;; The new entry shifts indices by 1, so adjust saved-pos.
     (helixel-register-jump 'jump 'return)
     (setq helixel--jump-pos (if saved-pos (1+ saved-pos) nil))
-    (let* ((start (if helixel--jump-pos helixel--jump-pos 0))
-           (pos (helixel--gr-find
-                 helixel--global-jump-log start 1
-                 #'helixel--jump-visible-p))
-           (found nil))
-      (while pos
-        (if (helixel--jump-goto pos)
-            (setq found t pos nil)
-          (setq helixel--jump-pos pos
-                pos (helixel--gr-find
-                     helixel--global-jump-log pos 1
-                     #'helixel--jump-visible-p))))
+    (let* ((start (or helixel--jump-pos 0))
+           (pos helixel--jump-pos)  ;; capture for closure
+           (found
+            (helixel--jump-navigate
+             (lambda ()
+               (setq pos (helixel--gr-find
+                          helixel--global-jump-log
+                          (or pos start) 1
+                          #'helixel--jump-visible-p))))))
       (unless found
-        (message (if helixel--jump-pos "At oldest" "No jump positions"))))))
+        (message (if helixel--jump-pos "At oldest"
+                   "No jump positions"))))))
 
 (defun helixel-jump-forward ()
   "Jump to next (newer) position in `helixel--global-jump-log'."
   (interactive)
   (if helixel--jump-pos
-      (let ((newest (helixel--gr-group-newest
-                     helixel--global-jump-log helixel--jump-pos
-                     #'helixel--jump-same-group-p))
-            (pos nil))
-        (while (and (not pos) (> newest 0))
-          (setq pos (helixel--gr-visible-index
-                     helixel--global-jump-log (1- newest)
-                     #'helixel--jump-visible-p))
-          (when pos
-            (let ((success (helixel--jump-goto pos)))
-              (unless success
-                (setq helixel--jump-pos pos
-                      newest pos
-                      pos nil)))))
-        (unless pos
+      (let* ((newest helixel--jump-pos)
+             (pos nil)
+             (found
+              (helixel--jump-navigate
+               (lambda ()
+                 ;; Jump to the entry before the current group's newest.
+                 (setq newest
+                       (helixel--gr-group-newest
+                        helixel--global-jump-log newest
+                        #'helixel--jump-same-group-p))
+                 (when (> newest 0)
+                   (setq pos
+                         (helixel--gr-visible-index
+                          helixel--global-jump-log (1- newest)
+                          #'helixel--jump-visible-p))
+                   (when pos (setq newest pos))
+                   pos)))))
+        (unless found
           (message "At newest")))
     (message "At newest")))
 

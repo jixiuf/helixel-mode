@@ -1074,35 +1074,33 @@ fake cursor's body runs in turn."
 (defmacro helixel-mc-with-saved-state (&rest body)
   "Execute BODY, saving and restoring per-cursor state.
 Snapshots the real cursor's state into a `helixel-pc-state'
-before BODY and restores it after — EXCEPT for point and mark,
-which are left as BODY leaves them (the caller is responsible
-for cursor positioning).
+before BODY and restores it after — EXCEPT for point and mark
+positions, which are left as BODY leaves them (the caller is
+responsible for cursor positioning).
 
 Use this when walking the buffer to collect targets outside
 of the standard with-each-cursor dispatch loop, so advance
 functions don't clobber the real cursor's per-cursor helixel
 state (kill-ring, event-ring, last-action, …)."
   (declare (indent 0) (debug t))
-  (let ((cs (gensym "cs")))
+  (let ((cs (gensym "cs"))
+        (pt (gensym "pt"))
+        (mk (gensym "mk")))
     `(let ((,cs (helixel-mc--pcs-clone)))
        (unwind-protect (progn ,@body)
-         ;; Restore everything except point/mark — callers rely on
-         ;; BODY moving point freely.
-         (setq mark-active            (helixel-pcs-mark-active ,cs)
-               kill-ring              (helixel-pcs-kill-ring ,cs)
-               kill-ring-yank-pointer (helixel-pcs-kill-ring-yank-pointer ,cs)
-               mark-ring              (helixel-pcs-mark-ring ,cs)
-               helixel--pending-sel   (helixel-pcs-pending-sel ,cs)
-               helixel-last-action   (helixel-pcs-last-action ,cs)
-               helixel--yank-register-source
-               (helixel-pcs-yank-register-source ,cs)
-               register-alist
-               (helixel-pcs-registers-alist ,cs)
-               helixel--active-search (helixel-pcs-active-search ,cs)
-               helixel--action-ring    (helixel-pcs-event-ring ,cs)
-               helixel--live-action   (helixel-pcs-live-action ,cs)
-               helixel--action-pos    (helixel-pcs-action-pos ,cs)
-               helixel--mark-cycle-pos (helixel-pcs-jump-cycle-pos ,cs))
+         ;; Save point/mark positions that body left behind.
+         (let ((,pt (point))
+               (,mk (and (mark t) (marker-position (mark-marker)))))
+           ;; Restore all pre-body per-cursor state via the
+           ;; standard swap-in path (single source of truth).
+           ;; This covers EVERY slot in `helixel-pc-state' — no
+           ;; manual list to keep in sync.
+           (helixel-mc--pcs-swap-in ,cs)
+           ;; Override point/mark with post-body positions.
+           (goto-char ,pt)
+           (if ,mk
+               (set-marker (mark-marker) ,mk)
+             (set-marker (mark-marker) ,pt)))
          (helixel-mc--pcs-release ,cs)))))
 
 (defvar helixel-mc--quit-p nil

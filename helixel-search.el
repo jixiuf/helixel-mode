@@ -83,6 +83,17 @@ Requires pcre2el (<https://github.com/joddie/pcre2el>)."
   :type 'boolean
   :group 'helixel-search)
 
+(defcustom helixel-search-use-region t
+  "When non-nil, / ? use active region text as search pattern.
+When a region is active and this is enabled:
+  - / ?  → literal search (regexp-quote region text)
+Point is positioned past the selection before searching.
+When nil, the normal interactive isearch prompt is used.
+Does NOT affect * # (they always use symbol-at-point or
+single-line region, regardless of this setting)."
+  :type 'boolean
+  :group 'helixel-search)
+
 (defun helixel-search--pcre-to-elisp (pattern)
   "Convert PATTERN from PCRE to elisp regexp if pcre2el is available.
 Returns PATTERN unchanged on failure, when pcre2el is absent,
@@ -395,28 +406,58 @@ Delegates to `helixel-search--isearch-literal' — the existing
                   text)))
       (helixel-search--isearch-literal pat dir))))
 
+(defun helixel-search--from-region (dir &optional word-bound-p)
+  "Search for the active region's text in DIR direction.
+DIR is \=`forward' or \=`backward'.
+When WORD-BOUND-P is non-nil, wrap with \\_<...\\_>
+\(for \=`*' and \=`#').  Otherwise `regexp-quote' the text
+\(for \=`/' and \=`?').
+Positions point past the current selection so the search finds
+the next occurrence, not the selected one."
+  (let* ((beg (region-beginning))
+         (end (region-end))
+         (text (filter-buffer-substring beg end))
+         (helixel-search--had-region t)
+         (pat (if word-bound-p
+                  (concat "\\_<" (regexp-quote text) "\\_>")
+                (regexp-quote text))))
+    (deactivate-mark)
+    (if (eq dir 'forward)
+        (goto-char end)
+      (goto-char (max (point-min) (1- beg))))
+    (helixel-search--isearch-literal pat dir)))
+
 (helixel-define-command helixel-search-forward
     (:category search :subcat search :clear-highlights nil)
-  (if (helixel--register-active-p)
-      (helixel-search--from-register 'forward)
+  (cond
+   ((and helixel-search-use-region (use-region-p))
+    (helixel-search--from-region 'forward))
+   ((helixel--register-active-p)
+    (helixel-search--from-register 'forward))
+   (t
     (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
     (helixel--with-invisible-search
-      (call-interactively #'isearch-forward-regexp))))
+      (call-interactively #'isearch-forward-regexp)))))
 
 (helixel-define-command helixel-search-backward
     (:category search :subcat search :clear-highlights nil)
-  (if (helixel--register-active-p)
-      (helixel-search--from-register 'backward)
+  (cond
+   ((and helixel-search-use-region (use-region-p))
+    (helixel-search--from-region 'backward))
+   ((helixel--register-active-p)
+    (helixel-search--from-register 'backward))
+   (t
     (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
     (helixel--with-invisible-search
-      (call-interactively #'isearch-backward-regexp))))
+      (call-interactively #'isearch-backward-regexp)))))
 
 ;; ---------------------------------------------------------------------------
 ;; * #  — symbol at point
 
 (defun helixel-search--bounds-at-point ()
   "Return (BEG . END) of the thing to search for at point.
-If there is a single-line region, use it; otherwise use the symbol at point."
+When a single-line region is active, uses the region bounds;
+otherwise uses the symbol at point."
   (if (and (region-active-p)
            (= (line-number-at-pos (region-end))
               (line-number-at-pos (region-beginning))))

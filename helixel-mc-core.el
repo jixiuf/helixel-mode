@@ -156,10 +156,15 @@ cursor's selection stands out among fake selections."
   :group 'helixel)
 
 (defcustom helixel-mc-max-cursors 500
-  "Maximum number of fake cursors before refusing to create more.
-Nil disables the check."
+  "Maximum number of fake cursors before asking whether to continue.
+When exceeded, the user is prompted; answering `y' suppresses the
+limit for the rest of the current command.  Nil disables the check."
   :type '(choice (const :tag "Unlimited" nil) integer)
   :group 'helixel)
+
+(defvar helixel-mc--max-cursors-suppressed nil
+  "Non-nil if the user chose to exceed the max-cursors limit this command.
+Resets at the start of each command via `helixel-mc--pre-command'.")
 
 ;; ── Per-cursor state ──
 ;;
@@ -576,17 +581,24 @@ Return the total number of fake cursors removed."
 (defun helixel-mc--create-fake-cursor (point &optional mark)
   "Create a fake cursor at POINT, with optional active region to MARK.
 Returns the new overlay, or nil if a fake at the same (point, mark)
-already exists.  Signals `user-error' if `helixel-mc-max-cursors'
-would be exceeded.
+already exists.  When `helixel-mc-max-cursors' would be exceeded,
+prompts whether to continue; answering \"y\" suppresses the warning
+for the rest of the current command.
 Snapshots the cursor state into a `helixel-pc-state' struct
 attached to the overlay (so each cursor has its own `kill-ring',
 event-ring, etc.).  Auto-enables `helixel-mc-mode'."
   (when (and helixel-mc-max-cursors
+             (not helixel-mc--max-cursors-suppressed)
              (and helixel-mc--cursors-by-id
                   (>= (hash-table-count helixel-mc--cursors-by-id)
                       helixel-mc-max-cursors)))
-    (user-error "Refusing to create more than %d fake cursors"
-                helixel-mc-max-cursors))
+    (if (y-or-n-p
+         (format "Already have %d fake cursors (max %d).  Continue anyway? "
+                 (hash-table-count helixel-mc--cursors-by-id)
+                 helixel-mc-max-cursors))
+        (setq helixel-mc--max-cursors-suppressed t)
+      (user-error "Limit of %d fake cursors reached"
+                  helixel-mc-max-cursors)))
   ;; Dedup against existing fakes only.  We do NOT skip when this
   ;; position happens to match the real cursor, because legitimate
   ;; flows (e.g. `s a' / `helixel-mc-add-cursor-here') snapshot the
@@ -1368,6 +1380,8 @@ fresh cache for third-party user-input functions (\=`read-char',
 \=\`read-string\=, etc.)."
   ;; Clear the input cache at the start of each outer command.
   (setq helixel-mc--input-cache nil)
+  ;; Reset the max-cursors suppression — each command gets its own prompt.
+  (setq helixel-mc--max-cursors-suppressed nil)
   ;; Snapshot `this-command' early — before any recursive edit
   ;; (isearch, query-replace, etc.) can overwrite it.  Used by
   ;; `helixel-mc--fresh-action-from-real' as a fallback.
@@ -1630,8 +1644,9 @@ Returns a list of (POINT . MARK) marker pairs.  Each iteration
 captures the current region (if any) or point as a target.
 Detects in-place recreate (where :advance moves no cursor — common
 for textobj) and force-advances point past the last region so the
-next iteration lands on a fresh target.  Bounded by
-`helixel-mc-max-cursors' to avoid runaways.
+next iteration lands on a fresh target.  When
+`helixel-mc-max-cursors' is reached, prompts whether to continue;
+answering \"y\" suppresses the limit for the rest of the command.
 
 Fully isolates helixel's event / selection / tracking globals so
 the walk does NOT pollute `helixel-last-action',
@@ -1654,14 +1669,28 @@ number of walk iterations), breaking dot-repeat at fake cursors."
         (helixel-with-replay-as 'dot
           (deactivate-mark)
           (goto-char (point-min))
-          (let ((dummy (helixel-mc--make-dummy-action sel)))
-            (catch 'done
-              (while (< (length targets) limit)
-                (if-let* ((result (helixel-mc--walk-advance-iter
-                                   dummy advance-fn targets last-key)))
+          (let ((dummy (helixel-mc--make-dummy-action sel))
+                (keep-going t))
+            (while keep-going
+              (if-let* ((result (helixel-mc--walk-advance-iter
+                                 dummy advance-fn targets last-key)))
+                  (progn
                     (setq last-key (cdr result)
                           targets (car result))
-                  (throw 'done nil)))))))
+                    ;; Prompt when limit reached (once per command).
+                    (when (and limit
+                               (>= (length targets) limit))
+                      (if (or helixel-mc--max-cursors-suppressed
+                              (y-or-n-p
+                               (format
+                                (concat "Already found %d targets"
+                                        " (max %d).  Continue scanning? ")
+                                (length targets) limit)))
+                          (setq helixel-mc--max-cursors-suppressed t
+                                limit nil)
+                        (setq keep-going nil)))
+                    t)
+                (setq keep-going nil))))))
       (nreverse targets))))
 
 (defun helixel-mc--walk-advance-iter (tx advance-fn targets last-key)

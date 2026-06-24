@@ -2179,13 +2179,28 @@ every fake cursor independently."
 ;; ── max-cursors limit ──
 
 (ert-deftest helixel-test-mc-max-cursors-limit ()
-  "Creating cursors past `helixel-mc-max-cursors' signals `user-error'."
+  "When `helixel-mc-max-cursors' is exceeded, the user is prompted.
+Answering \\\"n\\\" signals `user-error'; answering \\\"y\\\" suppresses
+the limit and allows the cursor to be created."
   (helixel-test-with-buffer "a\nb\nc\nd\n"
     (let ((helixel-mc-max-cursors 2))
       (helixel-mc--create-fake-cursor 1)
       (helixel-mc--create-fake-cursor 2)
-      (should-error (helixel-mc--create-fake-cursor 3)
-                    :type 'user-error))
+      ;; Answer "n": still signals user-error.
+      (cl-letf (((symbol-function 'y-or-n-p)
+                 (lambda (_prompt) (prog1 nil
+                                    (setq helixel-mc--max-cursors-suppressed nil)))))
+        (should-error (helixel-mc--create-fake-cursor 3)
+                      :type 'user-error)))
+    (helixel-mc-clear-all)
+    ;; Answer "y": suppresses and creates the cursor.
+    (let ((helixel-mc-max-cursors 2))
+      (helixel-mc--create-fake-cursor 1)
+      (helixel-mc--create-fake-cursor 2)
+      (cl-letf (((symbol-function 'y-or-n-p) (lambda (_prompt) t)))
+        (helixel-mc--create-fake-cursor 3)
+        (should (= 3 (length (helixel-mc-all-cursors))))
+        (should helixel-mc--max-cursors-suppressed)))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-max-cursors-unlimited ()

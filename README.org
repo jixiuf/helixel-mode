@@ -11,6 +11,7 @@ you type ~w w w ; d~ or ~3wd~ — select three words, then delete.
 - *FAQ*: [[file:docs/FAQ.md][docs/FAQ.md]] — common questions and answers
 - *API Reference*: [[file:docs/API.md][docs/API.md]] — extending helixel with custom commands, text objects, operators
 - *Architecture*: [[file:docs/ARCHITECTURE.md][docs/ARCHITECTURE.md]] — design, data flow, invariants
+- [[./CONTRIBUTING.md][CONTRIBUTING]] 
 
 ** Install
 

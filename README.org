@@ -179,6 +179,7 @@ Pair/structure movement with ~]~ / ~[~ / ~}~ / ~{~:
 
 - [[https://github.com/joddie/pcre2el][pcre2el]] support PCRE regexp for =/= =?=
 - [[https://github.com/meain/evil-textobj-tree-sitter][evil-textobj-tree-sitter]] helixel-get-tree-sitter-textobj needs it
+- [[https://github.com/jixiuf/emacs-leadkey][leadkey]] for a more flexible leader-key experience
 
 * Acknowledgments
 

@@ -170,6 +170,25 @@ Pair/structure movement with ~]~ / ~[~ / ~}~ / ~{~:
 | ~@~ ~ESC~               | Chain recording: start / finish (~.~ replays at next target)                        |
 | ~.~ ~M-.~               | Dot-repeat: repeat last edit / repeat last selection                                |
 | ~g~                     | Goto prefix (~g g~ ~g d~ ~g r~ ~g i~ ~g y~ ~g .~ ~g ;~)                             |
-| ~SPC~                   | Space prefix (LSP / project)                                                        |
 | ~C-w~                   | Window prefix                                                                       |
 | ~s~                     | Multi-cursor prefix (~s s~ spawn, ~s a~ add, ~s n~ next-like, ~s x~ per-line)       |
+
+* Dependencies
+
+** Soft dependencies
+
+- [[https://github.com/joddie/pcre2el][pcre2el]] support PCRE regexp for =/= =?=
+- [[https://github.com/meain/evil-textobj-tree-sitter][evil-textobj-tree-sitter]] helixel-get-tree-sitter-textobj needs it
+
+* Acknowledgments
+
+Helixel is heavily inspired by:
+- [[https://github.com/emacs-evil/evil][evil]]
+- [[https://github.com/meow-edit/meow][meow]]
+- [[https://codeberg.org/ideasman42/emacs-meep][meep]]
+- [[https://github.com/mgmarlow/helix-mode.git][helix-mode]]
+- [[https://github.com/magnars/multiple-cursors.el][multiple-cursors.el]]
+
+* License
+
+Licensed under GPLv3.

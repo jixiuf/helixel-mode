@@ -2169,4 +2169,42 @@ the line selection type so operators dispatch correctly."
     (call-interactively #'helixel-previous-line)
     (should (eq (helixel--sel-type) 'line))))
 
+;;; Regression: i after line spawn + movements must NOT jump to BOL
+
+(ert-deftest helixel-test-insert-no-bol-jump-after-mc-spawn-and-move ()
+  "After x x s s gh l, i must insert at current point, not jump to BOL.
+
+Movement commands deactivate the mark via `helixel--clear-highlights',
+but `region-beginning' still returns the old mark position (BOL).
+`helixel-insert' and `helixel-insert-after' must guard their
+`goto-char' calls with `(when mark-active ...)', otherwise they jump
+to the stale mark position."
+  (helixel-test-with-buffer "hello world\nhello world\nline3"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    ;; x x: select 2 lines
+    (call-interactively #'helixel-select-line)
+    (call-interactively #'helixel-select-line)
+    ;; s s: spawn mc from line selection
+    (call-interactively #'helixel-mc-toggle)
+    (should mark-active)
+    ;; gh: go BOL → mark deactivated by clear-highlights
+    (call-interactively #'helixel-go-beginning-line)
+    (should-not mark-active)
+    ;; l: forward-char
+    (let ((pt-before (point)))
+      (call-interactively #'helixel-forward-char)
+      (should (= (point) (1+ pt-before))))
+    ;; Now point is past BOL, pending-sel is still 'line.
+    ;; region-beginning still returns the stale BOL position even
+    ;; though mark is inactive.  Verify this is the case:
+    (let ((pt (point)))
+      (should (= (region-beginning) (1- pt))) ; region-beginning = BOL
+      ;; Call helixel-insert — with the fix, it must NOT jump:
+      (call-interactively #'helixel-insert)
+      (should (= (point) pt))               ; point unchanged
+      ;; Clean up insert state
+      (setq helixel--pending-sel nil)
+      (helixel-insert-exit))))
+
 ;;; helixel-test-edit.el ends here

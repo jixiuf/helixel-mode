@@ -239,12 +239,14 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                                :entry-kind 'insert))
       (run-hook-with-args
        'helixel-chain-insert-entry-functions 'insert)
-      (goto-char (region-beginning)))
+      (when mark-active
+        (goto-char (region-beginning))))
      ;; Manual region
      ((use-region-p)
       (helixel--sel-push
        (helixel-sel-create 'insert-selection-start nil))
-      (goto-char (region-beginning)))
+      (when mark-active
+        (goto-char (region-beginning))))
      ;; No context
      (t
       (setq helixel--pending-sel nil))))
@@ -296,12 +298,14 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                                :entry-kind 'append))
       (run-hook-with-args
        'helixel-chain-insert-entry-functions 'append)
-      (goto-char (region-end)))
+      (when mark-active
+        (goto-char (region-end))))
      ;; Manual region
      ((use-region-p)
       (helixel--sel-push
        (helixel-sel-create 'insert-selection-end nil))
-      (goto-char (region-end)))
+      (when mark-active
+        (goto-char (region-end))))
      ;; No context
      (t
       (unless (helixel--end-of-line-p)

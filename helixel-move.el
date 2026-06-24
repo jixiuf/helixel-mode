@@ -130,9 +130,43 @@ Example:
 (helixel-define-movement helixel-go-end-buffer end-of-buffer goto)
 
 (helixel-define-movement helixel-scroll-up-command scroll-up-command scroll
-                         :clear-highlights nil)
+                         :clear-highlights nil
+                         :reverse scroll-down-command)
 (helixel-define-movement helixel-scroll-down-command scroll-down-command scroll
-                         :clear-highlights nil)
+                         :clear-highlights nil
+                         :reverse scroll-up-command)
+
+(helixel-define-movement helixel-scroll-up-line scroll-up-line scroll
+                         :clear-highlights nil
+                         :reverse scroll-down-line)
+(helixel-define-movement helixel-scroll-down-line scroll-down-line scroll
+                         :clear-highlights nil
+                         :reverse scroll-up-line)
+
+;; ── View alignment commands ──
+
+(defun helixel-view-center ()
+  "Center the current line vertically in the window."
+  (interactive)
+  (recenter))
+
+(defun helixel-view-top ()
+  "Move the current line to the top of the window."
+  (interactive)
+  (recenter 0))
+
+(defun helixel-view-bottom ()
+  "Move the current line to the bottom of the window."
+  (interactive)
+  (recenter -1))
+
+(defun helixel-view-middle ()
+  "Center the current line horizontally in the window."
+  (interactive)
+  (let* ((col (current-column))
+         (win-width (window-width))
+         (target (max 0 (- col (/ win-width 2)))))
+    (set-window-hscroll (selected-window) target)))
 
 ;; ── Word / WORD / Symbol movement ──
 

@@ -77,6 +77,8 @@
 (declare-function eww-forward-url "eww")
 (declare-function eww-reload "eww")
 
+(declare-function diff-hunk-kill "diff-mode")
+
 (defun helixel-shims--set-invisible-nil ()
   "Set `helixel-invisible' to nil for the current buffer.
 Intended for mode hooks where invisible text means filtered-out
@@ -152,6 +154,22 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
     (put 'wgrep-finish-edit 'helixel-multiple-cursors nil)
     (put 'wgrep-abort-changes 'helixel-multiple-cursors nil)
     (put 'wgrep-save-all-buffers 'helixel-multiple-cursors nil)))
+
+;; ── diff-mode ──
+
+(defun helixel-shims--setup-diff-mode ()
+  "Setup `diff-mode' keybindings in motion state.
+Override `k' (normally `diff-hunk-kill' in `diff-mode-shared-map')
+to move to the previous line, and bind `d' to `diff-hunk-kill'.
+`j' already falls through to `helixel-next-line' via the motion
+parent-patching mechanism."
+  (helixel-define-key 'motion "d" #'diff-hunk-kill 'diff-mode)
+  (helixel-define-key 'motion "k" #'helixel-previous-line 'diff-mode)
+  (helixel-define-key 'motion "u" #'undo 'diff-mode)
+  (helixel-define-key 'motion "gj" #'diff-hunk-next 'diff-mode)
+  (helixel-define-key 'motion "gk" #'diff-hunk-prev 'diff-mode)
+  (helixel-define-key 'motion "[[" #'diff-file-prev 'diff-mode)
+  (helixel-define-key 'motion "]]" #'diff-file-next 'diff-mode))
 
 ;; ── Read-only mode keybindings ──
 ;; These modes default to motion state.  Their own keybindings fall
@@ -254,7 +272,8 @@ Called at top-level when this file is loaded."
   (helixel-shims--defer-setup 'man 'helixel-shims--setup-man-mode)
   (helixel-shims--defer-setup 'prog-mode 'helixel-shims--setup-prog-mode)
   (helixel-shims--defer-setup 'woman 'helixel-shims--setup-woman-mode)
-  (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode))
+  (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode)
+  (helixel-shims--defer-setup 'diff-mode 'helixel-shims--setup-diff-mode))
 
 (helixel-shims--register-deferred)
 

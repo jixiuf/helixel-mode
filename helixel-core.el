@@ -2207,6 +2207,19 @@ Old registers shift: slot N-1 → N, ..., slot 1 → 2."
                do (set-register (1+ src) (get-register src))))
     (set-register start text)))
 
+(defun helixel--register-store-delete (text)
+  "Store TEXT in numbered-delete and small-delete registers.
+Rotates `helixel-register-numbered-delete-start' through
+`helixel-register-numbered-delete-count' and sets
+`helixel-register-small-delete-char' when TEXT has no newline.
+Does NOT push to `kill-ring'.  Named register is also populated
+when `helixel--current-register' is active."
+  (helixel--register-rotate-delete text)
+  (when (and text (not (string-match-p "\n" text)))
+    (set-register helixel-register-small-delete-char text))
+  (when (helixel--register-active-p)
+    (helixel--register-set helixel--current-register text)))
+
 (defun helixel--kill-new (text &optional kind)
   "Like `kill-new', but also populates numbered registers.
 TEXT is a string with optional yank-handler text properties.
@@ -2224,12 +2237,11 @@ Does NOT clear the register -- callers should call
           (kill-new clip)))))
   (kill-new text)
   (if (eq kind :copy)
-      (set-register helixel-register-yank-char text)
-    (helixel--register-rotate-delete text)
-    (when (and text (not (string-match-p "\n" text)))
-      (set-register helixel-register-small-delete-char text)))
-  (when (helixel--register-active-p)
-    (helixel--register-set helixel--current-register text)))
+      (progn
+        (set-register helixel-register-yank-char text)
+        (when (helixel--register-active-p)
+          (helixel--register-set helixel--current-register text)))
+    (helixel--register-store-delete text)))
 
 (defun helixel--current-kill (n &optional no-move)
   "Like `current-kill', but reads from named register when active.

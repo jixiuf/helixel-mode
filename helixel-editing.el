@@ -504,7 +504,10 @@ instead of `insert-for-yank' — `helixel-replace' passes
      ((and (use-region-p) (eq (helixel--region-type) 'rect))
       (let* ((beg (region-beginning))
              (end (region-end))
-             (lines (nth 1 (get-text-property 0 'yank-handler text))))
+             (lines (nth 1 (get-text-property 0 'yank-handler text)))
+             (deleted-lines (extract-rectangle beg end)))
+        (helixel--register-store-delete
+         (helixel--rect-wise-text deleted-lines))
         (delete-rectangle beg end)
         (goto-char beg)
         (if (and rectwise-p lines)
@@ -514,6 +517,10 @@ instead of `insert-for-yank' — `helixel-replace' passes
      ;; Line-wise selection: expand to full line bounds
      ((and (use-region-p) (eq (helixel--region-type) 'line))
       (when-let* ((bounds (helixel--line-bounds-of-region)))
+        (let ((deleted-text (filter-buffer-substring
+                             (car bounds) (cdr bounds))))
+          (helixel--register-store-delete
+           (helixel--linewise-text deleted-text)))
         (delete-region (car bounds) (cdr bounds))
         (setq pop-start (point))
         ;; Strip properties to prevent yank-handler leaking into buffer
@@ -523,6 +530,8 @@ instead of `insert-for-yank' — `helixel-replace' passes
               (cons pop-start (point)))))
      ;; Charwise region
      ((use-region-p)
+      (helixel--register-store-delete
+       (filter-buffer-substring (region-beginning) (region-end)))
       (delete-region (region-beginning) (region-end))
       (setq pop-start (point))
       (insert (if (or linewise-p rectwise-p)
@@ -532,18 +541,24 @@ instead of `insert-for-yank' — `helixel-replace' passes
             (cons pop-start (point))))
      ;; No region — replace char at point
      (t
-      (when helixel-replace-delete-char-p
-        (delete-char 1))
-      (setq pop-start (point))
-      (if yank-fallback-fn
-          (let ((end-marker (copy-marker (point) t)))
-            (funcall yank-fallback-fn)
-            (setq helixel--yank-pop-bounds
-                  (cons pop-start (marker-position end-marker)))
-            (set-marker end-marker nil))
-        (insert-for-yank text)
-        (setq helixel--yank-pop-bounds
-              (cons pop-start (point))))))))
+      (let ((deleted-char nil))
+        (when helixel-replace-delete-char-p
+          (setq deleted-char (char-to-string (char-after)))
+          (delete-char 1))
+        (setq pop-start (point))
+        (if yank-fallback-fn
+            (let ((end-marker (copy-marker (point) t)))
+              (funcall yank-fallback-fn)
+              (setq helixel--yank-pop-bounds
+                    (cons pop-start (marker-position end-marker)))
+              (set-marker end-marker nil))
+          (insert-for-yank text)
+          (setq helixel--yank-pop-bounds
+                (cons pop-start (point))))
+        ;; Store deleted char to registers AFTER insertion so
+        ;; yank-fallback-fn can still read the original register.
+        (when deleted-char
+          (helixel--register-store-delete deleted-char)))))))
 
 (helixel-define-operator helixel-replace
     (:op replace :display "r" :self-advancing nil)

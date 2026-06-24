@@ -356,19 +356,60 @@ _HAD-REGION is ignored (kept for signature compatibility)."
     (setq transient-mark-mode (cons 'only t))))
 
 ;; ---------------------------------------------------------------------------
-;; / ?  — prompt isearch-regexp
+;; / ?  — prompt isearch-regexp (with register support)
+
+(defun helixel-search--isearch-literal (pattern dir)
+  "Enter isearch, feed PATTERN in DIR direction, and exit.
+DIR is \=`forward' or \=`backward'.
+Sets `isearch-regexp' to t and feeds PATTERN as a regexp.
+The `isearch-mode-end-hook' fires `helixel-search--done-hook'
+for commit/mark/echo — the caller must let-bind
+`helixel-search--had-region' beforehand."
+  (let ((inhibit-redisplay t)
+        (isearch-wrap-pause 'no-ding))
+    (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
+    (helixel--with-invisible-search
+      (if (eq dir 'backward)
+          (call-interactively #'isearch-backward-regexp)
+        (call-interactively #'isearch-forward-regexp)))
+    (setq isearch-regexp t)
+    (isearch-process-search-string
+     pattern (mapconcat #'isearch-text-char-description pattern ""))
+    (isearch-exit)))
+
+(defun helixel-search--from-register (dir &optional word-bound-p)
+  "Search using active register content in DIR direction.
+DIR is \=`forward' or \=`backward'.
+When WORD-BOUND-P is non-nil, symbol-bound the pattern
+\(for \=`*' and \=`#').
+Reads text from `helixel--current-register' and consumes it.
+Delegates to `helixel-search--isearch-literal' — the existing
+`helixel-search--done-hook' machinery handles all state setup."
+  (let ((text (helixel--register-get helixel--current-register)))
+    (unless text
+      (user-error "Register \"%c is empty" helixel--current-register))
+    (helixel--register-consume)
+    (let* ((helixel-search--had-region (region-active-p))
+           (pat (if word-bound-p
+                    (concat "\\_<" (regexp-quote text) "\\_>")
+                  text)))
+      (helixel-search--isearch-literal pat dir))))
 
 (helixel-define-command helixel-search-forward
     (:category search :subcat search :clear-highlights nil)
-  (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
-  (helixel--with-invisible-search
-    (call-interactively #'isearch-forward-regexp)))
+  (if (helixel--register-active-p)
+      (helixel-search--from-register 'forward)
+    (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
+    (helixel--with-invisible-search
+      (call-interactively #'isearch-forward-regexp))))
 
 (helixel-define-command helixel-search-backward
     (:category search :subcat search :clear-highlights nil)
-  (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
-  (helixel--with-invisible-search
-    (call-interactively #'isearch-backward-regexp)))
+  (if (helixel--register-active-p)
+      (helixel-search--from-register 'backward)
+    (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
+    (helixel--with-invisible-search
+      (call-interactively #'isearch-backward-regexp))))
 
 ;; ---------------------------------------------------------------------------
 ;; * #  — symbol at point
@@ -405,33 +446,27 @@ If there is a single-line region, use it; otherwise use the symbol at point."
 (defun helixel-search--at-point (dir)
   "Search for symbol at point in direction DIR (>0 forward, <0 backward)."
   (let* ((helixel-search--had-region (region-active-p))
-         (bounds (helixel-search--bounds-at-point))
-         (inhibit-redisplay t)
-         (isearch-wrap-pause 'no-ding))
-    (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
-    (helixel--with-invisible-search
-      (if (< dir 0)
-          (progn
-            (goto-char (if (= (point-min) (car bounds))
-                           (point-max)
-                         (1- (car bounds))))
-            (call-interactively #'isearch-backward-regexp))
-        (goto-char (cdr bounds))
-        (call-interactively #'isearch-forward-regexp)))
-    (let ((text (helixel-search--extract-regex bounds)))
-      (setq isearch-regexp t)
-      (setq isearch-yank-flag t)
-      (isearch-process-search-string
-       text (mapconcat #'isearch-text-char-description text "")))
-    (isearch-exit)))
+         (bounds (helixel-search--bounds-at-point)))
+    (if (< dir 0)
+        (goto-char (if (= (point-min) (car bounds))
+                       (point-max)
+                     (1- (car bounds))))
+      (goto-char (cdr bounds)))
+    (helixel-search--isearch-literal
+     (helixel-search--extract-regex bounds)
+     (if (< dir 0) 'backward 'forward))))
 
 (helixel-define-command helixel-search-at-point-next
     (:category search :subcat search :clear-highlights nil)
-  (helixel-search--at-point 1))
+  (if (helixel--register-active-p)
+      (helixel-search--from-register 'forward 'word)
+    (helixel-search--at-point 1)))
 
 (helixel-define-command helixel-search-at-point-prev
     (:category search :subcat search :clear-highlights nil)
-  (helixel-search--at-point -1))
+  (if (helixel--register-active-p)
+      (helixel-search--from-register 'backward 'word)
+    (helixel-search--at-point -1)))
 
 ;; ---------------------------------------------------------------------------
 ;; Isearch repeat

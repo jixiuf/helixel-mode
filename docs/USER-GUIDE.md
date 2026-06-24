@@ -311,7 +311,8 @@ helixel has a Helix-style register system:
 | `-`        | Small delete (< 1 line)               |
 | `a-z`      | Named registers                       |
 
-Usage: `"a y` (copy to register a), `"a p` (paste from a), etc.
+Usage: `"a y` (copy to register a), `"a p` (paste from a),
+`"a /` (search forward for register a text), etc.
 
 ### Entering Insert Mode
 
@@ -477,6 +478,8 @@ If `evil-textobj-tree-sitter` is not installed, the function returns
 | `?`   | Search backward (regexp)                   |
 | `*`   | Search symbol at point forward             |
 | `#`   | Search symbol at point backward            |
+| `"a /` | Search forward for register a text (regex) |
+| `"a *` | Search forward for register a text (word)  |
 | `n`   | Repeat search forward                      |
 | `,`   | Repeat last search (motion repeat)         |
 | `N`   | reverse direction                          |

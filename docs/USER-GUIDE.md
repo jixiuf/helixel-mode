@@ -69,7 +69,7 @@ Helix-style modal editing for Emacs.  Requires **Emacs ≥ 29.1**.
   - [Capture & Advance](#capture--advance)
   - [Third-party Integration](#third-party-integration)
   - [Examples](#examples)
-- [Configuration](#configuration-3)
+- [Configuration](#configuration-2)
   - [Key Options](#key-options)
   - [Adding Keybindings](#adding-keybindings)
   - [Excluding Buffers](#excluding-buffers)

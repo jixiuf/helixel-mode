@@ -95,6 +95,7 @@
 (defvar undo-tree-timer)
 (defvar undo-tree-mode)
 (defvar undo-tree-limit)
+(declare-function undo-list-transfer-to-tree "undo-tree" ())
 
 (defsubst helixel-mc--dispatch-in-progress-p ()
   "Return non-nil when an mc dispatch is in progress.
@@ -1001,8 +1002,8 @@ callback that `primitive-undo' calls during undo/redo."
         (when (and (bound-and-true-p undo-tree-mode)
                    (null (bound-and-true-p undo-tree-limit)))
           (setq undo-tree-timer
-                (run-with-idle-timer 5 'repeat
-                                     'undo-list-transfer-to-tree)))))))
+                (run-with-idle-timer 5 t
+                                     #'undo-list-transfer-to-tree)))))))
 
 ;; ── Undo-step callbacks — called by `primitive-undo' via `apply' ──
 ;;

@@ -78,6 +78,13 @@
 (declare-function eww-reload "eww")
 
 (declare-function diff-hunk-kill "diff-mode")
+(declare-function diff-hunk-next "diff-mode")
+(declare-function diff-hunk-prev "diff-mode")
+(declare-function diff-file-next "diff-mode")
+(declare-function diff-file-prev "diff-mode")
+
+(declare-function log-view-msg-next "log-view")
+(declare-function log-view-msg-prev "log-view")
 
 (defun helixel-shims--set-invisible-nil ()
   "Set `helixel-invisible' to nil for the current buffer.
@@ -170,6 +177,14 @@ parent-patching mechanism."
   (helixel-define-key 'motion "gk" #'diff-hunk-prev 'diff-mode)
   (helixel-define-key 'motion "[[" #'diff-file-prev 'diff-mode)
   (helixel-define-key 'motion "]]" #'diff-file-next 'diff-mode))
+
+;; ── log-view ──
+
+(defun helixel-shims--setup-log-view ()
+  "Setup `log-view' keybindings in motion state.
+Add `g'-prefix shortcuts for common log-view navigation commands."
+  (helixel-define-key 'motion "gj" #'log-view-msg-next 'log-view-mode)
+  (helixel-define-key 'motion "gk" #'log-view-msg-prev 'log-view-mode))
 
 ;; ── Read-only mode keybindings ──
 ;; These modes default to motion state.  Their own keybindings fall
@@ -273,7 +288,8 @@ Called at top-level when this file is loaded."
   (helixel-shims--defer-setup 'prog-mode 'helixel-shims--setup-prog-mode)
   (helixel-shims--defer-setup 'woman 'helixel-shims--setup-woman-mode)
   (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode)
-  (helixel-shims--defer-setup 'diff-mode 'helixel-shims--setup-diff-mode))
+  (helixel-shims--defer-setup 'diff-mode 'helixel-shims--setup-diff-mode)
+  (helixel-shims--defer-setup 'log-view 'helixel-shims--setup-log-view))
 
 (helixel-shims--register-deferred)
 

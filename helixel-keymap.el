@@ -192,7 +192,7 @@ and keymap-targeted (`helixel--keymap-bindings') registrations."
     (dolist (entry helixel--mode-keybindings)
       (let ((mode (caar entry)))
         (when (and (eq (cdar entry) state)
-                   (or (eq mode major-mode)
+                   (or (derived-mode-p mode)
                        (and (boundp mode) (symbol-value mode))))
           (push (cdr entry) overrides))))
     ;; Keymap-targeted bindings: activate if the resolved keymap
@@ -233,7 +233,7 @@ on top of the base maps."
     (dolist (entry helixel--mode-keybindings)
       (let ((mode (caar entry))
             (sub (cdar entry)))
-        (when (or (eq mode major-mode)
+        (when (or (derived-mode-p mode)
                   (and (boundp mode) (symbol-value mode)))
           (cond ((eq sub 'textobj-inner)
                  (push (cdr entry) inner-overrides))

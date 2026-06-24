@@ -89,7 +89,11 @@ When a region is active and this is enabled:
   - / ?  → literal search (regexp-quote region text)
 Point is positioned past the selection before searching.
 When nil, the normal interactive isearch prompt is used.
-Does NOT affect * # (they always use symbol-at-point or
+
+\\[universal-argument] / (\\[universal-argument] ?) toggles this:
+  - when off → forces region-search for this invocation
+  - when on  → forces interactive prompt
+Does NOT affect * # (they always use `symbol-at-point' or
 single-line region, regardless of this setting)."
   :type 'boolean
   :group 'helixel-search)
@@ -428,25 +432,33 @@ the next occurrence, not the selected one."
     (helixel-search--isearch-literal pat dir)))
 
 (helixel-define-command helixel-search-forward
-    (:category search :subcat search :clear-highlights nil)
+    (:category search :subcat search :clear-highlights nil
+               :params (&optional arg))
+  (interactive "P")
   (cond
-   ((and helixel-search-use-region (use-region-p))
+   ((and (use-region-p)
+         (if arg (not helixel-search-use-region) helixel-search-use-region))
     (helixel-search--from-region 'forward))
    ((helixel--register-active-p)
     (helixel-search--from-register 'forward))
    (t
+    (when (use-region-p) (deactivate-mark))
     (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
     (helixel--with-invisible-search
       (call-interactively #'isearch-forward-regexp)))))
 
 (helixel-define-command helixel-search-backward
-    (:category search :subcat search :clear-highlights nil)
+    (:category search :subcat search :clear-highlights nil
+               :params (&optional arg))
+  (interactive "P")
   (cond
-   ((and helixel-search-use-region (use-region-p))
+   ((and (use-region-p)
+         (if arg (not helixel-search-use-region) helixel-search-use-region))
     (helixel-search--from-region 'backward))
    ((helixel--register-active-p)
     (helixel-search--from-register 'backward))
    (t
+    (when (use-region-p) (deactivate-mark))
     (add-hook 'isearch-mode-end-hook #'helixel-search--done-hook 0 t)
     (helixel--with-invisible-search
       (call-interactively #'isearch-backward-regexp)))))

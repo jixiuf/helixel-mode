@@ -145,10 +145,13 @@ Example:
 
 ;; ── View alignment commands ──
 
-(defun helixel-view-center ()
-  "Center the current line vertically in the window."
-  (interactive)
-  (recenter))
+(defun helixel-view-center (&optional arg)
+  "Center the current line vertically in the window.
+
+With numeric prefix ARG, move current line ARG lines below the window top.
+With plain \\[universal-argument], move current line to window center."
+  (interactive "P")
+  (recenter-top-bottom arg))
 
 (defun helixel-view-top ()
   "Move the current line to the top of the window."

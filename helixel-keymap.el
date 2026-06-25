@@ -393,10 +393,10 @@ Helix-style top-level keys live directly in `helixel-normal-map'
 \(`(' `)' `M-(' `M-)') because they are typically pressed in
 rapid succession (rotating through cursors).  Less frequently
 used selection management lives here under `s'."
-  "s"   #'helixel-mc-toggle             ;3x ss  like Helix M-s
-  "x"   #'helixel-mc-edit-lines
-  "a"   #'helixel-mc-add-cursor-here
-  "A"   #'helixel-mc-add-cursor-here-up
+  "s"   #'helixel-mc-toggle
+  "x"   #'helixel-mc-edit-lines         ;like Helix M-s
+  "a"   #'helixel-mc-add-cursor-here    ; also on C
+  "A"   #'helixel-mc-add-cursor-here-up ;also on M-c
   "n"   #'helixel-mc-mark-next-like-this
   "p"   #'helixel-mc-mark-previous-like-this
   "N"   #'helixel-mc-skip-next

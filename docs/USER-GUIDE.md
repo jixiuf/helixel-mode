@@ -825,30 +825,55 @@ whitelisted command runs at every cursor in one undo step.
 
 ### Managing Cursors
 
-| Key                      | Action                                                                 |
-| ------------------------ | ---------------------------------------------------------------------- |
-| `s s`                    | Toggle (spawn from last selection / clear)                             |
-| `s ,`                    | Clear all fake cursors (keep primary only)                             |
-| `s a` `s A` `C` `M-c`    | Add a fake cursor at point, move real to next / previous line          |
-| `s x`                    | Per-line cursors: line-mode -> full-line REGION; char-mode -> POINT    |
-| `s n` `s p`              | Add cursor at next / previous occurrence of region text                |
-| `s N` `s P`              | Skip next / previous match without adding a cursor                     |
-| `s u` `s U`              | Unmark next / previous fake cursor                                     |
-| `s .`                    | Apply last edit at every fake cursor                                   |
-| `s k` `s K` `K` `M-k`    | Keep / remove cursors whose region matches a regex                     |
-| `s S`                    | Split each selection on regex (Helix `S`)                              |
-| `s -`                    | Merge all cursors into one big region (Helix `M--`)                    |
-| `s &`                    | Column-align cursors by padding with spaces (Helix `&`)                |
-| `s _`                    | Trim leading / trailing whitespace from each region (Helix `_`)        |
+#### `s` prefix (always available in normal mode)
 
-Top-level rotation keys:
+| Key                      | Action                                                | Helix       |
+| ------------------------ | ----------------------------------------------------- | ----------- |
+| `s s`                    | Toggle (spawn from last selection / clear)            | `s`         |
+| `s ,`                    | Clear all fake cursors (keep primary only)            | —           |
+| `s a` `s A`              | Add fake at point, move real to next / previous line  | `C` `Alt-C` |
+| `s x`                    | Per-line cursors: line-mode → REGION; char-mode → POINT | `Alt-s`   |
+| `s n` `s p`              | Add cursor at next / previous occurrence              | `n` `N`     |
+| `s N` `s P`              | Skip next / previous match (no cursor added)          | `Alt-n` `Alt-N` |
+| `s u` `s U`              | Unmark next / previous fake cursor                    | —           |
+| `s .`                    | Apply last edit at every fake cursor                  | `.`         |
+| `s k` `s K`              | Keep / remove cursors whose region matches a regex    | `K` `Alt-K` |
+| `s S`                    | Split each selection on regex                         | `S`         |
+| `s -`                    | Merge all cursors into one big region                 | `Alt--`     |
+| `s &`                    | Column-align cursors by padding with spaces           | `&`         |
+| `s _`                    | Trim leading / trailing whitespace from each region   | `_`         |
 
-| Key             | Action                                                 |
-| --------------- | ------------------------------------------------------ |
-| `(` / `)`       | Rotate primary cursor backward / forward               |
-| `M-,`           | Remove primary cursor, promote nearest (Helix `A-,`)   |
-| `M-(` / `M-)`   | Rotate selection content backward / forward            |
-| `g v`           | Restore last cursor layout (history stack, depth 16)   |
+#### Top-level keys (always available, enable mc automatically)
+
+| Key    | Action                                                | Helix     |
+| ------ | ----------------------------------------------------- | --------- |
+| `C`    | Add fake at point, move real down (same as `s a`)     | `C`       |
+| `M-c`  | Add fake at point, move real up (same as `s A`)       | `Alt-C`   |
+
+#### Top-level keys (when multi-cursor is active)
+
+When fake cursors exist, these keys work directly — no `s` prefix needed:
+
+| Key              | Action                                          | Helix       |
+| ---------------- | ----------------------------------------------- | ----------- |
+| `K`              | Keep cursors matching a regex                   | `K`         |
+| `M-k`            | Remove cursors matching a regex                 | `Alt-K`     |
+| `&`              | Column-align cursors by padding with spaces     | `&`         |
+| `_`              | Trim whitespace from each region                | `_`         |
+| `M--`            | Merge all cursors into one big region           | `Alt--`     |
+| `M-,`            | Remove primary cursor, promote nearest          | `Alt-,`     |
+
+#### Top-level rotation keys (when multi-cursor is active)
+
+| Key             | Action                                            | Helix         |
+| --------------- | ------------------------------------------------- | ------------- |
+| `(` / `)`       | Rotate primary cursor backward / forward          | `(` / `)`     |
+| `M-(` / `M-)`   | Rotate selection content backward / forward       | `Alt-(` / `Alt-)` |
+| `g v`           | Restore last cursor layout (history stack)        | `g v`         |
+
+**Tip**: After any `s n`/`s p`/`s N`/`s P`/`s u`/`s U`/`s a`/`s A`, press
+`,` (normal mode) to repeat the last action — no need for the `s` prefix.
+See [Motion Repeat (`,`)](#motion-repeat-) for details.
 
 ### Workflows
 
@@ -924,6 +949,32 @@ it does not depend on the current active search or region.
 | movement    | `match`                                 | `%` → `,` expand one nesting level outward   |
 | movement    | `paragraph` / `sentence` / `function`   | `}` → `,` skip past next boundary            |
 | search      | —                                       | `/foo` → `,` find next match (like `n`)      |
+| mc-spawn    | `mark` / `skip` / `unmark` / `add`     | `s n` → `,` mark another next occurrence     |
+
+### mc-spawn: Multi-Cursor Repeat
+
+After any multi-cursor spawn command under `s`, pressing `,` (in normal
+mode) repeats the last action — no need to type the `s` prefix again:
+
+| First key | Then `,` repeats      |
+| --------- | --------------------- |
+| `s n`     | mark next occurrence  |
+| `s p`     | mark previous         |
+| `s N`     | skip next             |
+| `s P`     | skip previous         |
+| `s u`     | unmark next           |
+| `s U`     | unmark previous       |
+| `s a`     | add cursor below      |
+| `s A`     | add cursor above      |
+
+Prefix arguments work as usual:
+
+- `-,` — permanently flip direction (e.g. `s n` then `-,` → now marks
+  previous occurrences until you flip again)
+- `3,` — repeat 3 times
+
+`,` always repeats the *most recent* motion.  If you perform a find-char
+or search after `s n`, `,` will replay that find-char instead.
 
 ### Layer-by-layer Outward
 
@@ -994,7 +1045,8 @@ n          repeats /pattern (from active-search)
 ;; Categories repeatable by ,
 (setq helixel-motion-repeat-categories
       '((movement . pair) (movement . match) (movement . paragraph)
-        (movement . sentence) (movement . function) search find-char))
+        (movement . sentence) (movement . function) search find-char
+        mc-spawn))
 
 ;; Disable motion repeat entirely
 (setq helixel-motion-repeat-categories nil)

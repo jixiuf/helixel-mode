@@ -1523,6 +1523,7 @@ deactivated when the last one is removed."
    helixel-repeat-chain-cancel
    helixel-repeat-edit helixel-repeat-selection
    helixel-repeat-edit-pick helixel-repeat-debug
+   helixel-repeat-last-motion            ; , (motion repeat) real-only
    helixel-normal-escape
    helixel-enter-normal-state helixel-enter-insert-state
    helixel-enter-motion-state

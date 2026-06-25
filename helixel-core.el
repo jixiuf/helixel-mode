@@ -1077,15 +1077,15 @@ Slots:
 (defcustom helixel-motion-repeat-categories
   '((movement . pair) (movement . match) (movement . paragraph)
     (movement . sentence) (movement . function) (movement . scroll)
-    search find-char)
+    search find-char mc-spawn)
   "Motion categories that \\[helixel-repeat-last-motion] can repeat.
 Each element is either a plain category symbol (matches all
 subcats) or a cons (CATEGORY . SUBCAT) for precise matching —
 the same format as `helixel-action-cycle-categories'.
 
-Plain symbols \='search and \='find-char match their respective
-commands.  Cons entries like (movement . pair) match only the
-specified subcat under that category.
+Plain symbols \='search, \='find-char, and \='mc-spawn match
+their respective commands.  Cons entries like (movement . pair)
+match only the specified subcat under that category.
 
 Set to nil to disable motion repeat entirely."
   :type '(repeat (choice symbol (cons symbol symbol)))

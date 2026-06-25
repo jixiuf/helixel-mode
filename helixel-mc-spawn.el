@@ -148,7 +148,9 @@ span, skip ahead to the first line that fits.  Signals
 `user-error' when no such line exists."
   (interactive)
   (unless (helixel-mc--copy-cursor-to-direction 1)
-    (user-error "No line below fits this column/selection")))
+    (user-error "No line below fits this column/selection"))
+  (helixel-record-motion 'helixel-mc-add-cursor-here
+                         :category 'mc-spawn :subcat 'add :dir 'forward))
 
 (defun helixel-mc-add-cursor-here-up ()
   "Copy current selection / cursor to the line above (Helix `Alt-C').
@@ -157,7 +159,9 @@ Like `helixel-mc-add-cursor-here' but moves the real cursor up
 instead of down."
   (interactive)
   (unless (helixel-mc--copy-cursor-to-direction -1)
-    (user-error "No line above fits this column/selection")))
+    (user-error "No line above fits this column/selection"))
+  (helixel-record-motion 'helixel-mc-add-cursor-here-up
+                         :category 'mc-spawn :subcat 'add :dir 'backward))
 
 ;;;###autoload
 (defun helixel-mc-edit-lines (&optional beg end)
@@ -309,13 +313,17 @@ cursor — so real never moves and never collides with a fake."
 (defun helixel-mc-mark-next-like-this ()
   "Add a fake cursor at the next occurrence of the region text."
   (interactive)
-  (helixel-mc--mark-like-this 1))
+  (helixel-mc--mark-like-this 1)
+  (helixel-record-motion 'helixel-mc-mark-next-like-this
+                         :category 'mc-spawn :subcat 'mark :dir 'forward))
 
 ;;;###autoload
 (defun helixel-mc-mark-previous-like-this ()
   "Add a fake cursor at the previous occurrence of the region text."
   (interactive)
-  (helixel-mc--mark-like-this -1))
+  (helixel-mc--mark-like-this -1)
+  (helixel-record-motion 'helixel-mc-mark-previous-like-this
+                         :category 'mc-spawn :subcat 'mark :dir 'backward))
 
 ;; Internal helper — not autoloaded (private "--" name).
 (defun helixel-mc--skip-in-dir (dir)
@@ -334,13 +342,17 @@ cursor — so real never moves and never collides with a fake."
 (defun helixel-mc-skip-next ()
   "Skip the next occurrence of the region text without adding a cursor."
   (interactive)
-  (helixel-mc--skip-in-dir 1))
+  (helixel-mc--skip-in-dir 1)
+  (helixel-record-motion 'helixel-mc-skip-next
+                         :category 'mc-spawn :subcat 'skip :dir 'forward))
 
 ;;;###autoload
 (defun helixel-mc-skip-previous ()
   "Skip the previous occurrence of the region text without adding a cursor."
   (interactive)
-  (helixel-mc--skip-in-dir -1))
+  (helixel-mc--skip-in-dir -1)
+  (helixel-record-motion 'helixel-mc-skip-previous
+                         :category 'mc-spawn :subcat 'skip :dir 'backward))
 
 ;;;###autoload
 (defun helixel-mc-remove-primary ()
@@ -401,7 +413,9 @@ other fake cursor."
                (point)))
           (helixel-mc-all-cursors :sort))))
     (unless cursor (user-error "No fake cursor after point"))
-    (helixel-mc--delete-fake-cursor cursor)))
+    (helixel-mc--delete-fake-cursor cursor))
+  (helixel-record-motion 'helixel-mc-unmark-next
+                         :category 'mc-spawn :subcat 'unmark :dir 'forward))
 
 ;;;###autoload
 (defun helixel-mc-unmark-previous ()
@@ -414,7 +428,41 @@ other fake cursor."
                (point)))
           (reverse (helixel-mc-all-cursors :sort)))))
     (unless cursor (user-error "No fake cursor before point"))
-    (helixel-mc--delete-fake-cursor cursor)))
+    (helixel-mc--delete-fake-cursor cursor))
+  (helixel-record-motion 'helixel-mc-unmark-previous
+                         :category 'mc-spawn :subcat 'unmark :dir 'backward))
+
+;; ── Motion repeater for mc-spawn commands ──
+;;
+;; Registered so \\[helixel-repeat-last-motion] (\`,') can replay
+;; the last mark/skip/unmark action.  Subcat+dir determine the
+;; specific function to call; \\=`-,' flips dir → opposite command.
+
+(helixel-register-motion-repeater 'mc-spawn nil
+                                  (lambda (rec)
+                                    (let ((subcat (helixel--last-motion-subcat rec))
+                                          (dir (helixel--last-motion-dir rec)))
+                                      (cl-case subcat
+                                        (mark (if (eq dir 'forward)
+                                                  (call-interactively
+                                                   #'helixel-mc-mark-next-like-this)
+                                                (call-interactively
+                                                 #'helixel-mc-mark-previous-like-this)))
+                                        (skip (if (eq dir 'forward)
+                                                  (call-interactively
+                                                   #'helixel-mc-skip-next)
+                                                (call-interactively
+                                                 #'helixel-mc-skip-previous)))
+                                        (unmark (if (eq dir 'forward)
+                                                    (call-interactively
+                                                     #'helixel-mc-unmark-next)
+                                                  (call-interactively
+                                                   #'helixel-mc-unmark-previous)))
+                                        (add (if (eq dir 'forward)
+                                                 (call-interactively
+                                                  #'helixel-mc-add-cursor-here)
+                                               (call-interactively
+                                                #'helixel-mc-add-cursor-here-up)))))))
 
 ;; Whitelist: helixel-mc commands themselves run only at real cursor.
 (helixel-mc-mark-all-for-real-cursor-only

@@ -4418,5 +4418,236 @@ and verify begin/finish don't error."
       (should (timerp undo-tree-timer)))
     (undo-tree-mode -1)))
 
+;; ── Motion repeat (,) for mc-spawn commands ──
+
+(ert-deftest helixel-test-mc-mark-repeat-comma ()
+  "After `s n', \`, \' repeats mark-next-like-this."
+  (helixel-test-with-buffer "foo bar foo baz foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo" (1..4)
+    (helixel-mc-mark-next-like-this)     ; adds fake at 9..12
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; , repeats the mark-next action — adds another fake.
+    (helixel-repeat-last-motion)
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    (let ((positions (mapcar (lambda (ov)
+                               (marker-position
+                                (helixel-mc-cursor-point ov)))
+                             (helixel-mc-all-cursors :sort))))
+      (should (equal (sort positions #'<) '(9 17))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-mark-repeat-comma-backward ()
+  "After `s p', \\`, \\' repeats mark-previous-like-this."
+  (helixel-test-with-buffer "foo bar foo baz foo bar foo\n"
+    (goto-char 25)                    ; start of last "foo"
+    (push-mark 28 t t)                ; region: last "foo" (25..28)
+    (helixel-mc-mark-previous-like-this) ; adds fake at earlier foo
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; , repeats mark-previous.
+    (helixel-repeat-last-motion)
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-skip-repeat-comma ()
+  "After `s N', \`, \' repeats skip-next."
+  (helixel-test-with-buffer "foo bar foo baz foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo" (1..4)
+    (helixel-mc-skip-next)              ; jumps to 9..12
+    (should (= 9 (region-beginning)))
+    ;; , repeats skip — jumps to 17..20.
+    (helixel-repeat-last-motion)
+    (should (= 17 (region-beginning)))
+    (should (null (helixel-mc-all-cursors)))))
+
+(ert-deftest helixel-test-mc-skip-repeat-comma-backward ()
+  "After `s P', \`, \' repeats skip-previous."
+  (helixel-test-with-buffer "foo bar foo baz\n"
+    (goto-char 9)
+    (push-mark 12 t t)                 ; region: 2nd "foo" (9..12)
+    (helixel-mc-skip-previous)          ; jumps back to 1..4
+    (should (= 1 (region-beginning)))
+    ;; , repeats skip-previous — but no more matches, should error.
+    (should-error (helixel-repeat-last-motion) :type 'user-error)))
+
+(ert-deftest helixel-test-mc-skip-repeat-flip-dir ()
+  "\`-,' flips skip direction permanently."
+  (helixel-test-with-buffer "foo bar foo baz foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo" (1..4)
+    (helixel-mc-skip-next)              ; jumps to 9..12
+    (should (= 9 (region-beginning)))
+    ;; -,' flips direction → skip-previous.
+    (helixel-repeat-last-motion '-)
+    ;; Should jump back to 1..4.
+    (should (= 1 (region-beginning)))
+    ;; Direction flip is permanent — next , stays flipped.
+    ;; No previous match → error, but we stayed at position 1.
+    (should-error (helixel-repeat-last-motion) :type 'user-error)
+    (should (= 1 (region-beginning))))) ; stayed at same position
+
+(ert-deftest helixel-test-mc-unmark-repeat-comma ()
+  "After `s u', \\`, \\' repeats unmark-next."
+  (helixel-test-with-buffer "foo bar foo baz\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo" (1..4)
+    (helixel-mc-mark-next-like-this)     ; adds fake at 9..12
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Move real cursor before the fake.
+    (goto-char 1)
+    ;; unmark-next removes fake after point (fake at 9).
+    (helixel-mc-unmark-next)
+    (should (= 0 (length (helixel-mc-all-cursors))))
+    ;; , repeats unmark — but no fakes left → error.
+    (should-error (helixel-repeat-last-motion) :type 'user-error)))
+
+(ert-deftest helixel-test-mc-unmark-repeat-comma-backward ()
+  "After `s U', \`, \' repeats unmark-previous."
+  (helixel-test-with-buffer "foo bar foo baz\n"
+    (goto-char 9)
+    (push-mark 12 t t)                 ; region: 2nd "foo"
+    (helixel-mc-mark-previous-like-this) ; fake at first "foo" (1..4)
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Move real past the fake.
+    (goto-char 9)
+    ;; unmark-previous removes fake before point (fake at 1).
+    (helixel-mc-unmark-previous)
+    (should (= 0 (length (helixel-mc-all-cursors))))
+    ;; , repeats unmark — no fakes → error.
+    (should-error (helixel-repeat-last-motion) :type 'user-error)))
+
+(ert-deftest helixel-test-mc-mark-repeat-error-no-record ()
+  "When `s n' errors, \\`, \\' does NOT record the failing command.
+The last successful motion is preserved instead."
+  (helixel-test-with-buffer "foo bar foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo" (1..4)
+    ;; Successful mark — records mc-spawn.
+    (helixel-mc-mark-next-like-this)
+    (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
+                'mc-spawn))
+    ;; Next mark errors (no more matches) — should NOT overwrite.
+    (should-error (helixel-mc-mark-next-like-this) :type 'user-error)
+    ;; The last-motion is still the successful mc-spawn record.
+    (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
+                'mc-spawn))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-mark-repeat-recorded-struct ()
+  "After `s n', `helixel--last-motion-cmd' has category mc-spawn,
+subcat mark, dir forward."
+  (helixel-test-with-buffer "foo bar foo baz foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)
+    (helixel-mc-mark-next-like-this)
+    (should (helixel--last-motion-p helixel--last-motion-cmd))
+    (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
+                'mc-spawn))
+    (should (eq (helixel--last-motion-subcat helixel--last-motion-cmd)
+                'mark))
+    (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                'forward))
+    (should (eq (helixel--last-motion-command helixel--last-motion-cmd)
+                'helixel-mc-mark-next-like-this))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-skip-repeat-recorded-struct ()
+  "After `s N', struct has subcat skip, dir forward."
+  (helixel-test-with-buffer "foo bar foo baz foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)
+    (helixel-mc-skip-next)
+    (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
+                'mc-spawn))
+    (should (eq (helixel--last-motion-subcat helixel--last-motion-cmd)
+                'skip))
+    (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                'forward))))
+
+(ert-deftest helixel-test-mc-unmark-repeat-recorded-struct ()
+  "After `s u', struct has subcat unmark, dir forward."
+  (helixel-test-with-buffer "foo bar foo baz\n"
+    (goto-char 1)
+    (push-mark 4 t t)
+    (helixel-mc-mark-next-like-this)
+    (goto-char 1)
+    ;; We know unmark-next may error if no fakes after point,
+    ;; so first add a fake, then test.
+    (helixel-mc-unmark-next)
+    (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
+                'mc-spawn))
+    (should (eq (helixel--last-motion-subcat helixel--last-motion-cmd)
+                'unmark))
+    (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                'forward))))
+
+(ert-deftest helixel-test-mc-mark-repeat-comma-after-other-motion ()
+  "\`, \' repeats the most recent motion; mc-spawn is overwritten
+by a later find-char."
+  (helixel-test-with-buffer "axb cxd exf foo bar foo\n"
+    (goto-char 1)
+    ;; First do mc-spawn on the first "foo".
+    (goto-char 13)                    ; start of first "foo"
+    (push-mark 16 t t)                ; region: first "foo" (13..16)
+    (helixel-mc-mark-next-like-this)   ; adds fake at 21 (second "foo")
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Then do find-char — overwrites last-motion.
+    (goto-char 1)
+    (helixel-find-next-char 120)        ; f x → land after 'x' at 2
+    (should (= (point) 3))
+    ;; , now repeats find-char, NOT mc-spawn → next 'x' at 6, land at 7.
+    (helixel-repeat-last-motion)
+    (should (= (point) 7))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-mark-repeat-comma-no-fakes-needed ()
+  "\`, \' after a mark-like-this with numeric prefix works."
+  (helixel-test-with-buffer "foo bar foo baz foo qux foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo"
+    (helixel-mc-mark-next-like-this)
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Prefix 2, → repeat twice.
+    (helixel-repeat-last-motion 2)
+    (should (= 3 (length (helixel-mc-all-cursors))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-repeat-comma-no-fake-dispatch ()
+  "\\`, \\' must NOT dispatch to fake cursors — only real cursor runs.
+When mc is active with existing fakes, pressing , after s n
+should add exactly 1 fake (at the real cursor), not N+1 fakes."
+  (helixel-test-with-buffer "foo bar foo baz foo qux foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo" (1..4)
+    (helixel-mc-mark-next-like-this)     ; +1 fake at 9, total=1 fake
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; , must NOT dispatch to the fake at 9 — only real runs it.
+    (helixel-repeat-last-motion)
+    ;; Should add exactly 1 more fake (at 17), not 2 (one per cursor).
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    (let ((positions (mapcar (lambda (ov)
+                               (marker-position
+                                (helixel-mc-cursor-point ov)))
+                             (helixel-mc-all-cursors :sort))))
+      (should (equal (sort positions #'<) '(9 17))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-repeat-add-with-fakes ()
+  "\\`, \\' after `s a' with mc active adds cursor at real only."
+  (helixel-test-with-buffer "line one\nline two\nline three\nline four\n"
+    (goto-char 1)                      ; point at column 0, line 1
+    (helixel-mc-add-cursor-here)        ; fake at line1 col0, real → line2
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (let ((real-line (line-number-at-pos (point))))
+      (should (= real-line 2)))
+    ;; , repeats add-cursor-here at real cursor only → should add 1 fake.
+    (helixel-repeat-last-motion)
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    ;; Real cursor should now be at line 3.
+    (let ((real-line (line-number-at-pos (point))))
+      (should (= real-line 3)))
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

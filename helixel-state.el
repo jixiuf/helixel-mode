@@ -73,7 +73,9 @@ at point (t) or simply insert without deleting (nil)."
   :group 'helixel)
 
 (defcustom helixel-motion-parent-excluded-modes
-  '(special-mode Custom-mode wdired-mode occur-edit-mode grep-edit-mode)
+  '(special-mode Custom-mode wdired-mode
+                 xref-edit-mode
+                 occur-edit-mode grep-edit-mode)
   "List of major modes excluded from motion-state keymap parent patching.
 
 When a buffer enters motion state and its `major-mode' is not in

@@ -86,6 +86,9 @@
 (declare-function log-view-msg-next "log-view")
 (declare-function log-view-msg-prev "log-view")
 
+(declare-function xref-edit-save-changes "xref")
+(declare-function xref-change-to-xref-edit-mode "xref")
+
 (defun helixel-shims--set-invisible-nil ()
   "Set `helixel-invisible' to nil for the current buffer.
 Intended for mode hooks where invisible text means filtered-out
@@ -161,6 +164,20 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
     (put 'wgrep-finish-edit 'helixel-multiple-cursors nil)
     (put 'wgrep-abort-changes 'helixel-multiple-cursors nil)
     (put 'wgrep-save-all-buffers 'helixel-multiple-cursors nil)))
+
+;; ── xref-edit (Emacs 29+ built-in) ──
+
+(defun helixel-shims--setup-xref-edit ()
+  "Setup xref-edit integration.
+Entering xref-edit → normal.  Saving → motion."
+  (when (fboundp 'xref-change-to-xref-edit-mode)
+    (add-hook 'xref-edit-mode-hook #'helixel-enter-normal-state)
+    (advice-add 'xref-edit-save-changes
+                :after #'helixel-enter-motion-state)
+    ;; xref-edit-save-changes exits the mode and saves globally —
+    ;; mc dispatch would run it again at each fake cursor after the
+    ;; mode is already off.  See also occur-cease-edit, wdired-*, wgre-*.
+    (put 'xref-edit-save-changes 'helixel-multiple-cursors nil)))
 
 ;; ── diff-mode ──
 
@@ -288,6 +305,7 @@ Called at top-level when this file is loaded."
   (helixel-shims--defer-setup 'prog-mode 'helixel-shims--setup-prog-mode)
   (helixel-shims--defer-setup 'woman 'helixel-shims--setup-woman-mode)
   (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode)
+  (helixel-shims--defer-setup 'xref 'helixel-shims--setup-xref-edit)
   (helixel-shims--defer-setup 'diff-mode 'helixel-shims--setup-diff-mode)
   (helixel-shims--defer-setup 'log-view 'helixel-shims--setup-log-view))
 

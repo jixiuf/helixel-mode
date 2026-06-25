@@ -393,7 +393,7 @@ Helix-style top-level keys live directly in `helixel-normal-map'
 \(`(' `)' `M-(' `M-)') because they are typically pressed in
 rapid succession (rotating through cursors).  Less frequently
 used selection management lives here under `s'."
-  "s"   #'helixel-mc-toggle
+  "s"   #'helixel-mc-toggle             ;3x ss  like Helix M-s
   "x"   #'helixel-mc-edit-lines
   "a"   #'helixel-mc-add-cursor-here
   "A"   #'helixel-mc-add-cursor-here-up
@@ -413,7 +413,9 @@ used selection management lives here under `s'."
   "-"   #'helixel-mc-merge           ; like Helix `M--'
   "&"   #'helixel-mc-align           ; like Helix `&'
   "_"   #'helixel-mc-trim            ; like Helix `_'
-  "S"   #'helixel-mc-split-on-regex) ; like Helix S
+  "r"   #'helixel-mc-select-regex-matches  ; like Helix `s'
+  "d"   #'helixel-mc-split-on-regex        ; like Helix `S' (d for "divide"/"delimiter")
+  "S"   #'helixel-mc-split-on-regex)       ; like Helix `S'
 
 ;; Top-level Helix-style rotation: typically pressed repeatedly
 ;; to cycle through cursors.

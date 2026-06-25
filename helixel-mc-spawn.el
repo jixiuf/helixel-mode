@@ -440,6 +440,7 @@ other fake cursor."
    helixel-mc-align
    helixel-mc-trim
    helixel-mc-split-on-regex
+   helixel-mc-select-regex-matches
    helixel-mc-restore-cursors))
 
 ;; ── Helix-style selection management ──
@@ -901,11 +902,62 @@ column-of-cursors created via `s a' / `xs'."
 ;;;###autoload
 (defun helixel-mc-split-on-regex (regex)
   "Split every cursor's selection on REGEX into multiple cursors.
+For each existing selection, splits it at every match of REGEX,
+discarding the matches themselves.  Each non-empty segment
+between matches becomes a new cursor.
+
+Example: select `apple,banana,orange' and split on `,' →
+3 cursors selecting `apple', `banana', `orange'.
+
+Selections with no match are removed.  If the resulting set is
+empty the mc session is disabled."
+  (interactive (list (read-regexp "Split selection on: ")))
+  (helixel-mc--push-history)
+  (let (count)
+    (helixel-mc-with-regions regions
+      (let ((new-specs
+             (cl-loop
+              for (b e fwd) in regions
+              append (helixel-mc--split-region-on-regex b e fwd regex))))
+        (setq count (length new-specs))
+        new-specs))
+    (message "helixel-mc: split into %d cursor%s"
+             count (if (= 1 count) "" "s"))))
+
+(defun helixel-mc--split-region-on-regex (beg end fwd regex)
+  "Split region BEG..END on REGEX matches.
+Return a list of (BEG END FWD) triples, one per non-empty segment
+between matches (or between boundary and match).
+Matches themselves are discarded."
+  (let ((search-invisible (helixel--invisible-effective))
+        (segments nil)
+        (pos beg))
+    (save-excursion
+      (goto-char beg)
+      (while (re-search-forward regex end t)
+        (when (and (> (match-end 0) (match-beginning 0))
+                   (or (helixel--invisible-effective)
+                       (funcall isearch-filter-predicate
+                                (match-beginning 0)
+                                (match-end 0))))
+          ;; Segment from pos to match-beginning.
+          (unless (= pos (match-beginning 0))
+            (push (list pos (match-beginning 0) fwd) segments))
+          (setq pos (match-end 0))))
+      ;; Final segment from pos to end.
+      (unless (= pos end)
+        (push (list pos end fwd) segments)))
+    (nreverse segments)))
+
+;;;###autoload
+(defun helixel-mc-select-regex-matches (regex)
+  "Select every match of REGEX within each cursor's selection.
 For each existing selection, replaces it with one cursor per
-REGEX match found inside it.  Selections with no match are
+REGEX match found inside it.  Matches are highlighted as
+selections (not discarded).  Selections with no match are
 removed.  If the resulting set is empty the mc session is
 disabled."
-  (interactive (list (read-regexp "Split on regex: ")))
+  (interactive (list (read-regexp "Select regex matches: ")))
   (helixel-mc--push-history)
   (let (count)
     (helixel-mc-with-regions regions
@@ -926,8 +978,8 @@ disabled."
                                               fwd))))))
         (setq count (length new-specs))
         new-specs))
-    (message "helixel-mc: split into %d cursor%s"
-             count (if (= 1 count) "" "s"))))
+    (message "helixel-mc: %d regex match%s selected"
+             count (if (= 1 count) "" "es"))))
 
 ;;;###autoload
 

@@ -7,7 +7,7 @@ helixel is off in those buffers), or use `helixel-mode-maybe-activate`
 to prevent activation:
 
 ```elisp
-(push '(reb-mode . insert) helixel-major-mode-default-states)
+(add-to-list  'helixel-major-mode-default-states '(reb-mode . insert))
 ```
 
 ## Q: How do I repeat the last motion (`f`, `t`, `%`, etc.)?

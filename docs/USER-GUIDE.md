@@ -1239,9 +1239,7 @@ C-c / C-x / M- bindings work automatically through the leader key.
 ### Excluding Buffers
 
 ```elisp
-(setq helixel-major-mode-default-states
-      '((minibuffer-mode . insert)
-        (term-mode . insert)))
+(add-to-list  'helixel-major-mode-default-states '(reb-mode . insert))
 ```
 
 ---

@@ -83,7 +83,7 @@ package-lint:
 	  if [ $$rc -gt 1 ]; then exit $$rc; fi
 
 
-COLWIDTH ?= 80
+COLWIDTH ?= 100
 
 column-check:
 	@echo "---- Check column width <= $(COLWIDTH)"

@@ -134,59 +134,51 @@ real to the next line same column.  Repeated invocations stack."
   (helixel-test-with-buffer "foo bar foo baz foo\n"
     (goto-char 1)
     (push-mark 4 t t)                   ; region: "foo" (real at 1..4)
-    (helixel-mc-mark-next-like-this)
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
     (should (= 1 (length (helixel-mc-all-cursors))))
-    (helixel-mc-mark-next-like-this)
+    (helixel-mc-mark-next-like-this)     ; fake at 9..12, real → 17..20
     (should (= 2 (length (helixel-mc-all-cursors))))
+    ;; Real cursor is at the latest match (visible).
+    (should (= 17 (region-beginning)))
     (helixel-mc-clear-all)))
 
-;; ── Regression: `s n' must NOT move the real cursor onto the match
-;; (would collide with the fake created at the same position, causing
-;; the same edit to run twice at that spot — user-reported "two foos
-;; at the last position").
-
-(ert-deftest helixel-test-mc-mark-next-leaves-real-in-place ()
-  "`helixel-mc-mark-next-like-this' must leave real cursor untouched.
-Real stays on the FIRST occurrence; fakes spawn at successive matches.
-No two cursors may share a position (else edits double up there)."
+(ert-deftest helixel-test-mc-mark-next-moves-real-to-match ()
+  "\\=`s n' moves real to the new match so the view scrolls to show it.
+After two `s n' calls: real is at the 3rd foo (17..20), fakes at
+1st (1..4) and 2nd (9..12).  No two cursors share a position."
   (helixel-test-with-buffer "foo bar foo baz foo\n"
     (goto-char 1)
     (push-mark 4 t t)                   ; real region: foo (1..4)
-    (helixel-mc-mark-next-like-this)    ; fake at 9..12
-    (helixel-mc-mark-next-like-this)    ; fake at 17..20
-    ;; Real did NOT move.
-    (should (= 1 (point)))
-    (should (= 4 (mark t)))
+    (helixel-mc-mark-next-like-this)    ; fake at 1..4, real → 9..12
+    (helixel-mc-mark-next-like-this)    ; fake at 9..12, real → 17..20
+    ;; Real moved to latest match.
+    (should (= 17 (region-beginning)))
+    (should (= 20 (region-end)))
     (should mark-active)
-    ;; Two fakes, both at later occurrences — distinct positions.
+    ;; Two fakes at earlier occurrences.
     (let* ((cursors (helixel-mc-all-cursors :sort))
-           ;; Each fake stores its `point' marker; we sort by that.
            (positions (mapcar (lambda (ov)
                                 (marker-position
                                  (helixel-mc-cursor-point ov)))
                               cursors)))
       (should (= 2 (length cursors)))
-      ;; Fakes have point=9 (start of 2nd `foo') and 17 (start of 3rd).
-      (should (equal '(9 17) (sort positions #'<)))
-      ;; No fake collides with the real cursor.
-      (should-not (memq 1 positions)))
+      ;; Fakes at start of 1st foo (1) and 2nd foo (9).
+      (should (equal '(1 9) (sort positions #'<)))
+      ;; No fake collides with real cursor.
+      (should-not (memq 17 positions)))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-mark-next-end-to-end-insert ()
-  "Realistic flow: `miw' on first `foo' then `s n s n', then `i' to
-insert `X' — must produce `Xfoo bar Xfoo baz Xfoo' (one X per match,
-NOT two at the last)."
+  "\\=`miw' then `s n s n' then `i X ESC': one X per match, no doubles."
   (helixel-test-with-buffer "foo bar foo baz foo\n"
     (helixel-enter-normal-state)
     (goto-char 1)
     (setq this-command 'helixel-mark-inner-word)
-    (helixel-mark-inner-word)
-    (helixel-mc-mark-next-like-this)
-    (helixel-mc-mark-next-like-this)
+    (helixel-mark-inner-word)            ; real at 1..4 (1st foo)
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
+    (helixel-mc-mark-next-like-this)     ; fake at 9..12, real → 17..20
     (should (= 2 (length (helixel-mc-all-cursors))))
-    ;; Simulate `i' (helixel-insert): jump to region-begin at every cursor.
-    ;; We test the position invariant directly: collect (point) at real
-    ;; and at each fake; they must be distinct.
+    ;; Collect region-begin of each cursor: real=17, fakes=1,9.
     (let ((positions (cons (region-beginning)
                            (mapcar (lambda (ov)
                                      (min (marker-position
@@ -194,7 +186,6 @@ NOT two at the last)."
                                           (marker-position
                                            (helixel-mc-cursor-mark ov))))
                                    (helixel-mc-all-cursors)))))
-      ;; Region-begin of each cursor: real=1 (1st foo), fakes=9,17.
       (should (equal '(1 9 17) (sort positions #'<))))
     (helixel-mc-clear-all)))
 
@@ -1510,7 +1501,8 @@ it — with a single-line buffer no further line exists."
 ;; same logical edge across cursors).
 
 (ert-deftest helixel-test-mc-mark-next-direction-forward ()
-  "`miw' leaves point at region-end; `s n' must keep that direction."
+  "\\=`miw' leaves point at region-end; `s n' preserves direction on both
+fake (old position) and real (new match)."
   (helixel-test-with-buffer "foo bar foo baz foo\n"
     (helixel-enter-normal-state)
     (goto-char 1)
@@ -1519,31 +1511,36 @@ it — with a single-line buffer no further line exists."
     ;; Real: forward selection (point=4 > mark=1).
     (should (= 4 (point)))
     (should (= 1 (mark t)))
-    (helixel-mc-mark-next-like-this)
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
     (let* ((ov (car (helixel-mc-all-cursors)))
            (fp (marker-position (helixel-mc-cursor-point ov)))
            (fm (marker-position (helixel-mc-cursor-mark ov))))
-      ;; Fake at second `foo' (9..12) MUST be forward too:
-      ;; point=12, mark=9 — NOT point=9 mark=12.
+      ;; Fake at OLD position (1..4) keeps forward direction.
       (should (> fp fm))
-      (should (= 12 fp))
-      (should (= 9 fm)))
+      (should (= 4 fp))
+      (should (= 1 fm)))
+    ;; Real at new match (9..12) also forward.
+    (should (= 12 (point)))
+    (should (= 9 (mark t)))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-mark-next-direction-backward ()
-  "When real has point < mark (backward selection), fake matches."
+  "When real has point < mark (backward selection), fake preserves it."
   (helixel-test-with-buffer "foo bar foo baz foo\n"
     (goto-char 1)
     (push-mark 4 t t)                   ; real: point=1, mark=4
     (should (< (point) (mark t)))
-    (helixel-mc-mark-next-like-this)
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
     (let* ((ov (car (helixel-mc-all-cursors)))
            (fp (marker-position (helixel-mc-cursor-point ov)))
            (fm (marker-position (helixel-mc-cursor-mark ov))))
-      ;; Backward: point < mark.  2nd foo at 9..12 → fake pt=9 mk=12.
+      ;; Fake at old position keeps backward: point=1, mark=4.
       (should (< fp fm))
-      (should (= 9 fp))
-      (should (= 12 fm)))
+      (should (= 1 fp))
+      (should (= 4 fm)))
+    ;; Real at new match also backward: point=9, mark=12.
+    (should (= 9 (point)))
+    (should (= 12 (mark t)))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-edit-lines-line-mode-bol ()
@@ -4421,20 +4418,22 @@ and verify begin/finish don't error."
 ;; ── Motion repeat (,) for mc-spawn commands ──
 
 (ert-deftest helixel-test-mc-mark-repeat-comma ()
-  "After `s n', \`, \' repeats mark-next-like-this."
+  "After `s n', \\`, \\' repeats mark-next-like-this."
   (helixel-test-with-buffer "foo bar foo baz foo\n"
     (goto-char 1)
     (push-mark 4 t t)                  ; region: first "foo" (1..4)
-    (helixel-mc-mark-next-like-this)     ; adds fake at 9..12
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
     (should (= 1 (length (helixel-mc-all-cursors))))
-    ;; , repeats the mark-next action — adds another fake.
+    (should (= 9 (region-beginning)))    ; real at 2nd foo
+    ;; , repeats — fake at 9..12, real → 17..20.
     (helixel-repeat-last-motion)
     (should (= 2 (length (helixel-mc-all-cursors))))
+    (should (= 17 (region-beginning)))   ; real at 3rd foo
     (let ((positions (mapcar (lambda (ov)
                                (marker-position
                                 (helixel-mc-cursor-point ov)))
                              (helixel-mc-all-cursors :sort))))
-      (should (equal (sort positions #'<) '(9 17))))
+      (should (equal (sort positions #'<) '(1 9))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-mark-repeat-comma-backward ()
@@ -4442,11 +4441,13 @@ and verify begin/finish don't error."
   (helixel-test-with-buffer "foo bar foo baz foo bar foo\n"
     (goto-char 25)                    ; start of last "foo"
     (push-mark 28 t t)                ; region: last "foo" (25..28)
-    (helixel-mc-mark-previous-like-this) ; adds fake at earlier foo
+    (helixel-mc-mark-previous-like-this) ; fake at 25..28, real → earlier
     (should (= 1 (length (helixel-mc-all-cursors))))
-    ;; , repeats mark-previous.
+    (should (= 17 (region-beginning)))   ; real at 5th foo
+    ;; , repeats mark-previous — fake at 17..20, real → 9..12.
     (helixel-repeat-last-motion)
     (should (= 2 (length (helixel-mc-all-cursors))))
+    (should (= 9 (region-beginning)))    ; real at 3rd foo
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-skip-repeat-comma ()
@@ -4492,12 +4493,10 @@ and verify begin/finish don't error."
   (helixel-test-with-buffer "foo bar foo baz\n"
     (goto-char 1)
     (push-mark 4 t t)                  ; region: first "foo" (1..4)
-    (helixel-mc-mark-next-like-this)     ; adds fake at 9..12
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
     (should (= 1 (length (helixel-mc-all-cursors))))
-    ;; Move real cursor before the fake.
-    (goto-char 1)
-    ;; unmark-next removes fake after point (fake at 9).
-    (helixel-mc-unmark-next)
+    ;; Real is at 9..12, fake at 1..4 → unmark-previous to remove it.
+    (helixel-mc-unmark-previous)
     (should (= 0 (length (helixel-mc-all-cursors))))
     ;; , repeats unmark — but no fakes left → error.
     (should-error (helixel-repeat-last-motion) :type 'user-error)))
@@ -4507,12 +4506,10 @@ and verify begin/finish don't error."
   (helixel-test-with-buffer "foo bar foo baz\n"
     (goto-char 9)
     (push-mark 12 t t)                 ; region: 2nd "foo"
-    (helixel-mc-mark-previous-like-this) ; fake at first "foo" (1..4)
+    (helixel-mc-mark-previous-like-this) ; fake at 9..12, real → 1..4
     (should (= 1 (length (helixel-mc-all-cursors))))
-    ;; Move real past the fake.
-    (goto-char 9)
-    ;; unmark-previous removes fake before point (fake at 1).
-    (helixel-mc-unmark-previous)
+    ;; Real is at 1..4, fake at 9..12 → unmark-next to remove it.
+    (helixel-mc-unmark-next)
     (should (= 0 (length (helixel-mc-all-cursors))))
     ;; , repeats unmark — no fakes → error.
     (should-error (helixel-repeat-last-motion) :type 'user-error)))
@@ -4566,21 +4563,19 @@ subcat mark, dir forward."
                 'forward))))
 
 (ert-deftest helixel-test-mc-unmark-repeat-recorded-struct ()
-  "After `s u', struct has subcat unmark, dir forward."
+  "After `s u', struct has subcat unmark, dir backward (used unmark-prev)."
   (helixel-test-with-buffer "foo bar foo baz\n"
     (goto-char 1)
     (push-mark 4 t t)
-    (helixel-mc-mark-next-like-this)
-    (goto-char 1)
-    ;; We know unmark-next may error if no fakes after point,
-    ;; so first add a fake, then test.
-    (helixel-mc-unmark-next)
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
+    ;; Real past the fake — use unmark-previous.
+    (helixel-mc-unmark-previous)
     (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
                 'mc-spawn))
     (should (eq (helixel--last-motion-subcat helixel--last-motion-cmd)
                 'unmark))
     (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
-                'forward))))
+                'backward))))
 
 (ert-deftest helixel-test-mc-mark-repeat-comma-after-other-motion ()
   "\`, \' repeats the most recent motion; mc-spawn is overwritten
@@ -4590,7 +4585,7 @@ by a later find-char."
     ;; First do mc-spawn on the first "foo".
     (goto-char 13)                    ; start of first "foo"
     (push-mark 16 t t)                ; region: first "foo" (13..16)
-    (helixel-mc-mark-next-like-this)   ; adds fake at 21 (second "foo")
+    (helixel-mc-mark-next-like-this)   ; fake at 13..16, real → 21..24
     (should (= 1 (length (helixel-mc-all-cursors))))
     ;; Then do find-char — overwrites last-motion.
     (goto-char 1)
@@ -4620,17 +4615,19 @@ should add exactly 1 fake (at the real cursor), not N+1 fakes."
   (helixel-test-with-buffer "foo bar foo baz foo qux foo\n"
     (goto-char 1)
     (push-mark 4 t t)                  ; region: first "foo" (1..4)
-    (helixel-mc-mark-next-like-this)     ; +1 fake at 9, total=1 fake
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
     (should (= 1 (length (helixel-mc-all-cursors))))
-    ;; , must NOT dispatch to the fake at 9 — only real runs it.
+    (should (= 9 (region-beginning)))
+    ;; , must NOT dispatch to the fake at 1 — only real runs it.
     (helixel-repeat-last-motion)
-    ;; Should add exactly 1 more fake (at 17), not 2 (one per cursor).
+    ;; Should add exactly 1 more fake (at old real 9..12), real → 17..20.
     (should (= 2 (length (helixel-mc-all-cursors))))
+    (should (= 17 (region-beginning)))
     (let ((positions (mapcar (lambda (ov)
                                (marker-position
                                 (helixel-mc-cursor-point ov)))
                              (helixel-mc-all-cursors :sort))))
-      (should (equal (sort positions #'<) '(9 17))))
+      (should (equal (sort positions #'<) '(1 9))))
     (helixel-mc-clear-all)))
 
 (ert-deftest helixel-test-mc-repeat-add-with-fakes ()
@@ -4647,6 +4644,168 @@ should add exactly 1 fake (at the real cursor), not N+1 fakes."
     ;; Real cursor should now be at line 3.
     (let ((real-line (line-number-at-pos (point))))
       (should (= real-line 3)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-skip-skips-past-fakes ()
+  "`s N' after `s n' skips past the fake cursor's position.
+After `s n' places a fake at the next occurrence, `s N' should
+find the occurrence AFTER the fake — not land on the fake."
+  (helixel-test-with-buffer "foo bar foo baz foo qux foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; region: first "foo" (1..4)
+    (helixel-mc-mark-next-like-this)     ; fake at 9..12 (2nd foo)
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; s N — skip should skip past the fake at 9..12 and land at 17..20.
+    (helixel-mc-skip-next)
+    ;; Real cursor must NOT be at the fake's position (9).
+    (should (= 17 (region-beginning)))
+    (should (= 20 (region-end)))
+    ;; Verify real does NOT share position with any fake.
+    (let ((real-beg (region-beginning))
+          (real-end (region-end)))
+      (should-not
+       (cl-find-if
+        (lambda (ov)
+          (let ((fp (marker-position (helixel-mc-cursor-point ov)))
+                (fm (marker-position (helixel-mc-cursor-mark ov))))
+            (and (>= real-beg (min fp fm))
+                 (<= real-end (max fp fm)))))
+        (helixel-mc-all-cursors))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-skip-past-fakes-backward ()
+  "`s P' after `s p' skips past the fake cursor's position backward."
+  (helixel-test-with-buffer "foo bar foo baz foo qux foo\n"
+    (goto-char 25)                     ; point at 6th "foo" (25..28)
+    (push-mark 28 t t)                 ; region: last "foo"
+    (helixel-mc-mark-previous-like-this) ; fake at 5th foo (17..20)
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; s P — skip should skip past the fake at 17..20 and land at 9..12.
+    (helixel-mc-skip-previous)
+    (should (= 9 (region-beginning)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-skip-preserves-forward-p ()
+  "`s N' preserves the original point>mark direction."
+  (helixel-test-with-buffer "foo bar foo baz foo\n"
+    (goto-char 4)                      ; point at end of 1st foo
+    (set-mark 1)                        ; mark at begin → forward (point>mark)
+    (activate-mark)
+    (should (> (point) (mark t)))
+    (helixel-mc-skip-next)              ; jump to 2nd foo
+    ;; Forward direction preserved: point at end, mark at begin.
+    (should (> (point) (mark t)))
+    (should (= 12 (point)))
+    (should (= 9 (mark t)))))
+
+(ert-deftest helixel-test-mc-skip-preserves-backward-p ()
+  "`s N' preserves the original point<mark direction."
+  (helixel-test-with-buffer "foo bar foo baz foo\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; backward: point=1 < mark=4
+    (should (< (point) (mark t)))
+    (helixel-mc-skip-next)              ; jump to 2nd foo
+    ;; Backward direction preserved: point at begin, mark at end.
+    (should (< (point) (mark t)))
+    (should (= 9 (point)))
+    (should (= 12 (mark t)))))
+
+(ert-deftest helixel-test-mc-unmark-next-moves-real ()
+  "`s u' removes the fake after point AND moves real to its position."
+  (helixel-test-with-buffer "abc def ghi\n"
+    (goto-char 1)
+    (helixel-mc--create-fake-cursor 5)   ; fake at 5 (has region? no)
+    (helixel-mc--create-fake-cursor 9)   ; fake at 9
+    (goto-char 3)                        ; real before both fakes
+    (helixel-mc-unmark-next)             ; removes fake at 5
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Real moved to the removed fake's position (5).
+    (should (= 5 (point)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-unmark-previous-moves-real ()
+  "`s U' removes the fake before point AND moves real to its position."
+  (helixel-test-with-buffer "abc def ghi\n"
+    (goto-char 1)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
+    (goto-char 7)                        ; real between fakes
+    (helixel-mc-unmark-previous)          ; removes fake at 5
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Real moved to the removed fake's position (5).
+    (should (= 5 (point)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-unmark-next-moves-real-with-region ()
+  "`s u' on a fake with a region moves real, preserving point/mark."
+  (helixel-test-with-buffer "foo bar foo baz\n"
+    (goto-char 1)
+    (push-mark 4 t t)                  ; real at 1..4 (backward: point<mark)
+    (helixel-mc-mark-next-like-this)     ; fake at 1..4, real → 9..12
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Fake at 1..4 has point=1, mark=4 (preserved backward direction).
+    ;; Real at 9..12 — unmark the fake (before real).
+    (helixel-mc-unmark-previous)
+    (should (= 0 (length (helixel-mc-all-cursors))))
+    ;; Real absorbed fake's region: point=1, mark=4 (backward preserved).
+    (should (= 1 (point)))
+    (should (= 4 (mark t)))
+    (should (< (point) (mark t)))))
+
+(ert-deftest helixel-test-mc-skip-preserves-direction-repeat ()
+  "\\`, \\' after `s N' preserves forward-p across repeats."
+  (helixel-test-with-buffer "foo bar foo baz foo qux foo\n"
+    (goto-char 4)
+    (set-mark 1)                        ; forward: point>mark
+    (activate-mark)
+    (helixel-mc-skip-next)              ; jump to 2nd foo at 9..12
+    (should (= 12 (point)))
+    (should (= 9 (mark t)))
+    ;; , repeats — should also preserve forward direction.
+    (helixel-repeat-last-motion)        ; jump to 3rd foo at 17..20
+    (should (= 20 (point)))
+    (should (= 17 (mark t)))))
+
+(ert-deftest helixel-test-mc-unmark-repeat-moves-real ()
+  "\\`, \\' after `s u' moves real to each removed fake in sequence."
+  (helixel-test-with-buffer "abc def ghi jkl\n"
+    (goto-char 1)
+    (helixel-mc--create-fake-cursor 5)
+    (helixel-mc--create-fake-cursor 9)
+    (helixel-mc--create-fake-cursor 13)
+    (goto-char 3)                        ; before all fakes
+    (helixel-mc-unmark-next)             ; real → 5 (1st fake)
+    (should (= 5 (point)))
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    ;; , repeats — removes next fake after 5 → fake at 9, real → 9.
+    (helixel-repeat-last-motion)
+    (should (= 9 (point)))
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-rotate-backward-no-oscillation ()
+  "`(' cycles backward through ALL cursors without oscillating
+between the first two positions."
+  (helixel-test-with-buffer "aaa bbb ccc ddd eee\n"
+    (goto-char 1)
+    (helixel-mc--create-fake-cursor 5)   ; bbb
+    (helixel-mc--create-fake-cursor 9)   ; ccc
+    (helixel-mc--create-fake-cursor 13)  ; ddd
+    ;; Real at 1 (first).  ( should wrap to last fake (13).
+    (helixel-mc-rotate-primary-backward)
+    (should (= 13 (point)))
+    ;; ( again → previous fake (9).
+    (helixel-mc-rotate-primary-backward)
+    (should (= 9 (point)))
+    ;; ( again → previous fake (5).
+    (helixel-mc-rotate-primary-backward)
+    (should (= 5 (point)))
+    ;; ( again → wrap back to real's old position (1).
+    ;; After the swaps, the fake at 1 should exist.
+    (helixel-mc-rotate-primary-backward)
+    (should (= 1 (point)))
+    ;; All 3 fakes still exist.
+    (should (= 3 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
 (provide 'helixel-test-mc)

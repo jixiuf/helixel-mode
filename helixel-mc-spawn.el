@@ -149,6 +149,9 @@ span, skip ahead to the first line that fits.  Signals
   (interactive)
   (unless (helixel-mc--copy-cursor-to-direction 1)
     (user-error "No line below fits this column/selection"))
+  (let ((n (helixel-mc-num-cursors)))
+    (message "Added cursor (line %d, %d cursor%s)"
+             (line-number-at-pos) n (if (> n 1) "s" "")))
   (helixel-record-motion 'helixel-mc-add-cursor-here
                          :category 'mc-spawn :subcat 'add :dir 'forward))
 
@@ -160,6 +163,9 @@ instead of down."
   (interactive)
   (unless (helixel-mc--copy-cursor-to-direction -1)
     (user-error "No line above fits this column/selection"))
+  (let ((n (helixel-mc-num-cursors)))
+    (message "Added cursor (line %d, %d cursor%s)"
+             (line-number-at-pos) n (if (> n 1) "s" "")))
   (helixel-record-motion 'helixel-mc-add-cursor-here-up
                          :category 'mc-spawn :subcat 'add :dir 'backward))
 
@@ -265,49 +271,65 @@ Filters invisible matches via `isearch-filter-predicate' when
             (throw 'found nil)))))))
 
 (defun helixel-mc--mark-like-this (dir)
-  "Add a fake cursor at the next occurrence of region text in DIR.
-DIR is 1 (forward) or -1 (backward).  The fake cursor is placed at
-the new match; the real cursor stays at its current selection.
+  "Move real cursor to the next occurrence, leaving a fake at its old position.
+DIR is 1 (forward) or -1 (backward).
 
-Successive calls walk further outward because the search start
-point is taken from the most recently spawned fake (highest match
-position for forward, lowest for backward), not from the real
-cursor — so real never moves and never collides with a fake."
+Finds the next occurrence of the region text, snapshots the current
+real cursor position as a fake, then moves real to the new match —
+so the view always scrolls to show what was just marked.
+
+Repeated calls chain: real always sits at the latest match (visible),
+fakes accumulate at all previously visited positions.  The search
+anchor is the farthest edge among ALL cursors (real + fakes) to
+guarantee no two cursors share a position."
   (let* ((text (helixel-mc--region-text))
-         ;; Use the FARTHEST edge (mark or point) of any existing
-         ;; fake as the new search anchor so each `s n' lands on a
-         ;; fresh occurrence and never re-finds the most recent one.
-         (anchor-end
-          (cl-loop for ov in (helixel-mc-all-cursors)
-                   for p = (marker-position
-                            (helixel-mc-cursor-point ov))
-                   for m = (marker-position
-                            (helixel-mc-cursor-mark ov))
-                   for hi = (max p m)
-                   for lo = (min p m)
-                   when (> dir 0) maximize hi into fwd
-                   when (< dir 0) minimize lo into bwd
-                   finally return (if (> dir 0) fwd bwd)))
-         (start (or anchor-end
-                    (if (> dir 0) (region-end) (region-beginning))))
+         ;; Collect farthest edge among ALL cursors (real + fakes).
+         (farthest
+          (let ((fwd (max (point) (or (mark t) (point))))
+                (bwd (min (point) (or (mark t) (point)))))
+            (dolist (ov (helixel-mc-all-cursors))
+              (let* ((p (marker-position (helixel-mc-cursor-point ov)))
+                     (m (marker-position (helixel-mc-cursor-mark ov)))
+                     (hi (max p m))
+                     (lo (min p m)))
+                (setq fwd (max fwd hi))
+                (setq bwd (min bwd lo))))
+            (if (> dir 0) fwd bwd)))
+         (start (if (> dir 0)
+                    (max farthest (region-end))
+                  (min farthest (region-beginning))))
          (target (save-excursion
                    (goto-char start)
-                   (helixel-mc--search-for-next text dir))))
+                   (helixel-mc--search-for-next text dir)))
+         ;; Snapshot current real position before moving.
+         (old-point (point))
+         (old-mark (and (use-region-p) (mark t)))
+         (had-region (use-region-p)))
     (unless target
       (user-error "No more matches for `%s'" text))
-    ;; Direction-consistency: if real has point at region-END (forward
-    ;; selection — `miw' leaves it like that), fake gets point=match-end
-    ;; / mark=match-begin.  If real has point at region-BEGIN (backward
-    ;; — e.g. after `b' then `miw'), fake gets point=match-begin /
-    ;; mark=match-end.  Otherwise insert at start (`i') and append at
-    ;; end (`a') behave inconsistently across cursors.
-    (let* ((tb (marker-position (car target)))
-           (te (marker-position (cdr target)))
-           (forward-p (>= (point) (mark t))))
-      (helixel-mc--create-fake-cursor
-       (if forward-p te tb)
-       (if forward-p tb te)))
-    (helixel-mc--free-targets (list target))))
+    ;; Create a fake cursor at the old real position — unless a fake
+    ;; already sits exactly there.
+    (unless (cl-find-if
+             (lambda (ov)
+               (= old-point (marker-position
+                             (helixel-mc-cursor-point ov))))
+             (helixel-mc-all-cursors))
+      (helixel-mc--create-fake-cursor old-point
+                                      (and had-region old-mark)))
+    ;; Move real to the new match (view scrolls with it).
+    (let ((tb (marker-position (car target)))
+          (te (marker-position (cdr target)))
+          (forward-p (if had-region
+                         (>= old-point old-mark)
+                       t)))
+      (deactivate-mark)
+      (goto-char (if forward-p te tb))
+      (set-mark (if forward-p tb te))
+      (activate-mark))
+    (helixel-mc--free-targets (list target))
+    (let ((n (helixel-mc-num-cursors)))
+      (message "Marked \"%s\" at line %d (%d cursor%s)"
+               text (line-number-at-pos) n (if (> n 1) "s" "")))))
 
 ;;;###autoload
 (defun helixel-mc-mark-next-like-this ()
@@ -327,16 +349,51 @@ cursor — so real never moves and never collides with a fake."
 
 ;; Internal helper — not autoloaded (private "--" name).
 (defun helixel-mc--skip-in-dir (dir)
-  "Skip occurrence in DIR (+1 / -1) without adding a cursor."
+  "Skip occurrence in DIR (+1 / -1) without adding a cursor.
+Skips past positions that already have a fake cursor, so the real
+cursor never lands on an existing fake.  Preserves the original
+point/mark direction (forward-p)."
   (let* ((text (helixel-mc--region-text))
          (start (if (> dir 0) (region-end) (region-beginning)))
-         (target (save-excursion
-                   (goto-char start)
-                   (helixel-mc--search-for-next text dir))))
-    (unless target (user-error "No more matches"))
-    (goto-char (marker-position (car target)))
-    (push-mark (marker-position (cdr target)) t t)
-    (helixel-mc--free-targets (list target))))
+         (target nil)
+         (search-start start)
+         ;; Capture original direction before moving.
+         (forward-p (if (use-region-p)
+                        (>= (point) (mark t))
+                      t)))
+    (while (not target)
+      (let ((candidate (save-excursion
+                         (goto-char search-start)
+                         (helixel-mc--search-for-next text dir))))
+        (unless candidate (user-error "No more matches"))
+        (let ((cand-beg (marker-position (car candidate)))
+              (cand-end (marker-position (cdr candidate))))
+          ;; Check if any existing fake already covers this position.
+          (if (cl-find-if
+               (lambda (ov)
+                 (let ((fp (marker-position (helixel-mc-cursor-point ov)))
+                       (fm (marker-position (helixel-mc-cursor-mark ov))))
+                   (and (>= cand-beg (min fp fm))
+                        (<= cand-end (max fp fm)))))
+               (helixel-mc-all-cursors))
+              ;; Collision — advance search-start past this match and retry.
+              (progn
+                (helixel-mc--free-targets (list candidate))
+                (setq search-start
+                      (if (> dir 0) (max cand-end (1+ search-start))
+                        (min cand-beg (1- search-start)))))
+            ;; No collision — accept this target.
+            (setq target candidate)))))
+    ;; Preserve original direction: if point was after mark (forward),
+    ;; set point at target-end and mark at target-begin.
+    (let ((tb (marker-position (car target)))
+          (te (marker-position (cdr target))))
+      (if forward-p
+          (progn (goto-char te) (set-mark tb))
+        (goto-char tb) (set-mark te))
+      (activate-mark))
+    (helixel-mc--free-targets (list target))
+    (message "Skipped to line %d" (line-number-at-pos))))
 
 ;;;###autoload
 (defun helixel-mc-skip-next ()
@@ -404,7 +461,8 @@ other fake cursor."
 
 ;;;###autoload
 (defun helixel-mc-unmark-next ()
-  "Remove the fake cursor at the next match-position after point."
+  "Remove the fake cursor at the next match-position after point.
+Move real cursor to the removed fake's position, so the view follows."
   (interactive)
   (let ((cursor
          (cl-find-if
@@ -413,13 +471,28 @@ other fake cursor."
                (point)))
           (helixel-mc-all-cursors :sort))))
     (unless cursor (user-error "No fake cursor after point"))
+    ;; Move real to the fake's position before deleting it.
+    (let ((fp (marker-position (helixel-mc-cursor-point cursor)))
+          (fm (marker-position (helixel-mc-cursor-mark cursor)))
+          (had-region (marker-position (helixel-mc-cursor-mark cursor))))
+      (if (and had-region fm)
+          (progn
+            (deactivate-mark)
+            (goto-char fp)
+            (set-mark fm)
+            (activate-mark))
+        (goto-char fp)))
     (helixel-mc--delete-fake-cursor cursor))
+  (let ((n (helixel-mc-num-cursors)))
+    (message "Unmarked (%d cursor%s remaining)"
+             n (if (> n 1) "s" "")))
   (helixel-record-motion 'helixel-mc-unmark-next
                          :category 'mc-spawn :subcat 'unmark :dir 'forward))
 
 ;;;###autoload
 (defun helixel-mc-unmark-previous ()
-  "Remove the fake cursor at the previous match-position before point."
+  "Remove the fake cursor at the previous match-position before point.
+Move real cursor to the removed fake's position, so the view follows."
   (interactive)
   (let ((cursor
          (cl-find-if
@@ -428,7 +501,20 @@ other fake cursor."
                (point)))
           (reverse (helixel-mc-all-cursors :sort)))))
     (unless cursor (user-error "No fake cursor before point"))
+    ;; Move real to the fake's position before deleting it.
+    (let ((fp (marker-position (helixel-mc-cursor-point cursor)))
+          (fm (marker-position (helixel-mc-cursor-mark cursor))))
+      (if (and fm (not (= fp fm)))
+          (progn
+            (deactivate-mark)
+            (goto-char fp)
+            (set-mark fm)
+            (activate-mark))
+        (goto-char fp)))
     (helixel-mc--delete-fake-cursor cursor))
+  (let ((n (helixel-mc-num-cursors)))
+    (message "Unmarked (%d cursor%s remaining)"
+             n (if (> n 1) "s" "")))
   (helixel-record-motion 'helixel-mc-unmark-previous
                          :category 'mc-spawn :subcat 'unmark :dir 'backward))
 
@@ -587,7 +673,7 @@ If the resulting set has no fakes left, fully disables mc mode."
 
 (defun helixel-mc--rotate-primary (dir)
   "Rotate the primary cursor one step in direction DIR.
-DIR is a comparison operator (`>', `<', `<=', `>=').
+DIR is a comparison operator (`>', `<').
 `>' moves forward to the next fake (by buffer position);
 `<' moves backward to the previous fake.  Returns non-nil when a
 rotation was performed, nil when there are no fakes.
@@ -606,7 +692,10 @@ and the new primary takes over all per-cursor state."
                                 (helixel-mc-cursor-point ov))
                                real))
                     candidates)
-                   (car sorted))))
+                   ;; Wrap around: forward → first, backward → last.
+                   (if (eq dir '<)
+                       (car (last sorted))
+                     (car sorted)))))
     (helixel-mc--swap-real-and-fake next)))
 
 ;;;###autoload

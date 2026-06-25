@@ -827,21 +827,22 @@ whitelisted command runs at every cursor in one undo step.
 
 #### `s` prefix (always available in normal mode)
 
-| Key                      | Action                                                | Helix       |
-| ------------------------ | ----------------------------------------------------- | ----------- |
-| `s s`                    | Toggle (spawn from last selection / clear)            | `s`         |
-| `s ,`                    | Clear all fake cursors (keep primary only)            | —           |
-| `s a` `s A`              | Add fake at point, move real to next / previous line  | `C` `Alt-C` |
-| `s x`                    | Per-line cursors: line-mode → REGION; char-mode → POINT | `Alt-s`   |
-| `s n` `s p`              | Add cursor at next / previous occurrence              | `n` `N`     |
-| `s N` `s P`              | Skip next / previous match (no cursor added)          | `Alt-n` `Alt-N` |
-| `s u` `s U`              | Unmark next / previous fake cursor                    | —           |
-| `s .`                    | Apply last edit at every fake cursor                  | `.`         |
-| `s k` `s K`              | Keep / remove cursors whose region matches a regex    | `K` `Alt-K` |
-| `s S`                    | Split each selection on regex                         | `S`         |
-| `s -`                    | Merge all cursors into one big region                 | `Alt--`     |
-| `s &`                    | Column-align cursors by padding with spaces           | `&`         |
-| `s _`                    | Trim leading / trailing whitespace from each region   | `_`         |
+| Key                      | Action                                                   | Helix       |
+| ------------------------ | ---------------------------------------------------------| ----------- |
+| `s s`                    | Toggle (spawn from last selection / clear)               |             |
+| `s ,`                    | Clear all fake cursors (keep primary only)               |             |
+| `s a` `s A`              | Add fake at point, move real to next / previous line     | `C` `Alt-C` |
+| `s x`                    | Per-line cursors: line-mode → REGION; char-mode → POINT  | `Alt-s`     |
+| `s n` `s p`              | Add cursor at next / previous occurrence                 |             |
+| `s N` `s P`              | Skip next / previous match (no cursor added)             |             |
+| `s u` `s U`              | Unmark next / previous fake cursor                       |             |
+| `s .`                    | Apply last edit at every fake cursor                     |             |
+| `s k` `s K`              | Keep / remove cursors whose region matches a regex       | `K` `Alt-K` |
+| `s r`                    | Select all regex matches within selections              | `s`         |
+| `s S` `s d`              | Split each selection on regex                           | `S`         |
+| `s -`                    | Merge all cursors into one big region                    | `Alt--`     |
+| `s &`                    | Column-align cursors by padding with spaces              | `&`         |
+| `s _`                    | Trim leading / trailing whitespace from each region      | `_`         |
 
 #### Top-level keys (always available, enable mc automatically)
 

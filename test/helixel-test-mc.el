@@ -2933,12 +2933,12 @@ on both real and fakes, so the second call hit
 
 ;; ── Split selection / restore-cursors ──
 
-(ert-deftest helixel-test-mc-select-regex-matches-creates-cursors ()
-  "`helixel-mc-select-regex-matches' turns each regex match into a cursor."
+(ert-deftest helixel-test-mc-select-regex-creates-cursors ()
+  "`helixel-mc-select-regex' turns each regex match into a cursor."
   (helixel-test-with-buffer "foo bar foo baz foo\n"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 20)
-    (helixel-mc-select-regex-matches "foo")
+    (helixel-mc-select-regex "foo")
     ;; 3 "foo" matches → real + 2 fakes.
     (should (= 2 (length (helixel-mc-all-cursors))))
     (should (equal "foo" (buffer-substring-no-properties
@@ -2951,12 +2951,12 @@ on both real and fakes, so the second call hit
         (should (equal "foo" (buffer-substring-no-properties b e)))))
     (helixel-mc-clear-all)))
 
-(ert-deftest helixel-test-mc-split-on-regex ()
-  "`helixel-mc-split-on-regex' splits selection on regex, discarding matches."
+(ert-deftest helixel-test-mc-split-selection ()
+  "`helixel-mc-split-selection' splits selection on regex, discarding matches."
   (helixel-test-with-buffer "apple,banana,orange"
     (helixel-enter-normal-state)
     (goto-char 1) (push-mark 1 t t) (goto-char 20)
-    (helixel-mc-split-on-regex ",")
+    (helixel-mc-split-selection ",")
     ;; 3 segments → real + 2 fakes.
     (should (= 2 (length (helixel-mc-all-cursors))))
     (let ((texts (sort

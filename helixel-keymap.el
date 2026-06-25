@@ -413,9 +413,9 @@ used selection management lives here under `s'."
   "-"   #'helixel-mc-merge           ; like Helix `M--'
   "&"   #'helixel-mc-align           ; like Helix `&'
   "_"   #'helixel-mc-trim            ; like Helix `_'
-  "r"   #'helixel-mc-select-regex-matches  ; like Helix `s'
-  "d"   #'helixel-mc-split-on-regex        ; like Helix `S' (d for "divide"/"delimiter")
-  "S"   #'helixel-mc-split-on-regex)       ; like Helix `S'
+  "r"   #'helixel-mc-select-regex    ; like Helix `s'
+  "d"   #'helixel-mc-split-selection ; like Helix `S' ("divide"/"delimiter")
+  "S"   #'helixel-mc-split-selection); like Helix `S'
 
 ;; Top-level Helix-style rotation: typically pressed repeatedly
 ;; to cycle through cursors.

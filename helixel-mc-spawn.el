@@ -36,7 +36,7 @@
 ;;   helixel-mc-rotate-content-forward / -backward
 ;;   helixel-mc-keep-matching / -remove-matching
 ;;   helixel-mc-merge / -trim / -align
-;;   helixel-mc-split-on-regex
+;;   helixel-mc-split-selection
 ;;   helixel-mc-restore-cursors       — g v history
 ;;
 ;; this file (user-facing commands).
@@ -439,8 +439,8 @@ other fake cursor."
    helixel-mc-merge
    helixel-mc-align
    helixel-mc-trim
-   helixel-mc-split-on-regex
-   helixel-mc-select-regex-matches
+   helixel-mc-split-selection
+   helixel-mc-select-regex
    helixel-mc-restore-cursors))
 
 ;; ── Helix-style selection management ──
@@ -900,7 +900,7 @@ column-of-cursors created via `s a' / `xs'."
     (dolist (p points) (set-marker p nil))))
 
 ;;;###autoload
-(defun helixel-mc-split-on-regex (regex)
+(defun helixel-mc-split-selection (regex)
   "Split every cursor's selection on REGEX into multiple cursors.
 For each existing selection, splits it at every match of REGEX,
 discarding the matches themselves.  Each non-empty segment
@@ -918,13 +918,13 @@ empty the mc session is disabled."
       (let ((new-specs
              (cl-loop
               for (b e fwd) in regions
-              append (helixel-mc--split-region-on-regex b e fwd regex))))
+              append (helixel-mc--split-region b e fwd regex))))
         (setq count (length new-specs))
         new-specs))
     (message "helixel-mc: split into %d cursor%s"
              count (if (= 1 count) "" "s"))))
 
-(defun helixel-mc--split-region-on-regex (beg end fwd regex)
+(defun helixel-mc--split-region (beg end fwd regex)
   "Split region BEG..END on REGEX matches.
 Return a list of (BEG END FWD) triples, one per non-empty segment
 between matches (or between boundary and match).
@@ -950,7 +950,7 @@ Matches themselves are discarded."
     (nreverse segments)))
 
 ;;;###autoload
-(defun helixel-mc-select-regex-matches (regex)
+(defun helixel-mc-select-regex (regex)
   "Select every match of REGEX within each cursor's selection.
 For each existing selection, replaces it with one cursor per
 REGEX match found inside it.  Matches are highlighted as

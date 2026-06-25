@@ -183,8 +183,9 @@ traversed during key lookup but are not themselves listed in
 
 (defun helixel--refresh-overriding-maps ()
   "Rebuild `minor-mode-overriding-map-alist' for the current buffer.
-Collects overrides from both mode-specific (`helixel--mode-keybindings')
-and keymap-targeted (`helixel--keymap-bindings') registrations."
+Collects overrides from mode-specific (`helixel--mode-keybindings'),
+keymap-targeted (`helixel--keymap-bindings') registrations, and
+the multi-cursor mode keymap when `helixel-mc-mode' is active."
   (let ((state helixel--current-state)
         (state-mode (alist-get helixel--current-state helixel-state-alist))
         (overrides nil))
@@ -209,6 +210,9 @@ and keymap-targeted (`helixel--keymap-bindings') registrations."
                 (when (and target
                            (helixel--keymap-active-p target active-maps))
                   (push (cdr entry) overrides))))))))
+    ;; Multi-cursor mode map: compose on top when mc is active.
+    (when (and (boundp 'helixel-mc-mode) helixel-mc-mode)
+      (push helixel-mc-mode-map overrides))
     (setq minor-mode-overriding-map-alist
           (assq-delete-all state-mode minor-mode-overriding-map-alist))
     (when overrides
@@ -526,7 +530,10 @@ If FORCE is non-nil, don't prompt for save when killing Emacs."
 (defun helixel-keymap--init-hooks ()
   "Wire state-change hooks for helixel-keymap."
   (add-hook 'helixel-state-change-hook #'helixel--refresh-overriding-maps)
-  (add-hook 'helixel-state-change-hook #'helixel--refresh-textobj-overrides))
+  (add-hook 'helixel-state-change-hook #'helixel--refresh-textobj-overrides)
+  ;; Refresh when multi-cursor mode is toggled so that mc-only
+  ;; keybindings (e.g. K, &, _, M--) appear/disappear.
+  (add-hook 'helixel-mc-mode-hook #'helixel--refresh-overriding-maps))
 ;; helixel-keymap--init-hooks registered via `helixel--register-mode-hooks'
 ;; in helixel.el.
 
@@ -643,24 +650,26 @@ If FORCE is non-nil, don't prompt for save when killing Emacs."
   (define-key helixel-normal-map "\C-w" helixel-window-map)
   (define-key helixel-normal-map "s" helixel-mc-map)
   (define-key helixel-goto-map   "v" #'helixel-mc-restore-cursors)
-  (define-key helixel-normal-map "K"    #'helixel-mc-keep-matching)
-  (define-key helixel-normal-map "\M-k" #'helixel-mc-remove-matching)
-  (define-key helixel-normal-map "&"    #'helixel-mc-align)
-  (define-key helixel-normal-map "_"    #'helixel-mc-trim)
-  (define-key helixel-normal-map "\M--" #'helixel-mc-merge)
+  ;; ── Multi-cursor top-level bindings (only while mc-mode is active) ──
+  ;; Populated into `helixel-mc-mode-map' and composed on top
+  ;; of `helixel-normal-map' via `helixel--refresh-overriding-maps'.
+  (define-key helixel-mc-mode-map "K"    #'helixel-mc-keep-matching)
+  (define-key helixel-mc-mode-map "\M-k" #'helixel-mc-remove-matching)
+  (define-key helixel-mc-mode-map "&"    #'helixel-mc-align)
+  (define-key helixel-mc-mode-map "_"    #'helixel-mc-trim)
+  (define-key helixel-mc-mode-map "\M--" #'helixel-mc-merge)
+  (define-key helixel-mc-mode-map "("    #'helixel-mc-rotate-primary-backward)
+  (define-key helixel-mc-mode-map ")"    #'helixel-mc-rotate-primary-forward)
+  (define-key helixel-mc-mode-map "\M-," #'helixel-mc-remove-primary)
+  (define-key helixel-mc-mode-map "\M-(" #'helixel-mc-rotate-content-backward)
+  (define-key helixel-mc-mode-map "\M-)" #'helixel-mc-rotate-content-forward)
+  ;; These spawn cursors and auto-enable mc-mode — always available.
   (define-key helixel-normal-map "C"    #'helixel-mc-add-cursor-here)
   (define-key helixel-normal-map "\M-c" #'helixel-mc-add-cursor-here-up)
-  (define-key helixel-normal-map "("    #'helixel-mc-rotate-primary-backward)
-  (define-key helixel-normal-map ")"    #'helixel-mc-rotate-primary-forward)
-  (define-key helixel-normal-map "\M-," #'helixel-mc-remove-primary)
-  (define-key helixel-normal-map "\M-(" #'helixel-mc-rotate-content-backward)
-  (define-key helixel-normal-map "\M-)" #'helixel-mc-rotate-content-forward)
   (define-key helixel-visual-map "v"    #'helixel-visual-exit)
-  (define-key helixel-visual-map "o"
-              #'helixel-visual-exchange-point-and-mark)
+  (define-key helixel-visual-map "o"    #'helixel-visual-exchange-point-and-mark)
   (define-key helixel-visual-map [escape] #'helixel-visual-exit)
-  (define-key helixel-normal-map "\M-;"
-              #'helixel-visual-exchange-point-and-mark)
+  (define-key helixel-normal-map "\M-;" #'helixel-visual-exchange-point-and-mark)
   (define-key helixel-insert-map [escape] #'helixel-insert-exit))
 (helixel-keymap--define-bindings)
 

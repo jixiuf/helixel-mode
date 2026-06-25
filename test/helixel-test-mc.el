@@ -2270,8 +2270,8 @@ the limit and allows the cursor to be created."
 ;; ── unmark-next / unmark-previous ──
 
 (ert-deftest helixel-test-mc-remove-primary-bound-to-m-comma ()
-  "\\[helixel-mc-remove-primary] is bound to `helixel-mc-remove-primary' in normal map."
-  (should (eq (lookup-key helixel-normal-map (kbd "M-,"))
+  "\\[helixel-mc-remove-primary] is bound in `helixel-mc-mode-map'."
+  (should (eq (lookup-key helixel-mc-mode-map (kbd "M-,"))
               'helixel-mc-remove-primary)))
 
 (ert-deftest helixel-test-mc-remove-primary-deletes-and-promotes ()

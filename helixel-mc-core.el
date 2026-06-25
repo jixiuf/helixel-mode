@@ -1682,10 +1682,8 @@ number of walk iterations), breaking dot-repeat at fake cursors."
                                (>= (length targets) limit))
                       (if (or helixel-mc--max-cursors-suppressed
                               (y-or-n-p
-                               (format
-                                (concat "Already found %d targets"
-                                        " (max %d).  Continue scanning? ")
-                                (length targets) limit)))
+                               (format "Already found %d targets (max %d).  Continue scanning? "
+                                       (length targets) limit)))
                           (setq helixel-mc--max-cursors-suppressed t
                                 limit nil)
                         (setq keep-going nil)))

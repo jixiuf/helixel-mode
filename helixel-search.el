@@ -866,32 +866,33 @@ Direction flip works for search, find-char, match, and movement
 categories.  Movement commands use the `helixel-motion-reverse'
 symbol property on the command to find the opposite command."
   (interactive "P")
-  (let ((rec helixel--last-motion-cmd)
-        (flip-p (or (eq raw-prefix '-)
-                    (and (integerp raw-prefix)
-                         (< raw-prefix 0))))
-        (repeat-n (cond ((not raw-prefix) 1)
-                        ((eq raw-prefix '-) 1)
-                        ((integerp raw-prefix) (abs raw-prefix))
-                        (t 1))))
-    (unless rec
-      (user-error "No motion to repeat"))
-    (unless (helixel--category-match-p
-             (helixel--last-motion-category rec)
-             (helixel--last-motion-subcat rec)
-             helixel-motion-repeat-categories)
-      (user-error
-       "Last motion `%s' is not in `helixel-motion-repeat-categories'"
-       (or (helixel--last-motion-subcat rec)
-           (helixel--last-motion-category rec))))
-    ;; Permanently flip direction on \\=`-,' (like \\=`-.' for edit repeat).
-    (when flip-p
-      (helixel--motion-flip-dir rec))
-    (if-let* ((fn (helixel--lookup-motion-repeater rec)))
-        (dotimes (_ repeat-n)
-          (funcall fn rec))
-      (user-error "No repeater registered for category `%s'"
-                  (helixel--last-motion-category rec)))))
+  (helixel--with-command helixel-repeat-last-motion
+    (let ((rec helixel--last-motion-cmd)
+          (flip-p (or (eq raw-prefix '-)
+                      (and (integerp raw-prefix)
+                           (< raw-prefix 0))))
+          (repeat-n (cond ((not raw-prefix) 1)
+                          ((eq raw-prefix '-) 1)
+                          ((integerp raw-prefix) (abs raw-prefix))
+                          (t 1))))
+      (unless rec
+        (user-error "No motion to repeat"))
+      (unless (helixel--category-match-p
+               (helixel--last-motion-category rec)
+               (helixel--last-motion-subcat rec)
+               helixel-motion-repeat-categories)
+        (user-error
+         "Last motion `%s' is not in `helixel-motion-repeat-categories'"
+         (or (helixel--last-motion-subcat rec)
+             (helixel--last-motion-category rec))))
+      ;; Permanently flip direction on \\=`-,' (like \\=`-.' for edit repeat).
+      (when flip-p
+        (helixel--motion-flip-dir rec))
+      (if-let* ((fn (helixel--lookup-motion-repeater rec)))
+          (dotimes (_ repeat-n)
+            (funcall fn rec))
+        (user-error "No repeater registered for category `%s'"
+                    (helixel--last-motion-category rec))))))
 
 ;; ── Motion direction flip (for \\=`-,' permanent flip) ──
 
@@ -919,17 +920,33 @@ Called by `helixel-repeat-last-motion' on \\=`-,' prefix."
 
 (defun helixel--repeat-search-motion (rec)
   "Replay a search (/) motion from REC.
-Creates a temporary `helixel--active-search' from the stored
-pattern, direction, and regexp flag, then calls
-`helixel-search--isearch-repeat'."
-  (let ((helixel--active-search
-         (make-helixel--last-motion
-          :category 'search
-          :pattern (helixel--last-motion-pattern rec)
-          :dir (helixel--last-motion-dir rec)
-          :regexp (helixel--last-motion-regexp rec))))
-    (helixel-search--isearch-repeat
-     (if (eq (helixel--last-motion-dir rec) 'forward) 1 -1))))
+Opens tracking, attaches a runner (`helixel-search--mc-runner'),
+does the isearch at the real cursor, and commits.  This ensures
+the unified mc dispatcher can replay this search at every fake
+cursor via path 1 (runner replay, no isearch re-entry at fakes).
+
+Note: `helixel-search--done-hook' is NOT on `isearch-mode-end-hook'
+during `isearch-repeat', so we must populate and commit manually."
+  (let* ((pat (helixel--last-motion-pattern rec))
+         (dir (helixel--last-motion-dir rec))
+         (regexp (helixel--last-motion-regexp rec))
+         (forwardp (eq dir 'forward)))
+    ;; Open tracking — the live action will carry the runner for mc dispatch.
+    (helixel--tracking-open 'search nil)
+    (when helixel--live-action
+      (setf (helixel-action-payload helixel--live-action)
+            (list :pattern pat :dir dir :regexp regexp))
+      (setf (helixel-action-runner helixel--live-action)
+            #'helixel-search--mc-runner))
+    ;; Temporary active-search for the isearch-repeat at real cursor.
+    (let ((helixel--active-search
+           (make-helixel--last-motion
+            :category 'search
+            :pattern pat :dir dir :regexp regexp)))
+      (helixel-search--isearch-repeat (if forwardp 1 -1)))
+    ;; Commit the live action — it now has payload + runner for the
+    ;; mc dispatcher to find and replay at fake cursors.
+    (helixel--action-commit)))
 
 (defun helixel--repeat-find-char-motion (rec)
   "Replay a find-char (f/t) motion from REC.

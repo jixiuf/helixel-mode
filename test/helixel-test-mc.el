@@ -4152,6 +4152,128 @@ and mark at match-end (matching isearch's backward orientation)."
                           (min p m) (max p m))))))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-search-repeat-comma-at-fakes ()
+  "After `/world<RET>' + fakes, \`, \' dispatches to fake cursors
+via the fresh-action runner (path 1 dispatch)."
+  (helixel-test-with-buffer "hello world here\nhello world there\n"
+    (helixel-enter-normal-state)
+    ;; Setup: motion record + region around first match.
+    (helixel-record-motion nil
+                           :category 'search
+                           :pattern "world"
+                           :dir 'forward
+                           :regexp t)
+    (goto-char 1)
+    (re-search-forward "world")
+    (set-mark (match-beginning 0))
+    ;; Spawn fake cursor at line 2 bol.
+    (helixel-mc--create-fake-cursor 18)
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    ;; Build and dispatch a synthetic action with the same runner
+    ;; that handle-done attaches (helixel-search--mc-runner).
+    ;; This proves the dispatch path works for search repeat.
+    (helixel-test-mc--replay-action-at-fakes
+     (helixel-test-mc--make-search-action "world" 'forward))
+    ;; After dispatch, the fake at line 2 must have found "world".
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (let* ((ov (car (helixel-mc-all-cursors)))
+           (fp (marker-position (helixel-mc-cursor-point ov))))
+      (should (= 29 fp)))  ; "world" at 24-28, point after=29
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-mark-comma-after-search-sequence ()
+  "After search + commas + miw + s n, \`, \' must NOT delete
+any existing fake cursor (Bug 2 regression)."
+  (helixel-test-with-buffer "foo bar foo baz foo qux foo\n"
+    (helixel-enter-normal-state)
+    ;; Simulate: /foo<RET> then ,,, was done.
+    (helixel-record-motion nil
+                           :category 'search
+                           :pattern "foo"
+                           :dir 'forward
+                           :regexp t)
+    ;; miw: select inner word at position 1 ("foo").
+    (goto-char 1)
+    (push-mark 4 t t)  ; region: "foo" at 1..4
+    ;; s n: mark next like this via command loop.
+    (let ((this-command 'helixel-mc-mark-next-like-this))
+      (call-interactively 'helixel-mc-mark-next-like-this))
+    ;; After s n: fake at 1..4, real → 9..12 (next "foo").
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (should (= 9 (region-beginning)))
+    ;; ,: repeat s n via command loop.
+    (let ((this-command 'helixel-repeat-last-motion))
+      (call-interactively 'helixel-repeat-last-motion))
+    ;; After ,: fake at 1..4, fake at 9..12, real → 17..20.
+    (should (= 2 (length (helixel-mc-all-cursors))))
+    (should (= 17 (region-beginning)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-mark-fake-inherits-mc-spawn-motion ()
+  "After search state + s n, the new fake cursor starts with
+nil last-motion-cmd (clean state, no stale search inheritance).
+
+The real cursor correctly records mc-spawn motion so \`, \'
+repeats s n at the real cursor."
+  (helixel-test-with-buffer "foo bar foo baz\n"
+    (helixel-enter-normal-state)
+    ;; Set up a search motion record.
+    (helixel-record-motion nil
+                           :category 'search
+                           :pattern "foo"
+                           :dir 'forward
+                           :regexp t)
+    ;; Select "foo" at position 1.
+    (goto-char 1)
+    (push-mark 4 t t)
+    ;; s n: mark next like this.
+    (let ((this-command 'helixel-mc-mark-next-like-this))
+      (call-interactively 'helixel-mc-mark-next-like-this))
+    ;; Fake cursor starts clean — nil motion history
+    ;; (:fresh nil in helixel-mc--define-state).
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (dolist (ov (helixel-mc-all-cursors))
+      (let* ((cs (overlay-get ov 'helixel-pc-state))
+             (lmc (helixel-pcs-last-motion-cmd cs)))
+        (should-not lmc)))
+    ;; Real cursor recorded mc-spawn so \`, \' repeats s n.
+    (should (eq 'mc-spawn (helixel--last-motion-category
+                           helixel--last-motion-cmd)))
+    (should (eq 'mark (helixel--last-motion-subcat
+                       helixel--last-motion-cmd)))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-add-fake-inherits-mc-spawn-motion ()
+  "After search state + s a, the new fake cursor starts with
+nil last-motion-cmd (clean state, no stale search inheritance).
+
+The real cursor correctly records mc-spawn motion so \`, \'
+repeats s a at the real cursor."
+  (helixel-test-with-buffer "foo bar\nbaz qux\n"
+    (helixel-enter-normal-state)
+    (helixel-record-motion nil
+                           :category 'search
+                           :pattern "foo"
+                           :dir 'forward
+                           :regexp t)
+    (goto-char 5)
+    ;; s a: add cursor here (copies real to fake, moves real down).
+    (let ((this-command 'helixel-mc-add-cursor-here))
+      (call-interactively 'helixel-mc-add-cursor-here))
+    ;; Fake cursor starts clean — nil motion history
+    ;; (:fresh nil in helixel-mc--define-state).
+    (should (= 1 (length (helixel-mc-all-cursors))))
+    (dolist (ov (helixel-mc-all-cursors))
+      (let* ((cs (overlay-get ov 'helixel-pc-state))
+             (lmc (helixel-pcs-last-motion-cmd cs)))
+        (should-not lmc)))
+    ;; Real cursor recorded mc-spawn so \`, \' repeats s a.
+    (should (eq 'mc-spawn (helixel--last-motion-category
+                           helixel--last-motion-cmd)))
+    (should (eq 'add (helixel--last-motion-subcat
+                      helixel--last-motion-cmd)))
+    (helixel-mc-clear-all)))
+
 (ert-deftest helixel-test-mc-find-char-repeat-n-at-fakes ()
   "After `fl' broadcast, `n' (repeat) must advance every fake cursor
 to the next occurrence of the same character.  Regression: before the

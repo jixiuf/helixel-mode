@@ -350,7 +350,8 @@ state spec (e.g. nil's live-action, deep-copies event-ring)."
                           :fresh nil)
   (action-pos             :var helixel--action-pos)
   (jump-cycle-pos         :var helixel--mark-cycle-pos)
-  (last-motion-cmd        :var helixel--last-motion-cmd)
+  (last-motion-cmd        :var helixel--last-motion-cmd
+                          :fresh nil)
   (motion-permanent-flip  :var helixel--motion-permanent-flip)
   (block-chosen-spec      :var helixel--block-chosen-spec))
 
@@ -1523,7 +1524,6 @@ deactivated when the last one is removed."
    helixel-repeat-chain-cancel
    helixel-repeat-edit helixel-repeat-selection
    helixel-repeat-edit-pick helixel-repeat-debug
-   helixel-repeat-last-motion            ; , (motion repeat) real-only
    helixel-normal-escape
    helixel-enter-normal-state helixel-enter-insert-state
    helixel-enter-motion-state

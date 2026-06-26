@@ -437,12 +437,32 @@ If the kind has a custom `:all-dir-fn', delegate to it."
         (helixel--repeat-echo cnt)))))
 
 (defun helixel--repeat-n (edit n reverse-p)
-  "Repeat EDIT N times from current position with REVERSE-P direction."
+  "Repeat EDIT N times from current position with REVERSE-P direction.
+When N=1 and `helixel--pending-sel' holds a selection of a DIFFERENT
+kind than the action's stored sel (e.g. user searched with / after a
+word-change), apply the edit directly without advancing — the user's
+explicit positioning takes priority.
+
+When the pending-sel has the SAME kind as the action's sel (typical
+of an advance leftover from a previous \\[helixel-repeat-edit]),
+advance normally.  `helixel--pending-sel' is NOT modified — the
+advance function relies on it internally for follow-up detection."
   (let ((effective (helixel--maybe-flip-dir-action edit reverse-p)))
-    (dotimes (_ n)
-      (unless (helixel--repeat-advance edit effective)
-        (user-error "No more targets for dot-repeat"))
-      (helixel-action-replay effective))
+    (if (and (= n 1)
+             helixel--pending-sel
+             (let ((action-kind (when-let* ((s (helixel-action-sel edit)))
+                                  (helixel-sel-kind s))))
+               (or (not action-kind)
+                   (not (eq (helixel-sel-kind helixel--pending-sel)
+                            action-kind)))))
+        ;; Direct apply: user explicitly selected a different kind
+        ;; (e.g. / search after a word-change).
+        (helixel-action-replay effective)
+      ;; Normal: advance then apply.
+      (dotimes (_ n)
+        (unless (helixel--repeat-advance edit effective)
+          (user-error "No more targets for dot-repeat"))
+        (helixel-action-replay effective)))
     (helixel--repeat-echo n)))
 
 (defun helixel--repeat-preview (edit mode n reverse-p)

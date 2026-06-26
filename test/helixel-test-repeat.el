@@ -1217,6 +1217,49 @@ goto-char(nil) when match data was stale, jumping to buffer start."
       (helixel-repeat-edit)
       (should (string= (buffer-string) "X world X")))))
 
+;; ── . after explicit search (direct-apply) ──
+
+(ert-deftest helixel-test-repeat-change-after-search-direct-apply ()
+  "ciwHELLO<ESC> then search selection then . applies edit directly.
+The user's explicit search selection (different kind than the
+stored textobj sel) takes priority over the stored advance,
+so . applies the edit to the search match without advancing.
+
+`helixel--pending-sel' is intentionally NOT cleared — the
+textobj advance function relies on it internally for follow-up
+detection.  The user presses n (search-repeat) to overwrite it.
+
+Uses ciw (change inner word) which selects exactly the word
+without trailing whitespace, making the test expectations precise."
+  (let ((helixel-repeat-change-method 'text))
+    (helixel-test-with-buffer "hello world hello world"
+      (setq helixel--current-state 'normal)
+      (goto-char 2) ; inside first "hello"
+      ;; Step 1: ciw HELLO <ESC> — change inner word to "HELLO"
+      (setq last-command nil this-command 'helixel-mark-inner-word)
+      (helixel-mark-inner-word)
+      (setq last-command 'helixel-mark-inner-word
+            this-command 'helixel-change)
+      (helixel-change)
+      (insert "HELLO")
+      (helixel-insert-exit)
+      (should (string= (buffer-string) "HELLO world hello world"))
+      (should (eq (helixel-action-op helixel-last-action) 'change))
+      ;; Step 2: simulate "1/ — search for "hello" (the deleted word)
+      (re-search-forward "hello")
+      (push-mark (match-beginning 0) t t)
+      (goto-char (match-end 0))
+      (setq helixel--pending-sel
+            (helixel-sel-create
+             'search '(:pattern "hello" :dir forward)))
+      ;; Step 3: . applies edit directly to search match (no textobj advance).
+      ;; `helixel--pending-sel' is NOT cleared — the advance function
+      ;; needs it internally for follow-up detection on subsequent
+      ;; repeats.  The user presses n (search-repeat) to overwrite it
+      ;; with a fresh search sel.
+      (helixel-repeat-edit)
+      (should (string= (buffer-string) "HELLO world HELLO world")))))
+
 ;; ── . from arbitrary position ──
 
 (ert-deftest helixel-test-repeat-search-dot-from-pos ()

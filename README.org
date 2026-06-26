@@ -173,6 +173,40 @@ Pair/structure movement with ~]~ / ~[~ / ~}~ / ~{~:
 | ~C-w~                   | Window prefix                                                                       |
 | ~s~                     | Multi-cursor prefix (~s s~ spawn, ~s a~ add, ~s n~ next-like, ~s x~ per-line)       |
 
+** Differences from Helix Native Keybindings
+
+Helixel follows Helix conventions but some keys are remapped to accommodate
+Emacs constraints and extra features.  The table below shows each Helix key
+that differs, its Helix action, what helixel binds that key to, and which
+helixel key provides the original Helix behavior.
+
+| key           | Helix action                 | Helixel binds to                 | Helix feature via                 |
+|---------------+------------------------------+----------------------------------+-----------------------------------|
+| ~s~           | Select regex matches         | Multi-cursor prefix              | ~s r~                             |
+| ~;~           | Collapse selection           | Action cycle (span + history)    | ~s ;~                             |
+| ~,~           | Keep primary selection only  | Repeat last motion               | ~s ,~                             |
+| ~M-.~         | Repeat last motion           | Preview repeat (select, no edit) | ~,~                               |
+| ~S~           | Split selections on regex    | Swap regions                     | ~s d~ / ~s S~ (split)             |
+| ~C~           | Copy selection to next line  | Same key (~C~) + also ~s a~      | Same purpose, different internals |
+| ~Space~       | Space mode (picker menus)    | User leader key (~SPC~)          | —                                 |
+| ~{~ / ~}~     | Move to prev/next empty line | Inner pair movement prefix       | ~[ p~ / ~] p~ (paragraph)         |
+| ~g n~ / ~g p~ | Go to next/prev VCS change   | — (not bound)                    | —                                 |
+| ~g .~         | Go to last modification      | Pick past edit to repeat         | (different meaning)               |
+| ~g ,~         | Go to first modification     | — (not bound)                    | —                                 |
+| ~q~ / ~Q~     | Record / replay macro        | — (not bound)                    | ~@~ (chain recording)             |
+| ~C-u~         | Scroll half-page up          | — (not bound)                    | universal-argument via C-u        |
+| ~C-d~         | Scroll half-page down        | — (not bound)                    | —                                 |
+| ~-~           | — (not bound in Helix)       | Negative-argument prefix         | —                                 |
+
+Helixel-only additions (no Helix equivalent):
+- ~M-.~ :: Preview repeat — repeat last selection without editing (Helix ~M-.~ = repeat motion, helixel uses ~,~ for that)
+- ~C-;~ :: Mark cycle — push mark to pre-motion cursor position
+- ~BS~ / ~C-BS~ / ~M-BS~ :: Delete backward char/word in normal mode
+
+Most multi-cursor operations are available under the ~s~ prefix.  When
+multi-cursor mode is active, these keys also work as top-level bindings
+(matching Helix): ~(~, ~)~, ~M-(~, ~M-)~, ~M-,~, ~K~, ~&~, ~_~, ~M--~, ~M-k~.
+
 * Dependencies
 
 ** Soft dependencies

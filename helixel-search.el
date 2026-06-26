@@ -83,7 +83,7 @@ Requires pcre2el (<https://github.com/joddie/pcre2el>)."
   :type 'boolean
   :group 'helixel-search)
 
-(defcustom helixel-search-use-region t
+(defcustom helixel-search-use-region nil
   "When non-nil, / ? use active region text as search pattern.
 When a region is active and this is enabled:
   - / ?  → literal search (regexp-quote region text)

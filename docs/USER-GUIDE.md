@@ -486,6 +486,14 @@ If `evil-textobj-tree-sitter` is not installed, the function returns
 
 Within `/` / `?`, `M-r` toggles between literal and regexp mode.
 
+When a region is active and `helixel-search-use-region` is non-nil,
+`/` and `?` use the active region text as the search pattern (literal,
+via `regexp-quote`).  Point is positioned past the selection before
+searching.  `C-u /` (or `C-u ?`) toggles the behavior: when off it
+forces region-search for that invocation, when on it forces the
+interactive prompt.  `*` and `#` always use `symbol-at-point` (or a
+single-line region) regardless of this setting.  Default: `nil`.
+
 ### Find Char
 
 | Key   | Action                                |
@@ -1243,6 +1251,9 @@ All configurable options are available via `M-x customize-group RET helixel RET`
 ```elisp
 ;; PCRE-style regexp search (requires pcre2el)
 (setq helixel-search-pcre t)
+
+;; Use active region text as search pattern for / and ?
+(setq helixel-search-use-region t)
 
 ;; Max entries in action ring (default 50)
 (setq helixel-action-ring-max 200)

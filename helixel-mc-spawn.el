@@ -1084,16 +1084,25 @@ Matches themselves are discarded."
         (pos beg))
     (save-excursion
       (goto-char beg)
-      (while (re-search-forward regex end t)
-        (when (and (> (match-end 0) (match-beginning 0))
-                   (or (helixel--invisible-effective)
-                       (funcall isearch-filter-predicate
-                                (match-beginning 0)
-                                (match-end 0))))
-          ;; Segment from pos to match-beginning.
-          (unless (= pos (match-beginning 0))
-            (push (list pos (match-beginning 0) fwd) segments))
-          (setq pos (match-end 0))))
+      (catch 'split-done
+        (while (re-search-forward regex end t)
+          (if (= (match-beginning 0) (match-end 0))
+              ;; Zero-width match (e.g. ^ $ \b): manually advance
+              ;; past it so the loop makes progress.  Unlike
+              ;; `select-regex', zero-width matches are NOT
+              ;; collected here — you cannot split a region on a
+              ;; zero-width boundary.
+              (if (eobp)
+                  (throw 'split-done nil)
+                (forward-char 1))
+            (when (or (helixel--invisible-effective)
+                      (funcall isearch-filter-predicate
+                               (match-beginning 0)
+                               (match-end 0)))
+              ;; Segment from pos to match-beginning.
+              (unless (= pos (match-beginning 0))
+                (push (list pos (match-beginning 0) fwd) segments))
+              (setq pos (match-end 0))))))
       ;; Final segment from pos to end.
       (unless (= pos end)
         (push (list pos end fwd) segments)))
@@ -1117,15 +1126,24 @@ disabled."
               for (b e fwd) in regions
               append (save-excursion
                        (goto-char b)
-                       (cl-loop while (re-search-forward regex e t)
-                                when (and (> (match-end 0) (match-beginning 0))
-                                          (or (helixel--invisible-effective)
-                                              (funcall isearch-filter-predicate
-                                                       (match-beginning 0)
-                                                       (match-end 0))))
+                       (cl-loop with continue = t
+                                while (and continue
+                                           (re-search-forward regex e t))
+                                for visible = (or (helixel--invisible-effective)
+                                                  (funcall
+                                                   isearch-filter-predicate
+                                                   (match-beginning 0)
+                                                   (match-end 0)))
+                                for zero-width = (= (match-beginning 0)
+                                                    (match-end 0))
+                                when visible
                                 collect (list (match-beginning 0)
                                               (match-end 0)
-                                              fwd))))))
+                                              fwd)
+                                when zero-width
+                                do (if (eobp)
+                                       (setq continue nil)
+                                     (forward-char 1)))))))
         (setq count (length new-specs))
         new-specs))
     (message "helixel-mc: %d regex match%s selected"

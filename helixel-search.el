@@ -1364,7 +1364,8 @@ Uses :regexp from SEL to respect the \\=`M-r' toggle."
               (goto-char pos)
               (insert txt)
               (when is-insert (goto-char (match-end 0))))
-            (when zlen (unless (eobp) (forward-char 1))))))
+            (when zlen
+              (if (eobp) (throw 'done nil) (forward-char 1))))))
       (helixel--repeat-echo cnt))))
 
 (defun helixel--all-buffer-search (edit prefix)

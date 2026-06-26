@@ -2975,6 +2975,35 @@ on both real and fakes, so the second call hit
       (should (equal '("apple" "banana" "orange") texts)))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-select-regex-zero-width ()
+  "`helixel-mc-select-regex' with zero-width regex (^) does not hang.
+Creates point-only cursors at each line start."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (goto-char 1) (push-mark 1 t t) (goto-char (point-max))
+    (helixel-mc-select-regex "^")
+    ;; 4 zero-width matches (3 lines + eob).
+    (should (= 3 (length (helixel-mc-all-cursors))))
+    (should-not (use-region-p))
+    (dolist (ov (helixel-mc-all-cursors))
+      (let ((p (marker-position (helixel-mc-cursor-point ov)))
+            (m (marker-position (helixel-mc-cursor-mark ov))))
+        (should (= p m))))
+    (helixel-mc-clear-all)))
+
+(ert-deftest helixel-test-mc-split-selection-zero-width ()
+  "`helixel-mc-split-selection' with zero-width regex (^) does not hang.
+Zero-width matches are discarded for splitting."
+  (helixel-test-with-buffer "aaa\nbbb\nccc\n"
+    (helixel-enter-normal-state)
+    (goto-char 1) (push-mark 1 t t) (goto-char (point-max))
+    (helixel-mc-split-selection "^")
+    (should (= 0 (length (helixel-mc-all-cursors))))
+    (should (use-region-p))
+    (should (= 1 (region-beginning)))
+    (should (= (point-max) (region-end)))
+    (helixel-mc-clear-all)))
+
 (ert-deftest helixel-test-mc-split-into-lines-creates-cursors ()
   "`s x' over a line-mode `x' selection produces one full-line
 region cursor per line (Helix `Alt-s' semantics)."

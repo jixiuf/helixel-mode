@@ -308,7 +308,7 @@ register character to select a register for the next operator.
 | ---------- | ------------------------------------- | ------------------------------------- |
 | `"`        | Default register (kill-ring and yank) | `helixel-default-register`            |
 | `0`        | Last yanked text (set by `y`)         | `helixel-register-yank-char`          |
-| `1-9`      | Numbered delete registers (rotating)  | `helixel-register-numbered-delete-start` / `-count` |
+| `1-9`      | Numbered delete registers (rotating)  | `helixel-register-delete-registers` (default: 1-9) |
 | `-`        | Small delete (< 1 line)               | `helixel-register-small-delete-char`  |
 | `a-z`      | Named registers (Emacs `register-alist`) | —                                   |
 | `+`        | System clipboard (CLIPBOARD)          | `helixel-register-backends`           |
@@ -371,8 +371,7 @@ When you delete text (`d`, `c`, etc.):
 
 1. Text is pushed to the **kill-ring**.
 2. Text is rotated into the **numbered delete registers** `1-9`
-   (configured by `helixel-register-numbered-delete-start` and
-   `helixel-register-numbered-delete-count`):
+   (configured by `helixel-register-delete-registers`):
    old content shifts `1→2`, `2→3`, …, `8→9`, and the new text
    lands in `1`.  Register `9` is discarded.
 3. If the deleted text contains **no newline**, it is also stored
@@ -1363,11 +1362,8 @@ All configurable options are available via `M-x customize-group RET helixel RET`
 ;; Register for small deletes — text without newline (default ?-)
 (setq helixel-register-small-delete-char ?-)
 
-;; First character of numbered delete register range (default ?1)
-(setq helixel-register-numbered-delete-start ?1)
-
-;; How many numbered delete registers to rotate (default 9)
-(setq helixel-register-numbered-delete-count 9)
+;; Numbered delete registers to rotate (default ?1 through ?9)
+(setq helixel-register-delete-registers '(?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9))
 ```
 
 ### Space Leader Key

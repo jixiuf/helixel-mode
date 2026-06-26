@@ -404,10 +404,13 @@ Delegates to `helixel-search--isearch-literal' — the existing
     (unless text
       (user-error "Register \"%c is empty" helixel--current-register))
     (helixel--register-consume)
-    (let* ((helixel-search--had-region (region-active-p))
-           (pat (if word-bound-p
-                    (concat "\\_<" (regexp-quote text) "\\_>")
-                  text)))
+    ;; When searching from a register the current region state is
+    ;; irrelevant — the search target is the register content, not
+    ;; the region.  `helixel-search--had-region' is not set here
+    ;; because the done-hook ignores it anyway.
+    (let ((pat (if word-bound-p
+                   (concat "\\_<" (regexp-quote text) "\\_>")
+                 (regexp-quote text))))
       (helixel-search--isearch-literal pat dir))))
 
 (defun helixel-search--from-region (dir &optional word-bound-p)

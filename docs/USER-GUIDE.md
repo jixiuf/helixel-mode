@@ -301,18 +301,96 @@ Examples:
 
 ### Registers
 
-helixel has a Helix-style register system:
+helixel has a Helix-style register system.  Press `"` followed by a
+register character to select a register for the next operator.
 
-| Register   | Purpose                               |
-| ---------- | ------------------------------------- |
-| `"`        | Default register (kill-ring and yank) |
-| `0`        | Last yanked text                      |
-| `1-9`      | Numbered delete registers             |
-| `-`        | Small delete (< 1 line)               |
-| `a-z`      | Named registers                       |
+| Register   | Purpose                               | Configurable via                      |
+| ---------- | ------------------------------------- | ------------------------------------- |
+| `"`        | Default register (kill-ring and yank) | `helixel-default-register`            |
+| `0`        | Last yanked text (set by `y`)         | `helixel-register-yank-char`          |
+| `1-9`      | Numbered delete registers (rotating)  | `helixel-register-numbered-delete-start` / `-count` |
+| `-`        | Small delete (< 1 line)               | `helixel-register-small-delete-char`  |
+| `a-z`      | Named registers (Emacs `register-alist`) | —                                   |
+| `+`        | System clipboard (CLIPBOARD)          | `helixel-register-backends`           |
+| `*`        | Primary selection (PRIMARY)           | `helixel-register-backends`           |
 
-Usage: `"a y` (copy to register a), `"a p` (paste from a),
-`"a /` (search forward for register a text), etc.
+#### How Registers Work
+
+Register selection via `"` sets a pending register that the **next**
+operator consumes.  The register is cleared after one operation.
+
+```
+"a y       copy selection to register a
+"a p       paste from register a
+"a d       delete selection to register a
+"a c       change text, deleted text goes to register a
+"a /       search forward for register a text (literal)
+"a *       search forward for register a text (symbol-bound)
+"a S       swap with register a content
+```
+
+Pressing `""` (double-quote followed by double-quote) explicitly
+selects the default register.  Pressing `ESC` after `"` cancels
+register selection.
+
+#### Register Backends
+
+Each register character is backed by one of three storage mechanisms,
+configured via `helixel-register-backends`:
+
+| Backend         | Description                                      |
+| --------------- | ------------------------------------------------ |
+| `kill-ring`     | Emacs kill ring (default for `"`)               |
+| `clipboard`     | System clipboard — CLIPBOARD selection (for `+`) |
+| `primary`       | Primary selection — middle-click paste (for `*`) |
+| (unlisted)      | Emacs `register-alist` — `a-z`, `0-9`, `-`       |
+
+Characters not listed in `helixel-register-backends` use Emacs's
+built-in `register-alist` via `get-register` / `set-register`.
+
+#### Default Register vs Explicit Register
+
+When **no register** is explicitly selected (or when the selected
+register equals `helixel-default-register`), operators read from and
+write to the **kill-ring directly** — they do not route through the
+register backend dispatch.  The `helixel-register-backends` mapping
+for the default register character is only consulted when that
+character is explicitly selected (e.g. pressing `""`).
+
+This means `helixel-default-register` primarily controls which
+register character is "transparent" — pressing `"` followed by the
+default character is a no-op, and `helixel--register-active-p` returns
+nil.  To actually redirect the default data flow to clipboard, you
+would use Emacs's built-in `select-enable-clipboard` (enabled by
+default) which syncs the kill-ring with the system clipboard
+automatically.
+
+#### How Deletes Populate Registers
+
+When you delete text (`d`, `c`, etc.):
+
+1. Text is pushed to the **kill-ring**.
+2. Text is rotated into the **numbered delete registers** `1-9`
+   (configured by `helixel-register-numbered-delete-start` and
+   `helixel-register-numbered-delete-count`):
+   old content shifts `1→2`, `2→3`, …, `8→9`, and the new text
+   lands in `1`.  Register `9` is discarded.
+3. If the deleted text contains **no newline**, it is also stored
+   in the **small delete register** (default `-`, configurable via
+   `helixel-register-small-delete-char`).
+4. If a named register is active (e.g. `"a d`), the text is also
+   stored there.
+
+When you copy text (`y`):
+
+1. Text is pushed to the kill-ring.
+2. Text is stored in the **yank register** (default `0`, configurable
+   via `helixel-register-yank-char`).
+3. If a named register is active, text is also stored there.
+
+This mirrors Helix's behavior where the yank register always holds
+the last *yanked* text, while the first numbered register holds the
+last *deleted* text.
 
 ### Entering Insert Mode
 
@@ -1270,8 +1348,26 @@ All configurable options are available via `M-x customize-group RET helixel RET`
 ;; Multi-cursor history depth (default 16)
 (setq helixel-mc-history-max 32)
 
-;; Default register for yank (default `"`)
+;; Default register (when no explicit register is selected)
 (setq helixel-default-register ?\")
+
+;; Register backends — which register uses kill-ring vs clipboard vs primary
+(setq helixel-register-backends
+      '((?\" . kill-ring)
+        (?+  . clipboard)
+        (?*  . primary)))
+
+;; Register for last yanked text (default ?0)
+(setq helixel-register-yank-char ?0)
+
+;; Register for small deletes — text without newline (default ?-)
+(setq helixel-register-small-delete-char ?-)
+
+;; First character of numbered delete register range (default ?1)
+(setq helixel-register-numbered-delete-start ?1)
+
+;; How many numbered delete registers to rotate (default 9)
+(setq helixel-register-numbered-delete-count 9)
 ```
 
 ### Space Leader Key

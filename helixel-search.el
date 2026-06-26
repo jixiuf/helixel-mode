@@ -543,7 +543,8 @@ instead of hardcoding `isearch-regexp' to t."
           (isearch-repeat-backward (- dir))
         (isearch-repeat-forward dir))
       (helixel-search--handle-done had-region)
-      (helixel-search--set-sel-ctx))))
+      (helixel-search--set-sel-ctx)
+      (helixel-search--echo-repeat-hint))))
 
 ;; ---------------------------------------------------------------------------
 ;; Find-char: f F t T
@@ -627,16 +628,77 @@ Signals `search-failed' if no visible match is found."
              :category 'find-char :type type :char char :dir sym-dir))
       (helixel-search--echo-repeat-hint))))
 
+(defun helixel-search--repeat-hint-prefix ()
+  "Return a short description of the current search/find-char for echo.
+Returns nil when `helixel--active-search' is nil.
+For search: \"/hello\" for forward, \"?hello\" for backward.
+For find-char: \"f->c\" (next-forward), \"F-<c\" (next-backward),
+\"t->c\" (till-forward), \"T-<c\" (till-backward)."
+  (when-let* ((s helixel--active-search)
+              (cat (helixel--last-motion-category s)))
+    (cl-case cat
+      (search
+       (let ((pat (helixel--last-motion-pattern s))
+             (dir (helixel--last-motion-dir s)))
+         (concat (if (eq dir 'forward) "/" "?")
+                 pat)))
+      (find-char
+       (let ((char (helixel--last-motion-char s))
+             (type (helixel--last-motion-type s))
+             (dir (helixel--last-motion-dir s)))
+         (concat
+          (pcase (cons type dir)
+            (`(next . forward)     "f")
+            (`(next . backward)    "F")
+            (`(till . forward)     "t")
+            (`(till . backward)    "T")
+            (_                     "f"))
+          "->"
+          (char-to-string char)))))))
+
+(defun helixel-search--display-hint (&optional show-repeat)
+  "Display search/find-char info and lazy count in the echo area.
+When SHOW-REPEAT is non-nil, also show repeat key hints
+\(\\[helixel-search-repeat-next] / \\[helixel-search-repeat-reverse]).
+
+During isearch, the term is built from `isearch-string' directly
+because `helixel--active-search' has not been set yet.
+After isearch/find-char, the term comes from
+`helixel--active-search' via `helixel-search--repeat-hint-prefix'."
+  (let* ((in-isearch (bound-and-true-p isearch-mode))
+         (prefix (if in-isearch
+                     (when (and isearch-string
+                                (not (string-empty-p isearch-string)))
+                       (if isearch-regexp
+                           (let ((c (if isearch-forward ?/ ??)))
+                             (format "%c%s" c isearch-string))
+                         isearch-string))
+                   (helixel-search--repeat-hint-prefix)))
+         (count (and isearch-lazy-count-current
+                     (or in-isearch
+                         (eq (helixel-search--safe-category) 'search))
+                     (isearch-lazy-count-format)))
+         (repeat-keys (when (and show-repeat (not in-isearch))
+                        (concat "  "
+                                (substitute-command-keys
+                                 "\\[helixel-search-repeat-next] or \\[helixel-repeat-last-motion]")
+                                " repeat, "
+                                (substitute-command-keys
+                                 "\\[helixel-search-repeat-reverse]")
+                                " reverse direction and repeat"))))
+    (when prefix
+      (message "%s%s%s"
+               (propertize prefix 'face 'font-lock-variable-name-face)
+               (if count
+                   (concat " " (propertize count
+                                           'face
+                                           'font-lock-function-name-face))
+                 "")
+               (or repeat-keys "")))))
+
 (defun helixel-search--echo-repeat-hint ()
-  "Echo a hint showing which key repeats the last search/find-char.
-Uses `substitute-command-keys' to dynamically look up the
-current keybinding for `helixel-search-repeat-next' and
-`helixel-search-repeat-reverse'."
-  (message "%s repeat, %s reverse direction and repeat"
-           (substitute-command-keys
-            "\\[helixel-search-repeat-next] or \\[helixel-repeat-last-motion]")
-           (substitute-command-keys
-            "\\[helixel-search-repeat-reverse]")))
+  "Compatibility wrapper for `helixel-search--display-hint' with repeat."
+  (helixel-search--display-hint t))
 
 (defun helixel-search--find-char-core (&optional dir char type)
   "Execute find-char in direction DIR.
@@ -844,7 +906,8 @@ replay this repeat at every fake cursor without re-entering `n'."
     (helixel-search--find-char-core dir char type)
     (helixel--action-commit)
     ;; Track n-count so . repeats the full n sequence.
-    (helixel-search--find-char-set-sel char type dir)))
+    (helixel-search--find-char-set-sel char type dir)
+    (helixel-search--echo-repeat-hint)))
 
 (defun helixel-repeat-last-motion (&optional raw-prefix)
   "Repeat the last motion (f, t, /, ?, \\=`%', \\=`[', \\=`]', \\=`{', \\=`}').
@@ -1133,21 +1196,11 @@ FORWARDP: t = use stored direction, nil = toggle it."
   (lazy-highlight-cleanup t))
 
 (defun helixel-search--count-hook ()
-  "Display search term and match count in the echo area."
+  "Display search term and match count in the echo area.
+Delegates to `helixel-search--display-hint' which handles both
+isearch and post-search/find-char display with unified formatting."
   (save-mark-and-excursion
-    (when isearch-lazy-count-current
-      (let ((term (if isearch-regexp
-                      (let* ((dir (helixel-search--current-dir))
-                             (c (if (eq dir 'backward) ?? ?/)))
-                        (format "%c%s" c
-                                (propertize isearch-string
-                                            'face
-                                            'font-lock-variable-name-face)))
-                    (propertize isearch-string
-                                'face 'font-lock-variable-name-face)))
-            (count (isearch-lazy-count-format)))
-        (message "%s %s" term
-                 (propertize count 'face 'font-lock-function-name-face))))))
+    (helixel-search--display-hint t)))
 
 (defun helixel-search-setup ()
   "Enable lazy-count, custom isearch prompt, highlight cleanup, and PCRE.

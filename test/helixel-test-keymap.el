@@ -108,21 +108,29 @@
         (should entry)
         (should (eq (lookup-key (cdr entry) "j") #'next-line))))))
 
-(ert-deftest helixel-test-refresh-overriding-maps-clears-when-no-bindings ()
-  "Test that refresh clears overriding alist when no bindings apply."
-  (let ((helixel--mode-keybindings nil))
+(ert-deftest helixel-test-refresh-overriding-maps-always-pushes-base ()
+  "Test that refresh always pushes the base keymap to overriding alist.
+Even when no mode-specific or keymap-targeted overrides apply, the
+state keymap is pushed so it overrides all other minor mode keymaps."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
     (with-temp-buffer
       (setq-local helixel--current-state 'normal)
-      ;; Pre-populate with a stale entry
-      (setq minor-mode-overriding-map-alist
-            (list (cons 'helixel-normal-state (make-sparse-keymap))))
+      (setq minor-mode-overriding-map-alist nil)
       (helixel--refresh-overriding-maps)
-      ;; Should have cleared the entry
-      (should-not (assq 'helixel-normal-state minor-mode-overriding-map-alist)))))
+      ;; Should always have an overriding entry with the base keymap
+      (let ((entry (assq 'helixel-normal-state minor-mode-overriding-map-alist)))
+        (should entry)
+        ;; The base keymap should have standard helixel bindings
+        (should (eq (lookup-key (cdr entry) "j") #'helixel-next-line))
+        (should (eq (lookup-key (cdr entry) "k") #'helixel-previous-line))))))
 
 (ert-deftest helixel-test-refresh-overriding-maps-no-cross-mode-leak ()
-  "Test that bindings for one major mode don't leak into another."
-  (let ((helixel--mode-keybindings nil))
+  "Test that bindings for one major mode don't leak into another.
+The overriding entry still exists (base keymap), but the dired-mode
+binding for \"j\" should not be active in fundamental-mode."
+  (let ((helixel--mode-keybindings nil)
+        (helixel--keymap-bindings nil))
     (with-temp-buffer
       ;; Register binding for dired-mode
       (helixel-define-key 'normal "j" #'next-line 'dired-mode)
@@ -130,8 +138,13 @@
       (setq major-mode 'fundamental-mode)
       (setq-local helixel--current-state 'normal)
       (helixel--refresh-overriding-maps)
-      ;; Should have no overriding entry
-      (should-not (assq 'helixel-normal-state minor-mode-overriding-map-alist)))))
+      ;; The overriding entry should exist (with base keymap)
+      (let ((entry (assq 'helixel-normal-state minor-mode-overriding-map-alist)))
+        (should entry)
+        ;; But j should NOT be dired-next-line — it falls back to base
+        (should-not (eq (lookup-key (cdr entry) "j") #'next-line))
+        ;; j should be the base helixel binding
+        (should (eq (lookup-key (cdr entry) "j") #'helixel-next-line))))))
 
 (ert-deftest helixel-test-refresh-overriding-maps-fallback-to-base ()
   "Test that non-overridden keys fall back to base helixel keymap."
@@ -256,14 +269,18 @@ itself is stored as the alist key (not the symbol)."
       (fundamental-mode)
       (setq-local helixel--current-state 'normal)
       (helixel--refresh-overriding-maps)
-      ;; Should have no overriding entry (or an entry without g q)
+      ;; The overriding entry exists (base keymap always pushed),
+      ;; but the prog-mode-map binding g q should not be active.
       (let ((entry (assq 'helixel-normal-state
                          minor-mode-overriding-map-alist)))
-        (if entry
-            ;; If there's an entry, g q should NOT be bound
-            (should-not (lookup-key (cdr entry) (kbd "g q")))
-          ;; No entry at all is also fine
-          t)))))
+        (should entry)
+        ;; prog-mode-map override should NOT leak into fundamental-mode
+        (should-not (eq (lookup-key (cdr entry) (kbd "g q"))
+                        #'prog-fill-reindent-defun))
+        ;; But g q still resolves to base helixel binding (not nil)
+        (should (commandp (lookup-key (cdr entry) (kbd "g q"))))
+        ;; But base helixel bindings should still work
+        (should (eq (lookup-key (cdr entry) "j") #'helixel-next-line))))))
 
 (ert-deftest helixel-test-refresh-overriding-maps-keymap-fallback ()
   "Test that non-overridden keys fall back to base with keymap overrides."

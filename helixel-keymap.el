@@ -213,12 +213,18 @@ the multi-cursor mode keymap when `helixel-mc-mode' is active."
     ;; Multi-cursor mode map: compose on top when mc is active.
     (when (and (boundp 'helixel-mc-mode) helixel-mc-mode)
       (push helixel-mc-mode-map overrides))
-    (setq minor-mode-overriding-map-alist
-          (assq-delete-all state-mode minor-mode-overriding-map-alist))
-    (when overrides
-      (let ((base-keymap (alist-get state helixel-state-map-alist)))
-        (push (cons state-mode (make-composed-keymap overrides base-keymap))
-              minor-mode-overriding-map-alist)))
+    ;; Clean up all helixel state entries to avoid stale entries
+    ;; from previous states (e.g. normal-state entry lingering after
+    ;; switching to motion).
+    (dolist (mode (mapcar #'cdr helixel-state-alist))
+      (setq minor-mode-overriding-map-alist
+            (assq-delete-all mode minor-mode-overriding-map-alist)))
+    (let ((base-keymap (alist-get state helixel-state-map-alist)))
+      (push (cons state-mode
+                  (if overrides
+                      (make-composed-keymap overrides base-keymap)
+                    base-keymap))
+            minor-mode-overriding-map-alist))
     ;; Textobj sub-map mode-specific overrides
     (helixel--refresh-textobj-overrides)))
 

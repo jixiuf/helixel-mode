@@ -71,7 +71,7 @@ Supported values: `search' and `find-char'."
 ;; ---------------------------------------------------------------------------
 ;; PCRE support (soft dependency on pcre2el)
 
-(defcustom helixel-search-pcre nil
+(defcustom helixel-search-pcre t
   "When non-nil, convert PCRE regexp syntax to Emacs regexp during search.
 
 When t and the pcre2el package is available, patterns like \\d,

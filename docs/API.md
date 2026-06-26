@@ -778,8 +778,7 @@ Customize the register system:
 (setq helixel-register-small-delete-char ?-)
 
 ;; Numbered delete registers
-(setq helixel-register-numbered-delete-start ?1)
-(setq helixel-register-numbered-delete-count 9)
+(setq helixel-register-delete-registers '(?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9))
 ```
 
 ---

@@ -286,8 +286,14 @@ found."
              for mr = (helixel-action-mark-region (nth i ring))
              when (and mr (consp mr)
                        (markerp (car mr)) (markerp (cdr mr)))
-             do (setq min-pos (min min-pos (marker-position (car mr))))
-             (setq max-pos (max max-pos (marker-position (cdr mr)))))
+             for cp = (marker-position (car mr))
+             for ce = (marker-position (cdr mr))
+             ;; Skip entries whose markers were orphaned by a
+             ;; buffer kill-and-resurrect cycle (same buffer object
+             ;; reused by `get-buffer-create').
+             when (and cp ce)
+             do (setq min-pos (min min-pos cp))
+             (setq max-pos (max max-pos ce)))
     (when (< min-pos most-positive-fixnum)
       (cons min-pos max-pos))))
 
@@ -405,8 +411,12 @@ Compares :buffer, :category, :subcat, and marker position."
              (mr-b (plist-get b :mark-region)))
          (if (and (consp mr-a) (consp mr-b)
                   (markerp (car mr-a)) (markerp (car mr-b)))
-             (= (marker-position (car mr-a))
-                (marker-position (car mr-b)))
+             (let ((pos-a (marker-position (car mr-a)))
+                   (pos-b (marker-position (car mr-b))))
+               ;; If either marker points nowhere (buffer was killed
+               ;; and resurrected as the same object via
+               ;; `get-buffer-create'), the entries are not the same.
+               (and pos-a pos-b (= pos-a pos-b)))
            t))))
 
 (defun helixel--jump-log-cap ()

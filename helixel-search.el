@@ -263,7 +263,12 @@ we bridge that via `helixel--search-filter-loop'."
   (helixel--with-invisible-search
     (let ((isearch-string pattern)
           (isearch-regexp regexp)
-          (isearch-forward (eq dir 'forward)))
+          (isearch-forward (eq dir 'forward))
+          (isearch-case-fold-search case-fold-search)
+          ;; When case-fold-search is nil, also suppress
+          ;; search-upper-case so isearch-update-from-string-properties
+          ;; doesn't re-enable case-insensitivity behind our back.
+          (search-upper-case (and case-fold-search search-upper-case)))
       (if (helixel--invisible-effective)
           (isearch-search-string pattern bound noerror)
         (or (helixel--search-filter-loop
@@ -536,7 +541,8 @@ instead of hardcoding `isearch-regexp' to t."
     (let ((inhibit-redisplay t)
           (isearch-wrap-pause 'no-ding)
           (isearch-repeat-on-direction-change t)
-          (had-region (region-active-p)))
+          (had-region (region-active-p))
+          (isearch-case-fold-search case-fold-search))
       (when-let* ((pat (helixel-search--safe-pattern)))
         (setq isearch-string pat
               isearch-regexp (helixel--last-motion-regexp
@@ -688,15 +694,18 @@ After isearch/find-char, the term comes from
                                 " repeat, "
                                 (substitute-command-keys
                                  "\\[helixel-search-repeat-reverse]")
-                                " reverse direction and repeat"))))
+                                " reverse direction and repeat")))
+         (case-hint (propertize (if case-fold-search " [ci]" " [CS]")
+                                'face 'font-lock-keyword-face)))
     (when prefix
-      (message "%s%s%s"
+      (message "%s%s%s%s"
                (propertize prefix 'face 'font-lock-variable-name-face)
                (if count
                    (concat " " (propertize count
                                            'face
                                            'font-lock-function-name-face))
                  "")
+               case-hint
                (or repeat-keys "")))))
 
 (defun helixel-search--echo-repeat-hint ()
@@ -1453,6 +1462,33 @@ using advance+apply without recursion."
                 (if c (format "%c→%c" prefix c) (string prefix)))))
 
 ;; ── Hook registrations ──
+
+;; ── Toggle case-fold ──
+
+;;;###autoload
+(defun helixel-toggle-case-fold ()
+  "Toggle `case-fold-search' for search and multi-cursor commands.
+Affects \\[helixel-search-repeat-next] (n), \\[helixel-search-repeat-reverse] (N),
+\\[helixel-mc-mark-next-like-this] (s n), \\[helixel-mc-mark-previous-like-this] (s p),
+\\[helixel-mc-select-regex] (s r), and find-char (f/F/t/T).
+Also clears isearch lazy-highlight so stale highlights don't persist."
+  (interactive)
+  (setq-local case-fold-search (not case-fold-search))
+  ;; Clear lazy-highlight so the next n/N shows matches with updated
+  ;; case sensitivity, not stale pre-toggle highlights.
+  (helixel-search--unhighlight)
+  (helixel-search--display-hint)
+  (message (concat "helixel: "
+                   (propertize "case-fold-search "
+                               'face 'font-lock-variable-name-face)
+                   (propertize (if case-fold-search "on" "off")
+                               'face 'font-lock-keyword-face)
+                   " ("
+                   (propertize (if case-fold-search
+                                   "case-insensitive"
+                                 "case-sensitive")
+                               'face 'font-lock-keyword-face)
+                   ")")))
 
 (defun helixel-search--init ()
   "Wire search lifecycle hooks."

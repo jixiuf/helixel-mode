@@ -1103,12 +1103,15 @@ Cycles \='auto → nil → t → \='open → \='auto."
           ('t 'open)
           ('open 'auto)
           (_ nil)))
-  (message "helixel: line expand invisible %s"
-           (pcase helixel-invisible
-             ('auto "auto")
-             ('nil "off")
-             ('open "open")
-             (_ "on"))))
+  (message "helixel %s %s"
+           (propertize "helixel-invisible"
+                       'face 'font-lock-variable-name-face)
+           (propertize (pcase helixel-invisible
+                         ('auto "auto")
+                         ('nil "off")
+                         ('open "open")
+                         (_ "on"))
+                       'face 'font-lock-keyword-face)))
 
 (defun helixel--extend-line-in-dir (dir)
   "Extend or shrink a linewise selection by one line in direction DIR.

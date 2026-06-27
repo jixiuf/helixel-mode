@@ -46,6 +46,7 @@
 (require 'cl-lib)
 (require 'helixel-core)
 (require 'helixel-mc-core)
+(require 'helixel-search)
 
 
 (declare-function helixel--recreate-selection "helixel-repeat")
@@ -244,13 +245,7 @@ Does not move point.
 Filters invisible matches via `isearch-filter-predicate' when
 `helixel-invisible' is nil (e.g. `grep-mode' with consult-focus-line)."
   (save-excursion
-    (let ((case-fold-search
-           ;; Respect buffer's case-fold-search, but force case-sensitive
-           ;; when TEXT contains uppercase (same rule as find-char f/F).
-           (if (let ((case-fold-search nil))
-                 (string-match-p "[[:upper:]]" text))
-               nil
-             case-fold-search))
+    (let ((case-fold-search case-fold-search)
           (search-invisible (helixel--invisible-effective))
           (search-fn (if (> dir 0) #'search-forward #'search-backward)))
       (catch 'found
@@ -1074,39 +1069,45 @@ empty the mc session is disabled."
     (message "helixel-mc: split into %d cursor%s"
              count (if (= 1 count) "" "s"))))
 
+(defun helixel-mc--regex-match-positions (beg end regex &optional skip-zero)
+  "Return visible (BEG . END) conses for each REGEX match in BEG..END.
+Skips invisible matches.  When SKIP-ZERO is non-nil, also skip
+zero-width matches (for splitting, where you cannot split on a
+zero-width boundary).  Respects `helixel-invisible'."
+  (helixel--with-invisible-search
+    (save-excursion
+      (goto-char beg)
+      (cl-loop with continue = t
+               while (and continue (re-search-forward regex end t))
+               for z-w = (= (match-beginning 0) (match-end 0))
+               if (and skip-zero z-w)
+               do (if (eobp) (setq continue nil) (forward-char 1))
+               else if (or (helixel--invisible-effective)
+                           (funcall isearch-filter-predicate
+                                    (match-beginning 0) (match-end 0)))
+               collect (cons (match-beginning 0) (match-end 0))
+               and when z-w
+               do (if (eobp) (setq continue nil) (forward-char 1))))))
+
 (defun helixel-mc--split-region (beg end fwd regex)
   "Split region BEG..END on REGEX matches.
 Return a list of (BEG END FWD) triples, one per non-empty segment
 between matches (or between boundary and match).
 Matches themselves are discarded."
-  (let ((search-invisible (helixel--invisible-effective))
-        (segments nil)
+  (let ((segments nil)
         (pos beg))
-    (save-excursion
-      (goto-char beg)
-      (catch 'split-done
-        (while (re-search-forward regex end t)
-          (if (= (match-beginning 0) (match-end 0))
-              ;; Zero-width match (e.g. ^ $ \b): manually advance
-              ;; past it so the loop makes progress.  Unlike
-              ;; `select-regex', zero-width matches are NOT
-              ;; collected here — you cannot split a region on a
-              ;; zero-width boundary.
-              (if (eobp)
-                  (throw 'split-done nil)
-                (forward-char 1))
-            (when (or (helixel--invisible-effective)
-                      (funcall isearch-filter-predicate
-                               (match-beginning 0)
-                               (match-end 0)))
-              ;; Segment from pos to match-beginning.
-              (unless (= pos (match-beginning 0))
-                (push (list pos (match-beginning 0) fwd) segments))
-              (setq pos (match-end 0))))))
-      ;; Final segment from pos to end.
-      (unless (= pos end)
-        (push (list pos end fwd) segments)))
+    (dolist (m (helixel-mc--regex-match-positions beg end regex t))
+      (unless (= pos (car m))
+        (push (list pos (car m) fwd) segments))
+      (setq pos (cdr m)))
+    (unless (= pos end)
+      (push (list pos end fwd) segments))
     (nreverse segments)))
+
+(defun helixel-mc--collect-regex-matches (beg end fwd regex)
+  "Return (BEG END FWD) specs for each visible REGEX match between BEG..END."
+  (mapcar (lambda (m) (list (car m) (cdr m) fwd))
+          (helixel-mc--regex-match-positions beg end regex)))
 
 ;;;###autoload
 (defun helixel-mc-select-regex (regex)
@@ -1120,30 +1121,9 @@ disabled."
   (helixel-mc--push-history)
   (let (count)
     (helixel-mc-with-regions regions
-      (let ((search-invisible (helixel--invisible-effective))
-            (new-specs
-             (cl-loop
-              for (b e fwd) in regions
-              append (save-excursion
-                       (goto-char b)
-                       (cl-loop with continue = t
-                                while (and continue
-                                           (re-search-forward regex e t))
-                                for visible = (or (helixel--invisible-effective)
-                                                  (funcall
-                                                   isearch-filter-predicate
-                                                   (match-beginning 0)
-                                                   (match-end 0)))
-                                for zero-width = (= (match-beginning 0)
-                                                    (match-end 0))
-                                when visible
-                                collect (list (match-beginning 0)
-                                              (match-end 0)
-                                              fwd)
-                                when zero-width
-                                do (if (eobp)
-                                       (setq continue nil)
-                                     (forward-char 1)))))))
+      (let ((new-specs (cl-loop for (b e fwd) in regions
+                                append (helixel-mc--collect-regex-matches
+                                        b e fwd regex))))
         (setq count (length new-specs))
         new-specs))
     (message "helixel-mc: %d regex match%s selected"

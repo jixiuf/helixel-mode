@@ -233,25 +233,27 @@ exact-case 'Hello' still matches 'Hello'."
       (should (use-region-p)))))
 
 (ert-deftest helixel-test-search-repeat-next-case-sensitive ()
-  "n after case-sensitive search (?Hello) respects case."
+  "n after case-sensitive search (?Hello) respects case.
+Pattern has uppercase, so isearch-case-fold-search becomes nil;
+only exact-case 'Hello' matches, not lower-case 'hello'."
   (helixel-test-with-buffer "hello Hello hello"
     (setq helixel--active-search (make-helixel--last-motion :category 'search :pattern "Hello" :dir 'forward))
     (helixel-search--set-dir 'backward)
-    ;; Simulate isearch state for a case-sensitive backward search
+    ;; Simulate isearch state for a case-sensitive backward search.
+    ;; 'Hello' has uppercase → isearch-case-fold-search becomes nil.
     (let ((isearch-string "Hello")
           (isearch-regexp t)
-          (isearch-forward nil)  ;; backward
-          (isearch-case-fold-search 'auto)  ;; 'Hello' has uppercase → nil
+          (isearch-forward nil)
+          (isearch-case-fold-search nil)
           (isearch-success t)
-          (isearch-other-end (copy-marker 18))  ;; end of last Hello
+          (isearch-other-end (copy-marker 12))
           (isearch-wrap-pause 'no-ding)
           (isearch-repeat-on-direction-change t))
-      ;; Starting at end of last match (pos 18), backward finds
-      ;; 'Hello' at 13-17 case-sensitively
-      (goto-char 18)
+      ;; Start after the second 'hello' (pos 12, end of 'Hello' at 7-11).
+      ;; Backward case-sensitive: skip 'hello' (13-17), match 'Hello' at 7.
+      (goto-char 12)
       (helixel-search-repeat-next)
-      ;; point moves to match-beginning for backward search
-      (should (= (point) 13))
+      (should (= (point) 7))
       (should (use-region-p)))))
 
 (ert-deftest helixel-test-search-repeat-next-case-fold-insensitive ()
@@ -1297,5 +1299,66 @@ Verifies the increment logic works correctly after the initial fix."
     (should (equal (plist-get (helixel-sel-ctx helixel--pending-sel)
                               :n-count)
                    1))))
+
+;; ── Toggle case-fold tests ──
+
+(ert-deftest helixel-test-toggle-case-fold-toggles-locally ()
+  "`helixel-toggle-case-fold' toggles `case-fold-search' buffer-locally."
+  (helixel-test-with-buffer "x"
+    (let ((orig case-fold-search))
+      (helixel-toggle-case-fold)
+      (should (not (eq case-fold-search orig)))
+      (helixel-toggle-case-fold)
+      (should (eq case-fold-search orig)))))
+
+(ert-deftest helixel-test-toggle-case-fold-affects-search ()
+  "`helixel-search--search' binds `isearch-case-fold-search' from
+`case-fold-search', so toggling case-fold affects search repeat (n).
+Also verifies that isearch-update-from-string-properties does NOT
+override our binding when case-fold-search is nil."
+  (helixel-test-with-buffer "foo Hello bar"
+    (goto-char (point-min))
+    ;; case-fold=t: case-insensitive (lowercase pattern matches uppercase)
+    (let ((case-fold-search t))
+      (should (helixel-search--search "hello" 'forward))
+      (should (= (match-beginning 0) 5)))
+    ;; case-fold=nil: case-sensitive (lowercase pattern must NOT match)
+    (goto-char (point-min))
+    (let ((case-fold-search nil))
+      (condition-case nil
+          (helixel-search--search "hello" 'forward)
+        (search-failed
+         (should t)))
+      ;; Exact case still matches
+      (should (helixel-search--search "Hello" 'forward))
+      (should (= (match-beginning 0) 5)))))
+
+(ert-deftest helixel-test-toggle-case-fold-no-uppercase-override ()
+  "When case-fold-search=nil and search-upper-case is default t,
+isearch-update-from-string-properties must NOT re-enable
+case-insensitivity for a lowercase-only pattern."
+  (helixel-test-with-buffer "foo hello bar"
+    (goto-char (point-min))
+    (let ((case-fold-search nil)
+          (search-upper-case t))
+      (condition-case nil
+          (helixel-search--search "HELLO" 'forward)
+        (search-failed
+         (should t)))
+      ;; Lowercase exact match still works
+      (should (helixel-search--search "hello" 'forward))
+      (should (= (match-beginning 0) 5)))))
+
+(ert-deftest helixel-test-toggle-case-fold-message ()
+  "`helixel-toggle-case-fold' echoes on/off with propertized keywords."
+  (helixel-test-with-buffer "x"
+    (let ((case-fold-search t)
+          (msg nil))
+      (cl-letf (((symbol-function 'message)
+                 (lambda (fmt &rest _args)
+                   (setq msg fmt))))
+        (helixel-toggle-case-fold))
+      (should (string-match-p "off" msg))
+      (should (string-match-p "case-sensitive" msg)))))
 
 ;;; helixel-test-search.el ends here

@@ -1,0 +1,1466 @@
+* helixel-mode User Guide :TOC_4_gh:
+  - [[#philosophy][Philosophy]]
+  - [[#installation][Installation]]
+    - [[#via-use-package-with-vc-emacs--30][Via use-package with :vc (Emacs ≥ 30)]]
+    - [[#manual-install][Manual Install]]
+    - [[#quick-try][Quick Try]]
+  - [[#basic-concepts][Basic Concepts]]
+    - [[#states][States]]
+    - [[#the-selection-first-workflow][The Selection-First Workflow]]
+  - [[#selection--movement][Selection & Movement]]
+    - [[#basic-movement][Basic Movement]]
+    - [[#line-selection][Line Selection]]
+    - [[#goto-prefix-g][Goto Prefix (~g~)]]
+    - [[#view--scroll][View / Scroll]]
+    - [[#pair--structure-movement-------][Pair & Structure Movement: ~[~ / ~]~ / ~{~ / ~}~]]
+  - [[#editing][Editing]]
+    - [[#edit-commands][Edit Commands]]
+    - [[#registers][Registers]]
+      - [[#how-registers-work][How Registers Work]]
+      - [[#register-backends][Register Backends]]
+      - [[#default-register-vs-explicit-register][Default Register vs Explicit Register]]
+      - [[#how-deletes-populate-registers][How Deletes Populate Registers]]
+    - [[#entering-insert-mode][Entering Insert Mode]]
+  - [[#text-objects][Text Objects]]
+    - [[#built-in-text-objects][Built-in Text Objects]]
+    - [[#region-aware-behavior][Region-aware Behavior]]
+    - [[#block-text-object][Block Text Object]]
+    - [[#custom-text-objects][Custom Text Objects]]
+    - [[#regex-text-objects][Regex Text Objects]]
+    - [[#tree-sitter-text-objects][Tree-sitter Text Objects]]
+  - [[#search--find][Search & Find]]
+    - [[#interactive-search][Interactive Search]]
+    - [[#find-char][Find Char]]
+    - [[#search-history--repeat][Search History & Repeat]]
+    - [[#search-toggles][Search Toggles]]
+    - [[#search-map-inheritance][Search-Map Inheritance]]
+    - [[#pcre-support][PCRE Support]]
+  - [[#dot-repeat-][Dot-Repeat (~.~)]]
+    - [[#prefix-modes][Prefix Modes]]
+    - [[#per-kind-examples][Per-Kind Examples]]
+  - [[#action-cycle---mark-cycle-c-][Action Cycle (~;~) & Mark Cycle (~C-;~)]]
+    - [[#how-they-differ][How They Differ]]
+    - [[#session-groups][Session Groups]]
+      - [[#movement-sessions][Movement sessions]]
+      - [[#search--find-sessions][Search & find sessions]]
+      - [[#text-object-sessions][Text-object sessions]]
+      - [[#edit-sessions-each-operation-is-its-own-session-group][Edit sessions (each operation is its own session group)]]
+      - [[#state-sessions][State sessions]]
+    - [[#examples][Examples]]
+  - [[#jump-navigation-c-o--c-i][Jump Navigation (~C-o~ / ~C-i~)]]
+    - [[#registering-jump-commands][Registering Jump Commands]]
+    - [[#configuration][Configuration]]
+  - [[#multi-cursor-s][Multi-Cursor (~s~)]]
+    - [[#spawning-cursors][Spawning Cursors]]
+    - [[#managing-cursors][Managing Cursors]]
+      - [[#s-prefix-always-available-in-normal-mode][~s~ prefix (always available in normal mode)]]
+      - [[#top-level-keys-always-available-enable-mc-automatically][Top-level keys (always available, enable mc automatically)]]
+      - [[#top-level-keys-when-multi-cursor-is-active][Top-level keys (when multi-cursor is active)]]
+      - [[#top-level-rotation-keys-when-multi-cursor-is-active][Top-level rotation keys (when multi-cursor is active)]]
+    - [[#workflows][Workflows]]
+    - [[#-with-multi-cursor][~;~ with Multi-Cursor]]
+    - [[#integration-with--and-][Integration with ~.~ and ~@~]]
+    - [[#whitelist][Whitelist]]
+  - [[#motion-repeat-][Motion Repeat (~,~)]]
+    - [[#supported-types][Supported Types]]
+    - [[#mc-spawn-multi-cursor-repeat][mc-spawn: Multi-Cursor Repeat]]
+    - [[#layer-by-layer-outward][Layer-by-layer Outward]]
+    - [[#-with-][~,~ with ~;~]]
+    - [[#find-char--vs-n][find-char: ~,~ vs ~n~]]
+    - [[#for-pair-motions][For Pair Motions]]
+    - [[#configuration-1][Configuration]]
+  - [[#surround][Surround]]
+    - [[#surround-keys][Surround Keys]]
+    - [[#custom-block-pairs][Custom Block Pairs]]
+  - [[#swap-s][Swap (~S~)]]
+    - [[#basic-flow][Basic Flow]]
+    - [[#implied-region][Implied Region]]
+    - [[#rectangle-swap][Rectangle Swap]]
+    - [[#register-integration][Register Integration]]
+    - [[#edge-cases][Edge Cases]]
+  - [[#chain-recording-][Chain Recording (~@~)]]
+    - [[#how-it-works][How It Works]]
+    - [[#capture--advance][Capture & Advance]]
+    - [[#third-party-integration][Third-party Integration]]
+    - [[#examples-1][Examples]]
+  - [[#configuration-2][Configuration]]
+    - [[#key-options][Key Options]]
+    - [[#space-leader-key][Space Leader Key]]
+    - [[#adding-keybindings][Adding Keybindings]]
+    - [[#excluding-buffers][Excluding Buffers]]
+  - [[#faq][FAQ]]
+
+** Philosophy
+
+Helixel is *selection-first*: you select a region first, then act on it.
+This is the opposite of Vim's operator-pending model where ~d3w~ means
+"delete 3 words" with the operator coming *first*.  In Helixel you type
+~w w w ; d~ or ~3wd~ — select three words, then delete.
+
+If you're coming from Vim, this is the one paradigmatic difference to
+internalize.  Every action follows: *select → act*.
+
+-----
+
+** Installation
+
+*** Via use-package with :vc (Emacs ≥ 30)
+
+#+begin_src elisp
+(use-package helixel
+  :vc (:url "https://github.com/jixiuf/helixel-mode")
+  :config (helixel-mode))
+#+end_src
+
+*** Manual Install
+
+#+begin_src elisp
+(add-to-list 'load-path "/path/to/helixel-mode")
+(require 'helixel)
+(helixel-mode)
+#+end_src
+
+*** Quick Try
+
+#+begin_src bash
+make run
+# or
+emacs -Q -L . -l helixel.el --eval '(progn (helixel-mode) (which-key-mode))'
+#+end_src
+
+-----
+
+** Basic Concepts
+
+*** States
+
+| State  | Indicator | Purpose               | Enter via               |
+|--------+-----------+-----------------------+-------------------------|
+| normal | ~NORMAL~  | Default editing state | ~ESC~                   |
+| insert | ~INSERT~  | Text input            | ~i~ ~a~ ~I~ ~A~ ~o~ ~O~ |
+| visual | ~VISUAL~  | Selection mode        | ~v~                     |
+| motion | ~MOTION~  | Read-only navigation  | (certain modes)         |
+
+- *Normal mode* — your home base.  All movement, selection, and editing
+  commands are available here.  Press ~ESC~ to return from any other state.
+- *Insert mode* — type text.  ~ESC~ returns to normal and saves typed
+  text for ~.~ repeat.
+- *Visual mode* — behave like Helix's visual mode; each movement
+  extends the selection.
+- *Motion mode* — read-only buffers (info, help, man, eww) use this
+  instead of normal mode.  Edit commands (~d~, ~c~, ~i~) are unavailable.
+
+*** The Selection-First Workflow
+
+1. *Select* something (a word, a line, a search match, a text object)
+2. *Act* on it (delete, change, copy, indent, surround, swap, case-toggle…)
+3. *Repeat* with ~.~ (dot-repeat)
+
+#+begin_src
+w w w ; d     # select 3 words forward, then delete
+3 x >         # select 3 lines, then indent
+/foo RET cbar # search "foo", then change to "bar"
+miw d         # select inner word, delete
+#+end_src
+
+-----
+
+** Selection & Movement
+
+*** Basic Movement
+
+| Key   | Action                   |
+|-------+--------------------------|
+| ~h~   | Left (backward-char)     |
+| ~j~   | Down (next-line)         |
+| ~k~   | Up (previous-line)       |
+| ~l~   | Right (forward-char)     |
+| ~w~   | Word start (forward)     |
+| ~b~   | Word start (backward)    |
+| ~e~   | Word end (forward)       |
+| ~W~   | WORD start (forward)     |
+| ~B~   | WORD start (backward)    |
+| ~E~   | WORD end (forward)       |
+| ~g h~ | Beginning of line        |
+| ~g s~ | First non-whitespace     |
+| ~g l~ | End of line              |
+| ~g g~ | Beginning of buffer      |
+| ~G~   | End of buffer            |
+| ~g e~ | End of buffer            |
+| ~%~   | Jump to matching bracket |
+
+*** Line Selection
+
+| Key   | Action                                           |
+|-------+--------------------------------------------------|
+| ~x~   | Select current line (extend downward)            |
+| ~X~   | Select current line (extend upward)              |
+| ~- x~ | Flip line direction (if already selecting lines) |
+
+~x~ followed by ~d~ deletes the line.  ~x x x d~ selects 3 lines then deletes.
+Use ~-~ as a prefix to flip the permanent direction of line selection,
+or to shrink an existing selection back toward the mark.
+
+*** Goto Prefix (~g~)
+
+| Key          | Action                     |
+|--------------+----------------------------|
+| ~g h~        | Beginning of line          |
+| ~g l~        | End of line                |
+| ~g s~        | First non-whitespace       |
+| ~g g~        | Beginning of buffer        |
+| ~g e~        | End of buffer              |
+| ~g j~        | Down (next-line)           |
+| ~g k~        | Up (previous-line)         |
+| ~g d~        | Go to definition           |
+| ~g r~        | Go to references           |
+| ~g i~        | Go to implementation       |
+| ~g y~        | Go to type definition      |
+| ~g u~        | Downcase region            |
+| ~g U~        | Upcase region              |
+| ~g c~        | Comment toggle             |
+| ~g q~        | Fill paragraph             |
+| ~g .~        | Pick past edit to repeat   |
+| ~g ;~        | Go to line number          |
+| ~g :~        | Go to character position   |
+| ~g｜~        | Move to column             |
+| ~g v~  ~s v~ | Restore last cursor layout |
+
+*** View / Scroll
+
+| Key   | Action                 |
+|-------+------------------------|
+| ~C-f~ | Scroll up (forward)    |
+| ~C-b~ | Scroll down (backward) |
+| ~z z~ | Recenter cursor        |
+
+*** Pair & Structure Movement: ~[~ / ~]~ / ~{~ / ~}~
+
+These prefixes mirror the text-object keys.  Each character from
+the text-object maps (paren, bracket, brace, angle, quote, tag, block)
+works as a sub-key for pair/structure movement.
+
+| Prefix  | Direction | Jumps to                           |
+|---------+-----------+------------------------------------|
+| ~[~ key | outward   | enclosing pair's opening delimiter |
+| ~]~ key | forward   | next pair's closing end            |
+| ~{~ key | outward   | enclosing inner opening            |
+| ~}~ key | forward   | next inner closing end             |
+
+Pair sub-keys (same chars as text objects):
+
+| Key | Text Object  | Example                        |
+|-----+--------------+--------------------------------|
+| ~(~ | parens       | ~[ (~ outward enclosing ~(~    |
+| ~[~ | brackets     | ~] [~ forward next ~[...]~ end |
+| ~{~ | braces       | ~[ {~ outward enclosing ~{~    |
+| ~<~ | angle        | ~] <~ forward next ~<...>~ end |
+| ~"~ | double-quote | ~[ "~ outward enclosing ~"~    |
+| ~'~ | single-quote | ~] '~ forward next ~'...'~ end |
+| ~`~ | back-quote   | ~[ `~ outward enclosing ~`~    |
+| ~t~ | XML tag      | ~] t~ forward next tag end     |
+| ~c~ | code block   | ~[ c~ outward enclosing block  |
+
+Structure sub-keys (~[~ / ~]~ only):
+
+| Key | ~[~                  | ~]~                |
+|-----+----------------------+--------------------|
+| ~d~ | prev flymake error   | next flymake error |
+| ~p~ | prev paragraph start | next paragraph end |
+| ~s~ | prev sentence start  | next sentence end  |
+| ~f~ | prev function start  | next function end  |
+
+After any pair/structure movement:
+- ~,~ repeats the motion (reads from a self-contained snapshot)
+- ~;~ selects the full span traversed by the motion
+- ~C-;~ pushes mark to the pre-motion cursor position
+
+Examples:
+- ~[ (~ — jump outward to the nearest enclosing ~(~
+- ~] (~ — jump forward to the end of the next ~(...)~ pair
+- ~%~ then ~,~ — jump to match, then repeat outward one nesting level
+- ~] p~ then ~;~ — jump to next paragraph end, then select the span
+
+-----
+
+** Editing
+
+*** Edit Commands
+
+| Key           | Action                | Notes                                      |
+|---------------+-----------------------+--------------------------------------------|
+| ~d~           | Delete (kill)         | Saves to kill-ring                         |
+| ~D~           | Delete (no kill-ring) | Delete without saving                      |
+| ~c~           | Change                | Delete then enter insert                   |
+| ~C~           | Change (no kill-ring) | Delete without kill-ring, then insert      |
+| ~y~           | Copy (kill-ring-save) | Also stores as swap source                 |
+| ~r~           | Replace with yanked   | Replace selection with last kill-ring text |
+| ~R~           | Replace-char          | Replace char(s) with a single character    |
+| ~p~           | Paste after           | Also pasted after line if yanked line      |
+| ~P~           | Paste before          |                                            |
+| ~>~           | Indent right          | Supports ~.~ repeat for next lines         |
+| ~<~           | Indent left           | Supports ~.~ repeat for next lines         |
+| *~*           | Toggle case           |                                            |
+| ~J~           | Join lines            |                                            |
+| ~=~           | Indent for tab        | Indent line or region                      |
+| ~u~           | Undo                  |                                            |
+| ~U~           | Redo                  |                                            |
+| ~g u~         | Downcase region       |                                            |
+| ~g U~         | Upcase region         |                                            |
+| ~g q~         | Fill paragraph        |                                            |
+| ~g c~         | Comment toggle        |                                            |
+| ~!~           | Shell command         | Pipe region through command                |
+| ~BS~          | Delete backward char  | Backspace in normal mode                   |
+| ~C-BS~/~M-BS~ | Delete backward word  | Ctrl/Meta Backspace in normal mode         |
+
+*** Registers
+
+helixel has a Helix-style register system.  Press ~"~ followed by a
+register character to select a register for the next operator.
+
+| Register | Purpose                                  | Configurable via                                   |
+|----------+------------------------------------------+----------------------------------------------------|
+| ~"~      | Default register (kill-ring and yank)    | ~helixel-default-register~                         |
+| ~0~      | Last yanked text (set by ~y~)            | ~helixel-register-yank-char~                       |
+| ~1-9~    | Numbered delete registers (rotating)     | ~helixel-register-delete-registers~ (default: 1-9) |
+| ~-~      | Small delete (< 1 line)                  | ~helixel-register-small-delete-char~               |
+| ~a-z~    | Named registers (Emacs ~register-alist~) | —                                                  |
+| ~+~      | System clipboard (CLIPBOARD)             | ~helixel-register-backends~                        |
+| ~*~      | Primary selection (PRIMARY)              | ~helixel-register-backends~                        |
+
+**** How Registers Work
+
+Register selection via ~"~ sets a pending register that the *next*
+operator consumes.  The register is cleared after one operation.
+
+#+begin_src
+"a y       copy selection to register a
+"a p       paste from register a
+"a d       delete selection to register a
+"a c       change text, deleted text goes to register a
+"a /       search forward for register a text (literal)
+"a *       search forward for register a text (symbol-bound)
+"a S       swap with register a content
+#+end_src
+
+Pressing ~""~ (double-quote followed by double-quote) explicitly
+selects the default register.  Pressing ~ESC~ after ~"~ cancels
+register selection.
+
+**** Register Backends
+
+Each register character is backed by one of three storage mechanisms,
+configured via ~helixel-register-backends~:
+
+| Backend     | Description                                      |
+|-------------+--------------------------------------------------|
+| ~kill-ring~ | Emacs kill ring (default for ~"~)                |
+| ~clipboard~ | System clipboard — CLIPBOARD selection (for ~+~) |
+| ~primary~   | Primary selection — middle-click paste (for ~*~) |
+| (unlisted)  | Emacs ~register-alist~ — ~a-z~, ~0-9~, ~-~       |
+
+Characters not listed in ~helixel-register-backends~ use Emacs's
+built-in ~register-alist~ via ~get-register~ / ~set-register~.
+
+**** Default Register vs Explicit Register
+
+When *no register* is explicitly selected (or when the selected
+register equals ~helixel-default-register~), operators read from and
+write to the *kill-ring directly* — they do not route through the
+register backend dispatch.  The ~helixel-register-backends~ mapping
+for the default register character is only consulted when that
+character is explicitly selected (e.g. pressing ~""~).
+
+This means ~helixel-default-register~ primarily controls which
+register character is "transparent" — pressing ~"~ followed by the
+default character is a no-op, and ~helixel--register-active-p~ returns
+nil.  To actually redirect the default data flow to clipboard, you
+would use Emacs's built-in ~select-enable-clipboard~ (enabled by
+default) which syncs the kill-ring with the system clipboard
+automatically.
+
+**** How Deletes Populate Registers
+
+When you delete text (~d~, ~c~, etc.):
+
+1. Text is pushed to the *kill-ring*.
+2. Text is rotated into the *numbered delete registers* ~1-9~
+   (configured by ~helixel-register-delete-registers~):
+   old content shifts ~1→2~, ~2→3~, …, ~8→9~, and the new text
+   lands in ~1~.  Register ~9~ is discarded.
+3. If the deleted text contains *no newline*, it is also stored
+   in the *small delete register* (default ~-~, configurable via
+   ~helixel-register-small-delete-char~).
+4. If a named register is active (e.g. ~"a d~), the text is also
+   stored there.
+
+When you copy text (~y~):
+
+1. Text is pushed to the kill-ring.
+2. Text is stored in the *yank register* (default ~0~, configurable
+   via ~helixel-register-yank-char~).
+3. If a named register is active, text is also stored there.
+
+This mirrors Helix's behavior where the yank register always holds
+the last *yanked* text, while the first numbered register holds the
+last *deleted* text.
+
+*** Entering Insert Mode
+
+| Key | Action                       |
+|-----+------------------------------|
+| ~i~ | Insert at current position   |
+| ~a~ | Append (insert after cursor) |
+| ~I~ | Insert at beginning of line  |
+| ~A~ | Insert at end of line        |
+| ~o~ | Open new line below          |
+| ~O~ | Open new line above          |
+
+-----
+
+** Text Objects
+
+~m~ is the text-object prefix.  ~mi~ selects *inner*, ~ma~ selects *a/around*.
+Inner objects are additionally available directly under ~m~ prefix to reduce keystrokes:
+~mw~ is the same as ~miw~ — select word.
+
+*** Built-in Text Objects
+
+| Key     | Text Object  | Example     |
+|---------+--------------+-------------|
+| ~w~     | word         | ~miw~ ~maw~ |
+| ~W~     | WORD         | ~miW~ ~maW~ |
+| ~o~     | symbol       | ~mio~ ~mao~ |
+| ~s~     | sentence     | ~mis~ ~mas~ |
+| ~p~     | paragraph    | ~mip~ ~map~ |
+| ~f~     | function     | ~mif~ ~maf~ |
+| ~(~ ~b~ | parens       | ~mi(~ ~ma(~ |
+| ~[~     | brackets     | ~mi[~ ~ma[~ |
+| ~{~     | braces       | ~mi{~ ~ma{~ |
+| ~<~     | angle        | ~mi<~ ~ma<~ |
+| ~"~     | double-quote | ~mi"~ ~ma"~ |
+| ~'~     | single-quote | ~mi'~ ~ma'~ |
+| ~`~     | back-quote   | ~mi`~ ~ma`~ |
+| ~t~     | XML tag      | ~mit~ ~mat~ |
+| ~c~     | code block   | ~mic~ ~mac~ |
+
+
+After selecting a text object, chain any editing command (~d~, ~c~, ~y~, etc.).
+
+~m h~ selects the whole buffer directly.
+
+*** Region-aware Behavior
+
+In normal mode when a region is already active, ~mi~/~ma~ selects the text
+object *within* the current region (not at point).
+- Example: ~hello |world~ with region ~hello ~ active: ~miw~ selects ~hello~.
+- In *visual* mode: pressing repeatedly *expands* the selection outward.
+- White space adjustment: cursor on whitespace between words automatically
+  finds the adjacent word.
+
+*** Block Text Object
+
+~mi c~ / ~ma c~ selects the nearest enclosing block (org
+~#+begin_src~/~#+end_src~, markdown fences, or bracket
+pairs ~()~ ~[]~ ~{}~).  Mode-specific patterns via
+~helixel-block-textobj-alist~:
+
+#+begin_src elisp
+(setq helixel-block-textobj-alist
+      '((org-mode . ("^#\\+begin_\\([^ \n\r]+\\)[^\n]*"
+                     "^#\\+end_\\([^ \n\r]+\\)[^\n]*" 1))
+        (markdown-mode . ("^```.+$" "^```[ \t]*$" nil))
+        (gfm-mode . ("^```.+$" "^```[ \t]*$" nil))))
+#+end_src
+
+Each entry is ~(MODE . (BEGIN-RE END-RE NAME-GROUP))~.  Multiple entries
+for the same MODE are tried; the tightest enclosing block wins.
+~NAME-GROUP~ nil = counter-based balancing (fences), integer = name-based.
+
+*** Custom Text Objects
+
+Define a thing-based text object (e.g. Go package names like
+~github.com/foo/bar~):
+
+#+begin_src elisp
+(require 'thingatpt)
+
+;; 1. Define the character set for the thing
+(define-thing-chars gopkg "-/[:alnum:]_.@:*")
+
+;; 2. Set forward-op so forward-thing knows how to move
+(put 'gopkg 'forward-op
+     (lambda (&optional count)
+       (helixel-forward-chars "-/[:alnum:]_.@:*" count)))
+
+;; 3. Define inner / a text-object commands
+(helixel-define-mark-object "gopkg" 'gopkg "gopkg" 'gopkg t)
+
+;; 4. Bind to keys
+(helixel-define-key 'textobj-inner "y" #'helixel-mark-inner-gopkg)
+(helixel-define-key 'textobj-outer "y" #'helixel-mark-a-gopkg)
+;; or mode-specific:
+(helixel-define-key 'textobj-inner "y" #'helixel-mark-inner-gopkg 'go-mode)
+(helixel-define-key 'textobj-outer "y" #'helixel-mark-a-gopkg 'go-mode)
+#+end_src
+
+*** Regex Text Objects
+
+Define text objects delimited by arbitrary regexp patterns — useful for
+org blocks, markdown fences, LaTeX environments, etc.:
+
+#+begin_src elisp
+;; Org mode #+begin_src / #+end_src blocks
+(helixel-define-regex-textobj org-block
+  "^#\\+begin_\\([^ \n\r]+\\)[^\n]*"
+  "^#\\+end_\\([^ \n\r]+\\)[^\n]*" 1 'block)
+
+;; Markdown ``` fences (counter-based: name-group nil)
+(helixel-define-regex-textobj md-fence
+  "^```[^\n]*$" "^```[ \t]*$" nil 'block)
+
+;; LaTeX \begin{env} / \end{env}
+(helixel-define-regex-textobj latex-env
+  "\\\\begin{\\([^}]+\\)}" "\\\\end{\\([^}]+\\)}" 1 'block)
+#+end_src
+
+Arguments: ~(NAME BEGIN-RE END-RE &optional NAME-GROUP SUBCAT)~.
+
+- *NAME*: unquoted symbol for the command suffix
+  (e.g. ~org-block~ → ~helixel-mark-inner-org-block~)
+- *BEGIN-RE* / *END-RE*: regexps matching the opening/closing delimiter lines
+- *NAME-GROUP*: integer = name-based balancing, ~nil~ = counter-based
+- *SUBCAT*: subcategory for ~;~ session grouping (default ~'block~)
+
+*** Tree-sitter Text Objects
+
+Requires [[https://github.com/meain/evil-textobj-tree-sitter][evil-textobj-tree-sitter]]
+as a soft dependency (it does NOT require evil-mode):
+
+#+begin_src elisp
+(define-key helixel-textobj-inner-map "f"
+  (helixel-get-tree-sitter-textobj "function.inner"))
+(define-key helixel-textobj-outer-map "f"
+  (helixel-get-tree-sitter-textobj "function.outer"))
+#+end_src
+
+Custom query alist per major-mode:
+
+#+begin_src elisp
+(define-key helixel-textobj-outer-map "m"
+  (helixel-get-tree-sitter-textobj "import"
+    '((python-mode . "((import_statement) @import)")
+      (python-ts-mode . "((import_statement) @import)")
+      (rust-mode . "((use_declaration) @import)"))))
+#+end_src
+
+If ~evil-textobj-tree-sitter~ is not installed, the function returns
+~nil~ and bindings are silently ignored.
+
+-----
+
+** Search & Find
+
+*** Interactive Search
+
+| Key    | Action                                     |
+|--------+--------------------------------------------|
+| ~/~    | Search forward (regexp)                    |
+| ~?~    | Search backward (regexp)                   |
+| ~*~    | Search symbol at point forward             |
+| ~#~    | Search symbol at point backward            |
+| ~"a /~ | Search forward for register a text (regex) |
+| ~"a *~ | Search forward for register a text (word)  |
+| ~n~    | Repeat search forward                      |
+| ~,~    | Repeat last search (motion repeat)         |
+| ~N~    | reverse direction                          |
+
+Within ~/~ / ~?~, ~M-r~ toggles between literal and regexp mode.
+
+When a region is active and ~helixel-search-use-region~ is non-nil,
+~/~ and ~?~ use the active region text as the search pattern (literal,
+via ~regexp-quote~).  Point is positioned past the selection before
+searching.  ~C-u /~ (or ~C-u ?~) toggles the behavior: when off it
+forces region-search for that invocation, when on it forces the
+interactive prompt.  ~*~ and ~#~ always use ~symbol-at-point~ (or a
+single-line region) regardless of this setting.  Default: ~nil~.
+
+*** Find Char
+
+| Key | Action                                |
+|-----+---------------------------------------|
+| ~f~ | Find next char (inclusive)            |
+| ~t~ | Till next char (exclusive)            |
+| ~F~ | Find previous char (inclusive)        |
+| ~T~ | Till previous char (exclusive)        |
+| ~n~ | Repeat last find-char forward         |
+| ~N~ | Reverse Direction                     |
+| ~,~ | Repeat last find-char (motion repeat) |
+
+~n~ and ~N~ repeat both search and find-char.  ~,~ also repeats
+find-char (and other motions) from a self-contained snapshot.
+
+*** Search History & Repeat
+
+~n~ / ~N~ repeat both search and find-char from a combined history ring.
+~C-u n~ / ~C-u N~ lets you pick from history.
+
+| Key     | Context               | Behavior                             |
+|---------+-----------------------+--------------------------------------|
+| ~n~     | After ~/~ or ~?~      | Repeat search forward                |
+| ~N~     | After ~/~ or ~?~      | Reverse direction then repeat        |
+| ~n~     | After ~f~/~F~/~t~/~T~ | Repeat find-char forward             |
+| ~N~     | After ~f~/~F~/~t~/~T~ | Reverse direction then repeat        |
+| ~C-u n~ | anytime               | Pick from combined history & execute |
+| ~C-u N~ | anytime               | Toggle direction + pick from history |
+
+~N~ flips the search direction; subsequent ~n~ continues in the new direction.
+
+#+begin_src
+/foo<RET>   search "foo"
+n           next match forward
+N           reverse direction, go back to previous match
+n           continue backward
+
+fb          find next "b"
+n           find next "b" again
+N           reverse direction, find previous "b"
+C-u n       pick a past search/find-char from history
+#+end_src
+
+*** Search Toggles
+
+Two global toggles under the ~s~ prefix control how searches behave.
+Both affect ~/~, ~?~, ~n~, ~N~, find-char (~f~ ~t~), and multi-cursor
+search commands (~s n~ ~s p~ ~s r~).
+
+| Key   | Toggle           | Default (on)            | When toggled off      |
+|-------+------------------+-------------------------+-----------------------|
+| ~s c~ | Case sensitivity | Case-insensitive ~[ci]~ | Case-sensitive ~[CS]~ |
+| ~s i~ | Invisible text   | Skips invisible text    | Includes hidden text  |
+
+ ~s c~ — *Case sensitivity.*  The search prompt shows ~[ci]~ or ~[CS]~
+as a visual indicator:
+
+#+begin_src
+/hello [ci]    case-insensitive — n repeats, N reverses and repeats
+/Hello [CS]    case-sensitive   — n repeats, N reverses and repeats
+#+end_src
+
+With case-fold on, selecting ~"hello"~ then ~s n~ matches ~"Hello"~
+and ~"HELLO"~ in addition to exact-case matches.
+
+ ~s i~ — *Invisible text.*  Controls whether text hidden by overlays or
+the ~invisible~ property is searched.  When on (default), hidden text is
+skipped; toggle off to include it.
+
+*** Search-Map Inheritance
+
+The ~s~ keymap inherits from Emacs' ~search-map~ (~M-s~ prefix), so these
+keys are also available under ~s~:
+
+| Key     | Action                          |
+|---------+---------------------------------|
+| ~s w~   | Word search forward             |
+| ~s o~   | Occur (list all matches)        |
+| ~s h r~ | Highlight regexp                |
+| ~s h u~ | Unhighlight regexp              |
+| ~s h l~ | Highlight lines matching regexp |
+| ~s h p~ | Highlight phrase                |
+| ~s h .~ | Highlight symbol at point       |
+
+*** PCRE Support
+
+Enable PCRE-style regexp (~\d~, ~\w~, ~\s~, etc.) via the optional
+[[https://github.com/joddie/pcre2el][pcre2el]] package:
+
+#+begin_src elisp
+(require 'pcre2el)
+(setq helixel-search-pcre t)
+#+end_src
+
+| PCRE | Emacs equivalent | Matches             |
+|------+------------------+---------------------|
+| ~\d~ | ~[[:digit:]]~    | Digits 0-9          |
+| ~\D~ | ~[^[:digit:]]~   | Non-digits          |
+| ~\w~ | ~[[:word:]]~     | Word characters     |
+| ~\W~ | ~[^[:word:]]~    | Non-word characters |
+| ~\s~ | ~[[:space:]]~    | Whitespace          |
+| ~\S~ | ~[^[:space:]]~   | Non-whitespace      |
+
+If pcre2el is not installed, patterns are passed through unchanged.
+
+-----
+
+** Dot-Repeat (~.~)
+
+~.~ repeats the last edit.  Works for all selection kinds.
+~M-.~ repeats the selection *without* editing (preview mode).
+
+*** Prefix Modes
+
+| Prefix  | Behavior                              |
+|---------+---------------------------------------|
+| ~.~     | Repeat once in stored direction       |
+| ~3.~    | Repeat 3 times                        |
+| ~0.~    | Repeat all remaining targets till end |
+| ~C-u .~ | Repeat all targets, entire buffer     |
+| ~- .~   | Flip direction permanently, 1 repeat  |
+| ~- 3 .~ | Flip direction permanently, 3 repeats |
+
+- ~0.~ stops silently when no more targets are found.
+- ~C-u .~ starts from ~point-min~ and processes every target forward.
+- ~-.~ / ~-N.~ *permanently* flip direction.  ~-.~ again flips back.
+- Subsequent ~.~ presses continue in the flipped direction.
+- All selection kinds support all prefix modes.
+
+*** Per-Kind Examples
+
+ *Search-based repeat* (advances to next match):
+#+begin_src
+/hello<RET>   search "hello"
+cWORLD<ESC>   change to "WORLD"
+.             change next "hello" → "WORLD"
+3.            change next 3 "hello"s → "WORLD"
+M-.           move to next hello (preview)
+.             change current "hello" to "WORLD"
+#+end_src
+
+ *Line-based repeat* (auto-advances to next line):
+#+begin_src
+x             select line
+>>>>          indent right
+.             indent next line (auto-advance)
+3.            indent next 3 lines
+
+x             select line
+ihello<ESC>   insert "hello" at bol
+.             insert "hello" on next line
+#+end_src
+
+ *Movement-based repeat* (w/e/b — next word each time):
+#+begin_src
+w             select forward word
+d             delete
+.             delete next word
+.             delete next word
+#+end_src
+
+ *Textobj-based repeat* (iw/aw — next textobj each time):
+#+begin_src
+miw           select inner word
+cXXX<ESC>     change to "XXX"
+.             change next inner word to "XXX"
+#+end_src
+
+ *Find-char repeat* (f/t — next char each time):
+#+begin_src
+fx            find-char to next "x"
+d             delete up to "x"
+.             delete up to next "x"
+#+end_src
+
+-----
+
+** Action Cycle (~;~) & Mark Cycle (~C-;~)
+
+~;~ and ~C-;~ navigate the event history.
+
+*** How They Differ
+
+- ~;~ (action cycle): First press selects the full span (from the
+  motion's origin to its destination). Subsequent presses cycle to older
+  events.
+- ~C-;~ (mark cycle): Every press pushes mark to the original
+  pre-motion cursor position. Never selects the full span.
+
+Both share grouping logic: consecutive same-kind motions form a group,
+and the cycle shows the group-start. Independent cycle positions.
+
+| Key     | Behavior                                                          |
+|---------+-------------------------------------------------------------------|
+| ~;~     | Select full span of current session, then cycle to older sessions |
+| ~C-u ;~ | Cycle to newer sessions                                           |
+
+After ~p~ / ~P~ / ~r~ / ~M-y~, the pasted or replaced text bounds are
+stored in the event.  The first ~;~ after a paste or replace jumps back to
+the edit spot and marks the full span of the pasted/replaced text.
+
+~C-g~ cancels the current session — the next command starts a fresh session
+even if the type matches.
+
+*** Session Groups
+
+Consecutive events with the same category and subcat form a session
+group.  ~;~ cycles between groups, setting mark to each group's start.
+
+**** Movement sessions
+
+| Subcat       | Keys                                    |
+|--------------+-----------------------------------------|
+| ~char~       | ~h~ ~l~                                 |
+| ~line~       | ~j~ ~k~                                 |
+| ~word~       | ~w~ ~e~ ~b~                             |
+| ~WORD~       | ~W~ ~E~ ~B~                             |
+| ~symbol~     | ~o~ (forward/backward symbol start/end) |
+| ~paragraph~  | ~{~ ~}~ (forward/backward paragraph)    |
+| ~sentence~   | ~(~ ~)~ (forward/backward sentence)     |
+| ~function~   | ~[ f~ ~] f~ (forward/backward function) |
+| ~goto~       | ~g~ prefix, ~G~                         |
+| ~scroll~     | ~C-f~ ~C-b~                             |
+| ~lineselect~ | ~x~ ~X~                                 |
+| ~rectselect~ | ~v~                                     |
+| ~pair~       | ~[~ ~]~ (pair/structure movement)       |
+| ~match~      | ~%~ (jump to matching bracket)          |
+
+**** Search & find sessions
+
+| Category    | Subcat        | Keys            |
+|-------------+---------------+-----------------|
+| ~search~    | ~search~      | ~/~ ~?~ ~*~ ~#~ |
+| ~find-char~ | ~next~/~till~ | ~f~ ~F~ ~t~ ~T~ |
+
+**** Text-object sessions
+
+| Subcat      | Keys                                            |
+|-------------+-------------------------------------------------|
+| ~word~      | ~miw~ ~maw~                                     |
+| ~WORD~      | ~miW~ ~maW~                                     |
+| ~symbol~    | ~mio~ ~mao~                                     |
+| ~sentence~  | ~mis~ ~mas~                                     |
+| ~paragraph~ | ~mip~ ~map~                                     |
+| ~function~  | ~mif~ ~maf~                                     |
+| ~pair~      | ~mi(~ ~ma(~ ~mi[~ ~ma[~ ~mi{~ ~ma{~ ~mi<~ ~ma<~ |
+| ~quote~     | ~mi"~ ~ma"~ ~mi'~ ~ma'~ ~mi`~ ma~ `~            |
+| ~tag~       | ~mit~ ~mat~                                     |
+| ~block~     | ~mic~ ~mac~ (org blocks, markdown fences)       |
+| ~treesit~   | tree-sitter objects (custom bindings)           |
+
+**** Edit sessions (each operation is its own session group)
+
+| Subcat                 | Keys          |
+|------------------------+---------------|
+| ~kill~                 | ~d~           |
+| ~delete~               | ~D~           |
+| ~delete-backward-char~ | ~BS~          |
+| ~delete-backward-word~ | ~C-BS~ ~M-BS~ |
+| ~change~               | ~c~           |
+| ~change-noyank~        | ~C~           |
+| ~replace~              | ~r~           |
+| ~copy~                 | ~y~           |
+| ~yank~                 | ~p~           |
+| ~yank-before~          | ~P~           |
+| ~yank-pop~             | ~M-y~         |
+| ~indent-left~          | ~<~           |
+| ~indent-right~         | ~>~           |
+| ~case~                 | ~~~           |
+| ~comment~              | ~g c~         |
+| ~shell~                | ~!~           |
+| ~fill~                 | ~g q~         |
+| ~join-lines~           | ~J~           |
+| ~replace-char~         | ~R~           |
+| ~surround-add~         | ~m s~         |
+| ~surround-delete~      | ~m d~         |
+| ~surround-replace~     | ~m r~         |
+| ~swap~                 | ~S~           |
+
+**** State sessions
+
+| Subcat   | Keys                     |
+|----------+--------------------------|
+| ~insert~ | ~i~ ~a~ ~I~ ~A~ ~o~ ~O~  |
+| ~exit~   | ~ESC~ (exit insert mode) |
+
+*** Examples
+
+Example 1 — Buffer ~hello world~, cursor at ~hel|lo~:
+#+begin_src
+w w        two word-forward movements, point at buffer end
+;          selects the full span: "hello world" (1..12)
+C-;        selects "lo world" (4..12), from original cursor to end
+#+end_src
+
+Example 2:
+#+begin_src
+w w        move forward two words
+;          mark start of this w w session
+
+j j        move down two lines
+;          mark start of j j (NOT the w w start!)
+;          again: mark start of w w
+C-u ;      back to j j mark
+
+f x        find char "x"
+n n        next "x" twice
+;          mark start of this find session
+;          again: older session ...
+
+C-g        cancel session
+w          new session, new start position
+;          mark start of this new w
+;          again: mark start of the old w w
+#+end_src
+
+-----
+
+** Jump Navigation (~C-o~ / ~C-i~)
+
+Global, cross-buffer jump navigation.
+
+| Key   | Behavior                                                       |
+|-------+----------------------------------------------------------------|
+| ~C-o~ | Jump to previous (older) position, switching buffers if needed |
+| ~C-i~ | Jump to next (newer) position                                  |
+
+Unlike ~;~ which sets the mark, jump commands *move point* and support
+cross-buffer navigation.  Every action recorded for ~;~ is also in the
+jump list.
+
+*** Registering Jump Commands
+
+#+begin_src elisp
+;; Method 1: one line — adds :before advice
+(helixel-define-jump-command 'my-goto-command)
+
+;; Method 2: call from inside your command body
+(defun my-command ()
+  (interactive)
+  (helixel-register-jump 'goto 'my-cmd)
+  ...)
+#+end_src
+
+*** Configuration
+
+#+begin_src elisp
+;; Max entries (default 100)
+(setq helixel-jump-log-max 200)
+
+;; Categories recorded (default: all)
+(setq helixel-jump-categories '(movement search find-char edit goto))
+
+;; Categories visible during C-o / C-i cycling
+(setq helixel-jump-cycle-categories '(search find-char edit goto))
+#+end_src
+
+-----
+
+** Multi-Cursor (~s~)
+
+~s~ is the multi-cursor prefix.  ~s s~ toggles spawning from the most
+recent selection or last edit.  When active, fake cursors carry their
+ *own* point, mark, ~mark-active~, ~kill-ring~ and helixel state — any
+whitelisted command runs at every cursor in one undo step.
+
+*** Spawning Cursors
+
+~s s~ pulls the current selection:
+
+| Selection kind           | Cursor layout                                |
+|--------------------------+----------------------------------------------|
+| line / rect              | column cursors at ~current-column~ per line  |
+| search (~/~ ~?~ ~*~ ~#~) | one cursor per match in the whole buffer     |
+| textobj (~miw~ ~maw~ …)  | one cursor per same-kind thing in the buffer |
+| find-char (~f~ ~t~ …)    | one cursor per occurrence                    |
+| movement (~w~ ~e~ ~b~ …) | one cursor per advance step                  |
+
+*** Managing Cursors
+
+**** ~s~ prefix (always available in normal mode)
+
+| Key         | Action                                                  | Helix       |
+|-------------+---------------------------------------------------------+-------------|
+| ~s s~       | Toggle (spawn from last selection / clear)              |             |
+| ~s ,~       | Clear all fake cursors (keep primary only)              |             |
+| ~s a~ ~s A~ | Add fake at point, move real to next / previous line    | ~C~ ~Alt-C~ |
+| ~s x~       | Per-line cursors: line-mode → REGION; char-mode → POINT | ~Alt-s~     |
+| ~s n~ ~s p~ | Add cursor at next / previous occurrence                |             |
+| ~s N~ ~s P~ | Skip next / previous match (no cursor added)            |             |
+| ~s u~ ~s U~ | Unmark next / previous fake cursor                      |             |
+| ~s .~       | Apply last edit at every fake cursor                    |             |
+| ~s k~ ~s K~ | Keep / remove cursors whose region matches a regex      | ~K~ ~Alt-K~ |
+| ~s r~       | Select all regex matches within selections              | ~s~         |
+| ~s S~ ~s d~ | Split each selection on regex                           | ~S~         |
+| ~s -~       | Merge all cursors into one big region                   | ~Alt--~     |
+| ~s &~       | Column-align cursors by padding with spaces             | ~&~         |
+| ~s _~       | Trim leading / trailing whitespace from each region     | ~_~         |
+| ~s c~       | Toggle case-fold for search (n/sn/sp/sr)                |             |
+| ~s i~       | Toggle invisible handling                               |             |
+
+**** Top-level keys (always available, enable mc automatically)
+
+| Key   | Action                                            | Helix   |
+|-------+---------------------------------------------------+---------|
+| ~C~   | Add fake at point, move real down (same as ~s a~) | ~C~     |
+| ~M-c~ | Add fake at point, move real up (same as ~s A~)   | ~Alt-C~ |
+
+**** Top-level keys (when multi-cursor is active)
+
+When fake cursors exist, these keys work directly — no ~s~ prefix needed:
+
+| Key   | Action                                      | Helix   |
+|-------+---------------------------------------------+---------|
+| ~K~   | Keep cursors matching a regex               | ~K~     |
+| ~M-k~ | Remove cursors matching a regex             | ~Alt-K~ |
+| ~&~   | Column-align cursors by padding with spaces | ~&~     |
+| ~_~   | Trim whitespace from each region            | ~_~     |
+| ~M--~ | Merge all cursors into one big region       | ~Alt--~ |
+| ~M-,~ | Remove primary cursor, promote nearest      | ~Alt-,~ |
+
+**** Top-level rotation keys (when multi-cursor is active)
+
+| Key           | Action                                      | Helix             |
+|---------------+---------------------------------------------+-------------------|
+| ~(~ / ~)~     | Rotate primary cursor backward / forward    | ~(~ / ~)~         |
+| ~M-(~ / ~M-)~ | Rotate selection content backward / forward | ~Alt-(~ / ~Alt-)~ |
+| ~g v~         | Restore last cursor layout (history stack)  | ~g v~             |
+
+ *Tip*: After any ~s n~/~s p~/~s N~/~s P~/~s u~/~s U~/~s a~/~s A~, press
+~,~ (normal mode) to repeat the last action — no need for the ~s~ prefix.
+See Motion Repeat (~,~) for details.
+
+*** Workflows
+
+Edit every occurrence of a word:
+#+begin_src
+miw c FOO <ESC> s s s .
+# select word → change to FOO → spawn cursors → apply to all
+#+end_src
+
+Search-and-replace at every match:
+#+begin_src
+/foo<RET> s s c bar <ESC>
+# search foo → spawn cursors → change to bar
+#+end_src
+
+Per-line editing:
+#+begin_src
+x x x s s i // <ESC>
+# line-select 3 lines → spawn column cursors → insert // on each
+#+end_src
+
+*** ~;~ with Multi-Cursor
+
+Each fake cursor owns its own event ring.  When ~;~ broadcasts,
+every cursor cycles its OWN history:
+
+#+begin_src
+/foobar<RET> s s w w w ; d
+# search → spawn → 3 words forward at each → ; selects the traversed
+# span at each cursor → d deletes each cursor's selected span
+#+end_src
+
+Caveats: fakes have empty history at spawn; ~C-o~ / ~C-i~ are real-only.
+
+*** Integration with ~.~ and ~@~
+
+- ~.~ replays each cursor's own last edit independently
+- ~@ ... ESC~ while multi-cursor is active: the chain transaction is
+  broadcast to every fake cursor, applied once at each position (one undo step)
+- ~ESC~ in normal mode: if chaining → finish chain; else if cursors
+  visible → clear them; else ~keyboard-quit~
+- ~C-g~ always clears fake cursors before propagating
+
+*** Whitelist
+
+Control dispatch via the ~helixel-multiple-cursors~ symbol property:
+
+#+begin_src elisp
+(put 'my-edit-cmd 'helixel-multiple-cursors t)   ;; all cursors
+(put 'my-global-cmd 'helixel-multiple-cursors nil) ;; real cursor only
+
+;; Bulk whitelist
+(helixel-mc-mark-all-for-multi-cursors '(cmd1 cmd2))
+(helixel-mc-mark-all-for-real-cursor-only '(cmd3 cmd4))
+
+;; Default policy for commands without the property
+(setq helixel-mc-default-policy 'all)  ;; 'all | 'once | 'prompt
+#+end_src
+
+-----
+
+** Motion Repeat (~,~)
+
+~,~ repeats the most recent motion from a self-contained snapshot —
+it does not depend on the current active search or region.
+
+*** Supported Types
+
+| Kind      | Subcat                                | Example                                    |
+|-----------+---------------------------------------+--------------------------------------------|
+| find-char | ~next~ / ~till~                       | ~f x~ → ~,~ finds next x (like ~n~)        |
+| movement  | ~pair~                                | ~]~ → ~,~ skip past next paren boundary    |
+| movement  | ~match~                               | ~%~ → ~,~ expand one nesting level outward |
+| movement  | ~paragraph~ / ~sentence~ / ~function~ | ~}~ → ~,~ skip past next boundary          |
+| search    | —                                     | ~/foo~ → ~,~ find next match (like ~n~)    |
+| mc-spawn  | ~mark~ / ~skip~ / ~unmark~ / ~add~    | ~s n~ → ~,~ mark another next occurrence   |
+
+*** mc-spawn: Multi-Cursor Repeat
+
+After any multi-cursor spawn command under ~s~, pressing ~,~ (in normal
+mode) repeats the last action — no need to type the ~s~ prefix again:
+
+| First key | Then ~,~ repeats     |
+|-----------+----------------------|
+| ~s n~     | mark next occurrence |
+| ~s p~     | mark previous        |
+| ~s N~     | skip next            |
+| ~s P~     | skip previous        |
+| ~s u~     | unmark next          |
+| ~s U~     | unmark previous      |
+| ~s a~     | add cursor below     |
+| ~s A~     | add cursor above     |
+
+Prefix arguments work as usual:
+
+- ~-,~ — permanently flip direction (e.g. ~s n~ then ~-,~ → now marks
+  previous occurrences until you flip again)
+- ~3,~ — repeat 3 times
+
+~,~ always repeats the *most recent* motion.  If you perform a find-char
+or search after ~s n~, ~,~ will replay that find-char instead.
+
+*** Layer-by-layer Outward
+
+Inside a nested pair, ~%~ jumps to the matching delimiter.  ~,~ then moves
+one level outward to the enclosing pair:
+
+#+begin_src
+(a (b (c)))
+      ↑
+%     → jump to ) after (c)
+,     → outward to ) after (b)
+,     → outward to ) after (a)
+#+end_src
+
+Works through mixed brackets and block delimiters:
+
+#+begin_src
+#+begin_src elisp
+(let ((x 1))
+  (message x))
+#+end_src
+;; % inside (message x) → matching )
+;; , → outward to (let ...)
+;; , → outward to #+begin_src
+#+end_src
+
+*** ~,~ with ~;~
+
+Every motion repeated by ~,~ records its own event.  Pressing ~;~ after
+~,~ selects the full span just traversed:
+
+#+begin_src
+(a (b (c)))
+      ↑
+%     → jump to ) after (c)
+,     → outward to ) after (b)
+;     → select (b (c))
+,     → outward to ) after (a)
+;     → select (a (b (c)))
+#+end_src
+
+*** find-char: ~,~ vs ~n~
+
+Both ~n~ and ~,~ repeat find-char, but ~,~ reads from a self-contained
+snapshot — it survives across an intervening search:
+
+#+begin_src
+f x        find x — recorded for ,
+/pattern   active-search now points to search, not find-char
+,          still finds the next x (from snapshot)
+n          repeats /pattern (from active-search)
+#+end_src
+
+*** For Pair Motions
+
+~, ~ skips past the current pair before re-invoking the original command:
+
+#+begin_src
+(a) (b) (c)
+]     → after ) of (a)
+,     → after ) of (b)
+,     → after ) of (c)
+#+end_src
+
+*** Configuration
+
+#+begin_src elisp
+;; Categories repeatable by ,
+(setq helixel-motion-repeat-categories
+      '((movement . pair) (movement . match) (movement . paragraph)
+        (movement . sentence) (movement . function) search find-char
+        mc-spawn))
+
+;; Disable motion repeat entirely
+(setq helixel-motion-repeat-categories nil)
+
+;; Add custom motion subcats
+(push '(movement . my-thing) helixel-motion-repeat-categories)
+#+end_src
+
+-----
+
+** Surround
+
+*** Surround Keys
+
+~m s~ reads a character and looks it up first in
+~helixel-surround-block-alist~ (per-mode string pairs), then in the
+built-in char pairs.  ~m t~ reads a tag name string and wraps in XML tags.
+~m d~ / ~m r~ use the previous text object selection (mi/ma).
+
+| Key       | Selection type      | Behavior                                    |
+|-----------+---------------------+---------------------------------------------|
+| ~m s~ ~(~ | Active region       | Wrap region in ~( )~                        |
+| ~m s~ ~[~ | Active region       | Wrap region in ~[ ]~                        |
+| ~m s~ ~{~ | Active region       | Wrap region in ~{ }~                        |
+| ~m s~ ~<~ | Active region       | Wrap region in ~< >~                        |
+| ~m s~ ~'~ | Active region       | Wrap region in ~' '~                        |
+| ~m s~ ~"~ | Active region       | Wrap region in ~" "~                        |
+| ~m s~ ~`~ | Active region       | Wrap region in ~`~                          |
+| ~m s~ ~s~ | Active region (org) | Wrap in ~#+begin_src~ / ~#+end_src~         |
+| ~m s~ ~e~ | Active region (org) | Wrap in ~#+begin_example~ / ~#+end_example~ |
+| ~m s~ ~q~ | Active region (org) | Wrap in ~#+begin_quote~ / ~#+end_quote~     |
+| ~m t~     | Active region       | Wrap in ~<tag>~ / ~</tag>~                  |
+| ~m d~     | After mi/ma         | Delete surrounding delimiters               |
+| ~m r~     | After mi/ma         | Replace surrounding delimiters              |
+
+After ~m s~ or ~m r~, the new region stays selected.
+
+*** Custom Block Pairs
+
+Add major-mode-specific block surround pairs:
+
+#+begin_src elisp
+(setq helixel-surround-block-alist
+      '((org-mode
+         (?s . ("#+begin_src " . "#+end_src"))
+         (?e . ("#+begin_example " . "#+end_example"))
+         (?q . ("#+begin_quote " . "#+end_quote")))
+        (markdown-mode
+         (?\` . ("```" . "```")))))
+#+end_src
+
+-----
+
+** Swap (~S~)
+
+Swaps the active region with a *swap source* — text previously copied
+with ~y~.  Position-aware and cross-buffer.
+
+*** Basic Flow
+
+1. Select text → ~y~ (copy + store as swap source)
+2. Select other text → ~S~ (swap)
+
+| Key | Behavior                                                 |
+|-----+----------------------------------------------------------|
+| ~y~ | Copy selection to ~kill-ring~ *and* store as swap source |
+| ~S~ | Swap active region with swap source (position-aware)     |
+
+*** Implied Region
+
+When ~S~ is pressed without an active region, a target region is *implied*
+starting at point:
+
+| Source type    | Implied region                                                   |
+|----------------+------------------------------------------------------------------|
+| character-wise | Same character-length range starting at point                    |
+| line-wise      | Same number of *full lines* starting from current line           |
+| rect-wise      | Same column span × same line count, starting from current column |
+
+Example: ~3x y~ to yank 3 lines line-wise, then move elsewhere and ~S~ —
+3 full lines starting at the current line are swapped.
+
+*** Rectangle Swap
+
+Rectangle selections swap line-by-line.  Each line pair is exchanged
+independently, preserving column alignment where possible.
+
+- *Default*: shorter rectangle is extended downward (new lines use same column span)
+- *~C-u S~*: truncates to ~min(N,M)~ lines
+
+*** Register Integration
+
+| Key   | Behavior                                                    |
+|-------+-------------------------------------------------------------|
+| ~"aS~ | Swap with register ~a~ (position-aware if stored by ~"a y~) |
+| ~"0S~ | Swap with last yanked text (register 0)                     |
+| ~"1S~ | Swap with last deleted text (register 1)                    |
+
+*** Edge Cases
+
+- *Cross-buffer*: works — source markers carry their native buffer
+- *Overlapping regions*: ~user-error~
+- *No source*: ~user-error~ — use ~y~ first
+- *Rectangle at buffer end*: stops at last line
+
+-----
+
+** Chain Recording (~@~)
+
+> *⚠ Experimental.* This feature is under active development.
+> Behavior and APIs may change in future releases.
+
+Record a sequence of commands and replay as a unit with ~.~.
+
+| Key   | Action                         |
+|-------+--------------------------------|
+| ~@~   | Start chain recording          |
+| ~ESC~ | End chain, create compound tx  |
+| ~.~   | Advance to next target, replay |
+| ~C-g~ | Cancel chain (discard)         |
+
+*** How It Works
+
+1. Select a target (line with ~x~, search match with ~/~) — this establishes
+   the *advance context*.
+2. ~@~ — starts recording, snapshots the selection.
+3. Perform any editing operations — all commands (helixel and vanilla Emacs)
+   are captured as replayable entries.
+4. ~ESC~ — stops recording, creates a chain transaction.
+5. ~.~ — advances to the *next* target and replays the recorded sequence.
+
+*** Capture & Advance
+
+| Command type           | Capture mechanism      | Replay method                          |
+|------------------------+------------------------+----------------------------------------|
+| Helixel edits (d, c)   | ~action-commit-hook~   | Runner function                        |
+| Helixel movements (w)  | ~action-commit-hook~   | Selection recreate                     |
+| Insert-mode typing     | after-change-functions | Text segments verbatim                 |
+| Vanilla commands (C-a) | ~post-command-hook~    | ~execute-kbd-macro~ with original keys |
+
+Insert-mode commands are captured exclusively by the insert-recording
+mechanism and NOT duplicated as vanilla entries (prevents double-replay).
+
+| Init ctx     | Advance                                               |
+|--------------+-------------------------------------------------------|
+| Line (~x~)   | Next line (EOL positioning matches recording context) |
+| Search (~/~) | Next match                                            |
+| None         | In-place (no advance, replay at cursor position)      |
+
+*** Third-party Integration
+
+#+begin_src elisp
+;; Exclude commands from vanilla capture
+(add-hook 'helixel-chain-vanilla-exclude-predicates
+          (lambda (cmd) (memq cmd '(my-custom-cmd))))
+
+;; Custom replay for vanilla commands
+(setq helixel-chain-vanilla-replay-function
+      (lambda (cmd entry)
+        (my-replay-command cmd (helixel-action-payload-get entry :prefix))))
+
+;; Chain lifecycle hooks
+(add-hook 'helixel-chain-start-hook  #'my-chain-setup)
+(add-hook 'helixel-chain-end-hook    #'my-chain-commit)
+(add-hook 'helixel-chain-cancel-hook #'my-chain-cleanup)
+#+end_src
+
+*** Examples
+
+#+begin_src
+x             select line (advance by line)
+@             start chain
+bb;           select 2 words backward 
+d             kill
+ESC           end chain
+.             next line: select 2 words backward, kill
+
+/foo<RET>     search for "foo" (advance by search match)
+@             start chain
+cbar<ESC>     change to "bar"
+ESC           end chain
+.             next "foo" match: change to "bar"
+#+end_src
+
+-----
+
+** Configuration
+
+All configurable options are available via ~M-x customize-group RET helixel RET~.
+
+*** Key Options
+
+#+begin_src elisp
+;; PCRE-style regexp search (requires pcre2el)
+(setq helixel-search-pcre t)
+
+;; Use active region text as search pattern for / and ?
+(setq helixel-search-use-region t)
+
+;; Max entries in action ring (default 50)
+(setq helixel-action-ring-max 200)
+
+;; Max entries in jump log (default 100)
+(setq helixel-jump-log-max 200)
+
+;; Max multi-cursors (default 200)
+(setq helixel-mc-max-cursors 500)
+
+;; Replace delete char behavior
+(setq helixel-replace-delete-char-p t)
+
+;; Multi-cursor history depth (default 16)
+(setq helixel-mc-history-max 32)
+
+;; Default register (when no explicit register is selected)
+(setq helixel-default-register ?\")
+
+;; Register backends — which register uses kill-ring vs clipboard vs primary
+(setq helixel-register-backends
+      '((?\" . kill-ring)
+        (?+  . clipboard)
+        (?*  . primary)))
+
+;; Register for last yanked text (default ?0)
+(setq helixel-register-yank-char ?0)
+
+;; Register for small deletes — text without newline (default ?-)
+(setq helixel-register-small-delete-char ?-)
+
+;; Numbered delete registers to rotate (default ?1 through ?9)
+(setq helixel-register-delete-registers '(?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9))
+#+end_src
+
+*** Space Leader Key
+
+~helixel-space-map~ is a leader keymap bound to SPC in normal state.
+Add bindings via `helixel-define-key' and SPC is automatically enabled:
+
+#+begin_src elisp
+(helixel-define-key 'space "w" #'my-command)  ; auto-enables SPC
+(helixel-define-key 'space "f" #'find-file)   ; add more bindings
+#+end_src
+
+When all user bindings are removed(default), SPC is automatically unbound.
+
+For a more flexible leader-key experience, consider
+[[https://github.com/jixiuf/emacs-leadkey][leadkey]].
+leadkey translates leader keys via `key-translation-map', so SPC f
+arrives as ~C-c C-f~ without any manual rebinding — all your existing
+C-c / C-x / M- bindings work automatically through the leader key.
+
+*** Adding Keybindings
+
+#+begin_src elisp
+(helixel-define-key 'space "w" #'my-command)
+(helixel-define-key 'normal "S" #'my-command)
+(helixel-define-key 'insert "C-d" #'my-command 'python-mode)
+#+end_src
+
+*** Excluding Buffers
+
+#+begin_src elisp
+(add-to-list  'helixel-major-mode-default-states '(reb-mode . insert))
+#+end_src
+
+-----
+
+** FAQ
+
+See [[file:FAQ.org][FAQ]].
+
+# Local Variables:
+# toc-org-mode: t
+# End:

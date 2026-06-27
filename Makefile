@@ -97,8 +97,8 @@ column-check:
 lint: format compile checkdoc package-lint column-check ctx-lint
 
 depgraph:
-	@emacs --batch -Q --script scripts/gen-depgraph.el > docs/DEPGRAPH.md
-	@echo "docs/DEPGRAPH.md regenerated"
+	@emacs --batch -Q --script scripts/gen-depgraph.el > docs/DEPGRAPH.org
+	@echo "docs/DEPGRAPH.org regenerated"
 
 # ── format ───────────────────────────────────────────────────────────
 # Reindent all .el source files using emacs-lisp-mode indentation.

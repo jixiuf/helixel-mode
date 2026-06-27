@@ -1,0 +1,109 @@
+* Emacs Elisp Debugging Skill
+
+** Core Principles
+
+*** 1. Reproduce in batch mode first
+#+begin_src bash
+emacs -batch -l package --eval "(package-initialize)" \
+  -l helixel-test.el \
+  --eval "(ert-run-tests-batch-and-exit 'test-name)"
+#+end_src
+Batch mode isolates: no interactive state, no ~.emacs.d~ customizations, deterministic output.
+
+*** 2. Trace the data flow end-to-end
+For every bug, draw the complete chain from trigger → intermediate state → final result.
+The bug is always at one step in the chain.
+
+*** 3. The test-isolation binary search
+When a test passes in isolation but fails in the full suite:
+1. Run just the failing tests → confirm they pass alone
+2. Run failing tests + their alphabetical neighbors → find the breaking range
+3. Use ~set-match-data nil~, ~(setq global-var nil)~ guards to eliminate state leakage
+
+Key insight: ~save-match-data~ *preserves* stale data as integers, which
+~set-match-data~ then interprets in the current buffer. Prefer ~(set-match-data nil)~
+to clear match data entirely.
+
+*** 4. Add ~message~ probes to narrow the gap
+Put ~(message "TAG: key1=%S key2=%S" val1 val2)~ at each step of the flow.
+Run in batch, grep for the TAG. Compare working vs broken scenarios.
+In batch mode output, look for the ~Test X condition:~ line which shows
+the full ~should~ failure with ~:form~, ~:value~, ~:explanation~.
+
+*** 5. Check the "invisible" state
+Things that silently cause wrong behavior:
+- *Stale match data*: ~(match-beginning 0)~ returns integers from killed buffers
+- *~post-command-hook~ not firing*: In tests, ~insert~ is a function, not a command
+- *~(when nil ...)~*: The most common "nothing happens" bug — a guard becomes nil unexpectedly
+- *Buffer-local vs global*: ~defvar~ is global, ~defvar-local~ is per-buffer. Tests with ~with-temp-buffer~ clean up locals but not globals.
+- *~this-command-keys-vector~ in non-command context*: Returns wrong or empty vector
+
+*** 6. Understand ~vconcat~ on a single list argument
+#+begin_src elisp
+(vconcat '([1] [2] [3]))  → [[1] [2] [3]]   ; vector of vectors (preserves structure)
+(vconcat '("a" "b" "c"))  → ["a" "b" "c"]   ; vector of strings
+(vconcat '(1 2 3))        → [1 2 3]          ; errors if elements aren't sequences
+#+end_src
+The single list argument is treated as a SEQUENCE whose elements become
+the result vector's elements. No flattening occurs.
+
+*** 7. Test the real path, not a simulation
+If the real code uses ~post-command-hook~ and ~this-command-keys-vector~,
+the test must either:
+- Use ~execute-kbd-macro~ (but it may not trigger post-command-hook in batch), or
+- The architecture should be redesigned so the testable path IS the real path
+
+** Common Bugs by Symptom
+
+| Symptom | Likely Cause | Check |
+|---------+--------------+-------|
+| "Nothing happens" | ~(when nil ...)~ guard, empty string, error caught silently | Add message before/after every guard |
+| Wrong text inserted | ~buffer-substring~ captures cursor-moved-over text | Check ~extract-self-insert-text~ result |
+| Wrong position | Stale match data, wrong ~sel-ctx~ kind | Print ~(match-beginning 0)~, ~(use-region-p)~, sel-ctx at each step |
+| Tests pass, interactive fails | ~post-command-hook~ timing, test simulates differently | Compare test's manual key-push vs real hook recording |
+| First key lost | ~pop~ on wrong list element, sentinel transition | Print raw list before/after each mutation |
+| Extra key in result | Entry key recorded, control char included | Check ~this-command~ in hook, check ~key-binding~ for self-insert |
+
+** Sentinel State Machine Pattern
+When using sentinels to track recording state:
+#+begin_src
+nil        → not recording (guard: (when val ...) skips)
+'pending   → waiting for first real event (skip entry event)
+(list nil) → recording, empty (non-nil so guard fires)
+(list A B) → recording, has data
+#+end_src
+The transition ~'pending~ → ~nil~ is WRONG because ~nil~ makes the guard skip.
+Always transition to a truthy value.
+
+** Key Functions for Probing
+
+#+begin_src elisp
+;; What command just ran?
+(message "CMD: %s keys=%S" this-command (this-command-keys-vector))
+
+;; What is the match data?
+(message "MATCH: mb=%S me=%S buf=%S"
+         (match-beginning 0) (match-end 0)
+         (and (match-data) (marker-buffer (car (match-data)))))
+
+;; Is the region active?
+(message "REGION: active=%S beg=%d end=%d"
+         (use-region-p) (region-beginning) (region-end))
+
+;; What's in the action?
+(message "ACTION: op=%S sel=%S char=%S"
+         (helixel-action-op tx) (helixel-action-sel tx) (helixel-action-char tx))
+#+end_src
+
+** Debugging the Recording Path (insert-mode)
+
+The recording path has 4 stages. Probe each:
+
+#+begin_src
+1. Entry:  insert-keys='pending, sel-ctx=?
+2. Post-command-hook: pending→(nil) transition, skip entry key?
+3. Each productive key: push key-vector onto list?
+4. Exit:   vconcat(nreverse(butlast(list)))? extract text? cursor-offset?
+#+end_src
+
+If any stage produces unexpected output, the final ~:text~ payload will be wrong.

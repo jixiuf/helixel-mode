@@ -1,7 +1,7 @@
 # AGENTS.md — helixel-mode
 
-> User docs: `docs/USER-GUIDE.md` | Extension API: `docs/API.md`
-> Architecture: `docs/ARCHITECTURE.md` | Debug: `docs/DEBUG-SKILL.md`
+> User docs: `docs/USER-GUIDE.org` | Extension API: `docs/API.org`
+> Architecture: `docs/ARCHITECTURE.org` | Debug: `docs/DEBUG-SKILL.org`
 
 ## File Map
 
@@ -241,7 +241,7 @@ pure movement/search/state events (~40B per entry negligible).
 ```bash
 rm -f *.elc && make compile && make test   # always fresh compile before test
 make lint                                   # checkdoc + package-lint + column-check + ctx-lint
-make depgraph                               # regenerate docs/DEPGRAPH.md from `require' edges
+make depgraph                               # regenerate docs/DEPGRAPH.org from `require' edges
 
 ## Pitfalls
 
@@ -439,6 +439,6 @@ that calls a `defsubst` defined in `helixel-core.el` is compiled AFTER
 
 `helixel-define-command`, `helixel-define-operator`, and
 `helixel-with-action-tracking` are documented in detail in
-`docs/API.md` — including auto-injected behavior
+`docs/API.org` — including auto-injected behavior
 (`helixel--tracking-open`, highlight clearing, visual-move tracking)
 and a decision flowchart for choosing the right macro.

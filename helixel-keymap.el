@@ -415,13 +415,13 @@ used selection management lives here under `s'."
   ","   #'helixel-mc-clear-all       ;\\[helixel-mc-clear-all] = remove fakes
   "v"   #'helixel-mc-restore-cursors ; like Helix gv
   "k"   #'helixel-mc-keep-matching   ; like Helix K
-  "K"   #'helixel-mc-remove-matching ; like Helix `M-K'
-  "-"   #'helixel-mc-merge           ; like Helix `M--'
-  "&"   #'helixel-mc-align           ; like Helix `&'
-  "_"   #'helixel-mc-trim            ; like Helix `_'
-  "r"   #'helixel-mc-select-regex    ; like Helix `s'
-  "d"   #'helixel-mc-split-selection ; like Helix `S' ("divide"/"delimiter")
-  "S"   #'helixel-mc-split-selection ; like Helix `S'
+  "K"   #'helixel-mc-remove-matching ; like Helix M-K
+  "-"   #'helixel-mc-merge           ; like Helix M--
+  "&"   #'helixel-mc-align           ; like Helix &
+  "_"   #'helixel-mc-trim            ; like Helix _
+  "r"   #'helixel-mc-select-regex    ; like Helix s
+  "d"   #'helixel-mc-split-selection ; like Helix S ("divide"/"delimiter")
+  "S"   #'helixel-mc-split-selection ; like Helix S
   ;; Search toggles (affect n / s n / s p / s r)
   "c"   #'helixel-toggle-case-fold
   "i"   #'helixel-toggle-invisible)

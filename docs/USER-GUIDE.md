@@ -31,6 +31,8 @@ Helix-style modal editing for Emacs.  Requires **Emacs ≥ 29.1**.
   - [Find Char](#find-char)
   - [Search History & Repeat](#search-history--repeat)
   - [PCRE Support](#pcre-support)
+  - [Search Toggles](#search-toggles)
+  - [Search-Map Inheritance](#search-map-inheritance)
 - [Dot-Repeat (`.`)](#dot-repeat-)
   - [Prefix Modes](#prefix-modes)
   - [Per-Kind Examples](#per-kind-examples)
@@ -614,6 +616,47 @@ N           reverse direction, find previous "b"
 C-u n       pick a past search/find-char from history
 ```
 
+### Search Toggles
+
+Two global toggles under the `s` prefix control how searches behave.
+Both affect `/`, `?`, `n`, `N`, find-char (`f` `t`), and multi-cursor
+search commands (`s n` `s p` `s r`).
+
+| Key   | Toggle              | Default (on)                  | When toggled off         |
+| ----- | ------------------- | ----------------------------- | ------------------------ |
+| `s c` | Case sensitivity    | Case-insensitive `[ci]`       | Case-sensitive `[CS]`    |
+| `s i` | Invisible text      | Skips invisible text          | Includes hidden text     |
+
+**`s c` — Case sensitivity.**  The search prompt shows `[ci]` or `[CS]`
+as a visual indicator:
+
+```
+/hello [ci]    case-insensitive — n repeats, N reverses and repeats
+/Hello [CS]    case-sensitive   — n repeats, N reverses and repeats
+```
+
+With case-fold on, selecting `"hello"` then `s n` matches `"Hello"`
+and `"HELLO"` in addition to exact-case matches.
+
+**`s i` — Invisible text.**  Controls whether text hidden by overlays or
+the `invisible` property is searched.  When on (default), hidden text is
+skipped; toggle off to include it.
+
+### Search-Map Inheritance
+
+The `s` keymap inherits from Emacs' `search-map` (`M-s` prefix), so these
+keys are also available under `s`:
+
+| Key      | Action                          |
+| -------- | ------------------------------- |
+| `s w`    | Word search forward             |
+| `s o`    | Occur (list all matches)        |
+| `s h r`  | Highlight regexp                |
+| `s h u`  | Unhighlight regexp              |
+| `s h l`  | Highlight lines matching regexp |
+| `s h p`  | Highlight phrase                |
+| `s h .`  | Highlight symbol at point       |
+
 ### PCRE Support
 
 Enable PCRE-style regexp (`\d`, `\w`, `\s`, etc.) via the optional
@@ -928,6 +971,8 @@ whitelisted command runs at every cursor in one undo step.
 | `s -`                    | Merge all cursors into one big region                    | `Alt--`     |
 | `s &`                    | Column-align cursors by padding with spaces              | `&`         |
 | `s _`                    | Trim leading / trailing whitespace from each region      | `_`         |
+| `s c`                    | Toggle case-fold for search (n/sn/sp/sr)                |             |
+| `s i`                    | Toggle invisible handling                               |             |
 
 #### Top-level keys (always available, enable mc automatically)
 

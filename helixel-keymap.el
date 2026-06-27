@@ -421,7 +421,13 @@ used selection management lives here under `s'."
   "_"   #'helixel-mc-trim            ; like Helix `_'
   "r"   #'helixel-mc-select-regex    ; like Helix `s'
   "d"   #'helixel-mc-split-selection ; like Helix `S' ("divide"/"delimiter")
-  "S"   #'helixel-mc-split-selection); like Helix `S'
+  "S"   #'helixel-mc-split-selection ; like Helix `S'
+  ;; Search toggles (affect n / s n / s p / s r)
+  "c"   #'helixel-toggle-case-fold
+  "i"   #'helixel-toggle-invisible)
+
+;; Inherit Emacs' M-s prefix (word search, occur, highlight, etc.)
+(set-keymap-parent helixel-mc-map search-map)
 
 ;; Top-level Helix-style rotation: typically pressed repeatedly
 ;; to cycle through cursors.

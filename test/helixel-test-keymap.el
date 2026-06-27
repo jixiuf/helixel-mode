@@ -323,4 +323,18 @@ itself is stored as the alist key (not the symbol)."
             (should (eq (lookup-key inner-map "f")
                         #'helixel-mark-inner-function))))))))
 
+(ert-deftest helixel-test-mc-map-inherits-search-map ()
+  "`helixel-mc-map' inherits from `search-map' so `s w' etc. work."
+  (should (eq (keymap-parent helixel-mc-map) search-map))
+  ;; Verify a search-map binding is reachable
+  (should (lookup-key helixel-mc-map "w"))
+  (should (lookup-key helixel-mc-map "o")))
+
+(ert-deftest helixel-test-mc-map-toggle-bindings ()
+  "`s c' is bound to `helixel-toggle-case-fold', `s i' to invisible toggle."
+  (should (eq (lookup-key helixel-mc-map "c")
+              #'helixel-toggle-case-fold))
+  (should (eq (lookup-key helixel-mc-map "i")
+              #'helixel-toggle-invisible)))
+
 ;;; helixel-test-keymap.el ends here

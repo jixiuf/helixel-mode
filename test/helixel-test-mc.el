@@ -4959,5 +4959,23 @@ between the first two positions."
     (should (= 3 (length (helixel-mc-all-cursors))))
     (helixel-mc-clear-all)))
 
+(ert-deftest helixel-test-mc-mark-next-case-insensitive ()
+  "With case-fold-search=t, \=`s n' respects case-insensitivity even
+when the selected region text contains uppercase after a previous
+case-insensitive match.  This ensures 'hello' → 'Hello' → 'hello'
+works without the uppercase-to-case-sensitive override."
+  (helixel-test-with-buffer "hello\nHello\nhello\nHello\n"
+    (let ((case-fold-search t))
+      (goto-char 1)
+      (push-mark 6 t t)                ; region: "hello" (1..6)
+      (helixel-mc-mark-next-like-this) ; fake at 1..6, real → match on L2
+      (should (= 7 (region-beginning))) ; "Hello" on line 2 starts at 7
+      (helixel-mc-mark-next-like-this) ; next case-insensitive match: L3 "hello"
+      (should (= 13 (region-beginning))) ; line 3 "hello" at 13, NOT line 4 "Hello"
+      (helixel-mc-mark-next-like-this) ; next: L4 "Hello"
+      (should (= 19 (region-beginning)))
+      (should (= 3 (length (helixel-mc-all-cursors))))
+      (helixel-mc-clear-all))))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

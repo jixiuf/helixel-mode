@@ -1376,7 +1376,7 @@ Add bindings via `helixel-define-key' and SPC is automatically enabled:
 (helixel-define-key 'space "f" #'find-file)   ; add more bindings
 ```
 
-When all user bindings are removed, SPC is automatically unbound.
+When all user bindings are removed(default), SPC is automatically unbound.
 
 For a more flexible leader-key experience, consider
 [leadkey](https://github.com/jixiuf/emacs-leadkey).

@@ -243,6 +243,14 @@ rm -f *.elc && make compile && make test   # always fresh compile before test
 make lint                                   # checkdoc + package-lint + column-check + ctx-lint
 make depgraph                               # regenerate docs/DEPGRAPH.org from `require' edges
 
+## Refactoring Best Practices
+### Keep Lint and Tests Passing
+
+```markdown
+After refactoring, run make test and confirm 0 failures.
+If semantics shift and a test must change, ask me first.
+```
+
 ## Pitfalls
 
 ### Always recompile after edits

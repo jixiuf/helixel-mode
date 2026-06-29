@@ -105,7 +105,8 @@ surround-pairs entry for major-mode filtering."
          (helixel--activate-textobj-range
           ,selector
           (helixel-make-pair-delimiter ,open ,close)
-          count))
+          count
+          ',subcat))
        ,@(unless inner-p surround-pushes))))
 
 (defmacro helixel-define-mark-pair (name open close doc &rest meta-kv)
@@ -196,7 +197,8 @@ RESTRICTED-P non-nil means use restricted version (for word/WORD)."
            (let ((beg (when use-bounds (region-beginning)))
                  (end (when use-bounds (region-end))))
              (helixel--activate-textobj-range
-              (,inner-func ,thing beg end count) nil count))))
+              (,inner-func ,thing beg end count) nil count
+              ,subcat))))
        (defun ,outer-name (&optional count)
          ,outer-doc
          (interactive "p")
@@ -210,7 +212,8 @@ RESTRICTED-P non-nil means use restricted version (for word/WORD)."
            (let ((beg (when use-bounds (region-beginning)))
                  (end (when use-bounds (region-end))))
              (helixel--activate-textobj-range
-              (,outer-func ,thing beg end count) nil count)))))))
+              (,outer-func ,thing beg end count) nil count
+              ,subcat)))))))
 
 (defmacro helixel-define-regex-textobj (name begin-re end-re
                                              &optional name-group
@@ -241,7 +244,8 @@ SUBCAT is the textobj subcat symbol (default: \='block)."
            (when (helixel--use-region-p) (region-end))
            nil count nil ,name-group)
           ',delimiter
-          count))
+          count
+          ,cat))
        (defun ,outer-name (&optional count)
          ,outer-doc
          (interactive "p")
@@ -254,7 +258,8 @@ SUBCAT is the textobj subcat symbol (default: \='block)."
            (when (helixel--use-region-p) (region-end))
            nil count t ,name-group)
           ',delimiter
-          count)))))
+          count
+          ,cat)))))
 
 
 ;; ── Tag mark commands ──
@@ -271,7 +276,8 @@ COUNT is the number of tags to select."
     (when (helixel--use-region-p) (region-end))
     nil count nil)
    (helixel-make-tag-delimiter)
-   count))
+   count
+   'tag))
 (defun helixel-mark-a-tag (&optional count)
   "Select a tag.
 COUNT is the number of tags to select."
@@ -284,7 +290,8 @@ COUNT is the number of tags to select."
     (when (helixel--use-region-p) (region-end))
     nil count t)
    (helixel-make-tag-delimiter)
-   count))
+   count
+   'tag))
 
 ;; ── Generic Block Text Objects (org blocks, markdown fences, etc.) ──
 
@@ -301,7 +308,8 @@ COUNT is the number of blocks to select."
     (when (helixel--use-region-p) (region-end))
     nil count nil)
    (helixel-make-block-delimiter)
-   count))
+   count
+   'block))
 
 (defun helixel-mark-a-block (&optional count)
   "Select a block (org block, markdown fence, etc.).
@@ -315,7 +323,8 @@ COUNT is the number of blocks to select."
     (when (helixel--use-region-p) (region-end))
     nil count t)
    (helixel-make-block-delimiter)
-   count))
+   count
+   'block))
 
 (defun helixel-get-tree-sitter-textobj (group &optional query)
   "Return a command for a tree-sitter text object of GROUP.
@@ -345,7 +354,7 @@ Example:
 
                       count interned-groups query)))
           (if range
-              (helixel--activate-textobj-range range nil count)
+              (helixel--activate-textobj-range range nil count 'treesit)
             (evil-textobj-tree-sitter--message-not-found groups)))))))
 
 (helixel-define-mark-object "word" 'helixel-word "word" 'word t)
@@ -402,6 +411,68 @@ Example:
                            (pos (string-match "mark-" name)))
                       (if pos (substring name (+ pos 5)) name))
                   "textobj"))))
+
+
+;; ── Motion repeater for textobj (\[helixel-repeat-last-motion] / \=',) ──
+
+(defun helixel--repeat-textobj-motion (rec)
+  "Replay a textobj selection motion from REC.
+Mimics repeated textobj selection: forward is like calling the
+same textobj command again after selecting the current one
+\(equivalent to \\=`miw miw\=' followup), backward is the
+symmetric reverse.
+
+Forward: go to the end of the current region, skip whitespace,
+re-invoke the textobj command.
+Backward: go before the start of the current region, skip
+whitespace backward, re-invoke the textobj command.
+
+No special character-class skipping — every textobj that the
+command can select (including punctuation sequences that
+Helixel treats as words) is a valid repeat target."
+  (let* ((cmd (helixel--last-motion-command rec))
+         (dir (helixel--last-motion-dir rec))
+         (forward-p (eq dir 'forward)))
+    (unless (commandp cmd)
+      (user-error "No textobj command to repeat"))
+    ;; Position past the current textobj using region bounds.
+    ;; Forward:  start from region-end (already past the textobj).
+    ;; Backward: start from region-beginning, then step one char
+    ;;           backward to go before the textobj.
+    (let ((rb (and (use-region-p) (region-beginning)))
+          (re (and (use-region-p) (region-end)))
+          (had-region (region-active-p)))
+      (when had-region (deactivate-mark))
+      (if (and rb re (> re rb))
+          (if forward-p
+              (goto-char re)
+            (progn (goto-char rb)
+                   (unless (bobp) (backward-char 1))))
+        ;; Fallback: no usable region — use funcall to find target.
+        (condition-case nil
+            (progn (funcall cmd 1)
+                   (when (use-region-p)
+                     (if forward-p
+                         (goto-char (region-end))
+                       (progn (goto-char (region-beginning))
+                              (unless (bobp) (backward-char 1))))))
+          (error nil))))
+    ;; Skip whitespace in the direction of travel.
+    (deactivate-mark)
+    (if forward-p
+        (skip-chars-forward " \t\n\r\f")
+      (skip-chars-backward " \t\n\r\f"))
+    ;; Execute the textobj command.
+    (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
+      (let ((this-command cmd))
+        (call-interactively cmd)
+        ;; Override direction on the freshly recorded motion struct
+        ;; (helixel--activate-textobj-range always records 'forward).
+        (when helixel--last-motion-cmd
+          (setf (helixel--last-motion-dir helixel--last-motion-cmd) dir))))))
+
+(helixel-register-motion-repeater 'textobj nil
+                                  #'helixel--repeat-textobj-motion)
 
 (provide 'helixel-textobj-marks)
 ;;; helixel-textobj-marks.el ends here

@@ -1077,7 +1077,8 @@ Slots:
 (defcustom helixel-motion-repeat-categories
   '((movement . pair) (movement . match) (movement . paragraph)
     (movement . sentence) (movement . function) (movement . scroll)
-    search find-char mc-spawn)
+    search find-char mc-spawn
+    textobj)
   "Motion categories that \\[helixel-repeat-last-motion] can repeat.
 Each element is either a plain category symbol (matches all
 subcats) or a cons (CATEGORY . SUBCAT) for precise matching —

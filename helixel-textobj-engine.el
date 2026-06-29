@@ -352,12 +352,12 @@ is returned."
   (let ((pnt (point)))
     (let ((beg (save-excursion
                  (ignore-errors
-                   (and (zerop (forward-thing thing -1))
+                   (and (forward-thing thing -1)
                         (forward-thing thing)))
                  (if (> (point) pnt) (point-min) (point))))
           (end (save-excursion
                  (ignore-errors
-                   (and (zerop (forward-thing thing))
+                   (and (forward-thing thing)
                         (forward-thing thing -1)))
                  (if (< (point) pnt) (point-max) (point)))))
       (when (and (<= beg (point) end) (< beg end))
@@ -634,11 +634,13 @@ a property list."
           (end (helixel-normalize-position (nth 1 range))))
       (min beg end))))
 
-(defun helixel--activate-textobj-range (range &optional delimiter count)
-  "Activate RANGE as a textobj selection with optional DELIMITER and COUNT.
-If an existing textobj sel of the same command is pending, accumulates
+(defun helixel--activate-textobj-range (range &optional delimiter count subcat)
+  "Activate RANGE as a textobj selection.
+DELIMITER, COUNT, and SUBCAT are optional.  If an existing
+textobj sel of the same command is pending, accumulates
 the count so \\[helixel-repeat-edit] repeats the full chain
-of textobj selections."
+of textobj selections.  When SUBCAT is non-nil, records a
+textobj motion for \\[helixel-repeat-last-motion]."
   (when range
     (push-mark (car range) nil t)
     (goto-char (if (consp (cdr range)) (cadr range) (cdr range)))
@@ -661,6 +663,13 @@ of textobj selections."
        (helixel-sel-create
         'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
                             :inline-advance t)))
+      ;; Record motion for \[helixel-repeat-last-motion] (, repeat).
+      ;; Direction always 'forward here; -, callers override afterwards.
+      (when subcat
+        (helixel-record-motion cmd
+                               :category 'textobj
+                               :subcat subcat
+                               :dir 'forward))
       (run-hook-with-args 'helixel-textobj-after-select-functions))))
 
 

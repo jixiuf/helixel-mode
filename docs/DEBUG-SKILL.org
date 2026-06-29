@@ -9,7 +9,7 @@ emacs -batch -l package --eval "(package-initialize)" \
   --eval "(ert-run-tests-batch-and-exit 'test-name)"
 #+end_src
 Batch mode isolates: no interactive state, no ~.emacs.d~ customizations, deterministic output.
-
+*** using emacsclient to debug is allowed
 *** 2. Trace the data flow end-to-end
 For every bug, draw the complete chain from trigger → intermediate state → final result.
 The bug is always at one step in the chain.

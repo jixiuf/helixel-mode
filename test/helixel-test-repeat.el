@@ -684,6 +684,322 @@ than call-interactively (which triggers mode-specific side effects)."
     (should (not helixel--repeat-permanent-flip))
     (setq helixel--repeat-permanent-flip nil)))
 
+;; ── Textobj comma-repeat (,) ──
+
+(ert-deftest helixel-test-repeat-textobj-comma-forward ()
+  "miw then ,,, repeats selection forward word by word."
+  (helixel-test-with-buffer "aaa bbb ccc ddd eee"
+    (goto-char 2)
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "aaa"))
+    ;; First comma
+    (setq last-command 'helixel-mark-inner-word)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "bbb"))
+    ;; Second comma
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "ccc"))
+    ;; Third comma
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "ddd"))
+    ;; Fourth comma
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "eee"))
+    ;; Fifth comma — stays on last word
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "eee"))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-backward ()
+  "miw then -, then ,,, repeats selection backward word by word."
+  (helixel-test-with-buffer "aaa bbb ccc ddd eee"
+    (goto-char 20)  ;; near "ddd"
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    ;; First, verify miw selected the right word
+    (should (member (buffer-substring (region-beginning) (region-end))
+                    '("ddd" "eee")))
+    (let ((first-word (buffer-substring (region-beginning) (region-end))))
+      ;; -, backward flip
+      (setq last-command 'helixel-mark-inner-word)
+      (helixel-repeat-last-motion '-)
+      (let ((second (buffer-substring (region-beginning) (region-end))))
+        (should (not (string= second first-word)))  ;; must have moved
+        ;; , backward repeat 1
+        (helixel-repeat-last-motion nil)
+        (let ((third (buffer-substring (region-beginning) (region-end))))
+          (should (not (string= third second)))
+          ;; , backward repeat 2
+          (helixel-repeat-last-motion nil)
+          (let ((fourth (buffer-substring (region-beginning) (region-end))))
+            (should (not (string= fourth third)))))))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-with-dash ()
+  "miw on just-in-time then , steps through words and separators."
+  (helixel-test-with-buffer "hello [yas] Prepared just-in-time loading"
+    (goto-char 22)  ;; start of "just"
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "just"))
+    ;; Forward: just -> - (consistent with miw miw)
+    (setq last-command 'helixel-mark-inner-word)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "-"))
+    ;; - -> in
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "in"))
+    ;; in -> -
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "-"))
+    ;; - -> time
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "time"))
+    ;; time -> loading (whitespace skipped by miw followup)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "loading"))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-backward-dash ()
+  "-, backward over just-in-time steps through words and separators."
+  (helixel-test-with-buffer "hello [yas] Prepared just-in-time loading"
+    (goto-char 33)  ;; near end of "time"
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "time"))
+    ;; Backward: time -> -
+    (setq last-command 'helixel-mark-inner-word)
+    (helixel-repeat-last-motion '-)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "-"))
+    ;; - -> in
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "in"))
+    ;; in -> -
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "-"))
+    ;; - -> just
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "just"))
+    ;; just -> Prepared (whitespace skipped by backward skip)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "Prepared"))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-at-buffer-edges ()
+  "comma at first/last word stays there."
+  (helixel-test-with-buffer "aaa bbb ccc"
+    (goto-char 2)
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "aaa"))
+    ;; -, at first word should not move
+    (setq last-command 'helixel-mark-inner-word)
+    (helixel-repeat-last-motion '-)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "aaa"))
+    ;; Backward comma again — still at first word
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "aaa"))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-with-brackets ()
+  "miw before [ then , selects [, yas, ], world in order."
+  (helixel-test-with-buffer "hello [yas] world"
+    (goto-char 6)  ;; space before "["
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "hello"))
+    ;; Forward: hello -> [
+    (setq last-command 'helixel-mark-inner-word)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "["))
+    ;; [ -> yas
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "yas"))
+    ;; yas -> ]
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "]"))
+    ;; ] -> world
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "world"))))
+
+;; ── Sentence textobj comma-repeat (,) ──
+
+(ert-deftest helixel-test-repeat-textobj-comma-sentence-forward ()
+  "mis then ,,, repeats sentence selection forward."
+  (helixel-test-with-buffer
+      "First sentence here.  Second sentence here.  Third sentence here."
+    (goto-char 2)
+    (setq last-command nil this-command 'helixel-mark-inner-sentence)
+    (helixel-mark-inner-sentence)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "First sentence here."))
+    ;; First comma
+    (setq last-command 'helixel-mark-inner-sentence)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "Second sentence here."))
+    ;; Second comma
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "Third sentence here."))
+    ;; Third comma — stays on last sentence
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "Third sentence here."))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-sentence-backward ()
+  "mis then -, then ,,, repeats sentence selection backward."
+  (helixel-test-with-buffer
+      "First sentence here.  Second sentence here.  Third sentence here."
+    (goto-char 35)  ;; inside second sentence
+    (setq last-command nil this-command 'helixel-mark-inner-sentence)
+    (helixel-mark-inner-sentence)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "Second sentence here."))
+    ;; -, backward flip
+    (setq last-command 'helixel-mark-inner-sentence)
+    (helixel-repeat-last-motion '-)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "First sentence here."))
+    ;; , backward repeat — stays at first sentence
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "First sentence here."))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-a-sentence-forward ()
+  "mas then ,,, repeats a-sentence selection forward."
+  (helixel-test-with-buffer
+      "First sentence here.  Second sentence here.  Third sentence here."
+    (goto-char 2)
+    (setq last-command nil this-command 'helixel-mark-a-sentence)
+    (helixel-mark-a-sentence)
+    ;; a-sentence includes trailing whitespace (double space here)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "First sentence here.  "))
+    ;; First comma
+    (setq last-command 'helixel-mark-a-sentence)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "Second sentence here.  "))
+    ;; Second comma — last sentence includes leading whitespace
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "  Third sentence here."))
+    ;; Third comma — stays on last (same leading whitespace)
+    (helixel-repeat-last-motion nil)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     "  Third sentence here."))))
+
+;; ── Function textobj comma-repeat (,) ──
+
+(ert-deftest helixel-test-repeat-textobj-comma-function-forward ()
+  "mif then ,,, repeats function selection forward."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert "(defun foo () 1)\n(defun bar () 2)\n(defun baz () 3)\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 4)  ;; inside first defun
+          (setq last-command nil this-command 'helixel-mark-inner-function)
+          (helixel-mark-inner-function)
+          ;; inner-function includes trailing newline
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun foo () 1)\n"))
+          ;; First comma
+          (setq last-command 'helixel-mark-inner-function)
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun bar () 2)\n"))
+          ;; Second comma
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun baz () 3)\n"))
+          ;; Third comma — stays on last function
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun baz () 3)\n")))
+      (helixel--deactivate-all-hooks))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-function-backward ()
+  "mif then -, then ,,, repeats function selection backward."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert "(defun foo () 1)\n(defun bar () 2)\n(defun baz () 3)\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 20)  ;; inside second defun
+          (setq last-command nil this-command 'helixel-mark-inner-function)
+          (helixel-mark-inner-function)
+          ;; inner-function includes trailing newline
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun bar () 2)\n"))
+          ;; -, backward flip
+          (setq last-command 'helixel-mark-inner-function)
+          (helixel-repeat-last-motion '-)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun foo () 1)\n"))
+          ;; , backward repeat — stays at first function
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun foo () 1)\n")))
+      (helixel--deactivate-all-hooks))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-a-function-forward ()
+  "maf then ,,, repeats a-function selection forward."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert "(defun foo () 1)\n(defun bar () 2)\n(defun baz () 3)\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 4)  ;; inside first defun
+          (setq last-command nil this-command 'helixel-mark-a-function)
+          (helixel-mark-a-function)
+          ;; a-function includes trailing newline
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun foo () 1)\n"))
+          ;; First comma
+          (setq last-command 'helixel-mark-a-function)
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun bar () 2)\n"))
+          ;; Second comma
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun baz () 3)\n"))
+          ;; Third comma — stays on last
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "(defun baz () 3)\n")))
+      (helixel--deactivate-all-hooks))))
+
 ;; ── Find-char dot-repeat ──
 
 (ert-deftest helixel-test-repeat-findchar-fxd-dot ()

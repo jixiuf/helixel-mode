@@ -555,9 +555,15 @@ is installed at module load (see below).")
   (helixel-define-jump-command cmd))
 
 
+(defun helixel--textobj-action-default (category subcat)
+  "Default handler for `helixel-textobj-action-function'.
+Called with CATEGORY and SUBCAT on textobj action start.
+Opens tracking via `helixel--tracking-open'."
+  (helixel--tracking-open category subcat))
+
 (defun helixel-state--init ()
   "Wire internals for helixel-state (load-time)."
-  (setq helixel-textobj-action-function #'helixel--tracking-open)
+  (setq helixel-textobj-action-function #'helixel--textobj-action-default)
   (setq helixel-textobj-visual-state-p-function
         #'helixel--pure-visual-state-p)
   (setq helixel-jump-cleanup-function #'helixel-clear-data)

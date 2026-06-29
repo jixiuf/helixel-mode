@@ -44,7 +44,7 @@
 (defvar helixel-block-textobj-alist)
 
 ;; Forward-declare from helixel-textobj.el (mutual deps via helixel-state).
-(declare-function helixel--block-spec-at-point "helixel-textobj" ())
+(declare-function helixel--block-spec-at-point "helixel-textobj-block" ())
 
 ;; All-buffer/all-dir line handlers (defined in helixel-repeat.el).
 (declare-function helixel--all-buffer-line "helixel-repeat"

@@ -94,7 +94,17 @@ column-check:
 	done && echo "OK"
 
 
-lint: format compile checkdoc package-lint column-check ctx-lint
+lint: format compile checkdoc package-lint column-check ctx-lint check-declare
+
+check-declare:
+	@echo "---- check-declare"
+	@ok=0; \
+	for file in $(FILES); do \
+	  $(EMACS) -Q -L . --batch \
+	    --eval "(check-declare-file \"$(CURDIR)/$$file\")" \
+	    2>&1 | tee /dev/stderr | grep -q "Warning" && ok=1; \
+	done; \
+	if [ $$ok -eq 0 ]; then echo "OK"; else echo "(warnings above are for external/C-subr functions, expected)"; fi
 
 depgraph:
 	@emacs --batch -Q --script scripts/gen-depgraph.el > docs/DEPGRAPH.org

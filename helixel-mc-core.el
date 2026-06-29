@@ -95,7 +95,7 @@
 (defvar undo-tree-timer)
 (defvar undo-tree-mode)
 (defvar undo-tree-limit)
-(declare-function undo-list-transfer-to-tree "undo-tree" ())
+(declare-function undo-list-transfer-to-tree "ext:undo-tree" ())
 
 (defsubst helixel-mc--dispatch-in-progress-p ()
   "Return non-nil when an mc dispatch is in progress.

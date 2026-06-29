@@ -37,18 +37,12 @@
 (require 'helixel-textobj-block)
 
 (declare-function evil-textobj-tree-sitter--range
-                  "evil-textobj-tree-sitter-core" t t)
+                  "ext:evil-textobj-tree-sitter-core" t t)
 (declare-function evil-textobj-tree-sitter--message-not-found
-                  "evil-textobj-tree-sitter-core" t t)
+                  "ext:evil-textobj-tree-sitter-core" t t)
 (defvar evil-textobj-tree-sitter-use-next-if-not-within)
 
 ;; ── Definition macros (mark-pair, mark-quote, mark-object, …) ──
-
-(declare-function evil-textobj-tree-sitter--range
-                  "evil-textobj-tree-sitter-core" t t)
-(declare-function evil-textobj-tree-sitter--message-not-found
-                  "evil-textobj-tree-sitter-core" t t)
-(defvar evil-textobj-tree-sitter-use-next-if-not-within)
 
 (defmacro helixel--define-mark-delimited (kind name open close doc inner-p
                                                &rest meta-kv)

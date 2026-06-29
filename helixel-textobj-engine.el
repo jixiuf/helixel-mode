@@ -30,7 +30,7 @@
 (require 'thingatpt)
 (require 'helixel-core)
 
-(declare-function helixel--set-mark-region "helixel-action")
+(declare-function helixel--set-mark-region "helixel-ring")
 
 (defvar helixel-textobj-visual-state-p-function nil
   "If non-nil, called with no args, return t when in visual state.")
@@ -694,13 +694,6 @@ Surround uses all entry types valid in the current mode
 \(see `helixel--surround-pairs-active').
 `helixel-jump-to-match' (% / ,) only considers :pair entries
 from `helixel--surround-pairs-active'.")
-
-
-(declare-function evil-textobj-tree-sitter--range
-                  "evil-textobj-tree-sitter-core" t t)
-(declare-function evil-textobj-tree-sitter--message-not-found
-                  "evil-textobj-tree-sitter-core" t t)
-(defvar evil-textobj-tree-sitter-use-next-if-not-within)
 
 (defvar helixel-textobj-action-function nil
   "If non-nil, called with (CATEGORY SUBCAT) on textobj action start.")

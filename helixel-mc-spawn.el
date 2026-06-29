@@ -49,7 +49,6 @@
 (require 'helixel-search)
 
 
-(declare-function helixel--recreate-selection "helixel-repeat")
 
 ;; Special vars from helixel-repeat — must be `defvar' so the `let'
 ;; bindings below are treated as dynamic, not lexical.

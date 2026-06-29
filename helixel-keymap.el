@@ -35,7 +35,6 @@
 
 ;;; Code:
 
-(declare-function flymake-show-buffer-diagnostics "flymake")
 (declare-function flymake-goto-next-error "flymake")
 (declare-function flymake-goto-prev-error "flymake")
 (declare-function eglot-find-typeDefinition "eglot")

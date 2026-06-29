@@ -77,14 +77,13 @@
 (declare-function eww-forward-url "eww")
 (declare-function eww-reload "eww")
 
-(declare-function diff-hunk-kill "diff-mode")
-(declare-function diff-hunk-next "diff-mode")
-(declare-function diff-hunk-prev "diff-mode")
-(declare-function diff-file-next "diff-mode")
-(declare-function diff-file-prev "diff-mode")
-
-(declare-function log-view-msg-next "log-view")
-(declare-function log-view-msg-prev "log-view")
+(declare-function diff-hunk-kill "ext:diff-mode--subrs")
+(declare-function diff-hunk-next "ext:diff-mode--subrs")
+(declare-function diff-hunk-prev "ext:diff-mode--subrs")
+(declare-function diff-file-next "ext:diff-mode--subrs")
+(declare-function diff-file-prev "ext:diff-mode--subrs")
+(declare-function log-view-msg-next "ext:log-view--subrs")
+(declare-function log-view-msg-prev "ext:log-view--subrs")
 
 (declare-function xref-edit-save-changes "xref")
 (declare-function xref-change-to-xref-edit-mode "xref")
@@ -278,38 +277,28 @@ Unset `l' from `help-mode-map' so it falls through to the
 ;; ── Deferred registration ──
 ;; We defer calling the setup functions until the target library is
 ;; loaded because `advice-add' requires the function to exist.
-;; We use a helper to invoke `eval-after-load' indirectly so that
-;; package-lint does not flag these as configuration-only usage.
 
-(defun helixel-shims--defer-setup (feature func)
-  "Arrange for FUNC to be called after FEATURE is loaded.
-FUNC is a function symbol (called with no arguments)."
-  (funcall (intern "eval-after-load") feature `(funcall ',func)))
+;; Modes where invisible = filtered-out content.
+(with-eval-after-load 'compile
+  (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil))
 
-(defun helixel-shims--register-deferred ()
-  "Register deferred shim setups.
-Called at top-level when this file is loaded."
-  ;; Modes where invisible = filtered-out content.
-  (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil)
-  ;; State-transition shims
-  (helixel-shims--defer-setup 'wdired 'helixel-shims--setup-wdired)
-  (helixel-shims--defer-setup 'grep 'helixel-shims--setup-grep-edit)
-  (helixel-shims--defer-setup 'replace 'helixel-shims--setup-occur-edit)
-  (helixel-shims--defer-setup 'wgrep 'helixel-shims--setup-wgrep)
-  ;; Keybinding shims
-  (helixel-shims--defer-setup 'help-mode 'helixel-shims--setup-help-mode)
-  (helixel-shims--defer-setup 'info 'helixel-shims--setup-info-mode)
-  (helixel-shims--defer-setup 'apropos 'helixel-shims--setup-apropos-mode)
-  (helixel-shims--defer-setup 'shortdoc 'helixel-shims--setup-shortdoc-mode)
-  (helixel-shims--defer-setup 'man 'helixel-shims--setup-man-mode)
-  (helixel-shims--defer-setup 'prog-mode 'helixel-shims--setup-prog-mode)
-  (helixel-shims--defer-setup 'woman 'helixel-shims--setup-woman-mode)
-  (helixel-shims--defer-setup 'eww 'helixel-shims--setup-eww-mode)
-  (helixel-shims--defer-setup 'xref 'helixel-shims--setup-xref-edit)
-  (helixel-shims--defer-setup 'diff-mode 'helixel-shims--setup-diff-mode)
-  (helixel-shims--defer-setup 'log-view 'helixel-shims--setup-log-view))
-
-(helixel-shims--register-deferred)
+;; State-transition shims
+(with-eval-after-load 'wdired       (helixel-shims--setup-wdired))
+(with-eval-after-load 'grep         (helixel-shims--setup-grep-edit))
+(with-eval-after-load 'replace      (helixel-shims--setup-occur-edit))
+(with-eval-after-load 'wgrep        (helixel-shims--setup-wgrep))
+;; Keybinding shims
+(with-eval-after-load 'help-mode    (helixel-shims--setup-help-mode))
+(with-eval-after-load 'info         (helixel-shims--setup-info-mode))
+(with-eval-after-load 'apropos      (helixel-shims--setup-apropos-mode))
+(with-eval-after-load 'shortdoc     (helixel-shims--setup-shortdoc-mode))
+(with-eval-after-load 'man          (helixel-shims--setup-man-mode))
+(with-eval-after-load 'prog-mode    (helixel-shims--setup-prog-mode))
+(with-eval-after-load 'woman        (helixel-shims--setup-woman-mode))
+(with-eval-after-load 'eww          (helixel-shims--setup-eww-mode))
+(with-eval-after-load 'xref         (helixel-shims--setup-xref-edit))
+(with-eval-after-load 'diff-mode    (helixel-shims--setup-diff-mode))
+(with-eval-after-load 'log-view     (helixel-shims--setup-log-view))
 
 ;; ── Multi-cursor shims ──
 ;;
@@ -362,8 +351,8 @@ doesn't try to call it at fakes) and installs the sync advice."
     (advice-add cmd :around #'helixel-mc--completion-preview-sync)))
 
 ;; Defer setup until `completion-preview' loads (Emacs 30.1).
-(helixel-shims--defer-setup 'completion-preview
-                            'helixel-mc--setup-completion-preview)
+(with-eval-after-load 'completion-preview
+  (helixel-mc--setup-completion-preview))
 
 ;; consult--read — cache during mc dispatch.  Defined at top
 ;; level so the byte-compiler sees `defun' before `advice-add'.
@@ -387,7 +376,8 @@ arguments (usually a prompt string)."
   "Advise `consult--read' to cache input during mc dispatch."
   (advice-add #'consult--read
               :around #'helixel-mc--cache-consult--read))
-(helixel-shims--defer-setup 'consult 'helixel-shims--setup-consult)
+(with-eval-after-load 'consult
+  (helixel-shims--setup-consult))
 
 (provide 'helixel-shims)
 ;;; helixel-shims.el ends here

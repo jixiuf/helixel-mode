@@ -781,15 +781,15 @@ must send each fake to ITS own matching delimiter."
 (ert-deftest helixel-test-mc-bracket-movement-broadcasts ()
   "`])' / `[(' / etc. are point-local textobj-end movements;
 broadcast must advance each fake to ITS own next/outer match."
-  (should (eq t (get 'helixel-next-paren-end 'helixel-multiple-cursors)))
-  (should (eq t (get 'helixel-outer-paren  'helixel-multiple-cursors)))
+  (should (eq t (get 'helixel-forward-outer-paren 'helixel-multiple-cursors)))
+  (should (eq t (get 'helixel-backward-outer-paren  'helixel-multiple-cursors)))
   (helixel-test-with-buffer "(aa) (bb) (cc) (dd)\n"
     (helixel-enter-normal-state)
     (goto-char 1)
     (helixel-mc--create-fake-cursor 6)
-    (helixel-next-paren-end)
-    (helixel-mc-with-each-cursor (helixel-next-paren-end))
-    ;; `helixel-next-paren-end' lands one PAST the closing `)'.
+    (helixel-forward-outer-paren)
+    (helixel-mc-with-each-cursor (helixel-forward-outer-paren))
+    ;; `helixel-forward-outer-paren' lands one PAST the closing `)'.
     (should (= 5 (point)))
     (should (= 10 (marker-position
                   (helixel-mc-cursor-point (car (helixel-mc-all-cursors))))))

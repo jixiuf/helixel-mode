@@ -347,24 +347,24 @@ DELIM-EXPR is an expression that evaluates to a `helixel-delimiter' struct."
   "Define the 4 outer/inner movement commands for a delimiter pair.
 STEM is the name fragment (e.g. paren, bracket, brace).
 OPEN and CLOSE are the delimiter characters.
-Generates commands: helixel-outer-STEM, helixel-next-STEM-end,
-helixel-inner-outer-STEM, helixel-inner-next-STEM-end."
+Generates commands: helixel-backward-outer-STEM, helixel-forward-outer-STEM,
+helixel-backward-inner-STEM, helixel-forward-inner-STEM."
   (declare (indent 1))
-  (let ((outer-cmd (intern (format "helixel-outer-%s" stem)))
-        (next-end-cmd (intern (format "helixel-next-%s-end" stem)))
-        (inner-outer-cmd (intern (format "helixel-inner-outer-%s" stem)))
-        (inner-next-end-cmd
-         (intern (format "helixel-inner-next-%s-end" stem)))
+  (let ((backward-outer-cmd (intern (format "helixel-backward-outer-%s" stem)))
+        (forward-outer-cmd (intern (format "helixel-forward-outer-%s" stem)))
+        (backward-inner-cmd (intern (format "helixel-backward-inner-%s" stem)))
+        (forward-inner-cmd
+         (intern (format "helixel-forward-inner-%s" stem)))
         (delim-form `(helixel-make-pair-delimiter ,open ,close)))
     `(progn
-       (helixel--define-delimiter-movement ,outer-cmd t nil
-         ,next-end-cmd ,delim-form)
-       (helixel--define-delimiter-movement ,next-end-cmd t t
-         ,outer-cmd ,delim-form)
-       (helixel--define-delimiter-movement ,inner-outer-cmd nil nil
-         ,inner-next-end-cmd ,delim-form)
-       (helixel--define-delimiter-movement ,inner-next-end-cmd nil t
-         ,inner-outer-cmd ,delim-form))))
+       (helixel--define-delimiter-movement ,backward-outer-cmd t nil
+         ,forward-outer-cmd ,delim-form)
+       (helixel--define-delimiter-movement ,forward-outer-cmd t t
+         ,backward-outer-cmd ,delim-form)
+       (helixel--define-delimiter-movement ,backward-inner-cmd nil nil
+         ,forward-inner-cmd ,delim-form)
+       (helixel--define-delimiter-movement ,forward-inner-cmd nil t
+         ,backward-inner-cmd ,delim-form))))
 
 (helixel--define-pair-delimiter-family paren ?\( ?\))
 (helixel--define-pair-delimiter-family bracket ?\[ ?\])
@@ -380,20 +380,20 @@ helixel-inner-outer-STEM, helixel-inner-next-STEM-end."
   "Define 4 movement commands for a zero-arg delimiter like tag/block.
 STEM is the name fragment.  FACTORY-FORM produces the delimiter."
   (declare (indent 1))
-  (let ((outer-cmd (intern (format "helixel-outer-%s" stem)))
-        (next-end-cmd (intern (format "helixel-next-%s-end" stem)))
-        (inner-outer-cmd (intern (format "helixel-inner-outer-%s" stem)))
-        (inner-next-end-cmd
-         (intern (format "helixel-inner-next-%s-end" stem))))
+  (let ((backward-outer-cmd (intern (format "helixel-backward-outer-%s" stem)))
+        (forward-outer-cmd (intern (format "helixel-forward-outer-%s" stem)))
+        (backward-inner-cmd (intern (format "helixel-backward-inner-%s" stem)))
+        (forward-inner-cmd
+         (intern (format "helixel-forward-inner-%s" stem))))
     `(progn
-       (helixel--define-delimiter-movement ,outer-cmd t nil
-         ,next-end-cmd ,factory-form)
-       (helixel--define-delimiter-movement ,next-end-cmd t t
-         ,outer-cmd ,factory-form)
-       (helixel--define-delimiter-movement ,inner-outer-cmd nil nil
-         ,inner-next-end-cmd ,factory-form)
-       (helixel--define-delimiter-movement ,inner-next-end-cmd nil t
-         ,inner-outer-cmd ,factory-form))))
+       (helixel--define-delimiter-movement ,backward-outer-cmd t nil
+         ,forward-outer-cmd ,factory-form)
+       (helixel--define-delimiter-movement ,forward-outer-cmd t t
+         ,backward-outer-cmd ,factory-form)
+       (helixel--define-delimiter-movement ,backward-inner-cmd nil nil
+         ,forward-inner-cmd ,factory-form)
+       (helixel--define-delimiter-movement ,forward-inner-cmd nil t
+         ,backward-inner-cmd ,factory-form))))
 
 (helixel--define-singleton-delimiter-family
     tag (helixel-make-tag-delimiter))

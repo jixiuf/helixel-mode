@@ -895,7 +895,7 @@ third"
   "Test [ ( outward to enclosing paren opening."
   (helixel-test-with-buffer '(:text "foo (bar) baz" :start nil)
     (goto-char 7)
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 5))
 ))
 
@@ -903,7 +903,7 @@ third"
   "Test ] ( forward to next paren closing from outside."
   (helixel-test-with-buffer '(:text "x (one) (two)" :start nil)
     (goto-char 1)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 8))
 ))
 
@@ -911,7 +911,7 @@ third"
   "Test [ [ outward to enclosing bracket opening."
   (helixel-test-with-buffer '(:text "[abc] def" :start nil)
     (goto-char 4)
-    (helixel-outer-bracket)
+    (helixel-backward-outer-bracket)
     (should (= (point) 1))
 ))
 
@@ -919,7 +919,7 @@ third"
   "Test ] [ forward to next bracket closing."
   (helixel-test-with-buffer '(:text "x [one] [two]" :start nil)
     (goto-char 1)
-    (helixel-next-bracket-end)
+    (helixel-forward-outer-bracket)
     (should (= (point) 8))
 ))
 
@@ -927,7 +927,7 @@ third"
   "Test [ { outward to enclosing brace opening."
   (helixel-test-with-buffer '(:text "{abc} def" :start nil)
     (goto-char 4)
-    (helixel-outer-brace)
+    (helixel-backward-outer-brace)
     (should (= (point) 1))
 ))
 
@@ -935,7 +935,7 @@ third"
   "Test ] { forward to next brace closing."
   (helixel-test-with-buffer '(:text "x {one} {two}" :start nil)
     (goto-char 1)
-    (helixel-next-brace-end)
+    (helixel-forward-outer-brace)
     (should (= (point) 8))
 ))
 
@@ -943,7 +943,7 @@ third"
   "Test [ \" outward to enclosing double-quote opening."
   (helixel-test-with-buffer '(:text "x \"abc\" def" :start nil)
     (goto-char 5)
-    (helixel-outer-double-quote)
+    (helixel-backward-outer-double-quote)
     (should (= (point) 3))
 ))
 
@@ -951,7 +951,7 @@ third"
   "Test [ ' outward to enclosing single-quote opening."
   (helixel-test-with-buffer '(:text "x 'abc' def" :start nil)
     (goto-char 5)
-    (helixel-outer-single-quote)
+    (helixel-backward-outer-single-quote)
     (should (= (point) 3))
 ))
 
@@ -959,7 +959,7 @@ third"
   "Test [ < outward to enclosing angle opening."
   (helixel-test-with-buffer '(:text "<abc> def" :start nil)
     (goto-char 4)
-    (helixel-outer-angle)
+    (helixel-backward-outer-angle)
     (should (= (point) 1))
 ))
 
@@ -967,7 +967,7 @@ third"
   "Test [ ` outward to enclosing back-quote opening."
   (helixel-test-with-buffer '(:text "x `abc` def" :start nil)
     (goto-char 5)
-    (helixel-outer-back-quote)
+    (helixel-backward-outer-back-quote)
     (should (= (point) 3))
 ))
 
@@ -977,7 +977,7 @@ third"
   "Test { ( outward to enclosing inner paren opening."
   (helixel-test-with-buffer '(:text "(abc def) ghi" :start nil)
     (goto-char 5)
-    (helixel-inner-outer-paren)
+    (helixel-backward-inner-paren)
     (should (= (point) 2))
 ))
 
@@ -985,7 +985,7 @@ third"
   "Test } ( forward to next inner paren closing."
   (helixel-test-with-buffer '(:text "x (one) (two)" :start nil)
     (goto-char 1)
-    (helixel-inner-next-paren-end)
+    (helixel-forward-inner-paren)
     (should (= (point) 7))
 ))
 
@@ -993,7 +993,7 @@ third"
   "Test { [ outward to enclosing inner bracket opening."
   (helixel-test-with-buffer '(:text "[abc] def" :start nil)
     (goto-char 4)
-    (helixel-inner-outer-bracket)
+    (helixel-backward-inner-bracket)
     (should (= (point) 2))
 ))
 
@@ -1001,7 +1001,7 @@ third"
   "Test } [ forward to next inner bracket closing."
   (helixel-test-with-buffer '(:text "x [one] [two]" :start nil)
     (goto-char 1)
-    (helixel-inner-next-bracket-end)
+    (helixel-forward-inner-bracket)
     (should (= (point) 7))
 ))
 
@@ -1009,7 +1009,7 @@ third"
   "Test { { outward to enclosing inner brace opening."
   (helixel-test-with-buffer '(:text "{abc} def" :start nil)
     (goto-char 4)
-    (helixel-inner-outer-brace)
+    (helixel-backward-inner-brace)
     (should (= (point) 2))
 ))
 
@@ -1017,7 +1017,7 @@ third"
   "Test } { forward to next inner brace closing."
   (helixel-test-with-buffer '(:text "x {one} {two}" :start nil)
     (goto-char 1)
-    (helixel-inner-next-brace-end)
+    (helixel-forward-inner-brace)
     (should (= (point) 7))
 ))
 
@@ -1025,7 +1025,7 @@ third"
   "Test { \" outward to enclosing inner double-quote opening."
   (helixel-test-with-buffer '(:text "\"abc\" def" :start nil)
     (goto-char 4)
-    (helixel-inner-outer-double-quote)
+    (helixel-backward-inner-double-quote)
     (should (= (point) 2))
 ))
 
@@ -1034,7 +1034,7 @@ third"
   "Test ; after [ ( marks the enclosing paren using stored bounds."
   (helixel-test-with-buffer '(:text "foo (the target) bar" :start nil)
     (goto-char 9)
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (helixel-action-mark-region helixel--live-action))
     (should (helixel-action-mark-region helixel--live-action))
     (let ((mr (helixel-action-mark-region helixel--live-action))) (push-mark (car mr) t t) (goto-char (cdr mr)) (activate-mark))
@@ -1222,9 +1222,9 @@ line two
   "hello world" 3 1 7)
 (helixel-test-mark-thing "o-symbol" #'helixel-forward-symbol-start
   "foo.bar baz" 1 1 4)
-(helixel-test-mark-thing "outer-paren" #'helixel-outer-paren
+(helixel-test-mark-thing "outer-paren" #'helixel-backward-outer-paren
   "foo (bar)" 7 5 10)
-(helixel-test-mark-thing "next-paren" #'helixel-next-paren-end
+(helixel-test-mark-thing "next-paren" #'helixel-forward-outer-paren
   "a (one) (two)" 1 3 8)
 
 (ert-deftest helixel-test-mark-thing-second-semicolon ()
@@ -1276,7 +1276,7 @@ line two
     (goto-char 2)
     (search-forward "he")
     ;; [t from inside <div> content
-    (helixel-outer-tag)
+    (helixel-backward-outer-tag)
     (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the stored bounds
     (helixel--action-cycle)
@@ -1296,7 +1296,7 @@ line two
     ;; Go between </div> and </p> (position 20 is \n after </div>)
     (goto-char 20)
     ;; [t finds <p>...</p> (the outer enclosing tag)
-    (helixel-outer-tag)
+    (helixel-backward-outer-tag)
     (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the stored bounds (outer <p>)
     (helixel--action-cycle)
@@ -1315,7 +1315,7 @@ line two
     (deactivate-mark)
     (goto-char 7)
     ;; {t from inside <p> content
-    (helixel-inner-outer-tag)
+    (helixel-backward-inner-tag)
     (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the stored inner bounds
     (helixel--action-cycle)
@@ -1334,7 +1334,7 @@ line two
     (deactivate-mark)
     (goto-char 4)  ; inside <a> content (the "x")
     ;; ]t from inside <a>
-    (helixel-next-tag-end)
+    (helixel-forward-outer-tag)
     (should (helixel-action-mark-region helixel--live-action))
     ;; ; marks the current enclosing tag <a>
     (helixel--action-cycle)
@@ -1389,7 +1389,7 @@ hello
   "Test ] ( at inner ) climbs to outer ) in nested parens."
   (helixel-test-with-buffer '(:text "(a (b) c)" :start nil)
     (goto-char 6)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 10))
 ))
 
@@ -1397,7 +1397,7 @@ hello
   "Test } ( at inner ) climbs to outer inner ) in nested parens."
   (helixel-test-with-buffer '(:text "(a (b) c)" :start nil)
     (goto-char 6)
-    (helixel-inner-next-paren-end)
+    (helixel-forward-inner-paren)
     (should (= (point) 9))
 ))
 
@@ -1405,7 +1405,7 @@ hello
   "Test ] { at inner } climbs to outer } in nested braces."
   (helixel-test-with-buffer '(:text "{a {b} c}" :start nil)
     (goto-char 6)
-    (helixel-next-brace-end)
+    (helixel-forward-outer-brace)
     (should (= (point) 10))
 ))
 
@@ -1413,7 +1413,7 @@ hello
   "Test } { at inner } climbs to outer inner } in nested braces."
   (helixel-test-with-buffer '(:text "{a {b} c}" :start nil)
     (goto-char 6)
-    (helixel-inner-next-brace-end)
+    (helixel-forward-inner-brace)
     (should (= (point) 9))
 ))
 
@@ -1423,7 +1423,7 @@ hello
   "Test ]t at inner </div> climbs to outer </p> in nested tags."
   (helixel-test-with-buffer '(:text "<p><div>hi</div></p>" :start nil)
     (goto-char 16)
-    (helixel-next-tag-end)
+    (helixel-forward-outer-tag)
     (should (= (point) 21))
 ))
 
@@ -1431,7 +1431,7 @@ hello
   "Test }t at inner </div> climbs to outer inner </p> in nested tags."
   (helixel-test-with-buffer '(:text "<p><div>hi</div></p>" :start nil)
     (goto-char 16)
-    (helixel-inner-next-tag-end)
+    (helixel-forward-inner-tag)
     (should (= (point) 17))
 ))
 
@@ -1443,13 +1443,13 @@ hello
   ;; 1:\( 2:a 3:SPC 4:\( 5:b 6:SPC 7:\( 8:c 9:\) 10:\) 11:\) 12:eob
   (helixel-test-with-buffer '(:text "(a (b (c)))" :start nil)
     (goto-char 8)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 10))
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 11))
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 12))
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 12))
 ))
 
@@ -1458,11 +1458,11 @@ hello
   ;; 1:\( 2:a 3:\( 4:b 5:\( 6:c 7:\) 8:\) 9:\) 10:eob
   (helixel-test-with-buffer '(:text "(a(b(c)))" :start nil)
     (goto-char 6)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 8))
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 9))
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 10))
 )) ; after third ) = eob
 
@@ -1470,11 +1470,11 @@ hello
   "Test ]{ from inside 3-nested braces steps one level each press."
   (helixel-test-with-buffer '(:text "{a {b {c}}}" :start nil)
     (goto-char 8)
-    (helixel-next-brace-end)
+    (helixel-forward-outer-brace)
     (should (= (point) 10))
-    (helixel-next-brace-end)
+    (helixel-forward-outer-brace)
     (should (= (point) 11))
-    (helixel-next-brace-end)
+    (helixel-forward-outer-brace)
     (should (= (point) 12))
 )) ; after third } = eob
 
@@ -1482,11 +1482,11 @@ hello
   "Test ][ from inside 3-nested brackets steps one level each press."
   (helixel-test-with-buffer '(:text "[a [b [c]]]" :start nil)
     (goto-char 8)
-    (helixel-next-bracket-end)
+    (helixel-forward-outer-bracket)
     (should (= (point) 10))
-    (helixel-next-bracket-end)
+    (helixel-forward-outer-bracket)
     (should (= (point) 11))
-    (helixel-next-bracket-end)
+    (helixel-forward-outer-bracket)
     (should (= (point) 12))
 )) ; after third ] = eob
 
@@ -1499,11 +1499,11 @@ need the normal AT-closing climb to advance."
   ;; Buffer: ((a)) — 1:( 2:( 3:a 4:) 5:) 6:eob
   (helixel-test-with-buffer '(:text "((a))" :start nil)
     (goto-char 3)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 5))
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 6))
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 6))
 ))
 
@@ -1513,7 +1513,7 @@ need the normal AT-closing climb to advance."
   "Test ] ( from before a paren pair jumps into it."
   (helixel-test-with-buffer '(:text "before (target) after" :start nil)
     (goto-char 1)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 16))
 ))
 
@@ -1521,7 +1521,7 @@ need the normal AT-closing climb to advance."
   "Test ] { from before a brace pair jumps into it."
   (helixel-test-with-buffer '(:text "before {target} after" :start nil)
     (goto-char 1)
-    (helixel-next-brace-end)
+    (helixel-forward-outer-brace)
     (should (= (point) 16))
 ))
 
@@ -1529,7 +1529,7 @@ need the normal AT-closing climb to advance."
   "Test ] \" from before a quoted string finds its closing."
   (helixel-test-with-buffer '(:text "x \"one\" y" :start nil)
     (goto-char 1)
-    (helixel-next-double-quote-end)
+    (helixel-forward-outer-double-quote)
     (should (= (point) 8))
 ))
 
@@ -1537,7 +1537,7 @@ need the normal AT-closing climb to advance."
   "Test ] ' from before a quoted string finds its closing."
   (helixel-test-with-buffer '(:text "x 'one' y" :start nil)
     (goto-char 1)
-    (helixel-next-single-quote-end)
+    (helixel-forward-outer-single-quote)
     (should (= (point) 8))
 ))
 
@@ -1545,7 +1545,7 @@ need the normal AT-closing climb to advance."
   "Test ] < moves to closing angle bracket."
   (helixel-test-with-buffer '(:text "<foo> bar" :start nil)
     (goto-char 2)
-    (helixel-next-angle-end)
+    (helixel-forward-outer-angle)
     (should (= (point) 6))
 ))
 
@@ -1555,14 +1555,14 @@ need the normal AT-closing climb to advance."
   "Test ] ( with no paren in buffer does not crash."
   (helixel-test-with-buffer '(:text "no parens here at all" :start nil)
     (goto-char 5)
-    (condition-case nil (helixel-next-paren-end) (error nil))
+    (condition-case nil (helixel-forward-outer-paren) (error nil))
     (let ((mr (helixel-action-mark-region helixel--live-action))) (should (= (marker-position (car mr)) (marker-position (cdr mr)))))
 ))
 
 (ert-deftest helixel-test-pair-outer-paren-no-pair ()
   "Test [ ( with no paren in buffer does not crash."
   (helixel-test-with-buffer '(:text "no parens here" :start nil)
-    (condition-case nil (helixel-outer-paren) (error nil))
+    (condition-case nil (helixel-backward-outer-paren) (error nil))
     (let ((mr (helixel-action-mark-region helixel--live-action))) (should (= (marker-position (car mr)) (marker-position (cdr mr)))))
 ))
 
@@ -1577,7 +1577,7 @@ need the normal AT-closing climb to advance."
     (deactivate-mark)
     (goto-char 10)
     (condition-case nil
-        (helixel-outer-block)
+        (helixel-backward-outer-block)
       (error nil))
     (when-let* ((mr (helixel-action-mark-region helixel--live-action)))
       (should (<= (marker-position (car mr)) 10)))))
@@ -1591,7 +1591,7 @@ need the normal AT-closing climb to advance."
     (deactivate-mark)
     (goto-char 10)
     (condition-case nil
-        (helixel-next-block-end)
+        (helixel-forward-outer-block)
       (error nil))
     (when-let* ((mr (helixel-action-mark-region helixel--live-action)))
       (should (>= (marker-position (cdr mr)) 10)))))
@@ -1664,12 +1664,12 @@ Second paragraph." :start nil)
   ", tracks and re-invokes pair delimiter motion (])."
   (helixel-test-with-buffer '(:text "x (a) (b) (c)" :start nil)
     (goto-char 1)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 6))
     (should (helixel--last-motion-p helixel--last-motion-cmd))
-    (should (eq (helixel--last-motion-command helixel--last-motion-cmd) 'helixel-next-paren-end))
+    (should (eq (helixel--last-motion-command helixel--last-motion-cmd) 'helixel-forward-outer-paren))
     (helixel-repeat-last-motion)
-    (should (eq (helixel--last-motion-command helixel--last-motion-cmd) 'helixel-next-paren-end))
+    (should (eq (helixel--last-motion-command helixel--last-motion-cmd) 'helixel-forward-outer-paren))
 ))
 
 (ert-deftest helixel-test-motion-repeat-match ()
@@ -1836,14 +1836,14 @@ para3
   "[( , ; selects the same span as [( [( ;."
   (helixel-test-with-buffer '(:text "((char (hello)))" :start nil)
     (goto-char 12)
-    (let ((helixel--action-ring nil) (helixel--live-action nil) (helixel--action-pos nil)) (helixel-outer-paren) (let ((last-command 'helixel-outer-paren)) (helixel--action-cycle)) (should (region-active-p)) (should (> (region-end) (region-beginning))))
+    (let ((helixel--action-ring nil) (helixel--live-action nil) (helixel--action-pos nil)) (helixel-backward-outer-paren) (let ((last-command 'helixel-backward-outer-paren)) (helixel--action-cycle)) (should (region-active-p)) (should (> (region-end) (region-beginning))))
 ))
 
 (ert-deftest helixel-test-semicolon-nested-paren-span ()
   "; after consecutive [( selects the full outer span."
   (helixel-test-with-buffer '(:text "((char (hello)))" :start nil)
     (goto-char 12)
-    (let ((helixel--action-ring nil) (helixel--live-action nil) (helixel--action-pos nil)) (helixel-outer-paren) (helixel-outer-paren) (helixel--action-cycle) (should (region-active-p)) (should (= (region-beginning) 2)) (should (= (region-end) 16)) (should (string= (buffer-substring-no-properties (region-beginning) (region-end)) "(char (hello))")))
+    (let ((helixel--action-ring nil) (helixel--live-action nil) (helixel--action-pos nil)) (helixel-backward-outer-paren) (helixel-backward-outer-paren) (helixel--action-cycle) (should (region-active-p)) (should (= (region-beginning) 2)) (should (= (region-end) 16)) (should (string= (buffer-substring-no-properties (region-beginning) (region-end)) "(char (hello))")))
 ))
 
 (ert-deftest helixel-test-motion-find-char-survives-search ()
@@ -1870,7 +1870,7 @@ so changing the active-search category cannot break motion repeat."
 Movement subcats store category=movement with the specific subcat."
   (helixel-test-with-buffer '(:text "x (a)" :start nil)
     (goto-char 1)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (eq (helixel--last-motion-category helixel--last-motion-cmd) 'movement))
     (should (eq (helixel--last-motion-subcat helixel--last-motion-cmd) 'pair))
     (goto-char 1)
@@ -1899,7 +1899,7 @@ recording is tested via integration tests."
   ", repeats ] past consecutive paren boundaries."
   (helixel-test-with-buffer '(:text "(a) (b) (c)" :start nil)
     (goto-char 1)
-    (helixel-next-paren-end)
+    (helixel-forward-outer-paren)
     (should (= (point) 4))
     (helixel-repeat-last-motion)
     (should (= (point) 8))
@@ -1911,7 +1911,7 @@ recording is tested via integration tests."
   ", repeats [ past consecutive paren boundaries."
   (helixel-test-with-buffer '(:text "(a) (b) (c)" :start nil)
     (goto-char (point-max))
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 9))
     (helixel-repeat-last-motion)
     (should (= (point) 5))
@@ -1928,7 +1928,7 @@ recording is tested via integration tests."
   ;; so , would skip two nesting levels instead of one.
   (helixel-test-with-buffer '(:text "(a (b (c)))" :start nil)
     (goto-char 8)
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 7))
     (helixel-repeat-last-motion)
     (should (= (point) 4))
@@ -1952,7 +1952,7 @@ recording is tested via integration tests."
     (insert "#+begin_quote\nouter\n#+begin_src elisp\ninner\n#+end_src\nmore\n#+end_quote\n")
     (deactivate-mark)
     (goto-char 35)  ;; inside inner src block
-    (helixel-outer-block)
+    (helixel-backward-outer-block)
     ;; First [c lands on the inner block opener.
     (should (= (point) 21))  ;; at #+begin_src
     ;; , must go one level outward to outer block opener.
@@ -1966,7 +1966,7 @@ recording is tested via integration tests."
   ", repeats } past consecutive inner paren boundaries."
   (helixel-test-with-buffer '(:text "(a x) (b y) (c z)" :start nil)
     (goto-char 3)
-    (helixel-inner-next-paren-end)
+    (helixel-forward-inner-paren)
     (let ((p1 (point))) (should (> p1 3)) (helixel-repeat-last-motion) (should (> (point) p1)))
 )) ;; moved further
 
@@ -1978,7 +1978,7 @@ recording is tested via integration tests."
   ;; causing , to double-jump to the grandparent.
   (helixel-test-with-buffer '(:text "(a (b (c)))" :start nil)
     (goto-char 8)
-    (helixel-inner-next-paren-end)
+    (helixel-forward-inner-paren)
     (should (= (point) 9))
     (helixel-repeat-last-motion)
     (should (= (point) 10))
@@ -1992,7 +1992,7 @@ recording is tested via integration tests."
   ", repeats { past consecutive inner paren boundaries."
   (helixel-test-with-buffer '(:text "(a) (b) (c)" :start nil)
     (goto-char 10)
-    (helixel-inner-outer-paren)
+    (helixel-backward-inner-paren)
     (let ((p1 (point))) (helixel-repeat-last-motion) (should (< (point) p1)))
 )) ;; moved backward
 
@@ -2002,13 +2002,13 @@ recording is tested via integration tests."
   "[ ( steps outward through paren openers one level each press."
   (helixel-test-with-buffer '(:text "(a (b (c)))" :start nil)
     (goto-char 8)
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 7))
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 4))
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 1))
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 1))
 ))
 
@@ -2016,11 +2016,11 @@ recording is tested via integration tests."
   "{ ( steps outward through inner paren openers one level each press."
   (helixel-test-with-buffer '(:text "(a (b (c)))" :start nil)
     (goto-char 8)
-    (helixel-inner-outer-paren)
+    (helixel-backward-inner-paren)
     (should (= (point) 5))
-    (helixel-inner-outer-paren)
+    (helixel-backward-inner-paren)
     (should (= (point) 2))
-    (helixel-inner-outer-paren)
+    (helixel-backward-inner-paren)
     (should (= (point) 2))
 ))
 
@@ -2028,7 +2028,7 @@ recording is tested via integration tests."
   ", repeats [ ( stepping outward through paren openers."
   (helixel-test-with-buffer '(:text "(a (b (c)))" :start nil)
     (goto-char 8)
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 7))
     (helixel-repeat-last-motion)
     (should (= (point) 4))
@@ -2046,11 +2046,11 @@ always."
   ;; Buffer: ((a)) — 1:( 2:( 3:a 4:) 5:) 6:eob
   (helixel-test-with-buffer '(:text "((a))" :start nil)
     (goto-char 3)
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 2))
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 1))
-    (helixel-outer-paren)
+    (helixel-backward-outer-paren)
     (should (= (point) 1))
 ))
 

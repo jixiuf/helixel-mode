@@ -2143,8 +2143,8 @@ The bounds search may fail, but the clearing runs first."
     (condition-case nil
         (progn
           (setq last-command 'helixel-select-line
-                this-command 'helixel-outer-paren)
-          (helixel-outer-paren))
+                this-command 'helixel-backward-outer-paren)
+          (helixel-backward-outer-paren))
       (error nil))
     (should (null helixel--pending-sel))))
 

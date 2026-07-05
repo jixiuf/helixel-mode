@@ -328,8 +328,9 @@ e.g. \"helixel-mark-a-%s\"."
 
 (defconst helixel--bracket-prefix-delims
   ;; (KEYS . TYPE-INFIX)
-  ;; TYPE-INFIX is the substring inserted into helixel-{prefix}-{TYPE}
-  ;; -end (for ] / }) or helixel-{prefix}-{TYPE} (for [ / {).
+  ;; TYPE-INFIX is the substring inserted into the function name template.
+  ;; Templates: helixel-backward-outer-%s ( [ ), helixel-forward-outer-%s ( ] ),
+  ;; helixel-backward-inner-%s ( { ), helixel-forward-inner-%s ( } ).
   '(("()b"   . "paren")
     ("[]"    . "bracket")
     ("B{}"   . "brace")
@@ -346,7 +347,7 @@ Used to populate `helixel-right-map' / `-left-map' /
 (defun helixel--bracket-prefix-populate (map fn-template)
   "Populate MAP from `helixel--bracket-prefix-delims'.
 FN-TEMPLATE is a format string that takes one %s for the type-infix,
-e.g. \"helixel-next-%s-end\"."
+e.g. \"helixel-forward-outer-%s\"."
   (dolist (cell helixel--bracket-prefix-delims)
     (let ((fn (intern (format fn-template (cdr cell)))))
       (dolist (ch (string-to-list (car cell)))
@@ -359,7 +360,7 @@ e.g. \"helixel-next-%s-end\"."
   "s" #'helixel-forward-sentence-end
   "f" #'helixel-forward-function-end)
 (helixel--bracket-prefix-populate helixel-right-map
-                                  "helixel-next-%s-end")
+                                  "helixel-forward-outer-%s")
 
 (defvar-keymap helixel-left-map
   :doc "Keymap for `[' prefix."
@@ -368,17 +369,17 @@ e.g. \"helixel-next-%s-end\"."
   "s" #'helixel-backward-sentence-start
   "f" #'helixel-backward-function-start)
 (helixel--bracket-prefix-populate helixel-left-map
-                                  "helixel-outer-%s")
+                                  "helixel-backward-outer-%s")
 
 (defvar-keymap helixel-inner-right-map
   :doc "Keymap for `}' prefix.")
 (helixel--bracket-prefix-populate helixel-inner-right-map
-                                  "helixel-inner-next-%s-end")
+                                  "helixel-forward-inner-%s")
 
 (defvar-keymap helixel-inner-left-map
   :doc "Keymap for `{' prefix.")
 (helixel--bracket-prefix-populate helixel-inner-left-map
-                                  "helixel-inner-outer-%s")
+                                  "helixel-backward-inner-%s")
 
 ;; ── State keymaps ──
 

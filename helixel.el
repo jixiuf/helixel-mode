@@ -68,11 +68,14 @@
   "Register all module init functions on `helixel-mode-on-hook'.
 Each init function registers its module's internal hooks only when
 `helixel-mode' is enabled."
-  (add-hook 'helixel-mode-on-hook #'helixel-keymap--init-hooks)
-  (add-hook 'helixel-mode-on-hook #'helixel-surround--init)
-  (add-hook 'helixel-mode-on-hook #'helixel-mc-spawn--init)
-  (add-hook 'helixel-mode-on-hook #'helixel-mc-integrate--init)
-  (add-hook 'helixel-mode-on-hook #'helixel--init-chain-hooks))
+  (add-hook 'helixel-mode-on-hook  #'helixel-keymap--init-hooks)
+  (add-hook 'helixel-mode-on-hook  #'helixel-surround--init)
+  (add-hook 'helixel-mode-on-hook  #'helixel-mc-spawn--init)
+  (add-hook 'helixel-mode-on-hook  #'helixel-mc-integrate--init)
+  (add-hook 'helixel-mode-on-hook  #'helixel--init-chain-hooks)
+  (add-hook 'helixel-mode-on-hook  #'helixel-shims-global-mode)
+  (add-hook 'helixel-mode-off-hook
+            (lambda () (helixel-shims-global-mode -1))))
 (helixel--register-mode-hooks)
 
 (defun helixel--init-chain-hooks ()

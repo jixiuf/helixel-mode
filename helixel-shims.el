@@ -77,7 +77,7 @@
 (declare-function eww-forward-url "eww")
 (declare-function eww-reload "eww")
 
-(declare-function diff-hunk-kill "ext:diff-mode--subrs")
+(declare-function diff-hunk-kill "diff-mode")
 (declare-function diff-hunk-next "ext:diff-mode--subrs")
 (declare-function diff-hunk-prev "ext:diff-mode--subrs")
 (declare-function diff-file-next "ext:diff-mode--subrs")
@@ -112,6 +112,17 @@ Entering wdired → normal.  Exiting (save/abort) → motion."
   ;; dired-omit-mode hides files via invisible text.
   (add-hook 'dired-mode-hook #'helixel-shims--set-invisible-nil))
 
+(defun helixel-shims--teardown-wdired ()
+  "Remove wdired integration hooks and advice."
+  (remove-hook 'wdired-mode-hook #'helixel-enter-normal-state)
+  (ignore-errors
+    (advice-remove 'wdired-finish-edit #'helixel-enter-motion-state))
+  (ignore-errors
+    (advice-remove 'wdired-abort-changes #'helixel-enter-motion-state))
+  (ignore-errors
+    (advice-remove 'wdired-exit #'helixel-enter-motion-state))
+  (remove-hook 'dired-mode-hook #'helixel-shims--set-invisible-nil))
+
 ;; ── grep-edit (Emacs 29+ built-in) ──
 
 (defun helixel-shims--setup-grep-edit ()
@@ -128,6 +139,13 @@ Entering grep-edit → normal.  Saving → motion."
   ;; grep/occur results use invisible for filtering (consult-focus-line).
   (add-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil))
 
+(defun helixel-shims--teardown-grep-edit ()
+  "Remove grep-edit integration hooks and advice."
+  (remove-hook 'grep-edit-mode-hook #'helixel-enter-normal-state)
+  (ignore-errors
+    (advice-remove 'grep-edit-save-changes #'helixel-enter-motion-state))
+  (remove-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil))
+
 ;; ── occur-edit (Emacs 29+ built-in) ──
 
 (defun helixel-shims--setup-occur-edit ()
@@ -140,6 +158,13 @@ Entering occur-edit → normal.  Ceasing edit → motion."
     ;; be dispatched to every fake cursor after the mode is off.
     (put 'occur-cease-edit 'helixel-multiple-cursors nil))
   (add-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil))
+
+(defun helixel-shims--teardown-occur-edit ()
+  "Remove occur-edit integration hooks and advice."
+  (remove-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
+  (ignore-errors
+    (advice-remove 'occur-cease-edit #'helixel-enter-motion-state))
+  (remove-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil))
 
 ;; ── wgrep (third-party) ──
 
@@ -164,6 +189,20 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
     (put 'wgrep-abort-changes 'helixel-multiple-cursors nil)
     (put 'wgrep-save-all-buffers 'helixel-multiple-cursors nil)))
 
+(defun helixel-shims--teardown-wgrep ()
+  "Remove wgrep integration advice."
+  (ignore-errors
+    (advice-remove 'wgrep-change-to-wgrep-mode
+                   #'helixel-enter-normal-state))
+  (ignore-errors
+    (advice-remove 'wgrep-finish-edit #'helixel-enter-motion-state))
+  (ignore-errors
+    (advice-remove 'wgrep-abort-changes #'helixel-enter-motion-state))
+  (ignore-errors
+    (advice-remove 'wgrep-save-all-buffers #'helixel-enter-motion-state))
+  (ignore-errors
+    (advice-remove 'wgrep-exit #'helixel-enter-motion-state)))
+
 ;; ── xref-edit (Emacs 29+ built-in) ──
 
 (defun helixel-shims--setup-xref-edit ()
@@ -177,6 +216,12 @@ Entering xref-edit → normal.  Saving → motion."
     ;; mc dispatch would run it again at each fake cursor after the
     ;; mode is already off.  See also occur-cease-edit, wdired-*, wgre-*.
     (put 'xref-edit-save-changes 'helixel-multiple-cursors nil)))
+
+(defun helixel-shims--teardown-xref-edit ()
+  "Remove xref-edit integration hooks and advice."
+  (remove-hook 'xref-edit-mode-hook #'helixel-enter-normal-state)
+  (ignore-errors
+    (advice-remove 'xref-edit-save-changes #'helixel-enter-motion-state)))
 
 ;; ── diff-mode ──
 
@@ -274,31 +319,15 @@ Unset `l' from `help-mode-map' so it falls through to the
   (helixel-define-key 'motion "gf" #'eww-forward-url 'eww-mode)
   (helixel-define-key 'motion "gr" #'eww-reload 'eww-mode))
 
-;; ── Deferred registration ──
-;; We defer calling the setup functions until the target library is
-;; loaded because `advice-add' requires the function to exist.
+;; ── Deferred setup: compile ──
 
-;; Modes where invisible = filtered-out content.
-(with-eval-after-load 'compile
+(defun helixel-shims--setup-compile ()
+  "Add invisible-text hook to `compilation-mode-hook'."
   (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil))
 
-;; State-transition shims
-(with-eval-after-load 'wdired       (helixel-shims--setup-wdired))
-(with-eval-after-load 'grep         (helixel-shims--setup-grep-edit))
-(with-eval-after-load 'replace      (helixel-shims--setup-occur-edit))
-(with-eval-after-load 'wgrep        (helixel-shims--setup-wgrep))
-;; Keybinding shims
-(with-eval-after-load 'help-mode    (helixel-shims--setup-help-mode))
-(with-eval-after-load 'info         (helixel-shims--setup-info-mode))
-(with-eval-after-load 'apropos      (helixel-shims--setup-apropos-mode))
-(with-eval-after-load 'shortdoc     (helixel-shims--setup-shortdoc-mode))
-(with-eval-after-load 'man          (helixel-shims--setup-man-mode))
-(with-eval-after-load 'prog-mode    (helixel-shims--setup-prog-mode))
-(with-eval-after-load 'woman        (helixel-shims--setup-woman-mode))
-(with-eval-after-load 'eww          (helixel-shims--setup-eww-mode))
-(with-eval-after-load 'xref         (helixel-shims--setup-xref-edit))
-(with-eval-after-load 'diff-mode    (helixel-shims--setup-diff-mode))
-(with-eval-after-load 'log-view     (helixel-shims--setup-log-view))
+(defun helixel-shims--teardown-compile ()
+  "Remove invisible-text hook from `compilation-mode-hook'."
+  (remove-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil))
 
 ;; ── Multi-cursor shims ──
 ;;
@@ -350,12 +379,13 @@ doesn't try to call it at fakes) and installs the sync advice."
     (put cmd 'helixel-multiple-cursors nil)
     (advice-add cmd :around #'helixel-mc--completion-preview-sync)))
 
-;; Defer setup until `completion-preview' loads (Emacs 30.1).
-(with-eval-after-load 'completion-preview
-  (helixel-mc--setup-completion-preview))
+(defun helixel-mc--teardown-completion-preview ()
+  "Remove completion-preview multi-cursor sync advice."
+  (dolist (cmd helixel-mc-completion-preview-commands)
+    (ignore-errors
+      (advice-remove cmd #'helixel-mc--completion-preview-sync))))
 
-;; consult--read — cache during mc dispatch.  Defined at top
-;; level so the byte-compiler sees `defun' before `advice-add'.
+;; consult--read — cache during mc dispatch.
 (defun helixel-mc--cache-consult--read (orig-fun &rest args)
   "Around-advice for `consult--read': cache result during mc dispatch.
 ORIG-FUN is the original `consult--read' function; ARGS are its
@@ -376,8 +406,66 @@ arguments (usually a prompt string)."
   "Advise `consult--read' to cache input during mc dispatch."
   (advice-add #'consult--read
               :around #'helixel-mc--cache-consult--read))
-(with-eval-after-load 'consult
+
+(defun helixel-shims--teardown-consult ()
+  "Remove `consult--read' around advice for mc dispatch."
+  (ignore-errors
+    (advice-remove #'consult--read
+                   #'helixel-mc--cache-consult--read)))
+
+;; ── Enable / Disable ──
+
+(defun helixel-shims--enable ()
+  "Enable all integration shims."
+  ;; State-transition shims
+  (helixel-shims--setup-wdired)
+  (helixel-shims--setup-grep-edit)
+  (helixel-shims--setup-occur-edit)
+  (helixel-shims--setup-wgrep)
+  (helixel-shims--setup-xref-edit)
+  ;; Invisible-text hooks
+  (helixel-shims--setup-compile)
+  ;; Keybinding shims
+  (helixel-shims--setup-diff-mode)
+  (helixel-shims--setup-log-view)
+  (helixel-shims--setup-help-mode)
+  (helixel-shims--setup-info-mode)
+  (helixel-shims--setup-apropos-mode)
+  (helixel-shims--setup-shortdoc-mode)
+  (helixel-shims--setup-man-mode)
+  (when (featurep 'prog-mode)
+    (helixel-shims--setup-prog-mode))
+  (helixel-shims--setup-woman-mode)
+  (helixel-shims--setup-eww-mode)
+  ;; Multi-cursor shims
+  (helixel-mc--setup-completion-preview)
   (helixel-shims--setup-consult))
+
+(defun helixel-shims--disable ()
+  "Disable all integration shims."
+  (helixel-shims--teardown-consult)
+  (helixel-mc--teardown-completion-preview)
+  (helixel-shims--teardown-compile)
+  (helixel-shims--teardown-xref-edit)
+  (helixel-shims--teardown-wgrep)
+  (helixel-shims--teardown-occur-edit)
+  (helixel-shims--teardown-grep-edit)
+  (helixel-shims--teardown-wdired))
+
+;;;###autoload
+(define-minor-mode helixel-shims-global-mode
+  "Global minor mode for helixel integration shims.
+
+When enabled, sets up hooks, advice, and keybindings so built-in
+modes integrate with helixel's modal editing.
+
+When disabled, removes all advice and hooks, leaving keybindings
+inert (they only activate when `helixel-mode' is on)."
+  :global t
+  :group 'helixel
+  (if helixel-shims-global-mode
+      (helixel-shims--enable)
+    (helixel-shims--disable)))
 
 (provide 'helixel-shims)
 ;;; helixel-shims.el ends here

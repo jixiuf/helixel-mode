@@ -26,13 +26,13 @@ INIT_PACKAGES="(progn \
 
 EMACS_BATCH=${EMACS} -Q -batch -L . --eval ${INIT_PACKAGES}
 
-.PHONY: all  test  lint compile clean depgraph melpazoid format
+.PHONY: all  test  test-verbose  lint compile clean depgraph melpazoid format
 all: clean-elc compile lint test
 
 compile: $(ELS)
 
 %.elc: %.el
-	$(EMACS) --batch -Q  -L . --eval "(setq byte-compile-error-on-warn t)" \
+	@$(EMACS) --batch -Q  -L . --eval "(setq byte-compile-error-on-warn t)" \
 		--eval "(package-initialize)" \
 		-f batch-byte-compile $<
 
@@ -48,6 +48,15 @@ TEST_SELECTOR ?= t
 test:
 	@echo "---- Run unit tests"
 	@${EMACS_BATCH} \
+		--eval "(setq warning-minimum-level :error)" \
+		-l scripts/ert-summary.el \
+		$(addprefix -l ,$(FILES)) \
+		$(addprefix -l ,$(TEST_FILES)) \
+		--eval "(progn (setq load-prefer-newer t) (ert-run-tests-batch-summary '${TEST_SELECTOR}))"
+
+test-verbose:
+	@echo "---- Run unit tests (verbose)"
+	@${EMACS_BATCH} \
 		$(addprefix -l ,$(FILES)) \
 		$(addprefix -l ,$(TEST_FILES)) \
 		--eval "(progn (setq load-prefer-newer t) (ert-run-tests-batch-and-exit '${TEST_SELECTOR}))" \
@@ -55,7 +64,6 @@ test:
 
 checkdoc:
 	@for file in $(FILES); do \
-		echo "Checking $$file..."; \
 		$(EMACS) -Q -L . --batch \
 		--eval "(require 'checkdoc)" \
 		--eval "(setq checkdoc-sentence-ends-double-space t \
@@ -102,7 +110,7 @@ check-declare:
 	for file in $(FILES); do \
 	  $(EMACS) -Q -L . --batch \
 	    --eval "(check-declare-file \"$(CURDIR)/$$file\")" \
-	    2>&1 | tee /dev/stderr | grep -q "Warning" && ok=1; \
+	    2>&1 | grep -v "^uncompressing " | tee /dev/stderr | grep -q "Warning" && ok=1; \
 	done; \
 	if [ $$ok -eq 0 ]; then echo "OK"; else echo "(warnings above are for external/C-subr functions, expected)"; fi
 
@@ -115,7 +123,6 @@ depgraph:
 # Converts tabs to spaces and removes trailing whitespace.
 format:
 	@for file in $(FILES); do \
-		echo "Formatting $$file..."; \
 		$(EMACS) -Q --batch -L . \
 		$(addprefix -l ,$(FILES)) \
 		--eval "(progn (find-file \"$$file\") \

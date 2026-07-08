@@ -851,32 +851,71 @@ INDENT-SIGN is +1 (right) or -1 (left)."
   (let* ((n (or helixel--replay-multiplier count 1))
          (consecutive-p nil))
     (unless (use-region-p)
-      ;; Consecutive (same op): reuse selection, indent 1 level,
-      ;; amalgamate multiplier into the last event.
+      ;; Consecutive (same op or opposite indent): reuse selection,
+      ;; indent 1 level, amalgamate multiplier into the last event.
+      ;; Only fires when point is still at the last indent position;
+      ;; moving the cursor elsewhere starts a fresh indent on the
+      ;; current line.
       (when-let* ((tx helixel-last-action)
-                  (sel (helixel-action-sel tx))
-                  ((eq (helixel-action-op tx) op)))
-        (when-let* ((m (car (helixel-action-mark-region tx)))
-                    (pos (marker-position m)))
-          (goto-char pos))
-        (helixel-with-replay-as 'dot
-          (helixel--recreate-selection sel))
+                  (tx-op (helixel-action-op tx))
+                  ((or (eq tx-op op)
+                       (and (eq op 'indent-left)
+                            (eq tx-op 'indent-right))
+                       (and (eq op 'indent-right)
+                            (eq tx-op 'indent-left))))
+                  ((let ((mr (helixel-action-mark-region tx)))
+                     (and (consp mr) (markerp (car mr))
+                          (= (point) (marker-position (car mr)))))))
+        (let* ((sel (helixel-action-sel tx))
+               (mr (helixel-action-mark-region tx))
+               (mr-beg (when (and (consp mr) (markerp (car mr)))
+                         (marker-position (car mr))))
+               (mr-end (when (and (consp mr) (markerp (cdr mr)))
+                         (marker-position (cdr mr)))))
+          (cond
+           ;; Stored region bounds from the first indent — restore
+           ;; region directly.  Avoids `helixel--recreate-textobj'
+           ;; which advances to the next target (correct for `.`
+           ;; repeat, wrong for consecutive indent).
+           ((and mr-beg mr-end (/= mr-beg mr-end))
+            (goto-char mr-beg)
+            (push-mark mr-end t t))
+           ;; Go to mark-region car and recreate selection (original
+           ;; behaviour for line/movement/find-char kinds).
+           (sel
+            (when mr-beg (goto-char mr-beg))
+            (helixel-with-replay-as 'dot
+              (helixel--recreate-selection sel)))
+           ;; No sel, no stored bounds (e.g. single-line indent
+           ;; without prior selection) — position at mark-region
+           ;; car; indent-rigidly on empty region is a no-op.
+           (t
+            (when mr-beg (goto-char mr-beg)))))
         (indent-rigidly (region-beginning) (region-end) indent-sign)
-        (let ((mult (or (helixel-action-payload-get tx :multiplier) 1)))
+        (let* ((mult (or (helixel-action-payload-get tx :multiplier) 1))
+               (new-mult (if (eq tx-op op) (1+ mult) (1- mult))))
           (helixel--update-last-event
-           (helixel-action-with-payload tx :multiplier (1+ mult))))
+           (helixel-action-with-payload tx :multiplier new-mult)))
         (goto-char (region-beginning))
         (setq consecutive-p t)))
     (unless consecutive-p
-      (let ((delta (* n indent-sign)))
-        (if (use-region-p)
-            (indent-rigidly (region-beginning) (region-end) delta)
+      (let* ((delta (* n indent-sign))
+             (has-region (use-region-p))
+             (region-beg (when has-region (region-beginning)))
+             (region-end-pos (when has-region (region-end))))
+        ;; Store region bounds BEFORE indent so markers track text
+        ;; shifts (indent-rigidly inserts spaces, moving all positions).
+        (when (and has-region region-beg region-end-pos)
+          (helixel--set-mark-region
+           (cons region-beg region-end-pos)))
+        (if has-region
+            (indent-rigidly region-beg region-end-pos delta)
           (indent-rigidly (line-beginning-position)
-                          (line-end-position) delta)))
-      (when (use-region-p)
-        (goto-char (region-beginning)))
-      (helixel-record-action op :multiplier n)))
-  (helixel-clear-data))
+                          (line-end-position) delta))
+        (when has-region
+          (goto-char region-beg))
+        (helixel-record-action op :multiplier n)))
+    (helixel-clear-data)))
 
 (helixel-define-operator helixel-indent-left
     (:op indent-left :display "<" :self-advancing nil

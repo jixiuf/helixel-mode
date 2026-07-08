@@ -304,6 +304,131 @@
       (helixel-repeat-edit)
       (should-not (string= after-first (buffer-string))))))
 
+(ert-deftest helixel-test-consecutive-indent-textobj ()
+  "Test consecutive indent (>>>) with textobj selection.
+First > indents the whole word; second > indents the same word again."
+  (helixel-test-with-buffer "hello world"
+    (goto-char 3)
+    ;; Select inner word
+    (setq last-command nil this-command 'helixel-mark-inner-word)
+    (helixel-mark-inner-word)
+    ;; First indent
+    (setq last-command 'helixel-mark-inner-word
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (let ((after-first (buffer-string)))
+      (should (string-prefix-p " " after-first))
+      ;; Second indent — should indent the same word again
+      (setq last-command 'helixel-indent-right
+            this-command 'helixel-indent-right)
+      (helixel-indent-right)
+      (should (string-prefix-p "  " (buffer-string)))
+      (should-not (string= after-first (buffer-string))))))
+
+(ert-deftest helixel-test-consecutive-indent-whole-buffer ()
+  "Test consecutive indent (>>>) with mark-whole-buffer region.
+All lines should get indented each time."
+  (helixel-test-with-buffer "a\nb\nc\n"
+    (goto-char (point-min))
+    (push-mark (point-max) t t)
+    (goto-char (point-min))
+    ;; First indent
+    (setq last-command nil this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (should (string= (buffer-string) " a\n b\n c\n"))
+    ;; Second indent
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (should (string= (buffer-string) "  a\n  b\n  c\n"))
+    ;; Third indent
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (should (string= (buffer-string) "   a\n   b\n   c\n"))))
+
+(ert-deftest helixel-test-cross-direction-indent ()
+  "Test >>> then << on the same region.
+Cross-direction consecutive indent should track net multiplier."
+  (helixel-test-with-buffer "a\nb\nc\n"
+    (goto-char (point-min))
+    (push-mark (point-max) t t)
+    (goto-char (point-min))
+    ;; >>>
+    (setq last-command nil this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (should (string= (buffer-string) "   a\n   b\n   c\n"))
+    ;; <<
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-left)
+    (helixel-indent-left)
+    (should (string= (buffer-string) "  a\n  b\n  c\n"))
+    (setq last-command 'helixel-indent-left
+          this-command 'helixel-indent-left)
+    (helixel-indent-left)
+    (should (string= (buffer-string) " a\n b\n c\n"))
+    (setq last-command 'helixel-indent-left
+          this-command 'helixel-indent-left)
+    (helixel-indent-left)
+    (should (string= (buffer-string) "a\nb\nc\n"))
+    ;; Multiplier should be 0 after back to original
+    (should (eql (helixel-action-payload-get helixel-last-action :multiplier) 0))))
+
+(ert-deftest helixel-test-consecutive-indent-move-away ()
+  "Test that moving cursor away then indent targets current line.
+After C-x h >, moving to another line and pressing > should indent
+only the current line, not jump back to the original region."
+  (helixel-test-with-buffer "a\nb\nc\n"
+    (goto-char (point-min))
+    (push-mark (point-max) t t)
+    (goto-char (point-min))
+    ;; First indent: whole buffer gets 1 space
+    (setq last-command nil this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (should (string= (buffer-string) " a\n b\n c\n"))
+    ;; Move to line 2
+    (forward-line 1)
+    ;; Now > should indent ONLY line 2
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (should (string= (buffer-string) " a\n  b\n c\n"))))
+
+(ert-deftest helixel-test-dot-repeat-after-mixed-indent ()
+  "Test dot-repeat after mixed >>> then << with line selection.
+After 3>> then 1<< (net +2, multiplier=2), dot-repeat advances to next
+line and replays +2 indent-right on it."
+  (helixel-test-with-buffer "a\nb\n"
+    (goto-char (point-min))
+    ;; Select current line (helixel selection, so sel is non-nil)
+    (setq last-command nil this-command 'helixel-select-line)
+    (helixel-select-line)
+    ;; >>>
+    (setq last-command 'helixel-select-line
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-right)
+    (helixel-indent-right)
+    ;; <
+    (setq last-command 'helixel-indent-right
+          this-command 'helixel-indent-left)
+    (helixel-indent-left)
+    (should (string= (buffer-string) "  a\nb\n"))
+    (should (eql (helixel-action-payload-get helixel-last-action :multiplier) 2))
+    ;; Dot-repeat: advances to next line, replays +2 indent-right
+    (helixel-repeat-edit)
+    (should (string= (buffer-string) "  a\n  b\n"))))
+
 (ert-deftest helixel-test-repeat-edit-kill-textobj ()
   "Test repeat kill with textobj selection (diw style)."
   (helixel-test-with-buffer "hello world foo"

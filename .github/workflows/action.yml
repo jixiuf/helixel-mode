@@ -23,6 +23,12 @@ jobs:
       with:
         version: ${{ matrix.emacs_version }}
     - uses: actions/checkout@v4
+    - name: Install tree-sitter python grammar
+      run: |
+        mkdir -p ~/.emacs.d/tree-sitter
+        curl -fsSL https://github.com/emacs-tree-sitter/tree-sitter-langs/releases/download/0.13.69/tree-sitter-grammars.x86_64-unknown-linux-gnu.v0.13.69.tar.gz \
+          | tar xz -O python.so \
+          > ~/.emacs.d/tree-sitter/libtree-sitter-python.so
     - name: Run tests
       run: make
     - name: Run melpazoid

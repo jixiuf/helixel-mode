@@ -11,10 +11,14 @@ you type ~w w w ; d~ or ~3wd~ — select three words, then delete.
 - [[file:docs/FAQ.org][FAQ]] — common questions and answers
 - [[file:docs/API.org][API Reference]] — extending helixel with custom commands, text objects, operators
 - [[file:docs/ARCHITECTURE.org][Architecture]] — design, data flow, invariants
+- [[file:docs/TREESIT.org][Tree-sitter]] — semantic text objects via evil-textobj-tree-sitter (151+ languages)
 
 ** Install
 
 #+begin_src elisp
+   ;; enable optional tree-sitter support
+  (use-package evil-textobj-tree-sitter :ensure t)
+
   (use-package helixel
     :vc (:url "https://github.com/jixiuf/helixel-mode")
     :config (helixel-mode))
@@ -138,6 +142,25 @@ Pair/structure movement with ~]~ / ~[~ / ~}~ / ~{~:
   ] p          forward to next paragraph end
   ,            next paragraph
   ;            select the span
+#+end_src
+
+Tree-sitter semantic text objects (opt-in):
+#+begin_src text
+  ;; One-time setup:
+  (require 'helixel-treesit)
+  (helixel-treesit-setup)
+
+  ;; In python-ts-mode:
+  maf          select around function (treesit-aware)
+  d            delete it
+  .            repeat at next function  (auto-advance)
+  ;            reselect the deleted function's position
+  mia          select inner parameter
+  cNEW ESC     change to "NEW"
+  .            next parameter → "NEW"
+  M-o          expand selection to parent scope
+  ]y           next class (or struct, impl)
+  [,           previous parameter
 #+end_src
 
 ** Key Reference

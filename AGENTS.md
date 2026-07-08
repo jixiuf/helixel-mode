@@ -28,6 +28,9 @@
 | `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors. |
 | `helixel-mc-integrate.el` | Glue: dot-repeat / chain / insert per-cursor execution + atomic undo. |
 | `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww) + multi-cursor completion-preview shim. 29 `declare-function` (all third-party). |
+| `helixel-treesit-core.el` | **Tree-sitter foundation**: readiness gates, node utilities, query provider (evil-textobj-tree-sitter integration), capture normalization, object resolution, index cache, selection activation, kind registration, type specification table. Soft-depends on `treesit` and `evil-textobj-tree-sitter-core`. |
+| `helixel-treesit-commands.el` | **Tree-sitter command layer**: data-driven `helixel-ts--define-type' macro generates textobj, inner-move, outer-nav commands for each semantic type. Also expand/shrink, sibling nav, comma-repeat repeater. Requires `helixel-treesit-core' + `helixel-macros'. |
+| `helixel-treesit.el` | **Tree-sitter facade**: `helixel-treesit-setup' entry point, dispatch var generation, keybinding registration, motion reverse/repeater wiring. Requires both core + commands. |
 | `helixel.el` | Package entry point. Requires all domain files. |
 
 ### Test Files
@@ -56,6 +59,7 @@
 | `test/helixel-test-ring-invariant.el` | Ring + jump-log invariants (dedup, cap, marker release, commit-hook contract, by-command fallback, jump-log lightweight) |
 | `test/helixel-test-cycle.el` | `;` action-cycle and `C-;` jump-cycle: group-start selection, push-mark, start-point vs full-span, per-fake cycling, cancel-session boundary |
 | `test/helixel-test-mc-invariant.el` | MC dispatch contract invariants: per-fake state isolation, undo-step amalgamation, kill-ring independence, fake-cursor overlay lifecycle |
+| `test/helixel-test-treesit.el` | Tree-sitter text objects and motions (helixel-ts-* commands) |
 
 ## Deps (one-way, compile-time — actual `require` graph)
 
@@ -64,6 +68,9 @@ helixel-core (cl-lib only, zero helixel deps)
   │
   ├── helixel-ring (→ core)
   │     └── helixel-macros (→ core + ring)
+  │           └── helixel-treesit-core (→ core)
+  │     └── helixel-treesit-commands (→ core + treesit-core + macros)
+  │           └── helixel-treesit (facade: requires core + commands)
   │
   ├── helixel-textobj-engine (→ core)
   │     ├── helixel-textobj-pair (→ core + textobj-engine)
@@ -116,7 +123,8 @@ Notes:
   - `helixel-textobj-engine.el`: 0
   - `helixel-textobj-pair.el`: 0
   - `helixel-textobj-block.el`: 0
-  - `helixel-textobj-marks.el`: 2 (evil-tree-sitter)
+  - `helixel-textobj-marks.el`: 0
+  - `helixel-treesit.el`: 18 (15 internal cross-module + 3 third-party evil-textobj-tree-sitter)
   - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww)
 
 ## Key Structs

@@ -678,11 +678,12 @@ Third."
     (goto-char 1)
     (deactivate-mark)
     (setq last-command nil)
-    (call-interactively #'helixel-forward-function-end)
+    (call-interactively #'helixel-forward-outer-function)
     ;; Function end should move point forward from start of defun
     (should (> (point) 1))
-    ;; Function is in helixel-thing-move-no-select-things by default.
-    (should (not (use-region-p)))))
+    ;; Function IS in helixel-motion-select-categories by default
+    ;; (unified subcat with treesit-function).
+    (should (use-region-p))))
 
 ;;; Word in pure whitespace buffer
 
@@ -971,6 +972,80 @@ third"
     (should (= (point) 3))
 ))
 
+(ert-deftest helixel-test-comment-next-end ()
+  "Test ] ; forward to current or next comment end."
+  (helixel-test-with-buffer '(:text ";; a\nx\n;; b\n" :start nil)
+    (emacs-lisp-mode)
+    (goto-char 6)
+    (helixel-forward-outer-comment)
+    (should (= (point) 12))
+))
+
+(ert-deftest helixel-test-comment-outer ()
+  "Test [ ; backward to current or previous comment start."
+  (helixel-test-with-buffer '(:text ";; a\nx\n;; b\n" :start nil)
+    (emacs-lisp-mode)
+    (goto-char 12)
+    (helixel-backward-outer-comment)
+    (should (= (point) 8))
+))
+
+(ert-deftest helixel-test-comment-inner-next-end ()
+  "Test } ; forward to current or next comment end."
+  (helixel-test-with-buffer '(:text ";; a\nx\n;; b\n" :start nil)
+    (emacs-lisp-mode)
+    (goto-char 1)
+    (helixel-forward-inner-comment)
+    (should (= (point) 5))
+))
+
+(ert-deftest helixel-test-comment-inner-outer ()
+  "Test { ; backward to current or previous comment start."
+  (helixel-test-with-buffer '(:text ";; a\nx\n;; b\n" :start nil)
+    (emacs-lisp-mode)
+    (goto-char 11)
+    (helixel-backward-inner-comment)
+    (should (= (point) 8))
+))
+(ert-deftest helixel-test-comment-select-repeat-forward ()
+  "Test ]; then , advances to next block with selection."
+  (helixel-test-with-buffer '(:text ";; one\n;; two\ncode\n;; three\n" :start nil)
+    (emacs-lisp-mode)
+    (goto-char 1)
+    (helixel-forward-outer-comment)
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     ";; one\n;; two"))
+    (setq last-command 'helixel-forward-outer-comment)
+    (helixel-repeat-last-motion nil)
+    (should (use-region-p))
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     ";; three"))))
+
+
+;; Select tests: [; / ]; with helixel-motion-select-categories
+
+(ert-deftest helixel-test-comment-select-forward ()
+  "Test ]; selects comment block when comment is in select-categories."
+  (helixel-test-with-buffer '(:text ";; one\n;; two\ncode\n;; three\n" :start nil)
+    (emacs-lisp-mode)
+    (goto-char 1)
+    (helixel-forward-outer-comment)
+    (should (use-region-p))
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     ";; one\n;; two"))
+    (should (= (point) (region-end)))))
+
+(ert-deftest helixel-test-comment-select-backward ()
+  "Test [; selects comment block when comment is in select-categories."
+  (helixel-test-with-buffer '(:text ";; one\n;; two\ncode\n;; three\n" :start nil)
+    (emacs-lisp-mode)
+    (goto-char 23)  ;; inside ;; three
+    (helixel-backward-outer-comment)
+    (should (use-region-p))
+    (should (string= (buffer-substring (region-beginning) (region-end))
+                     ";; three"))
+    (should (= (point) (region-beginning)))))
+
 ;; Inner variants: { outward, } forward
 
 (ert-deftest helixel-test-pair-inner-outer-paren ()
@@ -1177,7 +1252,7 @@ line two
     (insert "\n(defun foo () 1)\n")
     (deactivate-mark)
     (goto-char 2)
-    (helixel-forward-function-end)
+    (helixel-forward-outer-function)
     (should (helixel-action-mark-region helixel--live-action))
     ;; Mark using stored mark-region from event
     (let ((mr (helixel-action-mark-region helixel--live-action)))
@@ -1631,10 +1706,180 @@ Second paragraph." :start nil)
     (deactivate-mark)
     (goto-char 1)
     (setq helixel--action-pos nil)
-    (helixel-forward-function-end)
+    (helixel-forward-outer-function)
     (should (helixel-action-mark-region helixel--live-action))
     (helixel--action-cycle)
     (should (use-region-p))))
+
+;; ── Function movement: double-tracking eliminated ──
+;; The outer helixel-*-outer-function commands call plain helpers
+;; (no tracking), so each keypress produces exactly one ring entry.
+
+(ert-deftest helixel-test-function-no-double-tracking ()
+  "Single [f press produces exactly one non-degenerate ring entry."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil)
+        (helixel--last-motion-cmd nil))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (transient-mark-mode 1)
+      (insert "(defun foo () 1)\n\n(defun bar () 2)\n")
+      ;; Start at bar (the second defun).
+      (goto-char 19)
+      (setq last-command nil
+            this-command 'helixel-backward-outer-function)
+      (call-interactively #'helixel-backward-outer-function)
+      ;; Live action was set.
+      (should helixel--live-action)
+      (let ((mr (helixel-action-mark-region helixel--live-action)))
+        (should mr)
+        (should (consp mr))
+        ;; Non-degenerate: arrived-at function bounds.
+        (should (not (= (marker-position (car mr))
+                        (marker-position (cdr mr))))))
+      (helixel--action-cycle)
+      ;; Exactly one entry (not two from double-tracking).
+      (should (= (length helixel--action-ring) 1))
+      (should-not helixel--live-action))))
+
+(ert-deftest helixel-test-function-comma-no-double-tracking ()
+  "Each comma-repeat produces exactly one ring entry per press."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil)
+        (helixel--last-motion-cmd nil))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (transient-mark-mode 1)
+      (insert "(defun foo () 1)\n\n(defun bar () 2)\n\n(defun baz () 3)\n")
+      ;; Start at baz (third defun).
+      (goto-char 37)
+      ;; [f — backward to bar.
+      (setq last-command nil
+            this-command 'helixel-backward-outer-function)
+      (call-interactively #'helixel-backward-outer-function)
+      ;; , — backward to foo.
+      (setq last-command 'helixel-backward-outer-function)
+      (helixel-repeat-last-motion nil)
+      ;; ; commits pending live + starts cycle.
+      (helixel--action-cycle)
+      ;; 2 entries: initial + 1 comma.  No degenerate doubles.
+      (should (= (length helixel--action-ring) 2)))))
+
+;; ── Function movement: newest-for-mark (;) ──
+;; (movement . function) is in helixel-action-cycle-newest-for-mark.
+;; First ; selects just the last function; second ; selects all.
+
+(ert-deftest helixel-test-function-newest-for-mark-first ()
+  "After [f , , first ; selects only the last function (newest)."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil)
+        (helixel--last-motion-cmd nil)
+        (helixel-action-cycle-newest-for-mark
+         '((movement . function))))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (transient-mark-mode 1)
+      (insert "(defun foo () 1)\n\n(defun bar () 2)\n\n(defun baz () 3)\n")
+      ;; Start at baz (pos 37).
+      (goto-char 37)
+      (deactivate-mark)
+      ;; [f — backward to bar.
+      (setq last-command nil
+            this-command 'helixel-backward-outer-function)
+      (call-interactively #'helixel-backward-outer-function)
+      ;; , — backward to foo.
+      (setq last-command 'helixel-backward-outer-function)
+      (helixel-repeat-last-motion nil)
+      ;; First ; : newest-for-mark → selects just foo (last function).
+      (helixel--action-cycle)
+      (should (region-active-p))
+      ;; Region starts at foo, is short (one function, not all three).
+      (should (= (region-beginning) 1))
+      (should (< (- (region-end) (region-beginning)) 20)))))
+
+(ert-deftest helixel-test-function-newest-for-mark-second ()
+  "After [f , , second ; selects the full span (all functions)."
+  (let ((helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil)
+        (helixel--last-motion-cmd nil)
+        (helixel-action-cycle-newest-for-mark
+         '((movement . function))))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (transient-mark-mode 1)
+      (insert "(defun foo () 1)\n\n(defun bar () 2)\n\n(defun baz () 3)\n")
+      (goto-char 37)
+      (deactivate-mark)
+      (setq last-command nil
+            this-command 'helixel-backward-outer-function)
+      (call-interactively #'helixel-backward-outer-function)
+      (setq last-command 'helixel-backward-outer-function)
+      (helixel-repeat-last-motion nil)
+      ;; First ; — newest function only.
+      (helixel--action-cycle)
+      (let ((len1 (- (region-end) (region-beginning))))
+        ;; Second ; — group-span → selects all three functions.
+        (let ((last-command 'helixel-action-cycle)
+              (helixel--action-pos helixel--action-pos))
+          (helixel--action-cycle))
+        (should (region-active-p))
+        ;; Now region is larger: spans all functions from foo to baz.
+        (should (= (region-beginning) 1))
+        (should (> (- (region-end) (region-beginning)) len1))
+        (should (> (- (region-end) (region-beginning)) 30))))))
+
+;; ── Function movement: motion-select region covers full function ──
+;; When helixel-motion-select-categories includes (movement . function),
+;; [f / ]f select the full destination function (matching TS behaviour),
+;; not just the movement span from origin to destination.
+
+(ert-deftest helixel-test-function-select-full-backward ()
+  "[f with motion-select selects the entire destination function."
+  (let ((helixel-motion-select-categories '((movement . function)))
+        (helixel--last-motion-cmd nil)
+        (helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (transient-mark-mode 1)
+      (insert "(defun foo () (message \"hi\"))\n\n(defun bar () nil)\n")
+      ;; Start at bar (pos 32).
+      (goto-char 32)
+      (deactivate-mark)
+      (setq last-command nil
+            this-command 'helixel-backward-outer-function)
+      (call-interactively #'helixel-backward-outer-function)
+      (should (region-active-p))
+      ;; Region starts at foo, not at the cursor origin.
+      (should (= (region-beginning) 1))
+      ;; Region covers the full foo function.
+      (should (>= (region-end) 29)))))
+
+(ert-deftest helixel-test-function-select-full-forward ()
+  "]f with motion-select selects the entire destination function."
+  (let ((helixel-motion-select-categories '((movement . function)))
+        (helixel--last-motion-cmd nil)
+        (helixel--action-ring nil)
+        (helixel--live-action nil)
+        (helixel--action-pos nil))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (transient-mark-mode 1)
+      (insert "(defun foo () (message \"hi\"))\n\n(defun bar () nil)\n")
+      ;; Start inside foo (pos 15, inside the message call).
+      (goto-char 15)
+      (deactivate-mark)
+      (setq last-command nil
+            this-command 'helixel-forward-outer-function)
+      (call-interactively #'helixel-forward-outer-function)
+      (should (region-active-p))
+      ;; Region starts at foo (current function end reached first).
+      (should (= (region-beginning) 1)))))
 
 ;; ── Surround macro clears stale pending-sel ──
 

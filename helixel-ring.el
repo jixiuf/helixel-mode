@@ -72,7 +72,11 @@ Set to nil to disable entirely."
   :group 'helixel)
 
 (defcustom helixel-action-cycle-newest-for-mark
-  '(edit (movement . pair) (movement . match))
+  '(edit (movement . pair) (movement . match)
+         (movement . class)
+         (movement . parameter) (movement . comment)
+         (movement . loop) (movement . conditional)
+         (movement . sibling) (movement . grow-shrink))
   "Control which categories use the newest event's mark-region.
 For the first \\[helixel-action-cycle\\] marking in these categories,
 the newest event's bounds are selected.

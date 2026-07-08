@@ -55,6 +55,7 @@
 (require 'helixel-mc-spawn)
 (require 'helixel-mc-integrate)
 (require 'helixel-shims)
+(require 'helixel-treesit)
 
 ;; All helixel modules are loaded — NOW we can safely walk the obarray
 ;; and bulk-whitelist every helixel interactive command for multi-
@@ -74,6 +75,7 @@ Each init function registers its module's internal hooks only when
   (add-hook 'helixel-mode-on-hook  #'helixel-mc-integrate--init)
   (add-hook 'helixel-mode-on-hook  #'helixel--init-chain-hooks)
   (add-hook 'helixel-mode-on-hook  #'helixel-shims-global-mode)
+  (add-hook 'helixel-mode-on-hook  #'helixel-treesit-setup)
   (add-hook 'helixel-mode-off-hook
             (lambda () (helixel-shims-global-mode -1))))
 (helixel--register-mode-hooks)

@@ -228,7 +228,8 @@ relative to `helixel--');  SIGN is +1 or -1; SIDE is :a or :inner.
 Optional REVERSE-CMD is the opposite-direction command for
 \=`-,' permanent flip support."
   (declare (indent 0)
-           (debug (&define name sexp sexp sexp sexp sexp &optional sexp)))
+           (debug (&define name sexp sexp sexp sexp sexp
+                           &optional sexp)))
   (let* ((fn (intern (format "helixel--%s" fwd-fn)))
          ;; Only skip newlines for single-line things (word/WORD/symbol).
          ;; Multi-line things like paragraph/sentence/function naturally
@@ -242,17 +243,13 @@ Optional REVERSE-CMD is the opposite-direction command for
                           `(:motion-extra
                             (list :reverse-command ',reverse-cmd))))
          (interactive "p")
-         ;; Skip past a newline before capturing the motion origin,
-         ;; so \n is not treated as a separate word.
          ,@(when single-line-p `((helixel--skip-newline ,sign)))
-         (if (memq ',thing helixel-thing-move-no-select-things)
-             (progn
-               ;; Clean up stale state (same as with-movement-surround)
-               ;; but skip the visual selection (push-mark + activate).
-               (helixel--clear-non-movement-pending-sel)
-
+         (if (helixel--motion-select-category-p
+              'movement ',subcat)
+             (helixel--with-movement-surround
                (,fn ',thing (* ,sign (or count 1))))
-           (helixel--with-movement-surround
+           (progn
+             (helixel--clear-non-movement-pending-sel)
              (,fn ',thing (* ,sign (or count 1)))))
          (helixel--set-mark-region ',thing ,side))
        ,@(when reverse-cmd
@@ -400,6 +397,178 @@ STEM is the name fragment.  FACTORY-FORM produces the delimiter."
 (helixel--define-singleton-delimiter-family
     block (helixel-make-block-delimiter))
 
+;; ── Comment movement ([; ]; {; };) ──
+;; Thin dispatch defuns — in treesit buffers the dispatch vars
+;; are set by `helixel-ts--install-nav-vars' to plain treesit impls.
+;; In non-ts buffers, uses syntax-based comment scanning.
+
+(defvar-local helixel-backward-outer-comment-function nil
+  "Buffer-local override for `helixel-backward-outer-comment'.")
+(defvar-local helixel-forward-outer-comment-function nil
+  "Buffer-local override for `helixel-forward-outer-comment'.")
+(defvar-local helixel-backward-inner-comment-function nil
+  "Buffer-local override for `helixel-backward-inner-comment'.")
+(defvar-local helixel-forward-inner-comment-function nil
+  "Buffer-local override for `helixel-forward-inner-comment'.")
+
+(defun helixel--comment-bounds-at-point ()
+  "Return syntax comment bounds at point, or nil."
+  (let ((b (bounds-of-thing-at-point 'helixel-comment)))
+    (and b (< (car b) (cdr b)) b)))
+
+(defun helixel--comment-bounds-next ()
+  "Return bounds of the current or next syntax comment."
+  (or (helixel--comment-bounds-at-point)
+      (save-excursion
+        (let ((limit (point-max))
+              found)
+          (while (and (not found) (< (point) limit))
+            (forward-char 1)
+            (setq found (helixel--comment-bounds-at-point)))
+          found))))
+
+(defun helixel--comment-bounds-previous ()
+  "Return bounds of the current or previous syntax comment."
+  (or (helixel--comment-bounds-at-point)
+      (save-excursion
+        (let ((limit (point-min))
+              found)
+          (while (and (not found) (> (point) limit))
+            (backward-char 1)
+            (setq found (helixel--comment-bounds-at-point)))
+          found))))
+
+;; ── Comment block expansion ──
+
+(defun helixel--comment-block-bounds (bounds)
+  "Expand BOUNDS (START . END) to include adjacent comment lines.
+Adjacent means only whitespace or blank lines between comments.
+Returns new bounds or nil."
+  (when bounds
+    (let ((start (car bounds))
+          (end (cdr bounds))
+          changed)
+      (setq changed t)
+      (while changed
+        (setq changed nil)
+        (save-excursion
+          (goto-char start)
+          (when (forward-comment -1)
+            (let ((ps (point)))
+              (forward-comment 1)
+              (let ((pe (point)))
+                (when (and (> pe ps) (eq (char-before pe) ?\n))
+                  (setq pe (1- pe)))
+                (goto-char pe)
+                (skip-chars-forward " \t\r\n\f")
+                (when (>= (point) start)
+                  (setq start ps
+                        changed t)))))))
+      (setq changed t)
+      (while changed
+        (setq changed nil)
+        (save-excursion
+          (goto-char end)
+          (skip-chars-forward " \t\r\n\f")
+          (let ((ns (point)))
+            (when (and (< ns (point-max))
+                       (save-excursion
+                         (goto-char ns)
+                         (forward-comment 1)))
+              (goto-char ns)
+              (forward-comment 1)
+              (let ((ne (point)))
+                (when (and (> ne ns)
+                           (eq (char-before ne) ?\n))
+                  (setq ne (1- ne)))
+                (goto-char end)
+                (skip-chars-forward " \t\r\n\f")
+                (when (>= (point) ns)
+                  (setq end ne
+                        changed t)))))))
+      (when (> end start)
+        (cons start end)))))
+
+(defun helixel--comment-move (forward-p count &optional select-p)
+  "Move by syntax comment in direction FORWARD-P, COUNT times.
+Each step jumps over a full comment block (adjacent comment
+lines merged), not individual comments.
+When SELECT-P is non-nil, activate the region around the target."
+  (let ((n (abs (or count 1)))
+        (flipped (< (or count 1) 0))
+        bounds)
+    (helixel--clear-non-movement-pending-sel)
+    (unless select-p
+      (deactivate-mark))
+    (dotimes (_ n)
+      (let ((eff-forward-p (if flipped (not forward-p) forward-p)))
+        ;; Forward: if inside a comment, skip past it so we find
+        ;; the next block, not stay on the current one.
+        (when (and eff-forward-p (nth 4 (syntax-ppss)))
+          (forward-comment 1))
+        (setq bounds (if eff-forward-p
+                         (helixel--comment-bounds-next)
+                       (helixel--comment-bounds-previous)))
+        (unless bounds
+          (user-error "No comment found"))
+        (when-let* ((block (helixel--comment-block-bounds bounds)))
+          (setq bounds block))
+        (helixel--set-mark-region bounds)
+        (if select-p
+            (progn
+              (push-mark (if eff-forward-p (car bounds) (cdr bounds)) nil t)
+              (goto-char (if eff-forward-p (cdr bounds) (car bounds))))
+          (goto-char (if eff-forward-p (cdr bounds) (car bounds))))))))
+
+
+(helixel-define-command helixel-backward-outer-comment
+    (:category movement :subcat comment :clear-highlights nil
+               :params (&optional count)
+               :motion-extra (list :reverse-command
+                                   'helixel-forward-outer-comment))
+  "Move to start of current/previous comment.
+In treesit buffers, delegates via `helixel-backward-outer-comment-function'."
+  (if helixel-backward-outer-comment-function
+      (funcall helixel-backward-outer-comment-function (or count 1))
+    (helixel--comment-move nil count
+                           (helixel--motion-select-category-p 'movement 'comment))))
+
+(helixel-define-command helixel-forward-outer-comment
+    (:category movement :subcat comment :clear-highlights nil
+               :params (&optional count)
+               :motion-extra (list :reverse-command
+                                   'helixel-backward-outer-comment))
+  "Move to end of current/next comment.
+In treesit buffers, delegates via `helixel-forward-outer-comment-function'."
+  (if helixel-forward-outer-comment-function
+      (funcall helixel-forward-outer-comment-function (or count 1))
+    (helixel--comment-move t count
+                           (helixel--motion-select-category-p 'movement 'comment))))
+
+(helixel-define-command helixel-backward-inner-comment
+    (:category movement :subcat comment :clear-highlights nil
+               :params (&optional count)
+               :motion-extra (list :reverse-command
+                                   'helixel-forward-inner-comment))
+  "Move to inner start of current/previous comment.
+In treesit buffers, delegates via `helixel-backward-inner-comment-function'."
+  (if helixel-backward-inner-comment-function
+      (funcall helixel-backward-inner-comment-function (or count 1))
+    (helixel--comment-move nil count
+                           (helixel--motion-select-category-p 'movement 'comment))))
+
+(helixel-define-command helixel-forward-inner-comment
+    (:category movement :subcat comment :clear-highlights nil
+               :params (&optional count)
+               :motion-extra (list :reverse-command
+                                   'helixel-backward-inner-comment))
+  "Move to inner end of current/next comment.
+In treesit buffers, delegates via `helixel-forward-inner-comment-function'."
+  (if helixel-forward-inner-comment-function
+      (funcall helixel-forward-inner-comment-function (or count 1))
+    (helixel--comment-move t count
+                           (helixel--motion-select-category-p 'movement 'comment))))
+
 ;; `helixel--generic-bounds-at' / `helixel--generic-bounds-next'
 ;; are defined in helixel-core.el.
 
@@ -432,18 +601,107 @@ STEM is the name fragment.  FACTORY-FORM produces the delimiter."
                          sentence helixel-sentence forward-end         -1 :a
                          helixel-forward-sentence-end)
 
-(helixel--def-thing-move helixel-forward-function-end
-                         function helixel-function forward-end          1 :a
-                         helixel-backward-function-end)
-(helixel--def-thing-move helixel-backward-function-start
-                         function helixel-function forward-beginning   -1 :a
-                         helixel-forward-function-start)
-(helixel--def-thing-move helixel-forward-function-start
-                         function helixel-function forward-beginning    1 :a
-                         helixel-backward-function-start)
-(helixel--def-thing-move helixel-backward-function-end
-                         function helixel-function forward-end         -1 :a
-                         helixel-forward-function-end)
+;; Function movement — dispatch wrappers (thin defuns, no tracking).
+;; In treesit buffers the dispatch vars point to plain treesit impls
+;; (no tracking), so there is no double-tracking when the
+;; helixel-define-command wrapper opens tracking and calls the
+;; plain impl.
+
+(defvar-local helixel-forward-outer-function-function nil
+  "Buffer-local override for `helixel-forward-outer-function'.")
+(defvar-local helixel-backward-outer-function-function nil
+  "Buffer-local override for `helixel-backward-outer-function'.")
+
+;; ── Plain function movement helpers (no tracking) ──
+;; Called from the tracked outer commands below, which
+;; provide all tracking.  This mirrors the comment-move
+;; pattern (outer tracked + inner plain) and the TS dispatch-var
+;; pattern (outer tracked + plain TS impl).  No double-tracking.
+;;
+;; When motion-select includes function, the region covers the
+;; full destination function bounds (matching TS behaviour),
+;; not just the movement span from origin to destination.
+;; Destination-bounds are computed explicitly at point and
+;; passed as a cons to `helixel--set-mark-region', so
+;; `newest-for-mark' selects the arrived-at function.
+
+(defun helixel--move-function-and-mark (count forward-p)
+  "Move COUNT functions and set mark-region at destination.
+FORWARD-P non-nil → go to end of next function.
+FORWARD-P nil → go to start of previous function.
+
+Signals `user-error' if no function is found at the destination."
+  (let ((select-p (helixel--motion-select-category-p 'movement 'function))
+        (n (if forward-p (or count 1) (- (or count 1)))))
+    (if select-p
+        (progn
+          (if forward-p
+              (helixel--forward-end 'helixel-function n)
+            (helixel--forward-beginning 'helixel-function n))
+          (if-let* ((b (bounds-of-thing-at-point 'helixel-function)))
+              (progn
+                ;; Region covers full function (like TS mode).
+                ;; forward lands at end → push-mark at beg.
+                ;; backward lands at beg → push-mark at end.
+                (push-mark (if forward-p (car b) (cdr b)) nil t)
+                (helixel--set-mark-region
+                 (save-excursion
+                   (goto-char (cdr b))
+                   (skip-chars-forward " \t")
+                   (cons (car b) (point)))))
+            (user-error "No function at point")))
+      (if forward-p
+          (progn
+            (helixel--clear-non-movement-pending-sel)
+            (helixel--forward-end 'helixel-function n))
+        (progn
+          (helixel--clear-non-movement-pending-sel)
+          (helixel--forward-beginning 'helixel-function n)))
+      (if-let* ((b (bounds-of-thing-at-point 'helixel-function)))
+          (helixel--set-mark-region
+           (save-excursion
+             (goto-char (cdr b))
+             (skip-chars-forward " \t")
+             (cons (car b) (point))))
+        (user-error "No function at point")))))
+
+(defun helixel--forward-outer-function (count)
+  "Move COUNT functions forward to outer end (plain, no tracking)."
+  (helixel--move-function-and-mark count t))
+
+(defun helixel--backward-outer-function (count)
+  "Move COUNT functions backward to outer start (plain, no tracking)."
+  (helixel--move-function-and-mark count nil))
+
+(helixel-define-command helixel-forward-outer-function
+    (:category movement :subcat function
+               :params (&optional count)
+               :motion-extra (list :reverse-command
+                                   'helixel-backward-outer-function))
+  "Move to end of current/next function.
+In treesit buffers, delegates to the function in
+`helixel-forward-outer-function-function'."
+  (if helixel-forward-outer-function-function
+      (funcall helixel-forward-outer-function-function (or count 1))
+    (helixel--forward-outer-function (or count 1))))
+
+(helixel-define-command helixel-backward-outer-function
+    (:category movement :subcat function
+               :params (&optional count)
+               :motion-extra (list :reverse-command
+                                   'helixel-forward-outer-function))
+  "Move to start of current/previous function.
+In treesit buffers, delegates to the function in
+`helixel-backward-outer-function-function'."
+  (if helixel-backward-outer-function-function
+      (funcall helixel-backward-outer-function-function (or count 1))
+    (helixel--backward-outer-function (or count 1))))
+
+;; ── Register reverse-motion pairs for ; and comma-repeat flip ──
+(helixel-register-motion-reverse 'helixel-forward-outer-function
+                                 'helixel-backward-outer-function)
+(helixel-register-motion-reverse 'helixel-backward-outer-function
+                                 'helixel-forward-outer-function)
 
 (defun helixel--jump-target-for-delimiter (d orig &optional no-close-backoff
                                              mark-thing)
@@ -919,7 +1177,8 @@ Returns point on success, nil when no parent pair exists."
 
 For paragraph/sentence/function: skips past newline/whitespace.
 For other subcats (match handled by dedicated repeater, pair by
-its own repeater): no-op.  Skip-past is best-effort.
+its own repeater, treesit by command followup): no-op.
+Skip-past is best-effort.
 
 MOTION is a `helixel--last-motion' struct."
   (let ((sub (helixel--last-motion-subcat motion))

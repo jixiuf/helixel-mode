@@ -36,11 +36,9 @@
 (require 'helixel-textobj-pair)
 (require 'helixel-textobj-block)
 
-(declare-function evil-textobj-tree-sitter--range
-                  "ext:evil-textobj-tree-sitter-core" t t)
-(declare-function evil-textobj-tree-sitter--message-not-found
-                  "ext:evil-textobj-tree-sitter-core" t t)
-(defvar evil-textobj-tree-sitter-use-next-if-not-within)
+(declare-function helixel--comment-bounds-next "helixel-move")
+(declare-function helixel--comment-bounds-previous "helixel-move")
+(declare-function helixel--comment-block-bounds "helixel-move")
 
 ;; ── Definition macros (mark-pair, mark-quote, mark-object, …) ──
 
@@ -169,16 +167,16 @@ NAME is the name of the text object.  DOC is a description of the
 object.  THING should be a quoted symbol like \='helixel-word.
 SUBCAT is the textobj subcat symbol (e.g. word, pair, quote).
 RESTRICTED-P non-nil means use restricted version (for word/WORD)."
-  (let ((inner-name (intern (format "helixel-mark-inner-%s" name)))
-        (outer-name (intern (format "helixel-mark-a-%s" name)))
-        (inner-doc (format "Select inner %s." doc))
-        (outer-doc (format "Select a %s." doc))
-        (inner-func (if restricted-p
-                        'helixel-select-inner-restricted-object
-                      'helixel-select-inner-object))
-        (outer-func (if restricted-p
-                        'helixel-select-a-restricted-object
-                      'helixel-select-a-object)))
+  (let* ((inner-name (intern (format "helixel-mark-inner-%s" name)))
+         (outer-name (intern (format "helixel-mark-a-%s" name)))
+         (inner-doc (format "Select inner %s." doc))
+         (outer-doc (format "Select a %s." doc))
+         (inner-func (if restricted-p
+                         'helixel-select-inner-restricted-object
+                       'helixel-select-inner-object))
+         (outer-func (if restricted-p
+                         'helixel-select-a-restricted-object
+                       'helixel-select-a-object)))
     `(progn
        (defun ,inner-name (&optional count)
          ,inner-doc
@@ -326,37 +324,6 @@ COUNT is the number of blocks to select."
    count
    'block))
 
-(defun helixel-get-tree-sitter-textobj (group &optional query)
-  "Return a command for a tree-sitter text object of GROUP.
-
-GROUP is a string like \"function.inner\" or a list thereof.
-If multiple groups are passed, the first available one is used.
-QUERY is an optional alist mapping major-mode to custom query strings.
-
-The returned command can be bound in `helixel-textobj-inner-map'
-or `helixel-textobj-outer-map'.
-Requires `evil-textobj-tree-sitter' to be installed.
-
-Example:
-  (define-key helixel-textobj-inner-map \"f\"
-    (helixel-textobj-tree-sitter-get-textobj \"function.inner\"))
-  (define-key helixel-textobj-outer-map \"f\"
-    (helixel-textobj-tree-sitter-get-textobj \"function.outer\"))"
-  (when (or (featurep 'evil-textobj-tree-sitter-core)
-            (require 'evil-textobj-tree-sitter-core nil t))
-    (let* ((groups (if (listp group) group (list group)))
-           (interned-groups (mapcar #'intern groups)))
-      (lambda (&optional count)
-        (interactive "p")
-        (when helixel-textobj-action-function
-          (funcall helixel-textobj-action-function 'textobj 'treesit))
-        (let ((range (evil-textobj-tree-sitter--range
-
-                      count interned-groups query)))
-          (if range
-              (helixel--activate-textobj-range range nil count 'treesit)
-            (evil-textobj-tree-sitter--message-not-found groups)))))))
-
 (helixel-define-mark-object "word" 'helixel-word "word" 'word t)
 (helixel-define-mark-object "WORD" 'helixel-WORD "WORD" 'WORD t)
 (helixel-define-mark-object "symbol" 'helixel-symbol "symbol" 'symbol)
@@ -366,8 +333,127 @@ Example:
 
 ;; ── Function Text Objects ──
 
-(helixel-define-mark-object "function" 'helixel-function
-                            "function" 'function)
+(defvar-local helixel-mark-inner-function-function nil
+  "Buffer-local override for `helixel-mark-inner-function'.")
+(defvar-local helixel-mark-a-function-function nil
+  "Buffer-local override for `helixel-mark-a-function'.")
+
+;; Internal regex-based fallback — only used when no treesit parser.
+(defun helixel--mark-inner-function (count)
+  "Select inner function using regex (non-treesit fallback).
+With COUNT, select that many inner functions."
+  (when helixel-textobj-action-function
+    (funcall helixel-textobj-action-function 'textobj 'function))
+  (let ((use-bounds (helixel--use-region-p))
+        (followup-p (and (use-region-p)
+                         (eq (helixel--region-type) 'textobj))))
+    (cond
+     (followup-p
+      (goto-char (region-end))
+      (skip-chars-forward " \t\n\r\f"))
+     ((not use-bounds)
+      (helixel--ensure-point-in-thing)))
+    (let ((beg (when use-bounds (region-beginning)))
+          (end (when use-bounds (region-end))))
+      (helixel--activate-textobj-range
+       (helixel-select-inner-object 'helixel-function beg end count)
+       nil count 'function))))
+
+(defun helixel--mark-a-function (count)
+  "Select a function using regex (non-treesit fallback).
+With COUNT, select that many functions."
+  (when helixel-textobj-action-function
+    (funcall helixel-textobj-action-function 'textobj 'function))
+  (let ((use-bounds (helixel--use-region-p))
+        (followup-p (and (use-region-p)
+                         (eq (helixel--region-type) 'textobj))))
+    (unless (or use-bounds followup-p)
+      (helixel--ensure-point-in-thing))
+    (let ((beg (when use-bounds (region-beginning)))
+          (end (when use-bounds (region-end))))
+      (helixel--activate-textobj-range
+       (helixel-select-a-object 'helixel-function beg end count)
+       nil count 'function))))
+
+(defun helixel-mark-inner-function (&optional count)
+  "Select inner function.
+In treesit buffers, delegates via `helixel-mark-inner-function-function'.
+With optional COUNT, select that many inner functions."
+  (interactive "p")
+  (if helixel-mark-inner-function-function
+      (funcall helixel-mark-inner-function-function count)
+    (helixel--mark-inner-function count)))
+
+(defun helixel-mark-a-function (&optional count)
+  "Select a function.
+In treesit buffers, delegates via `helixel-mark-a-function-function'.
+With optional COUNT, select that many functions."
+  (interactive "p")
+  (if helixel-mark-a-function-function
+      (funcall helixel-mark-a-function-function count)
+    (helixel--mark-a-function count)))
+
+;; ── Comment Text Objects ──
+
+(defvar-local helixel-mark-inner-comment-function nil
+  "Buffer-local override for `helixel-mark-inner-comment'.")
+(defvar-local helixel-mark-a-comment-function nil
+  "Buffer-local override for `helixel-mark-a-comment'.")
+
+(defvar helixel--textobj-repeat-direction nil
+  "Direction of the current textobj motion repeat.
+Bound by `helixel--repeat-textobj-motion' to `forward' or
+`backward' so that textobj commands can adapt their search
+strategy (e.g. `helixel--comment-bounds-near-point').
+Nil outside of a motion replay.")
+
+(defun helixel--comment-bounds-near-point (&optional backward-only)
+  "Return syntax comment bounds near point, searching buffer-wide.
+When BACKWARD-ONLY is non-nil, searches backward first.
+Delegates to `helixel--comment-bounds-next' and
+`helixel--comment-bounds-previous' from helixel-move.el."
+  (if backward-only
+      (or (helixel--comment-bounds-previous)
+          (helixel--comment-bounds-next))
+    (or (helixel--comment-bounds-next)
+        (helixel--comment-bounds-previous))))
+
+(defun helixel--mark-comment (count)
+  "Select a syntax comment near point using COUNT."
+  (when helixel-textobj-action-function
+    (funcall helixel-textobj-action-function 'textobj 'comment))
+  (let* ((followup-p (and (use-region-p)
+                          (eq (helixel--region-type) 'textobj)))
+         (backward-p (eq helixel--textobj-repeat-direction 'backward)))
+    (when followup-p
+      (goto-char (region-end))
+      (skip-chars-forward " \t\n\r\f"))
+    (let ((range (helixel--comment-bounds-near-point
+                  (and backward-p (not followup-p)))))
+      (unless range
+        (user-error "No comment found"))
+      ;; Expand to adjacent comment block.
+      (when-let* ((block (helixel--comment-block-bounds range)))
+        (setq range block))
+      (helixel--activate-textobj-range range nil count 'comment))))
+
+(defun helixel-mark-inner-comment (&optional count)
+  "Select inner comment.
+In treesit buffers, delegates via `helixel-mark-inner-comment-function'.
+With optional COUNT, select that many comments."
+  (interactive "p")
+  (if helixel-mark-inner-comment-function
+      (funcall helixel-mark-inner-comment-function count)
+    (helixel--mark-comment count)))
+
+(defun helixel-mark-a-comment (&optional count)
+  "Select a comment.
+In treesit buffers, delegates via `helixel-mark-a-comment-function'.
+With optional COUNT, select that many comments."
+  (interactive "p")
+  (if helixel-mark-a-comment-function
+      (funcall helixel-mark-a-comment-function count)
+    (helixel--mark-comment count)))
 
 (helixel-define-mark-pair "paren" ?\( ?\) "parenthesis")
 (helixel-define-mark-pair "bracket" ?\[ ?\] "bracket")
@@ -462,9 +548,27 @@ Helixel treats as words) is a valid repeat target."
     (if forward-p
         (skip-chars-forward " \t\n\r\f")
       (skip-chars-backward " \t\n\r\f"))
+    ;; When the original command had a count > 1, skip past single-
+    ;; character boundary tokens (commas, semicolons, etc.) that the
+    ;; textobj engine treats as separate word tokens.  This prevents
+    ;; comma-repeat from anchoring at punctuation between word groups
+    ;; (e.g. "a A," -> skip comma -> "b B," instead of ",b ").
+    ;; Single-count repeats preserve the current behavior where each
+    ;; punctuation token is individually selectable.
+    (when (> (prefix-numeric-value
+              (helixel--last-motion-prefix-arg rec))
+             1)
+      (if forward-p
+          (progn
+            (skip-chars-forward "^[:word:] \t\n\r\f")
+            (skip-chars-forward " \t\n\r\f"))
+        (progn
+          (skip-chars-backward "^[:word:] \t\n\r\f")
+          (skip-chars-backward " \t\n\r\f"))))
     ;; Execute the textobj command.
     (let ((current-prefix-arg (helixel--last-motion-prefix-arg rec)))
-      (let ((this-command cmd))
+      (let ((this-command cmd)
+            (helixel--textobj-repeat-direction dir))
         (call-interactively cmd)
         ;; Override direction on the freshly recorded motion struct
         ;; (helixel--activate-textobj-range always records 'forward).

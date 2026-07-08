@@ -389,6 +389,12 @@ Dispatch:
      ;; Chain edits may have no kind advance (e.g. after J / join-lines
      ;; with no selection); allow in-place repeat.
      ((and (eq op 'chain) (null advance-fn)) t)
+     ;; Treesit advance handles its own positioning even for
+     ;; self-advancing ops (e.g. kill, change); skipping it
+     ;; would cause dot-repeat to re-select the same node
+     ;; instead of advancing to the next one.
+     ((and advance-fn (eq kind 'treesit))
+      (funcall advance-fn effective))
      ;; Op handles its own positioning, or kind has no advance: just recreate.
      ((or (not advance-fn) (helixel--op-self-advancing-p op))
       (helixel--with-debug-log repeat-advance-recreate

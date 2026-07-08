@@ -3,13 +3,13 @@ EMACS ?= emacs
 XDG_CACHE_HOME ?= $(HOME)/.cache
 MELPAZOID_DIR  ?= $(XDG_CACHE_HOME)/melpazoid
 
-FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj-engine.el helixel-textobj-pair.el helixel-textobj-block.el helixel-textobj-marks.el helixel-textobj.el helixel-mc-core.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel.el
-ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj-engine.elc helixel-textobj-pair.elc helixel-textobj-block.elc helixel-textobj-marks.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel.elc
+FILES = helixel-core.el helixel-ring.el helixel-macros.el helixel-repeat.el helixel-chain.el helixel-state.el helixel-move.el helixel-keymap.el helixel-search.el helixel-editing.el helixel-surround.el helixel-swap.el helixel-textobj-engine.el helixel-textobj-pair.el helixel-textobj-block.el helixel-textobj-marks.el helixel-textobj.el helixel-mc-core.el helixel-mc-spawn.el helixel-mc-integrate.el helixel-shims.el helixel-treesit-core.el helixel-treesit-commands.el helixel-treesit.el helixel.el
+ELS := helixel-core.elc helixel-ring.elc helixel-macros.elc helixel-repeat.elc helixel-chain.elc helixel-state.elc helixel-move.elc helixel-keymap.elc helixel-search.elc helixel-editing.elc helixel-surround.elc helixel-swap.elc helixel-textobj-engine.elc helixel-textobj-pair.elc helixel-textobj-block.elc helixel-textobj-marks.elc helixel-textobj.elc helixel-mc-core.elc helixel-mc-spawn.elc helixel-mc-integrate.elc helixel-shims.elc helixel-treesit-core.elc helixel-treesit-commands.elc helixel-treesit.elc helixel.elc
 
 TEST_FILES = $(wildcard test/helixel-test-*.el)
 
 # deps for test
-DEPS = package-lint undo-fu undo-tree pcre2el
+DEPS = package-lint undo-fu undo-tree pcre2el evil-textobj-tree-sitter
 
 INIT_PACKAGES="(progn \
   (require 'package) \

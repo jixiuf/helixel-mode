@@ -454,16 +454,50 @@ If STATE is given it used a parsing state at point."
      #'helixel--bounds-of-string-at-point)
 
 (defun helixel--bounds-of-comment-at-point ()
-  "Return the bounds of a string at point."
+  "Return the bounds of a comment at point."
   (save-excursion
     (let ((state (syntax-ppss)))
       (when (nth 4 state)
-        (cons (nth 8 state)
-              (when (parse-partial-sexp
-                     (point) (point-max) nil nil state 'syntax-table)
-                (point)))))))
+        (let ((beg (nth 8 state))
+              (end (when (parse-partial-sexp
+                          (point) (point-max) nil nil state 'syntax-table)
+                     (point))))
+          (when (and end (> end beg)
+                     (eq (char-before end) ?\n))
+            (setq end (1- end)))
+          (cons beg end))))))
 (put 'helixel-comment 'bounds-of-thing-at-point
      #'helixel--bounds-of-comment-at-point)
+
+(defun helixel--forward-comment (count)
+  "Move forward COUNT syntax comments.
+COUNT positive: move to after the current/next comment end.
+COUNT negative: move to before the current/previous comment start.
+
+When already inside a comment, the first step moves to the far
+end of that comment (cdr for forward, car for backward) before
+looking for the next one.  Uses `syntax-ppss' to locate comment
+boundaries."
+  (let ((dir (if (> count 0) 1 -1)))
+    (dotimes (_ (abs count))
+      (if (nth 4 (syntax-ppss))
+          ;; Already inside a comment — jump to the far end first.
+          (when-let* ((bnd (helixel--bounds-of-comment-at-point)))
+            (goto-char (if (> dir 0) (cdr bnd) (car bnd))))
+        ;; Not in a comment — scan for the next opener.
+        (let ((limit (if (> dir 0) (point-max) (point-min)))
+              (found nil))
+          (while (and (not found)
+                      (if (> dir 0) (< (point) limit) (> (point) limit)))
+            (forward-char dir)
+            (setq found (nth 4 (syntax-ppss))))
+          (if found
+              (when-let* ((bnd (helixel--bounds-of-comment-at-point)))
+                (goto-char (if (> dir 0) (cdr bnd) (car bnd))))
+            ;; Reached buffer limit — position there.
+            (goto-char (if (> dir 0) (point-max) (point-min)))))))))
+
+(put 'helixel-comment 'forward-op #'helixel--forward-comment)
 
 
 

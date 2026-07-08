@@ -48,7 +48,9 @@
 (require 'helixel-mc-core)
 (require 'helixel-search)
 
-
+;; ── Forward declarations for treesit integration ──
+(declare-function helixel-ts--next-after "helixel-treesit-core" t t)
+(declare-function helixel-ts--prev-before "helixel-treesit-core" t t)
 
 ;; Special vars from helixel-repeat — must be `defvar' so the `let'
 ;; bindings below are treated as dynamic, not lexical.
@@ -266,6 +268,95 @@ Filters invisible matches via `isearch-filter-predicate' when
             ;; No match at all.
             (throw 'found nil)))))))
 
+;; ── Treesit-aware mark-like-this helpers ──
+
+(defun helixel-mc--treesit-selection-p ()
+  "Return non-nil when the active selection is a treesit object."
+  (and (boundp 'helixel--pending-sel)
+       helixel--pending-sel
+       (eq (helixel-sel-kind helixel--pending-sel) 'treesit)))
+
+(defun helixel-mc--treesit-capture-has-fake-p (beg end)
+  "Return non-nil if any fake cursor's point lies in [BEG, END]."
+  (cl-find-if
+   (lambda (ov)
+     (let ((fp (marker-position (helixel-mc-cursor-point ov))))
+       (and fp (>= fp beg) (<= fp end))))
+   (helixel-mc-all-cursors)))
+
+(defun helixel-mc--treesit-next-unmarked (base part start forward-p)
+  "Find next unmarked treesit capture of (BASE . PART) from START.
+FORWARD-P non-nil searches forward, nil backward.
+Skips captures whose range already contains a fake cursor.
+Returns (BEG . END) cons, or nil if none found."
+  (let ((search-fn (if forward-p
+                       #'helixel-ts--next-after
+                     #'helixel-ts--prev-before))
+        (result nil)
+        (pos start))
+    (while (and (not result) pos)
+      (let ((capture (funcall search-fn base part pos)))
+        (if (null capture)
+            (setq pos nil)
+          (let ((cb (car capture))
+                (ce (cdr capture)))
+            (if (helixel-mc--treesit-capture-has-fake-p cb ce)
+                ;; Collision — skip past this capture and retry.
+                (setq pos (if forward-p
+                              (max ce (1+ pos))
+                            (min cb (1- pos))))
+              (setq result capture))))))
+    result))
+
+(defun helixel-mc--mark-like-this-treesit (dir)
+  "Treesit-aware variant: move to next/prev semantic object.
+DIR is 1 (forward) or -1 (backward).  Snapshots the current real
+cursor as a fake, then advances real to the next object of the
+same (BASE . PART) type."
+  (let* ((sel (or (and (boundp 'helixel--pending-sel)
+                       helixel--pending-sel)
+                  (and (boundp 'helixel-last-action)
+                       helixel-last-action
+                       (helixel-action-sel helixel-last-action))))
+         (base (helixel-sel-field sel :base))
+         (part (helixel-sel-field sel :part))
+         (forward-p (> dir 0))
+         ;; Farthest edge among ALL cursors (same as text-search path).
+         (farthest
+          (let ((fwd (max (point) (or (mark t) (point))))
+                (bwd (min (point) (or (mark t) (point)))))
+            (dolist (ov (helixel-mc-all-cursors))
+              (let* ((p (marker-position (helixel-mc-cursor-point ov)))
+                     (m (marker-position (helixel-mc-cursor-mark ov)))
+                     (hi (max p m))
+                     (lo (min p m)))
+                (setq fwd (max fwd hi))
+                (setq bwd (min bwd lo))))
+            (if forward-p fwd bwd)))
+         (start (if forward-p
+                    (max farthest (region-end))
+                  (min farthest (region-beginning))))
+         (target (helixel-mc--treesit-next-unmarked
+                  base part start forward-p))
+         (old-point (point))
+         (old-mark (and (use-region-p) (mark t)))
+         (had-region (use-region-p)))
+    (unless target
+      (user-error "No more %s(%s) objects" base part))
+    ;; Create fake at old position if not already there.
+    (unless (cl-find-if
+             (lambda (ov)
+               (= old-point (marker-position
+                             (helixel-mc-cursor-point ov))))
+             (helixel-mc-all-cursors))
+      (helixel-mc--create-fake-cursor old-point
+                                      (and had-region old-mark)))
+    ;; Move real to the new target and recreate the selection.
+    ;; Jumping to the capture start lets `helixel-ts--recreate'
+    ;; find the correct innermost object for :part inside/around.
+    (goto-char (car target))
+    (helixel--recreate-selection sel)))
+
 (defun helixel-mc--mark-like-this (dir)
   "Move real cursor to the next occurrence, leaving a fake at its old position.
 DIR is 1 (forward) or -1 (backward).
@@ -277,55 +368,61 @@ so the view always scrolls to show what was just marked.
 Repeated calls chain: real always sits at the latest match (visible),
 fakes accumulate at all previously visited positions.  The search
 anchor is the farthest edge among ALL cursors (real + fakes) to
-guarantee no two cursors share a position."
-  (let* ((text (helixel-mc--region-text))
-         ;; Collect farthest edge among ALL cursors (real + fakes).
-         (farthest
-          (let ((fwd (max (point) (or (mark t) (point))))
-                (bwd (min (point) (or (mark t) (point)))))
-            (dolist (ov (helixel-mc-all-cursors))
-              (let* ((p (marker-position (helixel-mc-cursor-point ov)))
-                     (m (marker-position (helixel-mc-cursor-mark ov)))
-                     (hi (max p m))
-                     (lo (min p m)))
-                (setq fwd (max fwd hi))
-                (setq bwd (min bwd lo))))
-            (if (> dir 0) fwd bwd)))
-         (start (if (> dir 0)
-                    (max farthest (region-end))
-                  (min farthest (region-beginning))))
-         (target (save-excursion
-                   (goto-char start)
-                   (helixel-mc--search-for-next text dir)))
-         ;; Snapshot current real position before moving.
-         (old-point (point))
-         (old-mark (and (use-region-p) (mark t)))
-         (had-region (use-region-p)))
-    (unless target
-      (user-error "No more matches for `%s'" text))
-    ;; Create a fake cursor at the old real position — unless a fake
-    ;; already sits exactly there.
-    (unless (cl-find-if
-             (lambda (ov)
-               (= old-point (marker-position
-                             (helixel-mc-cursor-point ov))))
-             (helixel-mc-all-cursors))
-      (helixel-mc--create-fake-cursor old-point
-                                      (and had-region old-mark)))
-    ;; Move real to the new match (view scrolls with it).
-    (let ((tb (marker-position (car target)))
-          (te (marker-position (cdr target)))
-          (forward-p (if had-region
-                         (>= old-point old-mark)
-                       t)))
-      (deactivate-mark)
-      (goto-char (if forward-p te tb))
-      (set-mark (if forward-p tb te))
-      (activate-mark))
-    (helixel-mc--free-targets (list target))
-    (let ((n (helixel-mc-num-cursors)))
-      (message "Marked \"%s\" at line %d (%d cursor%s)"
-               text (line-number-at-pos) n (if (> n 1) "s" "")))))
+guarantee no two cursors share a position.
+
+When the active selection is a treesit object, delegates to
+`helixel-mc--mark-like-this-treesit' for semantic advance
+instead of literal text search."
+  (if (helixel-mc--treesit-selection-p)
+      (helixel-mc--mark-like-this-treesit dir)
+    (let* ((text (helixel-mc--region-text))
+           ;; Collect farthest edge among ALL cursors (real + fakes).
+           (farthest
+            (let ((fwd (max (point) (or (mark t) (point))))
+                  (bwd (min (point) (or (mark t) (point)))))
+              (dolist (ov (helixel-mc-all-cursors))
+                (let* ((p (marker-position (helixel-mc-cursor-point ov)))
+                       (m (marker-position (helixel-mc-cursor-mark ov)))
+                       (hi (max p m))
+                       (lo (min p m)))
+                  (setq fwd (max fwd hi))
+                  (setq bwd (min bwd lo))))
+              (if (> dir 0) fwd bwd)))
+           (start (if (> dir 0)
+                      (max farthest (region-end))
+                    (min farthest (region-beginning))))
+           (target (save-excursion
+                     (goto-char start)
+                     (helixel-mc--search-for-next text dir)))
+           ;; Snapshot current real position before moving.
+           (old-point (point))
+           (old-mark (and (use-region-p) (mark t)))
+           (had-region (use-region-p)))
+      (unless target
+        (user-error "No more matches for `%s'" text))
+      ;; Create a fake cursor at the old real position — unless a fake
+      ;; already sits exactly there.
+      (unless (cl-find-if
+               (lambda (ov)
+                 (= old-point (marker-position
+                               (helixel-mc-cursor-point ov))))
+               (helixel-mc-all-cursors))
+        (helixel-mc--create-fake-cursor old-point
+                                        (and had-region old-mark)))
+      ;; Move real to the new match (view scrolls with it).
+      (let ((tb (marker-position (car target)))
+            (te (marker-position (cdr target)))
+            (forward-p (if had-region
+                           (>= old-point old-mark)
+                         t)))
+        (deactivate-mark)
+        (goto-char (if forward-p te tb))
+        (set-mark (if forward-p tb te))
+        (activate-mark))
+      (helixel-mc--free-targets (list target))
+      (let ((n (helixel-mc-num-cursors)))
+        (message "Marked \"%s\" at line %d (%d cursor%s)"
+                 text (line-number-at-pos) n (if (> n 1) "s" ""))))))
 
 ;;;###autoload
 (defun helixel-mc-mark-next-like-this ()
@@ -347,52 +444,85 @@ guarantee no two cursors share a position."
   (helixel-mc--mark-like-this -1))
 
 ;; Internal helper — not autoloaded (private "--" name).
+(defun helixel-mc--skip-in-dir-treesit (dir)
+  "Treesit-aware skip: advance to next/prev object without adding cursor.
+DIR is 1 (forward) or -1 (backward)."
+  (let* ((sel (or (and (boundp 'helixel--pending-sel)
+                       helixel--pending-sel)
+                  (and (boundp 'helixel-last-action)
+                       helixel-last-action
+                       (helixel-action-sel helixel-last-action))))
+         (base (helixel-sel-field sel :base))
+         (part (helixel-sel-field sel :part))
+         (forward-p (> dir 0))
+         (start (if forward-p (region-end) (region-beginning)))
+         (target (helixel-mc--treesit-next-unmarked
+                  base part start forward-p))
+         ;; Preserve original point/mark direction.
+         (orig-forward-p (if (use-region-p)
+                             (>= (point) (mark t))
+                           t)))
+    (unless target
+      (user-error "No more %s(%s) objects" base part))
+    (let ((cb (car target))
+          (ce (cdr target)))
+      (if orig-forward-p
+          (progn (goto-char ce) (set-mark cb))
+        (goto-char cb) (set-mark ce))
+      (activate-mark))
+    (message "Skipped to line %d" (line-number-at-pos))))
+
 (defun helixel-mc--skip-in-dir (dir)
   "Skip occurrence in DIR (+1 / -1) without adding a cursor.
 Skips past positions that already have a fake cursor, so the real
 cursor never lands on an existing fake.  Preserves the original
-point/mark direction (forward-p)."
-  (let* ((text (helixel-mc--region-text))
-         (start (if (> dir 0) (region-end) (region-beginning)))
-         (target nil)
-         (search-start start)
-         ;; Capture original direction before moving.
-         (forward-p (if (use-region-p)
-                        (>= (point) (mark t))
-                      t)))
-    (while (not target)
-      (let ((candidate (save-excursion
-                         (goto-char search-start)
-                         (helixel-mc--search-for-next text dir))))
-        (unless candidate (user-error "No more matches"))
-        (let ((cand-beg (marker-position (car candidate)))
-              (cand-end (marker-position (cdr candidate))))
-          ;; Check if any existing fake already covers this position.
-          (if (cl-find-if
-               (lambda (ov)
-                 (let ((fp (marker-position (helixel-mc-cursor-point ov)))
-                       (fm (marker-position (helixel-mc-cursor-mark ov))))
-                   (and (>= cand-beg (min fp fm))
-                        (<= cand-end (max fp fm)))))
-               (helixel-mc-all-cursors))
-              ;; Collision — advance search-start past this match and retry.
-              (progn
-                (helixel-mc--free-targets (list candidate))
-                (setq search-start
-                      (if (> dir 0) (max cand-end (1+ search-start))
-                        (min cand-beg (1- search-start)))))
-            ;; No collision — accept this target.
-            (setq target candidate)))))
-    ;; Preserve original direction: if point was after mark (forward),
-    ;; set point at target-end and mark at target-begin.
-    (let ((tb (marker-position (car target)))
-          (te (marker-position (cdr target))))
-      (if forward-p
-          (progn (goto-char te) (set-mark tb))
-        (goto-char tb) (set-mark te))
-      (activate-mark))
-    (helixel-mc--free-targets (list target))
-    (message "Skipped to line %d" (line-number-at-pos))))
+point/mark direction (forward-p).
+
+When the active selection is a treesit object, delegates to
+`helixel-mc--skip-in-dir-treesit' for semantic skip."
+  (if (helixel-mc--treesit-selection-p)
+      (helixel-mc--skip-in-dir-treesit dir)
+    (let* ((text (helixel-mc--region-text))
+           (start (if (> dir 0) (region-end) (region-beginning)))
+           (target nil)
+           (search-start start)
+           ;; Capture original direction before moving.
+           (forward-p (if (use-region-p)
+                          (>= (point) (mark t))
+                        t)))
+      (while (not target)
+        (let ((candidate (save-excursion
+                           (goto-char search-start)
+                           (helixel-mc--search-for-next text dir))))
+          (unless candidate (user-error "No more matches"))
+          (let ((cand-beg (marker-position (car candidate)))
+                (cand-end (marker-position (cdr candidate))))
+            ;; Check if any existing fake already covers this position.
+            (if (cl-find-if
+                 (lambda (ov)
+                   (let ((fp (marker-position (helixel-mc-cursor-point ov)))
+                         (fm (marker-position (helixel-mc-cursor-mark ov))))
+                     (and (>= cand-beg (min fp fm))
+                          (<= cand-end (max fp fm)))))
+                 (helixel-mc-all-cursors))
+                ;; Collision — advance search-start past this match and retry.
+                (progn
+                  (helixel-mc--free-targets (list candidate))
+                  (setq search-start
+                        (if (> dir 0) (max cand-end (1+ search-start))
+                          (min cand-beg (1- search-start)))))
+              ;; No collision — accept this target.
+              (setq target candidate)))))
+      ;; Preserve original direction: if point was after mark (forward),
+      ;; set point at target-end and mark at target-begin.
+      (let ((tb (marker-position (car target)))
+            (te (marker-position (cdr target))))
+        (if forward-p
+            (progn (goto-char te) (set-mark tb))
+          (goto-char tb) (set-mark te))
+        (activate-mark))
+      (helixel-mc--free-targets (list target))
+      (message "Skipped to line %d" (line-number-at-pos)))))
 
 ;;;###autoload
 (defun helixel-mc-skip-next ()

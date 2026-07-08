@@ -269,6 +269,21 @@ Structure sub-keys (~[~ / ~]~ only):
 | ~p~ | prev paragraph start | next paragraph end |
 | ~s~ | prev sentence start  | next sentence end  |
 | ~f~ | prev function start  | next function end  |
+| ~y~ | prev class           | next class (treesit) |
+| ~,~ | prev parameter       | next parameter (treesit) |
+| ~l~ | prev loop            | next loop (treesit) |
+| ~e~ | prev conditional     | next conditional (treesit) |
+| ~o~ | prev sibling         | next sibling (treesit) |
+
+Inner sub-keys (~{~ / ~}~) for treesit objects:
+
+| Key | ~{~ inner start          | ~}~ inner end            |
+|-----+--------------------------+--------------------------|
+| ~f~ | prev function body       | next function body end  |
+| ~y~ | prev class body          | next class body end     |
+| ~,~ | prev parameter (tight)   | next parameter (tight)  |
+| ~l~ | prev loop body           | next loop body end      |
+| ~e~ | prev conditional body    | next conditional body end |
 
 After any pair/structure movement:
 - ~,~ repeats the motion (reads from a self-contained snapshot)
@@ -534,28 +549,34 @@ Arguments: ~(NAME BEGIN-RE END-RE &optional NAME-GROUP SUBCAT)~.
 
 *** Tree-sitter Text Objects
 
-Requires [[https://github.com/meain/evil-textobj-tree-sitter][evil-textobj-tree-sitter]]
-as a soft dependency (it does NOT require evil-mode):
+helixel provides built-in tree-sitter support via
+~helixel-treesit.el~ — no external package required:
 
 #+begin_src elisp
-(define-key helixel-textobj-inner-map "f"
-  (helixel-get-tree-sitter-textobj "function.inner"))
-(define-key helixel-textobj-outer-map "f"
-  (helixel-get-tree-sitter-textobj "function.outer"))
+  (require 'helixel-treesit)
+  ;; Setup is automatic when helixel-mode activates.
+  ;; Manual call (idempotent) only needed if you install
+  ;; treesit after helixel-mode is already on:
+  ;; (helixel-treesit-setup)
 #+end_src
 
-Custom query alist per major-mode:
+This registers semantic text objects and navigation keys that
+work in any treesit-enabled buffer.  Query resolution delegates
+to ~evil-textobj-tree-sitter~ (soft dependency, 151+ languages).
+See [[file:TREESIT.org][TREESIT.org]] for the full keybinding table.
+
+For custom per-language bindings without ~helixel-treesit-setup~,
+you can still use the low-level helper:
 
 #+begin_src elisp
-(define-key helixel-textobj-outer-map "m"
-  (helixel-get-tree-sitter-textobj "import"
-    '((python-mode . "((import_statement) @import)")
-      (python-ts-mode . "((import_statement) @import)")
-      (rust-mode . "((use_declaration) @import)"))))
+  (define-key helixel-textobj-inner-map "f"
+    (helixel-get-tree-sitter-textobj "function.inner"))
+  (define-key helixel-textobj-outer-map "f"
+    (helixel-get-tree-sitter-textobj "function.outer"))
 #+end_src
 
-If ~evil-textobj-tree-sitter~ is not installed, the function returns
-~nil~ and bindings are silently ignored.
+If ~evil-textobj-tree-sitter~ is not installed, ~helixel-get-tree-sitter-textobj~
+returns ~nil~ and bindings are silently ignored.
 
 -----
 
@@ -834,7 +855,7 @@ group.  ~;~ cycles between groups, setting mark to each group's start.
 | ~quote~     | ~mi"~ ~ma"~ ~mi'~ ~ma'~ ~mi`~ ma~ `~            |
 | ~tag~       | ~mit~ ~mat~                                     |
 | ~block~     | ~mic~ ~mac~ (org blocks, markdown fences)       |
-| ~treesit~   | tree-sitter objects (custom bindings)           |
+| ~class~ ~parameter~ ~loop~ ~conditional~ ~sibling~ ~grow-shrink~ | tree-sitter objects (custom bindings) |
 
 **** Edit sessions (each operation is its own session group)
 
@@ -955,13 +976,15 @@ whitelisted command runs at every cursor in one undo step.
 
 ~s s~ pulls the current selection:
 
-| Selection kind           | Cursor layout                                |
-|--------------------------+----------------------------------------------|
-| line / rect              | column cursors at ~current-column~ per line  |
-| search (~/~ ~?~ ~*~ ~#~) | one cursor per match in the whole buffer     |
-| textobj (~miw~ ~maw~ …)  | one cursor per same-kind thing in the buffer |
-| find-char (~f~ ~t~ …)    | one cursor per occurrence                    |
-| movement (~w~ ~e~ ~b~ …) | one cursor per advance step                  |
+| Selection kind              | Cursor layout                                 |
+|-----------------------------+-----------------------------------------------|
+| line / rect                 | column cursors at ~current-column~ per line   |
+| search (~/~ ~?~ ~*~ ~#~)    | one cursor per match in the whole buffer      |
+| textobj (~miw~ ~maw~ …)     | one cursor per same-kind thing in the buffer  |
+| find-char (~f~ ~t~ …)       | one cursor per occurrence                     |
+| movement (~w~ ~e~ ~b~ …)    | one cursor per advance step                   |
+| treesit (~maf~ ~mif~ ~may~) | one cursor per semantic object (function,     |
+|                             | class, parameter, loop, conditional, comment) |
 
 *** Managing Cursors
 
@@ -1036,6 +1059,19 @@ Per-line editing:
 #+begin_src
 x x x s s i // <ESC>
 # line-select 3 lines → spawn column cursors → insert // on each
+#+end_src
+
+Treesit bulk editing:
+#+begin_src
+maf s s i DEBUG: <ESC>
+# select function → spawn at every function → insert prefix on each
+#+end_src
+
+Treesit mark-like-this (semantic s n):
+#+begin_src
+maf s n s n d
+# select func1 → mark func2 → mark func3 → delete all 3 functions
+# (each in separate undo step equivalent)
 #+end_src
 
 *** ~;~ with Multi-Cursor
@@ -1188,8 +1224,12 @@ n          repeats /pattern (from active-search)
 ;; Categories repeatable by ,
 (setq helixel-motion-repeat-categories
       '((movement . pair) (movement . match) (movement . paragraph)
-        (movement . sentence) (movement . function) search find-char
-        mc-spawn))
+        (movement . sentence) (movement . function)
+        (movement . class) (movement . parameter)
+        (movement . comment) (movement . loop)
+        (movement . conditional) (movement . sibling)
+        (movement . grow-shrink)
+        (movement . scroll) search find-char mc-spawn))
 
 ;; Disable motion repeat entirely
 (setq helixel-motion-repeat-categories nil)

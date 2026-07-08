@@ -1,0 +1,279 @@
+* helixel-treesit — Tree-sitter Support :TOC_3_gh:
+  - [[#quick-start][Quick Start]]
+  - [[#available-text-objects][Available Text Objects]]
+  - [[#tree-motions][Tree Motions]]
+  - [[#sibling-navigation][Sibling Navigation]]
+  - [[#motion-repeat][Motion Repeat]]
+  - [[#supported-languages][Supported Languages]]
+  - [[#custom-queries][Custom Queries]]
+  - [[#evil-textobj-integration][Evil-textobj Integration]]
+  - [[#graceful-degradation][Graceful Degradation]]
+  - [[#known-limitations][Known Limitations]]
+
+* Quick Start
+  :PROPERTIES:
+  :CUSTOM_ID: quick-start
+  :END:
+
+  #+begin_src emacs-lisp
+     (use-package evil-textobj-tree-sitter :ensure t)
+  #+end_src
+
+  This is all you need.
+
+  Text-object keys are global helixel bindings whose implementation
+  dispatches to tree-sitter only in parser-backed buffers.  Non-ts
+  buffers keep the existing regex fallback where one exists.
+
+* Available Text Objects
+  :PROPERTIES:
+  :CUSTOM_ID: available-text-objects
+  :END:
+
+  In treesit buffers, these text objects override or extend the
+  default regex-based ones:
+
+  | Key     | Inner                    | Around               | Target                              |
+  |---------+--------------------------+----------------------+-------------------------------------|
+  | ~m i f~ | ~mark-inner-function~    | ~mark-a-function~    | Function (treesit, overrides regex) |
+  | ~m i y~ | ~mark-inner-class~       | ~mark-a-class~       | Class / struct                      |
+  | ~m i ,~ | ~mark-inner-parameter~   | ~mark-a-parameter~   | Parameter / argument                |
+  | ~m i ;~ | ~mark-inner-comment~     | ~mark-a-comment~     | Comment                             |
+  | ~m i l~ | ~mark-inner-loop~        | ~mark-a-loop~        | For / while / loop                  |
+  | ~m i e~ | ~mark-inner-conditional~ | ~mark-a-conditional~ | If / match / switch                 |
+
+  The ~f~ and ~;~ keys use buffer-local dispatch in ts buffers.
+  In non-ts buffers, ~m i f~ still uses the regex function fallback,
+  and ~m i ;~ / ~m a ;~ use the normal syntax-based comment text
+  object.  Comment bracket motions (~[;~, ~];~, ~{;~, ~};~) follow
+  the same dispatch model: treesit in parser-backed buffers, syntax
+  comments otherwise.
+
+  Key mnemonics:
+  - ~f~ → function
+  - ~y~ → class (~c~ is taken by code block)
+  - ~,~ → parameter (suggesting a comma-separated list)
+  - ~;~ → comment
+  - ~l~ → loop
+  - ~e~ → "else" / conditional
+
+* Tree Motions
+  :PROPERTIES:
+  :CUSTOM_ID: tree-motions
+  :END:
+
+  | Key   | Command                                      | Description                            |
+  |-------+----------------------------------------------+----------------------------------------|
+  | ~M-o~ | ~helixel-treesit-grow-selection~             | Expand to parent scope                 |
+  | ~M-i~ | ~helixel-treesit-shrink-selection~           | Shrink to previous level               |
+  | ~]f~  | ~helixel-treesit-forward-outer-function~     | Next function (outer)                  |
+  | ~[f~  | ~helixel-treesit-backward-outer-function~    | Previous function (outer)              |
+  | ~}f~  | ~helixel-treesit-forward-inner-function~     | Next function inner end                |
+  | ~{f~  | ~helixel-treesit-backward-inner-function~    | Previous function inner start          |
+  | ~]y~  | ~helixel-treesit-forward-outer-class~        | Next class / struct                    |
+  | ~[y~  | ~helixel-treesit-backward-outer-class~       | Previous class / struct                |
+  | ~}y~  | ~helixel-treesit-forward-inner-class~        | Next class inner end                   |
+  | ~{y~  | ~helixel-treesit-backward-inner-class~       | Previous class inner start             |
+  | ~]e~  | ~helixel-treesit-forward-outer-conditional~  | Next if / conditional                  |
+  | ~[e~  | ~helixel-treesit-backward-outer-conditional~ | Previous conditional                   |
+  | ~}e~  | ~helixel-treesit-forward-inner-conditional~  | Next conditional inner end             |
+  | ~{e~  | ~helixel-treesit-backward-inner-conditional~ | Previous conditional inner start       |
+  | ~],~  | ~helixel-treesit-forward-outer-parameter~    | Next parameter †                       |
+  | ~[,~  | ~helixel-treesit-backward-outer-parameter~   | Previous parameter †                   |
+  | ~},~  | ~helixel-treesit-forward-inner-parameter~    | Next parameter inner                   |
+  | ~{,~  | ~helixel-treesit-backward-inner-parameter~   | Previous parameter inner               |
+  | ~]l~  | ~helixel-treesit-forward-outer-loop~         | Next loop                              |
+  | ~[l~  | ~helixel-treesit-backward-outer-loop~        | Previous loop                          |
+  | ~}l~  | ~helixel-treesit-forward-inner-loop~         | Next loop inner end                    |
+  | ~{l~  | ~helixel-treesit-backward-inner-loop~        | Previous loop inner start              |
+  | ~];~  | ~helixel-treesit-forward-outer-comment-end~  | Current / next comment end             |
+  | ~[;~  | ~helixel-treesit-backward-outer-comment~     | Current / previous comment start       |
+  | ~};~  | ~helixel-treesit-forward-inner-comment-end~  | Inner current / next comment end       |
+  | ~{;~  | ~helixel-treesit-backward-inner-comment~     | Inner current / previous comment start |
+
+  † Outer parameter navigation (~[,~  ~],~) expands the selected region
+  to include the trailing comma, matching ~ma,~ semantics.
+  Inner parameter navigation (~{,~/~},~) uses tight identifier-only
+  bounds.
+
+  All navigation commands point-move to the target and record its
+  span.  Press ~;~ to select the full span.
+  Motion repeat (~,~ / ~-,~) is supported for each.
+  
+  By default, the target node is selected (region is activated).
+  To disable selection for specific treesit motions, remove their
+  subcats:
+
+  #+begin_src emacs-lisp
+    ;; Disable selection for function motions only:
+    (setq helixel-motion-select-categories
+          (remove ='(movement . function)
+                  helixel-motion-select-categories))
+  #+end_src
+
+* Sibling Navigation
+  :PROPERTIES:
+  :CUSTOM_ID: sibling-navigation
+  :END:
+
+  | Key  | Command                                  | Description           |
+  |------+------------------------------------------+-----------------------|
+  | ~]o~ | ~helixel-treesit-forward-outer-sibling~  | Next sibling node     |
+  | ~[o~ | ~helixel-treesit-backward-outer-sibling~ | Previous sibling node |
+
+  Sibling navigation moves between adjacent named nodes at the same
+  syntax-tree level.  When no sibling exists, it ascends through
+  single-child wrapper nodes (e.g. Python's ~expression_statement~)
+  and retries at the parent level.
+
+
+  *Example (Go):*
+  #+begin_src go
+    func foo(ctx context.IContext, id int64, data *OpenID) { ... }
+    //       ]o → context.IContext
+    //       ]o, → int64
+    //       ]o,, → *OpenID
+  #+end_src
+
+  *Example (Python arguments):*
+  #+begin_src python
+    foo(a, b.c, d.e())
+    //   ]o → b.c (attribute, not just "c")
+    //   ]o, → d.e() (call, not just "e")
+  #+end_src
+
+* Motion Repeat
+  :PROPERTIES:
+  :CUSTOM_ID: motion-repeat
+  :END:
+
+  All treesit motions are registered in
+  ~helixel-motion-repeat-categories~ with per-type subcats
+  (~function~, ~class~, ~parameter~,
+  ~comment~, ~loop~, ~conditional~,
+  ~sibling~, ~grow-shrink~).
+  This means ~,~ repeats the last motion and ~-,~ reverses it.
+
+  | Initial motion            | ~,~ (repeat)   | ~-,~ (reverse)        |
+  |---------------------------+----------------+-----------------------|
+  | ~]o~ (next sibling)       | next sibling   | prev sibling          |
+  | ~[o~ (prev sibling)       | prev sibling   | next sibling          |
+  | ~M-o~ (grow)              | grow again     | shrink                |
+  | ~M-i~ (shrink)            | shrink again   | grow                  |
+  | ~]f~ / ~[f~ (function)    | next / prev fn | prev / next fn        |
+  | ~]y~ / ~[y~ (class)       | next / prev cls| prev / next cls       |
+  | ~]e~ / ~[e~ (conditional) | next / prev if | prev / next if        |
+  | ~],~ / ~[,~ (parameter)   | next / prev arg| prev / next arg       |
+
+* Supported Languages
+  :PROPERTIES:
+  :CUSTOM_ID: supported-languages
+  :END:
+
+  Helixel uses ~evil-textobj-tree-sitter~ as its capture provider.
+  When installed (soft dependency), it provides tree-sitter
+  text-object queries for 151+ languages — no additional
+  configuration needed.
+
+  When ~evil-textobj-tree-sitter~ is not installed, or lacks query
+  files for the current language, helix automatically falls back
+  to syntax-based text objects (regex).
+
+* Evil-textobj Integration
+  :PROPERTIES:
+  :CUSTOM_ID: evil-textobj-integration
+  :END:
+
+  When ~evil-textobj-tree-sitter~ is installed, helixel-treesit uses
+  it as the query provider.  This provides:
+
+  - Broad language support maintained outside Helixel
+  - Full Helix ~textobjects.scm~ query coverage where supported by
+    that package
+  - No configuration needed
+
+  Without ~evil-textobj-tree-sitter~, treesit dispatch vars are not
+  set and helixel uses its syntax-based (regex) fallbacks for
+  function and comment navigation.
+
+
+* Multi-Cursor Integration
+  :PROPERTIES:
+  :CUSTOM_ID: multi-cursor-integration
+  :END:
+
+  Treesit selections integrate with multi-cursor (~s~ prefix)
+  for semantic bulk operations.
+
+** Spawn (~s s~)
+
+  After any treesit text object (~maf~, ~mif~, ~may~, …), press
+  ~s s~ to spawn one fake cursor at every occurrence of the same
+  object type across the whole buffer:
+
+  #+begin_src
+  maf s s
+  # select function → spawn cursors at every function
+  #+end_src
+
+  Each cursor has its own function selected (mark at start, point
+  at end).  Follow with ~i~ / ~a~ / ~d~ / ~c~ to edit every function
+  independently.
+
+  Supported types: ~function~, ~class~, ~parameter~, ~loop~,
+  ~conditional~, ~comment~ — both ~around~ and ~inside~ variants.
+
+  Nested objects (e.g. inner function inside outer) follow ~maf~
+  semantics: only the innermost at each position gets a cursor.
+  Non-overlapping objects at the same level each get their own.
+
+** Mark-like-this (~s n~ / ~s p~)
+
+  When a treesit selection is active, ~s n~ and ~s p~ perform
+  /semantic/ advance instead of literal text search:
+
+  | Key  | Behavior (treesit selection)                            |
+  |------+--------------------------------------------------------|
+  | ~s n~ | Move to the next object of the same type, leave a fake |
+  | ~s p~ | Move to the previous object, leave a fake              |
+  | ~s N~ | Skip to next object (no fake cursor created)           |
+  | ~s P~ | Skip to previous object                                 |
+  | ~s u~ | Unmark next fake cursor (cursor-based, always works)    |
+  | ~s U~ | Unmark previous fake cursor                              |
+
+  Repeated ~s n~ calls chain: fakes accumulate at every visited
+  position, real cursor always sits at the latest match.
+
+  #+begin_src
+  maf s n s n s n
+  # select func1 → fake at func1, real to func2
+  #              → fake at func2, real to func3
+  #              → fake at func3, real to func4
+  #+end_src
+
+  After marking, press ~,~ (comma) to repeat ~s n~ / ~s p~ without
+  the prefix.  See Motion Repeat in the User Guide.
+
+* Graceful Degradation
+  :PROPERTIES:
+  :CUSTOM_ID: graceful-degradation
+  :END:
+
+  - **No parser**: Commands signal ~user-error~ (navigation) or
+    return nil silently (selection).
+  - **No query for language**: Returns no captures → nothing to
+    select.  Add a query or install ~evil-textobj-tree-sitter~.
+  - **Non-ts buffer**: All keybindings are mode-specific —
+    ~helixel-treesit-setup~ does not modify global keymaps.
+    Text object keys not in ts modes continue using regex fallbacks.
+
+* Known Limitations
+  :PROPERTIES:
+  :CUSTOM_ID: known-limitations
+  :END:
+
+  - **Query predicates**: Emacs treesit does not support ~#match?~
+    or ~#eq?~ predicates; queries must use structural patterns only.
+  - **Grammar version differences**: Tree-sitter grammar node names
+    may differ between versions.  If a query returns no captures,
+    check ~treesit-explore-mode~ to verify node names.

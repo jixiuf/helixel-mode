@@ -293,7 +293,7 @@ display it.
 | ~:all-buffer-fn~  | fn ~(EDIT PREFIX) → nil~ | Custom all-buffer scan |
 | ~:all-dir-fn~     | fn ~(EDIT) → nil~ | Custom all-direction scan |
 | ~:flip-dir-fn~    | fn ~(SEL) → SEL~ | Return reversed-direction sel |
-| ~:mc-spawn-fn~    | fn ~(BEG END) → positions~ | Multi-cursor spawn positions |
+| ~:mc-spawn-fn~    | fn ~(SEL) → targets~ | Multi-cursor spawn positions (\[s s\]) |
 
 *** Kind Protocol Methods
 

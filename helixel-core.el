@@ -227,22 +227,6 @@ Line-crossing trim and newline-skip logic in
 \=`helixel--def-thing-move' only apply to these things.
 Multi-line things (paragraph, sentence, function) are unaffected.")
 
-(defcustom helixel-thing-move-no-select-things
-  '(helixel-paragraph helixel-sentence helixel-function)
-  "Thing symbols for which \=`helixel--def-thing-move' skips visual selection.
-When a thing is in this list, movement commands just move point
-without creating a visual selection (region) around the movement.
-Commands for things listed here just move point without activating
-the mark.  The mark-region for \=`\;\=' action cycle is still recorded.
-
-Valid thing symbols:
-  helixel-word, helixel-WORD, helixel-symbol,
-  helixel-paragraph, helixel-sentence, helixel-function.
-
-Set to nil to always create a selection (original behavior)."
-  :type '(repeat symbol)
-  :group 'helixel)
-
 ;; ----------------------------------------------------------------------
 ;; helixel-sel: Selection Descriptor
 ;; ----------------------------------------------------------------------
@@ -1077,8 +1061,11 @@ Slots:
 (defcustom helixel-motion-repeat-categories
   '((movement . pair) (movement . match) (movement . paragraph)
     (movement . sentence) (movement . function) (movement . scroll)
-    search find-char mc-spawn
-    textobj)
+    (movement . class) (movement . parameter)
+    (movement . comment) (movement . loop)
+    (movement . conditional) (movement . sibling)
+    (movement . grow-shrink)
+    search find-char mc-spawn textobj)
   "Motion categories that \\[helixel-repeat-last-motion] can repeat.
 Each element is either a plain category symbol (matches all
 subcats) or a cons (CATEGORY . SUBCAT) for precise matching —
@@ -1091,6 +1078,27 @@ match only the specified subcat under that category.
 Set to nil to disable motion repeat entirely."
   :type '(repeat (choice symbol (cons symbol symbol)))
   :group 'helixel)
+
+(defcustom helixel-motion-select-categories
+  '((movement . word) (movement . WORD) (movement . symbol)
+    (movement . pair)
+    (movement . function) (movement . class)
+    (movement . parameter) (movement . comment)
+    (movement . loop) (movement . conditional)
+    (movement . sibling) (movement . grow-shrink))
+  "Motion subcats that auto-activate visual selection.
+When a motion's (CATEGORY . SUBCAT) or plain CATEGORY appears in
+this list, the movement creates a visible region (selection).
+Otherwise it only moves point without activating the mark.
+
+Used by thing-move commands and treesit sibling/mark-* commands.
+Set to nil to disable selection for all motions."
+  :type '(repeat (choice symbol (cons symbol symbol)))
+  :group 'helixel)
+
+(defun helixel--motion-select-category-p (category subcat)
+  "Return t if (CATEGORY . SUBCAT) appears in `helixel-motion-select-categories'."
+  (helixel--category-match-p category subcat helixel-motion-select-categories))
 
 (defun helixel--category-match-p (category subcat checklist)
   "Return non-nil if (CATEGORY . SUBCAT) matches CHECKLIST.

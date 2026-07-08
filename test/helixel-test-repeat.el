@@ -1000,6 +1000,183 @@ than call-interactively (which triggers mode-specific side effects)."
                            "(defun baz () 3)\n")))
       (helixel--deactivate-all-hooks))))
 
+;; ── Comment textobj comma-repeat ──
+
+(ert-deftest helixel-test-repeat-textobj-comment-comma-forward ()
+  "m; then ,,, advances comment BLOCK selection forward.
+Adjacent comments (only whitespace between) form a single block.
+Code between blocks separates them."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert ";; one\n;; two\ncode\n;; three\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 2)
+          (setq last-command nil this-command 'helixel-mark-inner-comment)
+          (helixel-mark-inner-comment)
+          ;; First block: one + two (adjacent)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; one\n;; two"))
+          ;; First comma: forward to next block
+          (setq last-command 'helixel-mark-inner-comment)
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; three"))
+          ;; Second comma: stays on last block
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; three")))
+      (helixel--deactivate-all-hooks))))
+
+(ert-deftest helixel-test-repeat-textobj-comment-comma-backward ()
+  "m; then -, ,,, selects previous comment blocks backward."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert ";; one\n;; two\ncode\n;; three\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 22)  ;; near "three"
+          (setq last-command nil this-command 'helixel-mark-inner-comment)
+          (helixel-mark-inner-comment)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; three"))
+          ;; -, backward flip — goes to previous block (one + two)
+          (setq last-command 'helixel-mark-inner-comment)
+          (helixel-repeat-last-motion '-)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; one\n;; two"))
+          ;; , backward repeat 1 — stays on first block
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; one\n;; two")))
+      (helixel--deactivate-all-hooks))))
+
+(ert-deftest helixel-test-repeat-textobj-comment-comma-backward-no-prev ()
+  "m; on first comment block, then -, stays on the same block (no previous)."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert ";; comment\ncode\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 2)
+          (setq last-command nil this-command 'helixel-mark-inner-comment)
+          (helixel-mark-inner-comment)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; comment"))
+          ;; -, backward flip — no previous block, stays on same
+          (setq last-command 'helixel-mark-inner-comment)
+          (helixel-repeat-last-motion '-)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; comment")))
+      (helixel--deactivate-all-hooks))))
+
+(ert-deftest helixel-test-repeat-textobj-comment-followup-forward ()
+  "m;m; followup (no comma) advances through comment blocks."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert ";; first\n;; second\ncode\n;; third\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 2)
+          (setq last-command nil this-command 'helixel-mark-inner-comment)
+          (helixel-mark-inner-comment)
+          ;; First block: first + second (adjacent)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; first\n;; second"))
+          ;; Second m; without comma — followup advances to next block
+          (setq last-command 'helixel-mark-inner-comment)
+          (helixel-mark-inner-comment)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; third"))
+          ;; Third m; — stays on last block
+          (helixel-mark-inner-comment)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; third")))
+      (helixel--deactivate-all-hooks))))
+
+(ert-deftest helixel-test-repeat-textobj-comment-comma-both-dirs ()
+  "m; then , forward, then -, backward: round-trip to the same block."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (transient-mark-mode 1)
+    (insert ";; first\n;; second\ncode\n;; third\n")
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 2)
+          (setq last-command nil this-command 'helixel-mark-inner-comment)
+          (helixel-mark-inner-comment)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; first\n;; second"))
+          ;; Forward comma to next block
+          (setq last-command 'helixel-mark-inner-comment)
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; third"))
+          ;; Backward flip back to first block
+          (helixel-repeat-last-motion '-)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           ";; first\n;; second")))
+      (helixel--deactivate-all-hooks))))
+
+;; ── Comma-repeat boundary skip for count > 1 ──
+
+(ert-deftest helixel-test-repeat-textobj-comma-skip-boundary ()
+  "maw with count=2 on comma-separated words: , skips boundary.
+Without the fix, , would anchor at the comma selecting \",b \"
+instead of \"b B\"."
+  (helixel-test-with-buffer "func Hello(a A,b B, c C) (err error) {"
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 12)  ;; on 'a'
+          (setq last-command nil this-command 'helixel-mark-a-word)
+          (let ((current-prefix-arg 2))
+            (helixel-mark-a-word 2))
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "a A"))
+          ;; Comma-repeat with count=2 skips comma boundary
+          (setq last-command 'helixel-mark-a-word)
+          (helixel-repeat-last-motion nil)
+          ;; Should select \"b B\" (not \",b \")
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "b B"))
+          ;; Second comma: \"c C\"
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "c C")))
+      (helixel--deactivate-all-hooks))))
+
+(ert-deftest helixel-test-repeat-textobj-comma-skip-boundary-count-1 ()
+  "maw with count=1 still selects punctuation tokens individually."
+  (helixel-test-with-buffer "hello [yas] Prepared just-in-time loading"
+    (helixel--activate-all-hooks)
+    (unwind-protect
+        (progn
+          (goto-char 22)  ;; start of \"just\"
+          (setq last-command nil this-command 'helixel-mark-inner-word)
+          (helixel-mark-inner-word 1)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "just"))
+          ;; Count=1: hyphen IS a selectable token
+          (setq last-command 'helixel-mark-inner-word)
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "-"))
+          ;; Next: \"in\"
+          (helixel-repeat-last-motion nil)
+          (should (string= (buffer-substring (region-beginning) (region-end))
+                           "in")))
+      (helixel--deactivate-all-hooks))))
+
 ;; ── Find-char dot-repeat ──
 
 (ert-deftest helixel-test-repeat-findchar-fxd-dot ()

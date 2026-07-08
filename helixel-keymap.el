@@ -266,14 +266,21 @@ on top of the base maps."
       (when (local-variable-p 'helixel-textobj-map)
         (define-key helixel-textobj-map "i" helixel-textobj-inner-map)
         (define-key helixel-textobj-map "a" helixel-textobj-outer-map)
+        ;; Restore the original parent.
+        (set-keymap-parent helixel-textobj-map
+                           helixel-textobj-inner-map)
         (kill-local-variable 'helixel-textobj-map)))
     ;; Build composed keymaps with overrides
     (when (or inner-overrides outer-overrides)
       (make-local-variable 'helixel-textobj-map)
       (when inner-overrides
-        (define-key helixel-textobj-map "i"
-                    (make-composed-keymap inner-overrides
-                                          helixel-textobj-inner-map)))
+        (let ((composed (make-composed-keymap inner-overrides
+                                              helixel-textobj-inner-map)))
+          (define-key helixel-textobj-map "i" composed)
+          ;; Also update the fallback parent so pressing a key
+          ;; directly (e.g. m,) without i/a prefix finds the
+          ;; overridden bindings.
+          (set-keymap-parent helixel-textobj-map composed)))
       (when outer-overrides
         (define-key helixel-textobj-map "a"
                     (make-composed-keymap outer-overrides
@@ -297,6 +304,7 @@ on top of the base maps."
     ("<>"    . "angle")
     ("t"     . "tag")
     ("f"     . "function")
+    (";"     . "comment")
     ("c"     . "block")
     ("`"     . "back-quote")
     ("'"     . "single-quote")
@@ -339,6 +347,7 @@ e.g. \"helixel-mark-a-%s\"."
     ("'"     . "single-quote")
     ("`"     . "back-quote")
     ("t"     . "tag")
+    (";"     . "comment")
     ("c"     . "block"))
   "Table mapping bracket-prefix KEYS to textobj TYPE-INFIX.
 Used to populate `helixel-right-map' / `-left-map' /
@@ -358,7 +367,7 @@ e.g. \"helixel-forward-outer-%s\"."
   "d" #'flymake-goto-next-error
   "p" #'helixel-forward-paragraph-end
   "s" #'helixel-forward-sentence-end
-  "f" #'helixel-forward-function-end)
+  "f" #'helixel-forward-outer-function)
 (helixel--bracket-prefix-populate helixel-right-map
                                   "helixel-forward-outer-%s")
 
@@ -367,7 +376,7 @@ e.g. \"helixel-forward-outer-%s\"."
   "d" #'flymake-goto-prev-error
   "p" #'helixel-backward-paragraph-start
   "s" #'helixel-backward-sentence-start
-  "f" #'helixel-backward-function-start)
+  "f" #'helixel-backward-outer-function)
 (helixel--bracket-prefix-populate helixel-left-map
                                   "helixel-backward-outer-%s")
 

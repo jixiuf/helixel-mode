@@ -99,18 +99,21 @@ content (e.g. grep results with consult-focus-line, dired-omit)."
 (defun helixel-shims--setup-wdired ()
   "Setup wdired integration.
 Entering wdired → normal.  Exiting (save/abort) → motion."
+  ;; Hooks are always safe — they exist as symbols before the mode.
   (add-hook 'wdired-mode-hook #'helixel-enter-normal-state)
-  (advice-add 'wdired-finish-edit   :after #'helixel-enter-motion-state)
-  (advice-add 'wdired-abort-changes :after #'helixel-enter-motion-state)
-  (when (fboundp 'wdired-exit)
-    (advice-add 'wdired-exit :after #'helixel-enter-motion-state))
-  ;; wdired-finish-edit / -abort-changes exit the mode globally —
-  ;; mc dispatch would run them again at each fake cursor after the
-  ;; mode is already off.
-  (put 'wdired-finish-edit 'helixel-multiple-cursors nil)
-  (put 'wdired-abort-changes 'helixel-multiple-cursors nil)
   ;; dired-omit-mode hides files via invisible text.
-  (add-hook 'dired-mode-hook #'helixel-shims--set-invisible-nil))
+  (add-hook 'dired-mode-hook #'helixel-shims--set-invisible-nil)
+  ;; Advice requires the target functions to exist.
+  (when (fboundp 'wdired-finish-edit)
+    (advice-add 'wdired-finish-edit   :after #'helixel-enter-motion-state)
+    (advice-add 'wdired-abort-changes :after #'helixel-enter-motion-state)
+    (when (fboundp 'wdired-exit)
+      (advice-add 'wdired-exit :after #'helixel-enter-motion-state))
+    ;; wdired-finish-edit / -abort-changes exit the mode globally —
+    ;; mc dispatch would run them again at each fake cursor after the
+    ;; mode is already off.
+    (put 'wdired-finish-edit 'helixel-multiple-cursors nil)
+    (put 'wdired-abort-changes 'helixel-multiple-cursors nil)))
 
 (defun helixel-shims--teardown-wdired ()
   "Remove wdired integration hooks and advice."
@@ -128,16 +131,18 @@ Entering wdired → normal.  Exiting (save/abort) → motion."
 (defun helixel-shims--setup-grep-edit ()
   "Setup grep-edit integration.
 Entering grep-edit → normal.  Saving → motion."
+  ;; Hook setup always safe — hooks exist as symbols before the mode.
+  (add-hook 'grep-edit-mode-hook #'helixel-enter-normal-state)
+  ;; grep/occur results use invisible for filtering (consult-focus-line).
+  (add-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil)
+  ;; Advice requires the target functions to exist.
   (when (fboundp 'grep-edit-mode)
-    (add-hook 'grep-edit-mode-hook #'helixel-enter-normal-state)
     (advice-add 'grep-edit-save-changes
                 :after #'helixel-enter-motion-state)
     ;; gre-edit-save-changes exits the mode and saves globally —
     ;; mc dispatch would run it again at each fake cursor after the
     ;; mode is already off.  See also occur-cease-edit, wdired-*, wgre-*.
-    (put 'grep-edit-save-changes 'helixel-multiple-cursors nil))
-  ;; grep/occur results use invisible for filtering (consult-focus-line).
-  (add-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil))
+    (put 'grep-edit-save-changes 'helixel-multiple-cursors nil)))
 
 (defun helixel-shims--teardown-grep-edit ()
   "Remove grep-edit integration hooks and advice."
@@ -151,13 +156,15 @@ Entering grep-edit → normal.  Saving → motion."
 (defun helixel-shims--setup-occur-edit ()
   "Setup occur-edit integration.
 Entering occur-edit → normal.  Ceasing edit → motion."
+  ;; Hook setup always safe — hooks exist as symbols before the mode.
+  (add-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
+  (add-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil)
+  ;; Advice requires the target functions to exist.
   (when (fboundp 'occur-edit-mode)
-    (add-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
     (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state)
     ;; occur-cease-edit exits the mode globally — must not
     ;; be dispatched to every fake cursor after the mode is off.
-    (put 'occur-cease-edit 'helixel-multiple-cursors nil))
-  (add-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil))
+    (put 'occur-cease-edit 'helixel-multiple-cursors nil)))
 
 (defun helixel-shims--teardown-occur-edit ()
   "Remove occur-edit integration hooks and advice."
@@ -208,8 +215,10 @@ Entering wgrep → normal.  Exiting (save/finish/abort) → motion."
 (defun helixel-shims--setup-xref-edit ()
   "Setup xref-edit integration.
 Entering xref-edit → normal.  Saving → motion."
+  ;; Hook setup always safe — hooks exist as symbols before the mode.
+  (add-hook 'xref-edit-mode-hook #'helixel-enter-normal-state)
+  ;; Advice requires the target functions to exist.
   (when (fboundp 'xref-change-to-xref-edit-mode)
-    (add-hook 'xref-edit-mode-hook #'helixel-enter-normal-state)
     (advice-add 'xref-edit-save-changes
                 :after #'helixel-enter-motion-state)
     ;; xref-edit-save-changes exits the mode and saves globally —
@@ -415,6 +424,11 @@ arguments (usually a prompt string)."
 
 ;; ── Enable / Disable ──
 
+(defvar helixel-shims--enabled nil
+  "Non-nil when `helixel-shims-global-mode' is active.
+Guards the `after-load-functions' handler so deferred advice
+setup is only re-tried when the mode is on.")
+
 (defun helixel-shims--enable ()
   "Enable all integration shims."
   ;; State-transition shims
@@ -439,10 +453,16 @@ arguments (usually a prompt string)."
   (helixel-shims--setup-eww-mode)
   ;; Multi-cursor shims
   (helixel-mc--setup-completion-preview)
-  (helixel-shims--setup-consult))
+  (helixel-shims--setup-consult)
+  ;; Mark as enabled so deferred advice setup knows to proceed.
+  (setq helixel-shims--enabled t)
+  ;; Register deferred setup for packages not yet loaded.
+  (add-hook 'after-load-functions #'helixel-shims--after-load))
 
 (defun helixel-shims--disable ()
   "Disable all integration shims."
+  (setq helixel-shims--enabled nil)
+  (remove-hook 'after-load-functions #'helixel-shims--after-load)
   (helixel-shims--teardown-consult)
   (helixel-mc--teardown-completion-preview)
   (helixel-shims--teardown-compile)
@@ -451,6 +471,34 @@ arguments (usually a prompt string)."
   (helixel-shims--teardown-occur-edit)
   (helixel-shims--teardown-grep-edit)
   (helixel-shims--teardown-wdired))
+
+;; ── Deferred advice setup ──
+;; Hook additions can be done eagerly (they are just symbol
+;; manipulation).  But `advice-add' requires the target function to
+;; exist, so we re-run the full setup when the package loads.
+;; The `helixel-shims--enabled' flag prevents setup when
+;; `helixel-shims-global-mode' is off.
+
+(defvar helixel-shims--deferred-features
+  '((wdired  . helixel-shims--setup-wdired)
+    (grep    . helixel-shims--setup-grep-edit)
+    (replace . helixel-shims--setup-occur-edit)
+    (wgrep   . helixel-shims--setup-wgrep)
+    (xref    . helixel-shims--setup-xref-edit)
+    (completion-preview . helixel-mc--setup-completion-preview)
+    (consult . helixel-shims--setup-consult))
+  "Alist of (FEATURE . SETUP-FN) for deferred advice setup.
+Setup functions are called from `after-load-functions' when
+FEATURE is loaded, but only when `helixel-shims--enabled' is non-nil.")
+
+(defun helixel-shims--after-load (feature)
+  "Re-try shim setup when FEATURE is loaded.
+Calls the associated setup function from
+`helixel-shims--deferred-features' if `helixel-shims--enabled'
+is non-nil.  Intended for `after-load-functions'."
+  (when helixel-shims--enabled
+    (when-let* ((fn (cdr (assq feature helixel-shims--deferred-features))))
+      (funcall fn))))
 
 ;;;###autoload
 (define-minor-mode helixel-shims-global-mode

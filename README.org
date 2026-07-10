@@ -61,7 +61,7 @@ neither the Helix editor nor other Emacs Helix simulators provide:
 - *Motion repeat* (~,~) :: Repeats any motion (find-char, pair, match, search)
   from a self-contained snapshot — survives intervening ~/~ without losing
   context.
-- *Chain recording* (~@~) :: Records a compound sequence (helixel + vanilla
+- *Chain recording* (~@~) (*⚠ Experimental.*) :: Records a compound sequence (helixel + vanilla
   commands) and replays at each target via ~.~.  Insert-mode typing captured
   verbatim, no double-replay.
 - *Multi-cursor* (~s~) :: Each fake cursor has its *own* ~kill-ring~,

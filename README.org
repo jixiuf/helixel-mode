@@ -221,6 +221,7 @@ Helixel is heavily inspired by:
 - [[https://github.com/meow-edit/meow][meow]]
 - [[https://codeberg.org/ideasman42/emacs-meep][meep]]
 - [[https://github.com/mgmarlow/helix-mode.git][helix-mode]]
+- [[https://github.com/anuvyklack/hel][Hel]]
 - [[https://github.com/magnars/multiple-cursors.el][multiple-cursors.el]]
 
 * License

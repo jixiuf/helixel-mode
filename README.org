@@ -7,6 +7,10 @@ Helixel is *selection-first*: you select a region first, then act on it.  This i
 Vim's operator-pending model (~d3w~ = "delete 3 words" where the operator comes first).  In Helixel
 you type ~w w w ; d~ or ~3wd~ — select three words, then delete.
 
+https://github.com/user-attachments/assets/40d728af-c6fa-4415-b84f-23ae72b0faec
+
+or see it on [[https://www.youtube.com/watch?v=PaM894-6DkU][youtube]]
+
 - [[file:docs/USER-GUIDE.org][User Guide]] — installation, keybindings, workflows
 - [[file:docs/FAQ.org][FAQ]] — common questions and answers
 - [[file:docs/API.org][API Reference]] — extending helixel with custom commands, text objects, operators

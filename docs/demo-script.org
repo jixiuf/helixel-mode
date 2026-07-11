@@ -1,0 +1,121 @@
+#+TITLE:   helixel-mode Feature Demo
+* Search-and-replace with dot-repeat:
+#+begin_src text
+  /hello RET   search "hello"
+  cWORLD ESC   change to "WORLD"
+  .            next "hello" → "WORLD"
+  3.           next 3 "hello"s → "WORLD"
+  M-.          preview next match (no edit)
+  .            then edit current "hello" after preview
+  -.           reverse direction, repeat (personally I bind negative-argument on `C-h`)
+  0.           repeat to end of
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+hello
+#+end_src
+
+* Search-and-replace with multi-cursor:
+#+begin_src text
+  /foo RET     search "foo"
+  s s          spawn cursors at every match
+  cbar ESC ESC change all to "bar" in one undo step
+foo
+foo
+foo
+foo
+#+end_src
+* Search-and-replace with multi-cursor:
+#+begin_src text
+  /foo RET     search "foo"
+  cbar ESC     change all to "bar" in one undo step
+  s s          spawn cursors at every match
+  s .  ESC     repeat last edit at all cursors
+foo
+foo
+foo
+foo
+#+end_src
+* Insert "hello" at each line with multi-cursor
+#+begin_src text
+  xxx            select  3 lines
+  s s            spawn cursors at every match
+  ihello ESC ESC insert hello ate each line
+hello foo
+hello foo
+hello foo
+hello foo
+#+end_src
+* Action cycle — reselect spans of past motions:
+#+begin_src text
+  w w          forward two words
+  ;            select full span of w w
+  j j          down two lines
+  ;            select full span of j j
+  ;            select full span of w w (older)
+
+  b b          backward two words
+  C-;          mark start of b b (no full span)
+
+  f w          find-char:"w"
+  n n n        repeat of next find-char
+  ;            select full span of find-char
+hello world foo
+hello world foo
+hello world foo
+hello world foo
+hello world foo
+#+end_src
+* Action cycle & multi-curosr
+#+begin_src text
+  change  world to bar
+
+  xxxxx        select 5line
+  s s          spawn cursors at every match
+  g h         go to bol
+  w w          forward two words
+  ;            select full span of w w (select hello worldN)
+  cbar<ESC>    change "hello world" -> bar
+  <ESC>
+hello world1 foo
+hello world2 foo
+hello world3 foo
+hello world4 foo
+hello world5 foo
+#+end_src
+* Motion repeat — repeat any motion from a snapshot:
+#+begin_src elisp
+  ;; %            jump to matching bracket
+  ;; ,            outward one nesting level
+  ;; ,            outward again
+  ;; ;            select the traversed span
+  ;; C-;          Try C-; see the different bewteen ";" and "C-;"
+(defun helixel-demo--surround-delete (char)
+  "Delete surrounding CHAR delimiter."
+  )
+#+end_src
+
+* Pair/structure/treesit movement with ~]~ / ~[~ / ~}~ / ~{~:
+#+begin_src text
+  [ {          outward to enclosing {'s opening
+  ;            select the span
+  m ,          select treesit parameter
+  ,            repeat to select next parameter
+
+  ] e          forward to next if/else
+  [ f          backward to function
+  ,            repeat backward to function
+  ,            repeat backward to function
+#+end_src

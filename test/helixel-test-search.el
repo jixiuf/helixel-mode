@@ -1361,4 +1361,118 @@ case-insensitivity for a lowercase-only pattern."
       (should (string-match-p "off" msg))
       (should (string-match-p "case-sensitive" msg)))))
 
+
+;;; occur / multi-occur search-state bridge
+
+(ert-deftest helixel-test-occur-sets-active-search ()
+  "`helixel-shims--occur-1-set-search' sets `helixel--active-search'.
+When `helixel-global-mode' is non-nil, the advice stores the
+occur regexp so `n' can repeat it in the source buffer.
+Also sets `helixel--last-motion-cmd' so `,' can repeat it."
+  (helixel-test-with-buffer "hello world hello"
+    (let ((helixel-global-mode t))
+      (setq helixel--active-search nil)
+      (setq helixel--last-motion-cmd nil)
+      ;; Simulate occur-1 advice: the mock orig-fun just returns nil.
+      (helixel-shims--occur-1-set-search
+       (lambda (_regexp &rest _args) nil)
+       "hello")
+      ;; n repeat: helixel--active-search
+      (should helixel--active-search)
+      (should (eq (helixel--last-motion-category helixel--active-search)
+                  'search))
+      (should (equal (helixel--last-motion-pattern helixel--active-search)
+                     "hello"))
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'forward))
+      (should (eq (helixel--last-motion-regexp helixel--active-search) t))
+      ;; , repeat: helixel--last-motion-cmd
+      (should helixel--last-motion-cmd)
+      (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
+                  'search))
+      (should (equal (helixel--last-motion-pattern helixel--last-motion-cmd)
+                     "hello")))))
+
+(ert-deftest helixel-test-occur-no-set-when-mode-off ()
+  "occur-1 advice does NOT set active-search when global mode is nil."
+  (helixel-test-with-buffer "hello world"
+    (let ((helixel-global-mode nil))
+      (setq helixel--active-search nil)
+      (helixel-shims--occur-1-set-search
+       (lambda (_regexp &rest _args) nil)
+       "hello")
+      (should-not helixel--active-search))))
+
+(ert-deftest helixel-test-occur-sets-motion-in-occur-buffer ()
+  "occur-1 advice sets `helixel--last-motion-cmd' in *Occur* buffer.
+After `occur-1' runs, the *Occur* buffer also gets the search
+motion recorded so `,' can repeat there."
+  (helixel-test-with-buffer "hello world"
+    (let ((helixel-global-mode t)
+          (occur-buf (get-buffer-create "*Occur*")))
+      (with-current-buffer occur-buf
+        (setq helixel--last-motion-cmd nil))
+      (unwind-protect
+          (progn
+            (helixel-shims--occur-1-set-search
+             (lambda (_regexp &rest _args) nil)
+             "hello")
+            (with-current-buffer occur-buf
+              (should helixel--last-motion-cmd)
+              (should (eq (helixel--last-motion-category
+                           helixel--last-motion-cmd)
+                          'search))
+              (should (equal (helixel--last-motion-pattern
+                              helixel--last-motion-cmd)
+                             "hello"))))
+        (when (buffer-live-p occur-buf)
+          (kill-buffer occur-buf))))))
+
+(ert-deftest helixel-test-occur-restore-after-kill-local ()
+  "`helixel-shims--occur-restore-search-state' rebuilds motion from args.
+Simulates `kill-all-local-variables' (as occur-edit-mode does):
+`helixel--last-motion-cmd' is lost, but `occur-revert-arguments'
+survives (permanent-local), so the hook restores the search state."
+  (helixel-test-with-buffer "hello world"
+    (let ((helixel-global-mode t))
+      ;; Set up occur-revert-arguments as occur-1 would.
+      (setq occur-revert-arguments '("hello" nil (nil) nil))
+      ;; Simulate kill-all-local-variables.
+      (setq helixel--last-motion-cmd nil)
+      (setq helixel--active-search nil)
+      ;; The hook restores from occur-revert-arguments.
+      (helixel-shims--occur-restore-search-state)
+      (should helixel--last-motion-cmd)
+      (should (eq (helixel--last-motion-category helixel--last-motion-cmd)
+                  'search))
+      (should (equal (helixel--last-motion-pattern helixel--last-motion-cmd)
+                     "hello"))
+      (should helixel--active-search)
+      (should (equal (helixel--last-motion-pattern helixel--active-search)
+                     "hello")))))
+
+(ert-deftest helixel-test-occur-n-repeat-after-set ()
+  "`n' repeats the occur regexp after `helixel--active-search' is set.
+Simulates what happens after `M-x occur': the source buffer's
+`helixel--active-search' carries the regexp, and `n' jumps to
+the next match."
+  (helixel-test-with-buffer "aaa hello bbb hello ccc"
+    (let ((helixel-global-mode t))
+      (setq helixel--active-search
+            (make-helixel--last-motion
+             :category 'search :pattern "hello"
+             :dir 'forward :regexp t))
+      (goto-char 1)
+      ;; n → isearch-repeat-forward (dir=1)
+      (let ((isearch-wrap-pause 'no-ding)
+            (isearch-repeat-on-direction-change t)
+            (isearch-case-fold-search t))
+        (helixel-search-repeat-next)
+        (should (>= (point) 5))   ; matched "hello" at pos 5
+        (should (use-region-p))
+        ;; n again → next "hello"
+        (helixel-search-repeat-next)
+        (should (>= (point) 15))  ; matched "hello" at pos 15
+        (should (use-region-p))))))
+
 ;;; helixel-test-search.el ends here

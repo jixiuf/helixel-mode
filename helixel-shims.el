@@ -43,6 +43,8 @@
 
 ;; ── Declare external functions (byte-compiler) ──
 
+(defvar helixel--active-search)           ; from `helixel-search'
+(defvar occur-revert-arguments)           ; from `replace'
 (defvar help-mode-map)
 
 (declare-function Info-next "info")
@@ -151,27 +153,85 @@ Entering grep-edit → normal.  Saving → motion."
     (advice-remove 'grep-edit-save-changes #'helixel-enter-motion-state))
   (remove-hook 'grep-mode-hook #'helixel-shims--set-invisible-nil))
 
+;; ── occur / multi-occur — search-state bridge ──
+
+(defun helixel-shims--occur-1-set-search (orig-fun regexp &rest args)
+  "Around-advice for `occur-1': push REGEXP to `helixel--active-search'.
+After any occur command runs, stores REGEXP in the source buffer's
+search state so that `n' / `N' can repeat the pattern there.
+Covers `occur', `multi-occur', `multi-occur-in-matching-buffers',
+and `occur-revert' — all call `occur-1' internally.
+ORIG-FUN is the original `occur-1'; REGEXP is the search pattern;
+ARGS are the remaining arguments (nlines bufs &optional buf-name)."
+  (let ((source-buf (current-buffer)))
+    (prog1 (apply orig-fun regexp args)
+      (when (and (stringp regexp)
+                 (buffer-live-p source-buf)
+                 helixel-global-mode)
+        (with-current-buffer source-buf
+          (setq helixel--active-search
+                (make-helixel--last-motion
+                 :category 'search :pattern regexp
+                 :dir 'forward :regexp t))
+          (helixel-record-motion nil
+                                 :category 'search :pattern regexp
+                                 :dir 'forward :regexp t))
+        ;; Also set in the *Occur* buffer so , repeats there too.
+        (when-let* ((occur-buf (get-buffer "*Occur*")))
+          (with-current-buffer occur-buf
+            (helixel-record-motion nil
+                                   :category 'search :pattern regexp
+                                   :dir 'forward :regexp t)))))))
+
 ;; ── occur-edit (Emacs 29+ built-in) ──
 
+(defun helixel-shims--occur-restore-search-state ()
+  "Restore `helixel--last-motion-cmd' from `occur-revert-arguments'.
+`occur-edit-mode' and `occur-mode' change the major mode, which
+calls `kill-all-local-variables', destroying buffer-local helixel
+state.  `occur-revert-arguments' is `permanent-local' and survives,
+so we can rebuild the search motion from it.
+Intended for `occur-mode-hook' and `occur-edit-mode-hook'."
+  (when-let* ((args occur-revert-arguments)
+              (regexp (car args))
+              ((stringp regexp)))
+    (setq helixel--active-search
+          (make-helixel--last-motion
+           :category 'search :pattern regexp
+           :dir 'forward :regexp t))
+    (helixel-record-motion nil
+                           :category 'search :pattern regexp
+                           :dir 'forward :regexp t)))
+
 (defun helixel-shims--setup-occur-edit ()
-  "Setup occur-edit integration.
-Entering occur-edit → normal.  Ceasing edit → motion."
+  "Setup occur-edit integration + occur search-state bridge.
+Entering occur-edit → normal.  Ceasing edit → motion.
+Also wires `occur-1' so occur and `multi-occur' regexps are available
+for `n' repeat in the source buffer."
   ;; Hook setup always safe — hooks exist as symbols before the mode.
   (add-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
+  (add-hook 'occur-edit-mode-hook #'helixel-shims--occur-restore-search-state)
   (add-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil)
+  (add-hook 'occur-mode-hook #'helixel-shims--occur-restore-search-state)
   ;; Advice requires the target functions to exist.
   (when (fboundp 'occur-edit-mode)
     (advice-add 'occur-cease-edit :after #'helixel-enter-motion-state)
     ;; occur-cease-edit exits the mode globally — must not
     ;; be dispatched to every fake cursor after the mode is off.
-    (put 'occur-cease-edit 'helixel-multiple-cursors nil)))
+    (put 'occur-cease-edit 'helixel-multiple-cursors nil))
+  (when (fboundp 'occur-1)
+    (advice-add 'occur-1 :around #'helixel-shims--occur-1-set-search)))
 
 (defun helixel-shims--teardown-occur-edit ()
   "Remove occur-edit integration hooks and advice."
   (remove-hook 'occur-edit-mode-hook #'helixel-enter-normal-state)
+  (remove-hook 'occur-edit-mode-hook #'helixel-shims--occur-restore-search-state)
   (ignore-errors
     (advice-remove 'occur-cease-edit #'helixel-enter-motion-state))
-  (remove-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil))
+  (ignore-errors
+    (advice-remove 'occur-1 #'helixel-shims--occur-1-set-search))
+  (remove-hook 'occur-mode-hook #'helixel-shims--set-invisible-nil)
+  (remove-hook 'occur-mode-hook #'helixel-shims--occur-restore-search-state))
 
 ;; ── wgrep (third-party) ──
 

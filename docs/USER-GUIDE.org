@@ -35,6 +35,7 @@
     - [[#search-toggles][Search Toggles]]
     - [[#search-map-inheritance][Search-Map Inheritance]]
     - [[#pcre-support][PCRE Support]]
+    - [[#occur-integration][Occur Integration]]
   - [[#dot-repeat-][Dot-Repeat (~.~)]]
     - [[#prefix-modes][Prefix Modes]]
     - [[#per-kind-examples][Per-Kind Examples]]
@@ -710,6 +711,23 @@ Enable PCRE-style regexp (~\d~, ~\w~, ~\s~, etc.) via the optional
 | ~\S~ | ~[^[:space:]]~   | Non-whitespace      |
 
 If pcre2el is not installed, patterns are passed through unchanged.
+
+*** Occur Integration
+
+After running =M-x occur= (or =multi-occur=,
+=multi-occur-in-matching-buffers=, =occur-revert=), the regexp is
+automatically stored so that ~n~, ~N~, and ~,~ can repeat-search for
+it:
+
+- ~n~ / ~N~ :: repeat-search for the occur regexp in the source
+  buffer (the buffer where ~occur~ was invoked).
+- ~,~ :: also works — in the source buffer, in the =*Occur*= buffer,
+  and even after entering =occur-edit-mode= (~e~ in the occur
+  buffer).  The search state survives major-mode changes via
+  =occur-revert-arguments=.
+
+No configuration needed — the integration wires itself automatically
+when =helixel-mode= is active.
 
 -----
 

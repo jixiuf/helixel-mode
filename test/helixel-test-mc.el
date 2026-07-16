@@ -4977,5 +4977,24 @@ works without the uppercase-to-case-sensitive override."
       (should (= 3 (length (helixel-mc-all-cursors))))
       (helixel-mc-clear-all))))
 
+(ert-deftest helixel-test-mc-spawn-search-ignores-n-count ()
+  "Regression: after /hello<RET> n n, s s must spawn at ALL matches.
+The :n-count field (tracking how many times n was pressed for dot-repeat)
+must NOT cause walk-advance to skip matches when spawning cursors."
+  (helixel-test-with-buffer "hello abc hello def hello ghi hello\n"
+    (helixel-enter-normal-state)
+    (goto-char 1)
+    ;; Simulate /hello<RET>: real selects first match (mark=1 pt=6).
+    (re-search-forward "hello")
+    (set-mark (match-beginning 0))
+    (helixel--sel-push
+     (helixel-sel-create 'search
+                         (list :pattern "hello" :dir 'forward
+                               :n-count 2 :regexp t)))
+    ;; s s: should spawn at ALL 4 matches despite :n-count 2.
+    (helixel-mc-toggle)
+    (should (= 3 (length (helixel-mc-all-cursors)))) ; 1 real + 3 fakes
+    (helixel-mc-clear-all)))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here

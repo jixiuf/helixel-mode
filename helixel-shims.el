@@ -326,8 +326,8 @@ Unset `l' from `help-mode-map' so it falls through to the
 `helixel-normal-map' parent (`l' → `helixel-forward-char').
 `h' is not bound in `help-mode-map', falls through to
 `helixel-backward-char' automatically."
-  (keymap-unset help-mode-map "l" t)
   (keymap-unset special-mode-map "h" t)
+  (helixel-define-key 'motion "l" #'helixel-forward-char 'help-mode)
   (helixel-define-key 'motion "gb" #'help-go-back 'help-mode)
   (helixel-define-key 'motion "gf" #'help-go-forward 'help-mode)
   (helixel-define-key 'motion "gn" #'help-goto-next-page 'help-mode)

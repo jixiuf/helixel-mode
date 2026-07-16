@@ -1670,7 +1670,8 @@ number of walk iterations), breaking dot-repeat at fake cursors."
         (helixel-with-replay-as 'dot
           (deactivate-mark)
           (goto-char (point-min))
-          (let ((dummy (helixel-mc--make-dummy-action sel))
+          (let ((dummy (helixel-mc--make-dummy-action
+                        (helixel-sel-update-ctx sel :n-count 0)))
                 (keep-going t))
             (while keep-going
               (if-let* ((result (helixel-mc--walk-advance-iter

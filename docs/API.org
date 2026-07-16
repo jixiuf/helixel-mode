@@ -294,6 +294,7 @@ display it.
 | ~:all-dir-fn~     | fn ~(EDIT) → nil~ | Custom all-direction scan |
 | ~:flip-dir-fn~    | fn ~(SEL) → SEL~ | Return reversed-direction sel |
 | ~:mc-spawn-fn~    | fn ~(SEL) → targets~ | Multi-cursor spawn positions (\[s s\]) |
+| ~:skip-reverse-exchange~ | boolean | skip `exchange-point-and-mark' on N reverse |
 
 *** Kind Protocol Methods
 
@@ -554,8 +555,8 @@ Register a function that replays a recorded motion of a specific type.
 (helixel-register-motion-repeater CATEGORY SUBCAT FN)
 #+end_src
 
-- ~CATEGORY~ — e.g. ~'movement~, ~'search~
-- ~SUBCAT~ — e.g. ~'pair~, ~'match~, ~'word~
+- ~CATEGORY~ — e.g. ~'movement~, ~'search~, ~'next-error~
+- ~SUBCAT~ — e.g. ~'pair~, ~'match~, ~'word~, or ~nil~
 - ~FN~ — ~(LAST-MOTION-STRUCT) → nil~
 
 #+begin_src elisp
@@ -848,7 +849,7 @@ Delimiters are represented as plists with these keys:
 
 ;; Categories repeatable by ,
 (setq helixel-motion-repeat-categories
-  '((movement . pair) (movement . match) search find-char))
+  '((movement . pair) (movement . match) search find-char next-error))
 #+end_src
 
 -----

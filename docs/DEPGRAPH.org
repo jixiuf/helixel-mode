@@ -74,6 +74,11 @@ graph TD
   helixel-textobj --> helixel-textobj-pair
   helixel-textobj --> helixel-textobj-block
   helixel-textobj --> helixel-textobj-marks
+  helixel-treesit-commands --> helixel-treesit-core
+  helixel-treesit-commands --> helixel-macros
+  helixel-treesit-core --> helixel-core
+  helixel-treesit --> helixel-treesit-core
+  helixel-treesit --> helixel-treesit-commands
   helixel --> helixel-core
   helixel --> helixel-ring
   helixel --> helixel-macros
@@ -94,4 +99,5 @@ graph TD
   helixel --> helixel-mc-spawn
   helixel --> helixel-mc-integrate
   helixel --> helixel-shims
+  helixel --> helixel-treesit
 #+END_SRC

@@ -4996,5 +4996,501 @@ must NOT cause walk-advance to skip matches when spawning cursors."
     (should (= 3 (length (helixel-mc-all-cursors)))) ; 1 real + 3 fakes
     (helixel-mc-clear-all)))
 
+;; ── next-error MC integration tests ──
+
+(ert-deftest helixel-test-mc-next-error-context-p ()
+  "helixel-mc--next-error-context-p returns t only for next-error category."
+  (helixel-test-with-buffer "x"
+    ;; No active search.
+    (setq helixel--active-search nil)
+    (should-not (helixel-mc--next-error-context-p))
+    ;; Search category (not next-error).
+    (setq helixel--active-search
+          (make-helixel--last-motion :category 'search :dir 'forward))
+    (should-not (helixel-mc--next-error-context-p))
+    ;; next-error category.
+    (setq helixel--active-search
+          (make-helixel--last-motion :category 'next-error :dir 'forward))
+    (should (helixel-mc--next-error-context-p))))
+
+;; ── compilation target collector (collect-compilation-targets-dynamic) ──
+;; These guard against the bug where integer positions were passed
+;; to `copy-marker', which creates markers in the current buffer
+;; (the compilation buffer) instead of the source marker's buffer.
+
+(ert-deftest helixel-test-mc-collect-targets-preserves-buffer ()
+  "collect-compilation-targets-dynamic creates markers in the TARGET buffer."
+  (let ((file-buf (generate-new-buffer " *mc-collector-file*"))
+        (comp-buf (generate-new-buffer " *mc-collector-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer file-buf
+            (insert "line 1\nline 2\nline 3\n"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (let ((next-error-last-buffer comp-buf)
+                (seq nil))
+            (cl-letf (((symbol-function 'next-error)
+                       (lambda (_n)
+                         (if seq
+                             (user-error "No more matches")
+                           (setq seq t)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 8 file-buf)
+                            nil)))))
+              (let ((targets
+                     (with-current-buffer comp-buf
+                       (helixel-mc--collect-compilation-targets-dynamic
+                        file-buf))))
+                (should (= (length targets) 1))
+                (let ((target (car targets)))
+                  (should (eq (marker-buffer (car target)) file-buf))
+                  (should (= (marker-position (car target)) 8))
+                  (helixel-mc--free-targets targets))))))
+      (kill-buffer file-buf)
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-collect-targets-with-end-mk ()
+  "collect-compilation-targets-dynamic creates a range target with end mark."
+  (let ((file-buf (generate-new-buffer " *mc-collector-range*"))
+        (comp-buf (generate-new-buffer " *mc-collector-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer file-buf
+            (insert "hello world\n"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (let ((next-error-last-buffer comp-buf)
+                (seq nil))
+            (cl-letf (((symbol-function 'next-error)
+                       (lambda (_n)
+                         (if seq
+                             (user-error "No more matches")
+                           (setq seq t)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 1 file-buf)
+                            (set-marker (make-marker) 6 file-buf))))))
+              (let ((targets
+                     (with-current-buffer comp-buf
+                       (helixel-mc--collect-compilation-targets-dynamic
+                        file-buf))))
+                (should (= (length targets) 1))
+                (let ((target (car targets)))
+                  (should (eq (marker-buffer (car target)) file-buf))
+                  (should (= (marker-position (car target)) 1))
+                  (should (eq (marker-buffer (cdr target)) file-buf))
+                  (should (= (marker-position (cdr target)) 6))
+                  (helixel-mc--free-targets targets))))))
+      (kill-buffer file-buf)
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-collect-targets-filters-other-buf ()
+  "collect-compilation-targets-dynamic skips matches not in cur-buf."
+  (let ((file-buf (generate-new-buffer " *mc-collector-file*"))
+        (other-buf (generate-new-buffer " *mc-collector-other*"))
+        (comp-buf (generate-new-buffer " *mc-collector-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer other-buf
+            (insert "other content\n"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (let ((next-error-last-buffer comp-buf)
+                (seq nil))
+            (cl-letf (((symbol-function 'next-error)
+                       (lambda (_n)
+                         (if seq
+                             (user-error "No more matches")
+                           (setq seq t)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 1 other-buf)
+                            nil)))))
+              ;; Collect targets for file-buf, but match is in other-buf.
+              (let ((targets
+                     (with-current-buffer comp-buf
+                       (helixel-mc--collect-compilation-targets-dynamic
+                        file-buf))))
+                (should (= (length targets) 0))))))
+      (kill-buffer file-buf)
+      (kill-buffer other-buf)
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-collect-targets-dedup ()
+  "collect-compilation-targets-dynamic deduplicates same position."
+  (let ((file-buf (generate-new-buffer " *mc-collector-dedup*"))
+        (comp-buf (generate-new-buffer " *mc-collector-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer file-buf
+            (insert "dup line\n"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (let ((next-error-last-buffer comp-buf)
+                (calls 0))
+            (cl-letf (((symbol-function 'next-error)
+                       (lambda (_n)
+                         (cl-incf calls)
+                         (if (> calls 2)
+                             (user-error "No more matches")
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 1 file-buf)
+                            nil)))))
+              (let ((targets
+                     (with-current-buffer comp-buf
+                       (helixel-mc--collect-compilation-targets-dynamic
+                        file-buf))))
+                (should (= (length targets) 1))
+                (helixel-mc--free-targets targets)))))
+      (kill-buffer file-buf)
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-collect-targets-includes-first-entry ()
+  "collect-compilation-targets-dynamic includes the first entry after reset."
+  (let ((file-buf (generate-new-buffer " *mc-first*"))
+        (comp-buf (generate-new-buffer " *mc-first-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer file-buf (insert "A B C D"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t)) (compilation-mode)))
+          (let ((next-error-last-buffer comp-buf)
+                (calls 0)
+                (ps '(1 3 5 7)))
+            (cl-letf (((symbol-function 'next-error)
+                       (lambda (_n)
+                         (cl-incf calls)
+                         (if (> calls (length ps))
+                             (user-error "No more matches")
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker)
+                                        (nth (1- calls) ps) file-buf)
+                            nil)))))
+              (let ((targets
+                     (with-current-buffer comp-buf
+                       (helixel-mc--collect-compilation-targets-dynamic
+                        file-buf))))
+                (should (= (length targets) 4))
+                (should (= (marker-position (car (nth 0 targets))) 1))
+                (should (= (marker-position (car (nth 1 targets))) 3))
+                (should (= (marker-position (car (nth 2 targets))) 5))
+                (should (= (marker-position (car (nth 3 targets))) 7))
+                (helixel-mc--free-targets targets)))))
+      (kill-buffer file-buf)
+      (kill-buffer comp-buf)))
+  )
+
+;; ── next-error find-match / mark-like-this / skip-in-dir ──
+
+(ert-deftest helixel-test-mc-next-error-find-match-forward ()
+  "next-error-find-match forward finds next match in buffer."
+  (let ((comp-buf (generate-new-buffer " *nef-comp*"))
+        (target-buf (generate-new-buffer " *nef-target*"))
+        (call-count 0))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "AAA BBB CCC DDD\n"))
+          (with-current-buffer comp-buf
+            (setq-local next-error-function #'ignore))
+          (with-current-buffer target-buf
+            (let ((helixel--active-search
+                   (make-helixel--last-motion :category 'next-error
+                                              :dir 'forward))
+                  (next-error-last-buffer comp-buf))
+              (goto-char 5)
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (cl-incf call-count)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker)
+                                        (* call-count 4) target-buf)
+                            (set-marker (make-marker)
+                                        (+ (* call-count 4) 3)
+                                        target-buf)))))
+                (should (helixel-mc--next-error-find-match 1))
+                (should (= (point) 4))
+                (should (helixel-mc--next-error-find-match 1))
+                (should (= (point) 8))))))
+      (kill-buffer target-buf)
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-next-error-find-match-backward ()
+  "next-error-find-match backward finds previous match."
+  (let ((comp-buf (generate-new-buffer " *nef-comp*"))
+        (target-buf (generate-new-buffer " *nef-target*"))
+        (call-count 3))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "AAA BBB CCC DDD\n"))
+          ;; Use plain buffer, not compilation-mode, so
+          ;; compilation-text-advance doesn't interfere.
+          (with-current-buffer comp-buf
+            (setq-local next-error-function #'ignore))
+          (with-current-buffer target-buf
+            (let ((helixel--active-search
+                   (make-helixel--last-motion :category 'next-error
+                                              :dir 'backward))
+                  (next-error-last-buffer comp-buf))
+              (goto-char 9)
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (cl-decf call-count)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker)
+                                        (* call-count 4) target-buf)
+                            (set-marker (make-marker)
+                                        (+ (* call-count 4) 3)
+                                        target-buf)))))
+                (should (helixel-mc--next-error-find-match -1))
+                (should (= (point) 8))
+                (should (helixel-mc--next-error-find-match -1))
+                (should (= (point) 4))))))
+      (kill-buffer target-buf)
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-next-error-find-match-no-more ()
+  "next-error-find-match returns nil when no more matches."
+  (let ((comp-buf (generate-new-buffer " *nef-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer comp-buf
+            (setq-local next-error-function #'ignore))
+          (helixel-test-with-buffer "x"
+            (let ((helixel--active-search
+                   (make-helixel--last-motion :category 'next-error
+                                              :dir 'forward))
+                  (next-error-last-buffer comp-buf))
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (user-error "No more matches"))))
+                (should-not (helixel-mc--next-error-find-match 1))))))
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-mark-like-this-next-error ()
+  "mark-like-this-next-error creates fake cursor at old position."
+  (let ((comp-buf (generate-new-buffer " *mlt-comp*"))
+        (target-buf (generate-new-buffer " *mlt-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "AAA BBB\n"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t)) (compilation-mode)))
+          (with-current-buffer target-buf
+            (let ((helixel--active-search
+                   (make-helixel--last-motion :category 'next-error
+                                              :dir 'forward))
+                  (next-error-last-buffer comp-buf))
+              (goto-char 1) (push-mark 4 t t)
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 5 target-buf)
+                            (set-marker (make-marker) 8 target-buf)))))
+                (helixel-mc--mark-like-this-next-error 1)
+                ;; Real cursor moved to new match.
+                (should (= (point) 5))
+                ;; Fake cursor created at old position.
+                (should (= 1 (length (helixel-mc-all-cursors))))
+                (should (= 1 (marker-position
+                              (helixel-mc-cursor-point
+                               (car (helixel-mc-all-cursors)))))))
+              (helixel-mc-clear-all))))
+      (kill-buffer target-buf)
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-mark-like-this-next-error-no-match ()
+  "mark-like-this-next-error signals error when no more matches."
+  (let ((comp-buf (generate-new-buffer " *mlt-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t)) (compilation-mode)))
+          (helixel-test-with-buffer "x"
+            (let ((helixel--active-search
+                   (make-helixel--last-motion :category 'next-error
+                                              :dir 'forward))
+                  (next-error-last-buffer comp-buf))
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (user-error "No more matches"))))
+                (should-error
+                 (helixel-mc--mark-like-this-next-error 1)
+                 :type 'user-error)))))
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-mc-skip-in-dir-next-error ()
+  "skip-in-dir-next-error moves point without creating fake cursor."
+  (let ((comp-buf (generate-new-buffer " *sid-comp*"))
+        (target-buf (generate-new-buffer " *sid-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "AAA BBB\n"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t)) (compilation-mode)))
+          (with-current-buffer target-buf
+            (let ((helixel--active-search
+                   (make-helixel--last-motion :category 'next-error
+                                              :dir 'forward))
+                  (next-error-last-buffer comp-buf))
+              (goto-char 1)
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 5 target-buf)
+                            (set-marker (make-marker) 8 target-buf)))))
+                (helixel-mc--skip-in-dir-next-error 1)
+                ;; Point moved to new match.
+                (should (= (point) 5))
+                ;; No fake cursor created.
+                (should (null (helixel-mc-all-cursors)))))))
+      (kill-buffer target-buf)
+      (kill-buffer comp-buf))))
+
+;; ── collect-targets-on-line: per-line overlay scan ──
+
+(ert-deftest helixel-test-mc-collect-targets-on-line ()
+  "collect-targets-on-line finds all next-error overlays on current line."
+  (helixel-test-with-buffer "pattern test pattern"
+    (let ((ov1 (make-overlay 1 8))
+          (ov2 (make-overlay 14 21)))
+      (overlay-put ov1 'face 'next-error)
+      (overlay-put ov2 'face 'next-error)
+      (goto-char 1)
+      (let ((targets (helixel-mc--collect-targets-on-line nil)))
+        (should (= (length targets) 2))
+        ;; Targets are collected left-to-right, pushed → reversed.
+        (should (= (marker-position (car (nth 0 targets))) 14))
+        (should (= (marker-position (cdr (nth 0 targets))) 21))
+        (should (= (marker-position (car (nth 1 targets))) 1))
+        (should (= (marker-position (cdr (nth 1 targets))) 8))
+        (helixel-mc--free-targets targets)))))
+
+(ert-deftest helixel-test-mc-collect-targets-on-line-dedup ()
+  "collect-targets-on-line deduplicates against SEEN list."
+  (helixel-test-with-buffer "pattern pattern"
+    (let ((ov1 (make-overlay 1 8))
+          (ov2 (make-overlay 9 16)))
+      (overlay-put ov1 'face 'next-error)
+      (overlay-put ov2 'face 'next-error)
+      (goto-char 1)
+      ;; Mark position 1 as already seen.
+      (let ((targets (helixel-mc--collect-targets-on-line '(1))))
+        (should (= (length targets) 1))
+        (should (= (marker-position (car (nth 0 targets))) 9))
+        (helixel-mc--free-targets targets)))))
+
+(ert-deftest helixel-test-mc-collect-targets-on-line-empty ()
+  "collect-targets-on-line returns nil when no overlays and pos is seen."
+  (helixel-test-with-buffer "no matches here"
+    (goto-char 1)
+    ;; When there are no next-error overlays, the function falls back
+    ;; to a single match at point.  With pos in SEEN list, it returns nil.
+    (should-not (helixel-mc--collect-targets-on-line (list (point))))))
+
+
+;; ── spawn-from-next-error with expand-targets-on-lines ──
+
+(ert-deftest helixel-test-mc-expand-targets-on-lines ()
+  "expand-targets-on-lines adds additional matches on same line."
+  (let ((buf (generate-new-buffer " *expand-test*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf
+            (insert "foo foo foo\n"))
+          (with-current-buffer buf
+            (let* ((tg1 (helixel-mc--make-target 1 4))
+                   (targets (list tg1)))
+              (helixel-mc--expand-targets-on-lines targets)
+              ;; Should have 3 targets: original + 2 additional.
+              (should (= (length targets) 3))
+              (should (= (marker-position (car (nth 0 targets))) 1))
+              ;; Additional targets appear in reverse order (right-to-left).
+              (should (= (marker-position (car (nth 1 targets))) 9))
+              (should (= (marker-position (car (nth 2 targets))) 5))
+              (helixel-mc--free-targets targets))))
+      (kill-buffer buf))))
+
+(ert-deftest helixel-test-mc-expand-targets-dedup ()
+  "expand-targets-on-lines does not duplicate existing positions."
+  (let ((buf (generate-new-buffer " *expand-dedup*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf
+            (insert "foo foo foo\n"))
+          (with-current-buffer buf
+            ;; Two targets already covering positions 1 and 5.
+            (let* ((tg1 (helixel-mc--make-target 1 4))
+                   (tg2 (helixel-mc--make-target 5 8))
+                   (targets (list tg1 tg2)))
+              (helixel-mc--expand-targets-on-lines targets)
+              ;; Should have 3 targets: 1, 5, 9 (no duplicate).
+              (should (= (length targets) 3))
+              (helixel-mc--free-targets targets))))
+      (kill-buffer buf))))
+
+(ert-deftest helixel-test-mc-spawn-from-next-error-expanded ()
+  "spawn-from-next-error returns nil when no entries in buffer."
+  (let ((grep-buf (generate-new-buffer " *spawn-grep*"))
+        (target-buf (generate-new-buffer " *spawn-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "foo foo\n"))
+          (with-current-buffer grep-buf
+            (grep-mode)
+            (setq-local next-error-function #'ignore))
+          (with-current-buffer target-buf
+            (let ((next-error-last-buffer grep-buf))
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (user-error "No more"))))
+                (should-error
+                 (helixel-mc--spawn-from-next-error nil)
+                 :type 'user-error)))))
+      (kill-buffer target-buf)
+      (kill-buffer grep-buf))))
+
 (provide 'helixel-test-mc)
 ;;; helixel-test-mc.el ends here
+
+;; ── expand-targets-on-lines with compilation-all-matched-strings ──
+
+(ert-deftest helixel-test-mc-expand-targets-all-strings ()
+  "expand-targets-on-lines uses all matched strings from compilation buffer."
+  (let ((grep-buf (generate-new-buffer " *expand-all*"))
+        (target-buf (generate-new-buffer " *expand-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "feehello foohello\n"))
+          (with-current-buffer grep-buf
+            (insert "feehello foohello\n")
+            (put-text-property 1 9 'font-lock-face 'match)
+            (put-text-property 10 18 'font-lock-face 'match)
+            (setq major-mode 'compilation-mode))
+          (with-current-buffer target-buf
+            (let ((next-error-last-buffer grep-buf)
+                  (tg1 (helixel-mc--make-target 1 9)))
+              (let ((targets (list tg1)))
+                (helixel-mc--expand-targets-on-lines targets)
+                (should (>= (length targets) 2))
+                (helixel-mc--free-targets targets)))))
+      (kill-buffer target-buf)
+      (kill-buffer grep-buf))))
+

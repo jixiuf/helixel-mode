@@ -390,15 +390,195 @@ Unset `l' from `help-mode-map' so it falls through to the
 
 ;; ── Deferred setup: compile ──
 
+(defun helixel-shims--next-error-hook ()
+  "Set up helixel search state after a `next-error' jump.
+Called from `next-error-hook' in the target buffer.
+When `next-error-last-buffer' has a `next-error-function',
+sets `helixel--active-search' so that \\[helixel-search-repeat-next]
+and \\[helixel-search-repeat-reverse] navigate matches via
+`next-error' and `previous-error'.
+
+Works for any buffer with `next-error-function' — compilation,
+grep, diff, xref, etc.
+
+Also records the motion for \\[helixel-repeat-last-motion] repeat.
+For modes whose navigation function pushes a mark (compilation),
+activates it to show the match region.  For modes that don't
+set mark (e.g. diff), clears any stale mark from a previous selection."
+  (when (and (not helixel-search--probing-next-error-p)
+             (helixel-search--next-error-buffer-valid-p)
+             ;; When the source is an occur-mode buffer, the
+             ;; occur-1 around-advice already set up search
+             ;; repeat (category=search) for n/N.  Don't override
+             ;; that with a next-error context.
+             (not (with-current-buffer next-error-last-buffer
+                    (derived-mode-p 'occur-mode))))
+    ;; Track whether navigation pushed a new mark.
+    (let ((mark-changed-p
+           (and helixel-search--mark-before-navigation
+                (not (equal (mark t)
+                            helixel-search--mark-before-navigation)))))
+      (if (eq (helixel-search--safe-category) 'next-error)
+          ;; Category already set.
+          (if helixel-search--pending-next-error-dir
+              ;; From our n/N/, repeat — sync direction from pending
+              ;; (carries -,/N flip across buffer boundaries).
+              (progn
+                (helixel-search--set-dir
+                 helixel-search--pending-next-error-dir)
+                ;; Update motion record so `,' reads the correct
+                ;; direction after returning to a visited buffer.
+                (helixel-record-motion nil :category 'next-error
+                                       :dir helixel-search--pending-next-error-dir))
+            ;; Fresh navigation (RET click, M-g n, etc.) — not from
+            ;; our repeat loop.  Reset direction to forward so the
+            ;; user doesn't inherit a stale backward direction from
+            ;; a previous walk.
+            (helixel-search--set-dir 'forward)
+            (helixel-record-motion nil :category 'next-error
+                                   :dir 'forward))
+        ;; New setup in this buffer.
+        (let ((dir (or helixel-search--pending-next-error-dir
+                       'forward)))
+          (setq helixel--active-search
+                (make-helixel--last-motion :category 'next-error
+                                           :dir dir))
+          (helixel-record-motion nil :category 'next-error :dir dir)))
+      ;; Push next-error sel so s s can spawn from it without needing
+      ;; an explicit n/N first.
+      (helixel--push-selection
+       'next-error `(:dir ,(helixel-search--current-dir)))
+      ;; Activate mark only if the navigation function pushed a
+      ;; fresh one (compilation-mode).  Otherwise try to set region
+      ;; from next-error overlays, or clear stale mark.
+      (if mark-changed-p
+          (when (and (mark) (/= (point) (mark)))
+            (activate-mark))
+        ;; Navigation didn't push mark — try overlay-based region.
+        (if-let* ((bounds (helixel-search--next-error-match-bounds))
+                  (end (cdr bounds)))
+            (progn
+              (push-mark end t t)
+              (goto-char (car bounds)))
+          (deactivate-mark)))
+      ;; Pre-populate next-error overlays for compilation/grep
+      ;; so n/N and s n/s N can step through all on-line matches.
+      (when (and (buffer-live-p next-error-last-buffer)
+                 (with-current-buffer next-error-last-buffer
+                   (derived-mode-p 'compilation-mode)))
+        (let ((created (helixel-search--populate-compilation-overlays)))
+          ;; For backward navigation: jump to the LAST match.
+          (when (and created
+                     (eq helixel-search--pending-next-error-dir
+                         'backward))
+            (when-let* ((last-ov
+                         (car (last (sort
+                                     (seq-filter
+                                      (lambda (o)
+                                        (overlay-get o
+                                         'helixel--compilation-overlay))
+                                      (overlays-in (line-beginning-position)
+                                                   (line-end-position)))
+                                     (lambda (a b)
+                                       (< (overlay-start a)
+                                          (overlay-start b))))))))
+              (goto-char (overlay-start last-ov))
+              (when (> (overlay-end last-ov)
+                       (overlay-start last-ov))
+                (push-mark (overlay-end last-ov) t t)))))
+      ))))
+
 (defun helixel-shims--setup-compile ()
-  "Add invisible-text hook to `compilation-mode-hook'."
+  "Add invisible-text hook to `compilation-mode-hook'.
+Also install `next-error-hook' for helixel \=`next-error' repeat."
   (helixel-define-key 'motion "l" #'helixel-forward-char 'compilation-minor-mode-map)
   (helixel-define-key 'motion "\C-l" #'recenter-current-error 'compilation-minor-mode-map)
-  (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil))
+  (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil)
+  (add-hook 'next-error-hook #'helixel-shims--next-error-hook))
 
 (defun helixel-shims--teardown-compile ()
-  "Remove invisible-text hook from `compilation-mode-hook'."
-  (remove-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil))
+  "Remove invisible-text hook from `compilation-mode-hook'.
+Also remove `next-error-hook'."
+  (remove-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil)
+  (remove-hook 'next-error-hook #'helixel-shims--next-error-hook))
+
+;; ── compilation/grep → helixel search bridge ──
+;;
+;; When the user presses RET on a match in a compilation-derived
+;; buffer (grep, etc.), extract the search pattern from the
+;; source buffer and activate it so \[helixel-search-repeat-next\]
+;; and \[helixel-search-repeat-reverse\] repeat the search in the
+;; visited buffer.
+;;
+;; No command-level advice needed — pattern extraction happens from
+;; the source buffer at jump time, covering all entry points (grep,
+;; lgrep, rgrep, find-grep, third-party, etc.).
+
+(defun helixel--search-source-extract ()
+  "Extract a search pattern from the compilation source buffer.
+Intended for `next-error-hook'.  When `next-error-last-buffer'
+is a recognized search-source buffer, extract the pattern and
+set `helixel--active-search' in the current (visited) buffer.
+
+No-op when `helixel-mode' is off.
+
+Pattern sources (checked in order):
+  `grep-mode'  — extract `font-lock-face'=match text (literal match)."
+  (when (and (bound-and-true-p helixel-mode)
+             (bound-and-true-p next-error-last-buffer)
+             (buffer-live-p next-error-last-buffer))
+    (let ((src-buf next-error-last-buffer)
+          pattern regexp-flag)
+      (with-current-buffer src-buf
+        (cond
+         ;; grep-mode: extract the highlighted match text
+         ((derived-mode-p 'grep-mode)
+          (let ((end (line-end-position))
+                (beg (line-beginning-position)))
+            (let ((mbeg (text-property-any
+                         beg end
+                         'font-lock-face 'match)))
+              (when mbeg
+                (let ((mend (or (next-single-property-change
+                                 mbeg 'font-lock-face nil end)
+                                end)))
+                  (setq pattern
+                        (buffer-substring-no-properties mbeg mend)
+                        regexp-flag nil))))))))
+      ;; Activate the pattern in the visited buffer.
+      ;; When `helixel-shims--next-error-hook' already activated a
+      ;; `next-error' repeat context (category `next-error'), do NOT
+      ;; override it — that would break n/N repeat, mc mark-like-this,
+      ;; and mc spawn for next-error navigation (see helixel-search.el).
+      (when (and pattern (not (string-empty-p pattern))
+                 (not (and (fboundp 'helixel-search--safe-category)
+                           (eq (helixel-search--safe-category)
+                               'next-error))))
+        (when (bound-and-true-p helixel-search--debug-next-error)
+          (message "[helixel-debug] search-source-extract OVERRIDE → search (was: %s)"
+                   (if (fboundp 'helixel-search--safe-category)
+                       (helixel-search--safe-category) 'fboundp-nil)))
+        (setq helixel--active-search
+              (make-helixel--last-motion
+               :category 'search :pattern pattern
+               :dir 'forward :regexp (and regexp-flag t)))
+        (when (fboundp 'helixel-search--set-sel-ctx)
+          (helixel-search--set-sel-ctx))
+        (when (fboundp 'helixel-search--echo-repeat-hint)
+          (helixel-search--echo-repeat-hint)))
+      (when (and (bound-and-true-p helixel-search--debug-next-error)
+                 pattern (not (string-empty-p pattern))
+                 (fboundp 'helixel-search--safe-category)
+                 (eq (helixel-search--safe-category) 'next-error))
+        (message "[helixel-debug] search-source-extract SKIP (already next-error)")))))
+
+(defun helixel--setup-search-source ()
+  "Wire compilation-source → helixel search bridge."
+  (add-hook 'next-error-hook #'helixel--search-source-extract))
+
+(defun helixel--teardown-search-source ()
+  "Remove compilation-source → helixel search bridge."
+  (remove-hook 'next-error-hook #'helixel--search-source-extract))
 
 ;; ── Multi-cursor shims ──
 ;;
@@ -526,6 +706,8 @@ FEATURE keys should match the file's base name (e.g. wgrep.el → wgrep).")
     (helixel-shims--setup-prog-mode))
   (helixel-shims--setup-woman-mode)
   (helixel-shims--setup-eww-mode)
+  ;; compilation/grep → helixel search bridge
+  (helixel--setup-search-source)
   ;; Multi-cursor shims
   (helixel-mc--setup-completion-preview)
   (helixel-shims--setup-consult)
@@ -540,6 +722,7 @@ FEATURE keys should match the file's base name (e.g. wgrep.el → wgrep).")
   (remove-hook 'after-load-functions #'helixel-shims--after-load)
   (helixel-shims--teardown-consult)
   (helixel-mc--teardown-completion-preview)
+  (helixel--teardown-search-source)
   (helixel-shims--teardown-compile)
   (helixel-shims--teardown-xref-edit)
   (helixel-shims--teardown-wgrep)

@@ -1474,5 +1474,678 @@ the next match."
         (helixel-search-repeat-next)
         (should (>= (point) 15))  ; matched "hello" at pos 15
         (should (use-region-p))))))
+;; ── n prefix arg dispatch tests ──
+
+(ert-deftest helixel-test-search-repeat-next-negative-flips-dir ()
+  "- n (M--) permanently flips direction and repeats once (find-char)."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'forward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at positions 2, 5, 8, 11, 14.
+      ;; Start at pos 5 (b).  - n flips to backward, repeat 1:
+      ;; backward from 5 → b at 2, point → 2.
+      (goto-char 5)
+      (helixel-search-repeat-next '-)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'backward))
+      (should (eql (point) 2)))))
+
+(ert-deftest helixel-test-search-repeat-next-negative-count ()
+  "-3 n flips direction and repeats |N| times (find-char)."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'forward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at positions 2, 5, 8, 11, 14.
+      ;; Start at pos 11 (b).  -3 n flips to backward, repeat 3:
+      ;; backward ×3: 11→8→5→2, point → 2.
+      (goto-char 11)
+      (helixel-search-repeat-next -3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'backward))
+      (should (eql (point) 2)))))
+
+(ert-deftest helixel-test-search-repeat-next-numeric-count ()
+  "3 n repeats 3 times in current direction without flipping (find-char)."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'forward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at positions 2, 5, 8, 11, 14.
+      ;; Start at pos 1 (a).  3 n forward: 1→2→5→8, point → 9.
+      (goto-char 1)
+      (helixel-search-repeat-next 3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'forward))
+      (should (eql (point) 9)))))
+
+;; ── N prefix arg dispatch tests ──
+;;
+;; All N tests use backward active-search so N's default flip
+;; (backward→forward) sends us forward where buffer has room.
+
+(ert-deftest helixel-test-search-repeat-reverse-negative-no-flip ()
+  "- N does NOT flip direction — it undoes N's default flip."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'backward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at 2, 5, 8, 11, 14.  Active-search dir = backward.
+      ;; - N: no flip → stays backward.
+      ;; exchange (11↔14) puts point at 14, then backward×1:
+      ;;   from 14 → pos 13 → b at 11, point → 11.
+      (goto-char 11)
+      (push-mark 14 t nil)
+      (helixel-search-repeat-reverse '-)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'backward))
+      (should (eql (point) 11)))))
+
+(ert-deftest helixel-test-search-repeat-reverse-negative-count ()
+  "-3 N flips direction and repeats |N| times."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'backward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at 2, 5, 8, 11, 14.  Active-search dir = backward.
+      ;; -3 N: still flips dir (only bare - cancels the flip),
+      ;;   so backward→forward, exchange (8↔1) puts point at 1,
+      ;;   forward×3: 1→2→5→8, point → 9.
+      (goto-char 8)
+      (push-mark 1 t nil)
+      (helixel-search-repeat-reverse -3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'forward))
+      (should (eql (point) 9)))))
+
+(ert-deftest helixel-test-search-repeat-reverse-numeric-count ()
+  "3 N flips direction and repeats 3 times."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'backward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at 2, 5, 8, 11, 14.  Active-search dir = backward.
+      ;; 3 N: flip backward→forward, exchange (8↔1) puts point at 1,
+      ;;   forward×3: 1→2→5→8, point → 9.
+      (goto-char 8)
+      (push-mark 1 t nil)
+      (helixel-search-repeat-reverse 3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'forward))
+      (should (eql (point) 9)))))
+
+;; ── next-error hook: motion record update on re-entry ──
+
+(ert-deftest helixel-test-next-error-hook-updates-existing-motion ()
+  "next-error-hook updates helixel--last-motion-cmd when category already set."
+  (let ((comp-buf (generate-new-buffer " *next-error-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer comp-buf
+            (compilation-mode))
+          (helixel-test-with-buffer "target content"
+            ;; Setup: active-search already has next-error category
+            ;; (simulating a buffer previously visited via next-error).
+            (setq helixel--active-search
+                  (make-helixel--last-motion :category 'next-error
+                                             :dir 'forward))
+            ;; Record a stale motion with forward direction.
+            (helixel-record-motion nil :category 'next-error :dir 'forward)
+            (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                        'forward))
+            ;; Simulate a cross-buffer jump coming from backward direction.
+            (let ((helixel-search--pending-next-error-dir 'backward)
+                  (next-error-last-buffer comp-buf))
+              (helixel-shims--next-error-hook))
+            ;; After the hook: motion record must reflect the new direction.
+            (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                        'backward))
+            ;; Active-search direction must also be updated.
+            (should (eq (helixel-search--current-dir) 'backward))))
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-next-error-hook-new-setup ()
+  "next-error-hook creates new motion record for first-time buffer visit."
+  (let ((comp-buf (generate-new-buffer " *next-error-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer comp-buf
+            (compilation-mode))
+          (helixel-test-with-buffer "target content"
+            ;; No prior next-error state in this buffer.
+            (setq helixel--active-search nil)
+            (setq helixel--last-motion-cmd nil)
+            (let ((helixel-search--pending-next-error-dir 'backward)
+                  (next-error-last-buffer comp-buf))
+              (helixel-shims--next-error-hook))
+            ;; A new motion record must be created.
+            (should helixel--last-motion-cmd)
+            (should (eq (helixel--last-motion-category
+                         helixel--last-motion-cmd)
+                        'next-error))
+            (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                        'backward))))
+      (kill-buffer comp-buf))))
+
+
+;; ── next-error-in-buffer: state advance on repeat ──
+
+(ert-deftest helixel-test-next-error-in-buffer-advances-on-repeat ()
+  "Repeated next-error-in-buffer calls advance, not repeat the same match."
+  (let ((comp-buf (generate-new-buffer " *ne-adv*"))
+        (entry-pos 0)
+        (cur nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (helixel-test-with-buffer "AAA BBB CCC DDD"
+            (setq cur (current-buffer))
+            (let ((next-error-last-buffer comp-buf))
+              ;; Mock next-error: each call simulates a compilation
+              ;; entry advancing to the next match in cur.
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (with-current-buffer comp-buf
+                             (cl-incf entry-pos)
+                             (setq compilation-current-error
+                                   (copy-marker entry-pos)))
+                           ;; Trigger intercepted compilation-goto-locus
+                           ;; with markers into the target buffer cur.
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker)
+                                        (* entry-pos 4) cur)
+                            (set-marker (make-marker)
+                                        (+ (* entry-pos 4) 3) cur)))))
+                ;; First call: finds match at position 4.
+                (helixel-search--next-error-in-buffer 'forward)
+                (should (= (point) 4))
+                (should (= entry-pos 1))
+                ;; Second call: must advance to position 8, NOT repeat 4.
+                (helixel-search--next-error-in-buffer 'forward)
+                (should (= (point) 8))
+                (should (= entry-pos 2))))))
+      (kill-buffer comp-buf))))
+
+;; ── call-next-error: cross-buffer navigation ──
+
+(ert-deftest helixel-test-call-next-error-jumps-to-target ()
+  "call-next-error jumps to the target buffer and position."
+  (let ((comp-buf (generate-new-buffer " *ne-call-comp*"))
+        (target-buf (generate-new-buffer " *ne-call-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "aaa bbb ccc ddd eee"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (let ((next-error-last-buffer comp-buf))
+            ;; Mock next-error: returns markers into target-buf.
+            (cl-letf (((symbol-function 'next-error)
+                       (lambda (_n)
+                         (compilation-goto-locus
+                          (point-min-marker)
+                          (set-marker (make-marker) 9 target-buf)
+                          (set-marker (make-marker) 12 target-buf)))))
+              (helixel-search--call-next-error 1)
+              (should (eq (current-buffer) target-buf))
+              (should (= (point) 9))
+              (should (= (mark) 12)))))
+      (kill-buffer comp-buf)
+      (kill-buffer target-buf))))
+
+(ert-deftest helixel-test-call-next-error-reverse-dir ()
+  "call-next-error with negative N goes backward."
+  (let ((comp-buf (generate-new-buffer " *ne-rev-comp*"))
+        (target-buf (generate-new-buffer " *ne-rev-target*"))
+        (captured-dir nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "111 222 333"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (helixel-test-with-buffer "unrelated"
+            (let ((next-error-last-buffer comp-buf))
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (setq captured-dir
+                                 helixel-search--pending-next-error-dir)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 5 target-buf)
+                            nil))))
+                (helixel-search--call-next-error -1)
+                (should (eq captured-dir 'backward))
+                (should (= (point) 5))))))
+      (kill-buffer comp-buf)
+      (kill-buffer target-buf))))
+
+(ert-deftest helixel-test-call-next-error-invalid-buffer ()
+  "call-next-error signals user-error when next-error-last-buffer is invalid."
+  (let ((next-error-last-buffer nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'next-error :dir 'forward)))
+    (should-error (helixel-search--call-next-error 1)
+                  :type 'user-error)
+    ;; Invalid buffer clears active-search.
+    (should-not helixel--active-search)))
+
+;; ── Narrowing: next-error skips matches outside narrowed region ──
+
+(ert-deftest helixel-test-next-error-in-buffer-respects-narrowing ()
+  "next-error-in-buffer skips matches outside the narrowed region."
+  (let ((comp-buf (generate-new-buffer " *ne-narrow-comp*"))
+        (target-buf (generate-new-buffer " *ne-narrow-target*"))
+        (call-count 0))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "AAA BBB CCC DDD EEE FFF GGG"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (with-current-buffer target-buf
+            ;; Narrow to the middle region (positions 5-13: "BBB CCC DDD").
+            (narrow-to-region 5 14)
+            (let ((next-error-last-buffer comp-buf))
+              ;; Mock next-error: returns matches at positions
+              ;; 1 (AAA), 5 (BBB), 9 (CCC), 13 (DDD), 17 (EEE), 21 (FFF).
+              ;; Only 5, 9, 13 are inside the narrowed region.
+              (cl-letf (((symbol-function 'next-error)
+                         (lambda (_n)
+                           (cl-incf call-count)
+                           (if (> call-count 7)
+                               (user-error "No more matches")
+                             (let ((pos (- (* call-count 4) 3)))
+                               (compilation-goto-locus
+                                (point-min-marker)
+                                (set-marker (make-marker) pos target-buf)
+                                (set-marker (make-marker)
+                                            (+ pos 3) target-buf)))))))
+                ;; First call: skips pos 1 (outside narrowing),
+                ;; advances to pos 5 (inside).
+                (helixel-search--next-error-in-buffer 'forward)
+                (should (= (point) 5))
+                (should (= call-count 2))  ;; skipped pos 1, landed on pos 5
+                ;; Second call: advances to pos 9.
+                (helixel-search--next-error-in-buffer 'forward)
+                (should (= (point) 9))
+                (should (= call-count 3))
+                ;; Third call: advances to pos 13.
+                (helixel-search--next-error-in-buffer 'forward)
+                (should (= (point) 13))
+                (should (= call-count 4))
+                ;; Fourth call: pos 17 is outside narrowing,
+                ;; so skips to 21 (also outside) → no more matches.
+                (should-error (helixel-search--next-error-in-buffer 'forward)
+                              :type 'user-error)))))
+      (kill-buffer comp-buf)
+      (kill-buffer target-buf)))
+
+(ert-deftest helixel-test-call-next-error-respects-narrowing ()
+  "call-next-error does NOT widen the target buffer."
+  (let ((comp-buf (generate-new-buffer " *ne-call-narrow-comp*"))
+        (target-buf (generate-new-buffer " *ne-call-narrow-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "AAA BBB CCC DDD")
+            ;; Narrow to middle.
+            (narrow-to-region 5 8)
+            (let ((orig-min (point-min))
+                  (orig-max (point-max)))
+              (should (= orig-min 5))
+              (should (= orig-max 8)))
+            (let ((narrowed-buf (current-buffer)))
+              (with-current-buffer comp-buf
+                (let ((delay-mode-hooks t))
+                  (compilation-mode)))
+              (let ((next-error-last-buffer comp-buf))
+                (cl-letf (((symbol-function 'next-error)
+                           (lambda (_n)
+                             (compilation-goto-locus
+                              (point-min-marker)
+                              ;; Marker at pos 9 (outside narrowing).
+                              (set-marker (make-marker) 9 target-buf)
+                              (set-marker (make-marker) 12 target-buf)))))
+                  ;; goto-char with a marker goes to absolute position
+                  ;; regardless of narrowing.  The important thing is
+                  ;; that narrowing itself is preserved.
+                  (helixel-search--call-next-error 1)
+                  (should (eq (current-buffer) target-buf))
+                  (should (= (point) 9))
+                  ;; Narrowing must still be in effect.
+                  (should (= (point-min) 5))
+                  (should (= (point-max) 8)))))))
+      (kill-buffer comp-buf)
+      (kill-buffer target-buf))))
+
+;; ── Window stability: call-next-error does NOT display-buffer ──
+
+(ert-deftest helixel-test-call-next-error-no-display-buffer ()
+  "call-next-error navigates to target and calls display-buffer normally.
+With `display-buffer-overriding-action' bound, `display-buffer' is still
+called by `compilation-goto-locus', but it opens in the same window."
+  (let ((comp-buf (generate-new-buffer " *ne-win-comp*"))
+        (target-buf (generate-new-buffer " *ne-win-target*"))
+        (display-called nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "target content here"))
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          ;; Start in some other buffer.
+          (helixel-test-with-buffer "unrelated"
+            (let ((next-error-last-buffer comp-buf))
+              (cl-letf (((symbol-function 'display-buffer)
+                         (lambda (buf &rest _)
+                           (setq display-called t)
+                           ;; Still return a window so the real
+                           ;; compilation-goto-locus path works.
+                           (selected-window)))
+                        ((symbol-function 'next-error)
+                         (lambda (_n)
+                           (compilation-goto-locus
+                            (point-min-marker)
+                            (set-marker (make-marker) 8 target-buf)
+                            nil))))
+                (helixel-search--call-next-error 1)
+                (should (eq (current-buffer) target-buf))
+                (should (= (point) 8))
+                ;; display-buffer IS called by compilation-goto-locus;
+                ;; display-buffer-overriding-action keeps it same-window.
+                (should display-called))))))
+      (kill-buffer comp-buf)
+      (kill-buffer target-buf))))
+
+;; ── next-error-hook: direction reset on fresh navigation ──
+
+(ert-deftest helixel-test-next-error-hook-resets-dir ()
+  "next-error-hook resets direction to forward for fresh navigations."
+  (let ((comp-buf (generate-new-buffer " *neh-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (helixel-test-with-buffer "target content"
+            ;; Simulate: user navigated backward, so dir is backward.
+            (setq helixel--active-search
+                  (make-helixel--last-motion :category 'next-error
+                                             :dir 'backward))
+            (setq helixel--last-motion-cmd nil)
+            ;; Fresh navigation (RET click, not from our repeat):
+            ;; pending-next-error-dir is nil.
+            (let ((helixel-search--pending-next-error-dir nil)
+                  (next-error-last-buffer comp-buf))
+              (helixel-shims--next-error-hook))
+            ;; Direction must be reset to forward.
+            (should (eq (helixel-search--current-dir) 'forward))
+            (should helixel--last-motion-cmd)
+            (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                        'forward))))
+      (kill-buffer comp-buf))))
+
+(ert-deftest helixel-test-next-error-hook-preserves-repeat-dir ()
+  "next-error-hook preserves direction from repeat when pending is set."
+  (let ((comp-buf (generate-new-buffer " *neh-comp*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer comp-buf
+            (let ((delay-mode-hooks t))
+              (compilation-mode)))
+          (helixel-test-with-buffer "target content"
+            ;; Simulate: user navigated backward, dir is backward.
+            (setq helixel--active-search
+                  (make-helixel--last-motion :category 'next-error
+                                             :dir 'backward))
+            (setq helixel--last-motion-cmd nil)
+            ;; From our repeat: pending-next-error-dir is set to backward.
+            (let ((helixel-search--pending-next-error-dir 'backward)
+                  (next-error-last-buffer comp-buf))
+              (helixel-shims--next-error-hook))
+            ;; Direction must stay backward (preserved from repeat).
+            (should (eq (helixel-search--current-dir) 'backward))
+            (should helixel--last-motion-cmd)
+            (should (eq (helixel--last-motion-dir helixel--last-motion-cmd)
+                        'backward))))
+      (kill-buffer comp-buf))))
+
+;; ── compilation text-search for grep ──
+
+(ert-deftest helixel-test-compilation-match-text ()
+  "compilation-match-text returns the symbol at point."
+  (helixel-test-with-buffer "foohello bar"
+    (goto-char 1)
+    (should (equal (helixel-search--compilation-match-text) "foohello"))
+    (goto-char 10)
+    (should (equal (helixel-search--compilation-match-text) "bar"))))
+
+(ert-deftest helixel-test-collect-highlight-matches ()
+  "collect-highlight-matches finds all regexp matches on current line."
+  (helixel-test-with-buffer "abc def abc"
+    (let ((result (helixel-search--collect-highlight-matches "abc" nil nil)))
+      (should (= (length result) 2))
+      (should (= (caar result) 1))
+      (should (= (cdar result) 4))
+      (should (= (car (cadr result)) 9))
+      (should (= (cdr (cadr result)) 12)))))
+
+(ert-deftest helixel-test-compilation-text-advance-forward ()
+  "compilation-text-advance forward steps to next overlay on same line."
+  (helixel-test-with-buffer "abc def abc"
+    ;; Pre-create overlays simulating populate-compilation-overlays.
+    (let ((ov1 (make-overlay 1 4))
+          (ov2 (make-overlay 9 12)))
+      (overlay-put ov1 'helixel--compilation-overlay t)
+      (overlay-put ov2 'helixel--compilation-overlay t)
+      (goto-char 1) (deactivate-mark)
+      (let ((result (helixel-search--compilation-text-advance 'forward 1)))
+        (should result)
+        (should (= (point) 9))
+        (should (= (mark) 12))))))
+
+(ert-deftest helixel-test-compilation-text-advance-backward ()
+  "compilation-text-advance backward steps to previous overlay on same line."
+  (helixel-test-with-buffer "abc def abc"
+    (let ((ov1 (make-overlay 1 4))
+          (ov2 (make-overlay 9 12)))
+      (overlay-put ov1 'helixel--compilation-overlay t)
+      (overlay-put ov2 'helixel--compilation-overlay t)
+      (goto-char 9) (push-mark 12 t t)
+      (let ((result (helixel-search--compilation-text-advance 'backward 9)))
+        (should result)
+        (should (= (point) 1))
+        (should (= (mark) 4))))))
+
+(ert-deftest helixel-test-compilation-text-advance-no-match ()
+  "compilation-text-advance returns nil when no more overlays on line."
+  (helixel-test-with-buffer "abc def abc"
+    (let ((ov1 (make-overlay 1 4))
+          (ov2 (make-overlay 9 12)))
+      (overlay-put ov1 'helixel--compilation-overlay t)
+      (overlay-put ov2 'helixel--compilation-overlay t)
+      (goto-char 9)
+      ;; Forward from last match: no more overlays after.
+      (should-not (helixel-search--compilation-text-advance 'forward 9))
+      ;; Backward from first match: nothing before.
+      (goto-char 1)
+      (should-not (helixel-search--compilation-text-advance 'backward 1)))))
+
+(ert-deftest helixel-test-compilation-advance-with-text-search ()
+  "compilation-advance uses overlay-based advance for grep buffers."
+  (let ((grep-buf (generate-new-buffer " *grep*"))
+        (target-buf (generate-new-buffer " *grep-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "foohello test foohello\n"))
+          (with-current-buffer grep-buf
+            (grep-mode)
+            (setq-local next-error-function #'ignore))
+          (with-current-buffer target-buf
+            ;; Pre-populate overlays as populate-compilation-overlays would.
+            (let ((ov1 (make-overlay 1 9))
+                  (ov2 (make-overlay 15 23)))
+              (overlay-put ov1 'helixel--compilation-overlay t)
+              (overlay-put ov2 'helixel--compilation-overlay t))
+            (let ((helixel--active-search
+                   (make-helixel--last-motion :category 'next-error
+                                              :dir 'forward))
+                  (next-error-last-buffer grep-buf)
+                  helixel--action-ring helixel--live-action)
+              (goto-char 1) (deactivate-mark)
+              (let ((result (helixel-search--next-error-compilation-advance
+                             'forward)))
+                (should result)
+                (should (= (point) 15))
+                (should (= (mark) 23))))))
+      (kill-buffer target-buf)
+      (kill-buffer grep-buf))))
+
+(ert-deftest helixel-test-advance-to-last-on-line-grep ()
+  "advance-to-last-on-line works for grep via overlay scan."
+  (let ((grep-buf (generate-new-buffer " *grep*"))
+        (target-buf (generate-new-buffer " *grep-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "abc def abc\n"))
+          (with-current-buffer grep-buf
+            (grep-mode))
+          (with-current-buffer target-buf
+            ;; Pre-populate overlays.
+            (let ((ov1 (make-overlay 1 4))
+                  (ov2 (make-overlay 9 12)))
+              (overlay-put ov1 'helixel--compilation-overlay t)
+              (overlay-put ov2 'helixel--compilation-overlay t))
+            (let ((next-error-last-buffer grep-buf)
+                  (tp (set-marker (make-marker) 1))
+                  (te (set-marker (make-marker) 4)))
+              ;; Simulate: probe landed on first match (1,4).
+              ;; advance-to-last-on-line should move to (9,12).
+              (goto-char 1) (deactivate-mark)
+              (helixel-search--advance-to-last-on-line tp te)
+              (should (= (marker-position tp) 9))
+              (should (= (marker-position te) 12))
+              (should (= (point) 9)))))
+      (kill-buffer target-buf)
+      (kill-buffer grep-buf))))
+
+(ert-deftest helixel-test-goto-last-match-on-line-grep ()
+  "goto-last-match-on-line works for grep via overlay scan."
+  (let ((grep-buf (generate-new-buffer " *grep*"))
+        (target-buf (generate-new-buffer " *grep-target*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer target-buf
+            (insert "abc def abc\n"))
+          (with-current-buffer grep-buf
+            (grep-mode))
+          (with-current-buffer target-buf
+            ;; Pre-populate overlays.
+            (let ((ov1 (make-overlay 1 4))
+                  (ov2 (make-overlay 9 12)))
+              (overlay-put ov1 'helixel--compilation-overlay t)
+              (overlay-put ov2 'helixel--compilation-overlay t))
+            (let ((next-error-last-buffer grep-buf))
+              (goto-char 1) (deactivate-mark)
+              (helixel-search--goto-last-match-on-line)
+              (should (= (point) 9))
+              (should (= (mark) 12)))))
+      (kill-buffer target-buf)
+      (kill-buffer grep-buf))))
+
+;;; helixel-test-search.el ends here
+
+;; ── compilation-text-advance: no false-positive fallback ──
+
+(ert-deftest helixel-test-compilation-text-advance-no-fallback ()
+  "compilation-text-advance returns nil when no overlays and no match info."
+  (helixel-test-with-buffer "of \"hello\"\n"
+    (let ((grep-buf (generate-new-buffer " *grep*")))
+      (unwind-protect
+          (progn
+            (with-current-buffer grep-buf (grep-mode))
+            (let ((next-error-last-buffer grep-buf))
+              (goto-char 2)
+              (should-not
+               (helixel-search--compilation-text-advance 'backward 2))))
+        (kill-buffer grep-buf)))))
+
+;; ── compilation-all-matched-strings ──
+
+(ert-deftest helixel-test-compilation-all-matched-strings ()
+  "compilation-all-matched-strings collects unique matched strings."
+  (let ((grep-buf (generate-new-buffer " *grep-str*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer grep-buf
+            (insert "Xfoo Xfee Xbar\n")
+            (put-text-property 1 5 'font-lock-face 'match)
+            (put-text-property 6 10 'font-lock-face 'match)
+            (put-text-property 11 15 'font-lock-face 'match))
+          (let ((next-error-last-buffer grep-buf)
+                (major-mode-backup
+                 (buffer-local-value 'major-mode grep-buf)))
+            ;; Temporarily set major-mode to pass derived-mode-p check.
+            (with-current-buffer grep-buf
+              (setq major-mode 'compilation-mode))
+            (unwind-protect
+                (let ((strings
+                       (helixel-search--compilation-all-matched-strings)))
+                  (should (member "Xfoo" strings))
+                  (should (member "Xfee" strings))
+                  (should (member "Xbar" strings)))
+              ;; Restore original major-mode.
+              (with-current-buffer grep-buf
+                (setq major-mode major-mode-backup)))))
+      (kill-buffer grep-buf))))
+
+(ert-deftest helixel-test-compilation-all-matched-strings-dedup ()
+  "compilation-all-matched-strings deduplicates repeated strings."
+  (let ((grep-buf (generate-new-buffer " *grep-dedup*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer grep-buf
+            (insert "Xfoo Xfoo\n")
+            (put-text-property 1 5 'font-lock-face 'match)
+            (put-text-property 6 10 'font-lock-face 'match)
+            (setq major-mode 'compilation-mode))
+          (let ((next-error-last-buffer grep-buf))
+            (let ((strings (helixel-search--compilation-all-matched-strings)))
+              ;; Should have only one unique string after dedup.
+              (should (= (length strings) 1))
+              (should (member "Xfoo" strings)))))
+      (kill-buffer grep-buf))))
+
+;; ── compilation-all-matched-strings: empty buffer ──
+
+(ert-deftest helixel-test-compilation-all-matched-strings-empty ()
+  "compilation-all-matched-strings returns nil for empty buffer."
+  (let ((grep-buf (generate-new-buffer " *grep-empty*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer grep-buf
+            (setq major-mode 'compilation-mode))
+          (let ((next-error-last-buffer grep-buf))
+            (should-not
+             (helixel-search--compilation-all-matched-strings))))
+      (kill-buffer grep-buf))))
+
 
 ;;; helixel-test-search.el ends here

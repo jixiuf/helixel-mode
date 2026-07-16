@@ -16,7 +16,7 @@
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
 | `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. 7 `declare-function` for flymake/eglot (third-party only). |
-| `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state. |
+| `helixel-search.el` | Search/find-char/next-error + `n`/`N` repeat + `helixel--active-search` state. In-buffer next-error navigation (`helixel-search--next-error-in-buffer`), compilation-state save/restore, next-error kind registration. |
 | `helixel-textobj-engine.el` | Forward primitives (forward-word/WORD/symbol/sentence/paragraph/function), generic select-inner/a-object + restricted variants, range struct, type-properties, motion-loop / with-restriction macros, activate-textobj-range, recreate-textobj + advance-textobj. Pure primitives, no per-textobj-type code. |
 | `helixel-textobj-pair.el` | Paren / quote / xml-tag selection (the matched-pair families): get-block-range, select-block, up-paren, select-paren, forward-quote, select-quote, select-xml-tag, tag-* helpers, make-pair-delimiter, make-tag-delimiter. |
 | `helixel-textobj-block.el` | Regex / fenced block text objects: up-regex-block, select-regex-block, up-block-at-point, select-block-at-point, block-textobj-alist (customs), block-spec-at-point, block-adjust-for-jump, regex-adjust-for-jump, make-block-delimiter, make-regex-delimiter. |
@@ -24,10 +24,10 @@
 | `helixel-textobj.el` | Facade: requires engine, pair, block, marks. |
 | `helixel-surround.el` | Surround add/delete/replace. |
 | `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
-| `helixel-mc-core.el` | **Multi-cursor core + target computation**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook` / `pre-command-hook`, cursor-ID hash table, undo-step management (begin/finish + `buffer-undo-list` `apply` entry injection for cursor-position persistence across undo/redo), whitelist policy, `helixel-multi-cursor-mode`.  Target computation: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc--spawn-from-sel/-line/-rect/-find-char`, kind registry hooks. |
-| `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors. |
+| `helixel-mc-core.el` | **Multi-cursor core + target computation**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook` / `pre-command-hook`, cursor-ID hash table, undo-step management (begin/finish + `buffer-undo-list` `apply` entry injection for cursor-position persistence across undo/redo), whitelist policy, `helixel-multi-cursor-mode`.  Target computation: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc--spawn-from-sel/-line/-rect/-find-char/-next-error`, kind registry hooks. |
+| `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors.  Next-error dispatch: `mark-like-this-next-error` / `skip-in-dir-next-error` (activated when active search is next-error). |
 | `helixel-mc-integrate.el` | Glue: dot-repeat / chain / insert per-cursor execution + atomic undo. |
-| `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww) + multi-cursor completion-preview shim. 29 `declare-function` (all third-party). |
+| `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww) + multi-cursor completion-preview shim + next-error-hook for search state sync. 30 `declare-function` (all third-party). |
 | `helixel-treesit-core.el` | **Tree-sitter foundation**: readiness gates, node utilities, query provider (evil-textobj-tree-sitter integration), capture normalization, object resolution, index cache, selection activation, kind registration, type specification table. Soft-depends on `treesit` and `evil-textobj-tree-sitter-core`. |
 | `helixel-treesit-commands.el` | **Tree-sitter command layer**: data-driven `helixel-ts--define-type' macro generates textobj, inner-move, outer-nav commands for each semantic type. Also expand/shrink, sibling nav, comma-repeat repeater. Requires `helixel-treesit-core' + `helixel-macros'. |
 | `helixel-treesit.el` | **Tree-sitter facade**: `helixel-treesit-setup' entry point, dispatch var generation, keybinding registration, motion reverse/repeater wiring. Requires both core + commands. |
@@ -42,7 +42,7 @@
 | `test/helixel-test-action.el` | Action tracking and command execution |
 | `test/helixel-test-repeat.el` | Line selection auto-advance, flip-dir, movement, textobj, find-char dot-repeat |
 | `test/helixel-test-chain.el` | Chain dot/comma tests |
-| `test/helixel-test-search.el` | Search, search history, n/N repeat |
+| `test/helixel-test-search.el` | Search, search history, n/N repeat, next-error repeat |
 | `test/helixel-test-move.el` | Movement/word/symbol/find-char |
 | `test/helixel-test-keymap.el` | Keymap and define-key |
 | `test/helixel-test-line.el` | Line-wise editing |
@@ -53,7 +53,7 @@
 | `test/helixel-test-register.el` | Register |
 | `test/helixel-test-ring.el` | Event ring + jump log |
 | `test/helixel-test-jump.el` | Jump navigation + all-buffer/all-dir repeat tests |
-| `test/helixel-test-mc.el` | Multi-cursor: create/clear, whitelist, with-each-cursor isolation, dispatch insert, spawn-from-line, edit-lines, add-cursor-here, mark-next-like-this, apply-last-edit, kill-ring isolation.  Undo: marker injection, number filtering, noop step, capture/restore roundtrip, restore creates cursors, delete undo, insert undo, full cycle, mark-active capture, ID persistence, independent steps, callback roundtrip |
+| `test/helixel-test-mc.el` | Multi-cursor: create/clear, whitelist, with-each-cursor isolation, dispatch insert, spawn-from-line, edit-lines, add-cursor-here, mark-next-like-this, apply-last-edit, kill-ring isolation.  Undo: marker injection, number filtering, noop step, capture/restore roundtrip, restore creates cursors, delete undo, insert undo, full cycle, mark-active capture, ID persistence, independent steps, callback roundtrip.  Next-error: spawn-from-next-error, mark-like-this-next-error, skip-in-dir-next-error. |
 | `test/helixel-test-chain-invariant.el` | Chain subsystem invariants (lifecycle flag, chain-control exclusion, runnerless tx exclusion, marker release) |
 | `test/helixel-test-repeat-invariant.el` | Repeat subsystem invariants (replay context, buffer-local last-action, tx-replay immutability, pre-replay order, cleanup on error) |
 | `test/helixel-test-ring-invariant.el` | Ring + jump-log invariants (dedup, cap, marker release, commit-hook contract, by-command fallback, jump-log lightweight) |
@@ -203,7 +203,7 @@ pure movement/search/state events (~40B per entry negligible).
 ;; ── Kind Registry ──
 (helixel-register-kind kind &rest props)
   ;; props: :recreate :advance :display :all-buffer-fn :all-dir-fn
-  ;;        :flip-dir-fn :mc-spawn-fn
+  ;;        :flip-dir-fn :mc-spawn-fn :skip-reverse-exchange
 (helixel--kind-advance kind)        → fn|nil
 (helixel--kind-recreate kind)       → fn|nil
 (helixel--kind-all-buffer-fn kind)  → fn|nil
@@ -228,10 +228,12 @@ pure movement/search/state events (~40B per entry negligible).
 
 ;; ── Multi-cursor (`s' prefix + top-level) ──
 (helixel-mc-toggle)              ; s s  toggle (spawn from sel / clear)
+;;   next-error context: spawns fake cursors at all compilation hits in buffer
 (helixel-mc-clear-all)           ; s SPC / s ,
 (helixel-mc-add-cursor-here)     ; s a / s A
 (helixel-mc-edit-lines)          ; s x  line-mode → region / char-mode → col
 (helixel-mc-mark-next-like-this) ; s n / s p / s N / s P / s u / s U
+;;   next-error context: delegates to helixel-mc--mark-like-this-next-error
 (helixel-mc-apply-last-action)     ; s .
 (helixel-mc-remove-primary)      ; M-,  remove primary cursor (Helix A-,)
 (helixel-mc-keep-matching REGEX) ; s k  / s K  (remove-matching)
@@ -442,6 +444,21 @@ with one arg — the committed `helixel-action'.  Consumers: chain
 accumulator (`helixel--chain-on-commit') and mc-integrate
 (`helixel-mc--on-chain-end').  Extend here rather than touching
 `helixel--action-commit' or the ring.
+
+### next-error / compilation state save-restore
+`compilation-next-error-function' mutates `compilation-current-error'
+and point in the compilation buffer on every `next-error' call.
+In-buffer navigation (`helixel-search--next-error-in-buffer') and
+multi-cursor spawn (`helixel-mc--collect-compilation-targets-dynamic')
+MUST save-restore the compilation buffer's state via
+`helixel--save-compilation-state' / `helixel--restore-compilation-state'
+to avoid corrupting the global `next-error' navigation cursor.
+
+The snapshot uses `copy-marker' for `compilation-current-error'
+so it survives in-place mutations by the navigation function.
+`display-buffer-overriding-action' is bound to
+`display-buffer-same-window' to prevent window ping-pong across
+successive n/N presses.
 
 ### `defsubst` Compilation Order
 

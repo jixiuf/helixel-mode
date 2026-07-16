@@ -627,14 +627,16 @@ find-char (and other motions) from a self-contained snapshot.
 ~n~ / ~N~ repeat both search and find-char from a combined history ring.
 ~C-u n~ / ~C-u N~ lets you pick from history.
 
-| Key     | Context               | Behavior                             |
-|---------+-----------------------+--------------------------------------|
-| ~n~     | After ~/~ or ~?~      | Repeat search forward                |
-| ~N~     | After ~/~ or ~?~      | Reverse direction then repeat        |
-| ~n~     | After ~f~/~F~/~t~/~T~ | Repeat find-char forward             |
-| ~N~     | After ~f~/~F~/~t~/~T~ | Reverse direction then repeat        |
-| ~C-u n~ | anytime               | Pick from combined history & execute |
-| ~C-u N~ | anytime               | Toggle direction + pick from history |
+| Key     | Context                | Behavior                             |
+|---------+------------------------+--------------------------------------|
+| ~n~     | After ~/~ or ~?~       | Repeat search forward                |
+| ~N~     | After ~/~ or ~?~       | Reverse direction then repeat        |
+| ~n~     | After ~f~/~F~/~t~/~T~  | Repeat find-char forward             |
+| ~N~     | After ~f~/~F~/~t~/~T~  | Reverse direction then repeat        |
+| ~n~     | After compile/grep hit | Repeat next-error forward            |
+| ~N~     | After compile/grep hit | Reverse direction then repeat        |
+| ~C-u n~ | anytime                | Pick from combined history & execute |
+| ~C-u N~ | anytime                | Toggle direction + pick from history |
 
 ~N~ flips the search direction; subsequent ~n~ continues in the new direction.
 
@@ -648,7 +650,20 @@ fb          find next "b"
 n           find next "b" again
 N           reverse direction, find previous "b"
 C-u n       pick a past search/find-char from history
+
+M-g n       next-error (compile/grep)
+;; Or just hit RET on a match in a compile/grep buffer.
+n           next match forward via next-error
+N           reverse direction, previous match via previous-error
+,           repeat the last next-error motion
 #+end_src
+
+When a compilation, grep, occur, or diff buffer is the
+~next-error-last-buffer~, ~n~ and ~N~ navigate matches via
+~next-error~ / ~previous-error~ instead of searching.  ~,~
+(motion repeat) also works — it remembers the direction and
+replays the cross-buffer jump.  ~s s~ (mc toggle) spawns fake
+cursors at every compilation match in the current buffer.
 
 *** Search Toggles
 
@@ -1139,14 +1154,15 @@ it does not depend on the current active search or region.
 
 *** Supported Types
 
-| Kind      | Subcat                                | Example                                    |
-|-----------+---------------------------------------+--------------------------------------------|
-| find-char | ~next~ / ~till~                       | ~f x~ → ~,~ finds next x (like ~n~)        |
-| movement  | ~pair~                                | ~]~ → ~,~ skip past next paren boundary    |
-| movement  | ~match~                               | ~%~ → ~,~ expand one nesting level outward |
-| movement  | ~paragraph~ / ~sentence~ / ~function~ | ~}~ → ~,~ skip past next boundary          |
-| search    | —                                     | ~/foo~ → ~,~ find next match (like ~n~)    |
-| mc-spawn  | ~mark~ / ~skip~ / ~unmark~ / ~add~    | ~s n~ → ~,~ mark another next occurrence   |
+| Kind       | Subcat                                | Example                                    |
+|------------+---------------------------------------+--------------------------------------------|
+| find-char  | ~next~ / ~till~                       | ~f x~ → ~,~ finds next x (like ~n~)        |
+| movement   | ~pair~                                | ~]~ → ~,~ skip past next paren boundary    |
+| movement   | ~match~                               | ~%~ → ~,~ expand one nesting level outward |
+| movement   | ~paragraph~ / ~sentence~ / ~function~ | ~}~ → ~,~ skip past next boundary          |
+| search     | —                                     | ~/foo~ → ~,~ find next match (like ~n~)    |
+| next-error | —                                     | ~M-g n~ → ~,~ jump next match              |
+| mc-spawn   | ~mark~ / ~skip~ / ~unmark~ / ~add~    | ~s n~ → ~,~ mark another next occurrence   |
 
 *** mc-spawn: Multi-Cursor Repeat
 
@@ -1172,6 +1188,12 @@ Prefix arguments work as usual:
 
 ~,~ always repeats the *most recent* motion.  If you perform a find-char
 or search after ~s n~, ~,~ will replay that find-char instead.
+
+*next-error context*: When the active search is a `next-error' repeat
+(after ~M-g n~ / ~M-g p~ or when a compilation buffer is active),
+~s n~ / ~s p~ / ~s N~ / ~s P~ navigate compilation matches within the
+current buffer instead of using literal text search.  ~s s~ spawns
+fake cursors at every compilation match in the current buffer.
 
 *** Layer-by-layer Outward
 
@@ -1247,7 +1269,7 @@ n          repeats /pattern (from active-search)
         (movement . comment) (movement . loop)
         (movement . conditional) (movement . sibling)
         (movement . grow-shrink)
-        (movement . scroll) search find-char mc-spawn))
+        (movement . scroll) search find-char next-error mc-spawn))
 
 ;; Disable motion repeat entirely
 (setq helixel-motion-repeat-categories nil)

@@ -290,7 +290,8 @@ Slots map 1:1 to the keyword properties documented for
   recreate advance display
   all-buffer-fn all-dir-fn flip-dir-fn mc-spawn-fn
   ctx-schema
-  sel-type)
+  sel-type
+  skip-reverse-exchange)
 
 ;; ── Registered kinds (single source of truth) ──
 ;;
@@ -379,6 +380,12 @@ The sel-type determines the return value of `helixel--sel-type'
 for this kind — e.g. \='line→\='line, nil for movement."
   (when-let* ((k (gethash kind helixel--kind-registry)))
     (helixel-kind-sel-type k)))
+
+(defsubst helixel--kind-skip-reverse-exchange-p (kind)
+  "Return non-nil if KIND should skip `exchange-point-and-mark' on N reverse.
+Returns nil for unknown kinds."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-skip-reverse-exchange k)))
 
 (defun helixel--validate-ctx (kind ctx-plist)
   "Validate CTX-PLIST against the schema registered for KIND.
@@ -1065,7 +1072,7 @@ Slots:
     (movement . comment) (movement . loop)
     (movement . conditional) (movement . sibling)
     (movement . grow-shrink)
-    search find-char mc-spawn textobj)
+    search find-char next-error mc-spawn textobj)
   "Motion categories that \\[helixel-repeat-last-motion] can repeat.
 Each element is either a plain category symbol (matches all
 subcats) or a cons (CATEGORY . SUBCAT) for precise matching —
@@ -1613,6 +1620,7 @@ Shows operator name, display label, and `self-advancing' flag."
 ;; ----------------------------------------------------------------------
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
+(defvar compilation-current-error)          ; from `compile.el'
 
 (defsubst helixel--sel-type ()
   "Return the selection type from pending-sel: nil, `line', `rect', `textobj'.
@@ -2269,6 +2277,51 @@ ARG is passed through to `yank' when using the `kill-ring'."
             (insert-for-yank text)
           (message "Register \"%c is empty" helixel--current-register)))
     (yank arg)))
+
+;; ----------------------------------------------------------------------
+;; Part 11 — Next-error source buffer state save/restore
+;; ----------------------------------------------------------------------
+;; Navigating via `next-error' mutates point (and for compilation
+;; buffers, `compilation-current-error') in the source buffer.
+;; We snapshot that state so in-buffer navigation and multi-cursor spawn
+;; walks don't corrupt the source buffer's navigation cursor.
+;; For non-compilation buffers (occur, diff, etc.) only point is
+;; saved; the `(boundp 'compilation-current-error)' guard is a no-op.
+
+(defun helixel--save-compilation-state ()
+  "Snapshot `next-error-last-buffer' navigation state for later restore.
+Returns (SAVED-PT . SAVED-CURRENT) as a cons.
+SAVED-PT is a `point-marker' in the source buffer.
+SAVED-CURRENT is a `copy-marker' of `compilation-current-error' (or nil
+for non-compilation buffers like occur, diff).
+Uses `copy-marker' so the snapshot survives in-place marker
+mutations by the buffer's `next-error-function'."
+  (let ((saved-pt nil)
+        (saved-current nil))
+    (with-current-buffer next-error-last-buffer
+      (setq saved-pt (point-marker))
+      (when (and (boundp 'compilation-current-error)
+                 (markerp compilation-current-error))
+        (setq saved-current
+              (copy-marker compilation-current-error))))
+    (cons saved-pt saved-current)))
+
+(defun helixel--restore-compilation-state (state &optional free-only)
+  "Restore the `next-error' source buffer from STATE, or just free markers.
+STATE is the cons returned by `helixel--save-compilation-state'.
+When FREE-ONLY is non-nil, only release markers without restoring
+positions — used on success when the navigation cursor is already
+at the correct position."
+  (when (and state (buffer-live-p next-error-last-buffer))
+    (with-current-buffer next-error-last-buffer
+      (when (car state)
+        (unless free-only
+          (goto-char (marker-position (car state))))
+        (set-marker (car state) nil))
+      (when (cdr state)
+        (if free-only
+            (set-marker (cdr state) nil)
+          (setq compilation-current-error (cdr state)))))))
 
 (provide 'helixel-core)
 ;;; helixel-core.el ends here

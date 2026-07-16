@@ -38,6 +38,8 @@ Centralizes per-kind protocol. Each kind (line, rect, search, movement, textobj,
 :display       fn(ctx) → string     display string for history
 :all-buffer-fn fn(edit prefix) → nil  custom all-buffer scan (line, search)
 :all-dir-fn    fn(edit) → nil         custom all-dir scan (line)
+:mc-spawn-fn   fn(sel) → targets     multi-cursor spawn positions (s s)
+:skip-reverse-exchange boolean        skip exchange-point-and-mark on N reverse
 #+end_src
 
 Access: ~(helixel--kind-advance 'line)~, ~(helixel--kind-all-buffer-fn 'search)~, etc.
@@ -226,13 +228,19 @@ key-capture pre-command-hook.  Chain session struct: 4 slots
 ~helixel--active-search~ is the single mutable search state:
 
 #+begin_src elisp
-(:category search|find-char :pattern PAT :dir forward|backward [:type TYPE :char CHAR])
+(:category search|find-char|next-error :pattern PAT :dir forward|backward [:type TYPE :char CHAR])
 #+end_src
 
 - ~n~ reads direction from active-search
 - ~N~ flips direction in active-search
 - ~.~ replay uses direction from event's sel (immutable snapshot)
 - History selection copies direction to active-search
+- *next-error*: ~n~/~N~ call ~next-error~ / ~previous-error~ when
+  ~next-error-last-buffer~ is a compilation buffer.  Compilation
+  window stability is enforced via ~display-buffer-overriding-action~.
+  In-buffer navigation (mc spawn / mark-like-this) saves-restores
+  compilation buffer state to avoid corrupting the global
+  ~next-error~ cursor.
 
 -----
 
@@ -358,6 +366,7 @@ helixel-repeat.el:helixel--repeat-advance(edit, effective)
   ├── Delegates to kind registry :advance fn
   │     ├── line: advance line(s) then recreate
   │     ├── search: find-next-match then recreate
+  │     ├── next-error: call `next-error' then recreate
   │     ├── movement: advance steps then recreate
   │     ├── textobj: advance to next textobj then recreate
   │     └── find-char: find next char then recreate

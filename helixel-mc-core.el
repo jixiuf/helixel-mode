@@ -78,6 +78,7 @@
 (defvar helixel--yank-register-source)    ; from `helixel-core'
 (defvar helixel--current-register)        ; from `helixel-core'
 (defvar helixel--active-search)           ; from `helixel-state'
+(defvar helixel-search--probing-next-error-p) ; from `helixel-search'
 (defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
 (defvar helixel--action-pos)              ; from `helixel-ring'
@@ -85,10 +86,23 @@
 (defvar helixel--last-motion-cmd)         ; from `helixel-core'
 (defvar helixel--motion-permanent-flip)   ; from `helixel-core'
 (defvar helixel--block-chosen-spec)       ; from `helixel-core'
+
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
 (declare-function helixel-visual-exit "helixel-state")
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
                   (raw-prefix))
+(declare-function helixel-search--next-error-buffer-valid-p
+                  "helixel-search" ())
+(declare-function helixel-search--next-error-match-bounds
+                  "helixel-search" ())
+(declare-function helixel-search--compilation-match-text
+                  "helixel-search" ())
+(declare-function helixel-search--compilation-matched-strings
+                  "helixel-search" ())
+(declare-function helixel-search--compilation-all-matched-strings
+                  "helixel-search" ())
+(declare-function helixel-search--collect-highlight-matches
+                  "helixel-search" (regexp _cur-pt _dir))
 
 ;; Third-party undo packages — declared for the undo-tree timer
 ;; defence in `helixel-mc--undo-step-begin' / `-finish'.
@@ -1857,6 +1871,218 @@ motion or operator."
         (user-error "No find-char matches in buffer"))
       result)))
 
+;; ── next-error spawn: collect all match positions in current buffer ──
+
+(defun helixel-mc--collect-compilation-targets-dynamic (cur-buf)
+  "Walk all `next-error' entries and return CUR-BUF targets.
+Returns a list of (POINT . MARK) marker pairs.
+
+Uses `cl-letf' on `compilation-goto-locus' and
+`compilation-find-file' to read raw markers without buffer
+switches.  This differs from `helixel-search--next-error-in-buffer'
+which uses `save-excursion' to probe one entry at a time:
+collecting ALL targets requires walking every entry, and
+`save-excursion' would discard the accumulated cursor positions.
+
+Also intercepts `compilation-find-file' to avoid opening files
+that are not CUR-BUF.  `next-error' internally calls
+`compilation-find-file' for every file it has not yet visited;
+by skipping non-CUR-BUF files before they are opened, we keep
+the walk fast and prevent side effects (new buffers).
+
+Works only for `compilation-mode' and derived modes (grep, etc.)
+whose `next-error-function' calls `compilation-goto-locus'.
+Other `next-error-function' providers (diff, xref) are
+not supported here — they need their own spawn functions.
+
+Saves and restores the compilation buffer's internal
+navigation state."
+  (let ((comp-state (helixel--save-compilation-state))
+        (targets nil)
+        (seen nil)
+        (orig-cff (symbol-function 'compilation-find-file)))
+    (unwind-protect
+        (save-excursion
+          (save-restriction
+            (let ((next-error-verbose nil))
+              (cl-letf (((symbol-function 'compilation-goto-locus)
+                         (lambda (_msg mk end-mk)
+                           (let ((buf (and (markerp mk)
+                                           (marker-buffer mk)))
+                                 (pos (and (markerp mk)
+                                           (marker-position mk))))
+                             (when (and buf pos
+                                        (eq buf cur-buf)
+                                        (not (member pos seen))
+                                        (with-current-buffer buf
+                                          (and (>= pos (point-min))
+                                               (<= pos (point-max)))))
+                               (push pos seen)
+                               (push (helixel-mc--make-target mk end-mk)
+                                     targets)))))
+                        ((symbol-function 'compilation-find-file)
+                         (lambda (marker filename directory &rest formats)
+                           "Find FILE, but skip it when it is not CUR-BUF."
+                           (cond
+                            ((null filename)
+                             (apply orig-cff marker filename
+                                    directory formats))
+                            (t
+                             (let* ((abs-name
+                                     (condition-case nil
+                                         (expand-file-name
+                                          filename
+                                          (or directory
+                                              default-directory))
+                                       (error nil)))
+                                    (cur-file
+                                     (and (buffer-live-p cur-buf)
+                                          (buffer-file-name
+                                           cur-buf))))
+                               (if (and abs-name cur-file
+                                        (or (string-equal
+                                             abs-name
+                                             (expand-file-name
+                                              cur-file))
+                                            (when-let*
+                                                ((buf
+                                                  (find-buffer-visiting
+                                                   abs-name)))
+                                              (eq buf cur-buf))))
+                                   ;; Target is CUR-BUF — proceed.
+                                   (apply orig-cff marker
+                                          filename directory
+                                          formats)
+                                 ;; Not CUR-BUF — skip without
+                                 ;; opening.
+                                 (throw
+                                  'skip-entry nil))))))))
+                ;; Reset to first entry (may skip).
+                (condition-case nil
+                    (catch 'skip-entry
+                      (next-error 0 t))
+                  (error nil))
+                ;; Walk remaining entries (skip non-CUR-BUF).
+                (catch 'done
+                  (while t
+                    (condition-case nil
+                        (catch 'skip-entry
+                          (next-error 1))
+                      (user-error (throw 'done nil)))))))))
+      (helixel--restore-compilation-state comp-state))
+    (nreverse targets)))
+
+(defun helixel-mc--collect-targets-on-line (seen)
+  "Return list of (POINT . MARK) targets for `next-error' matches on this line.
+Scans the current line for overlays with `next-error' face (set by
+both `occur--highlight-occurrences' and `compilation-goto-locus').
+Falls back to the single match at point when no overlays found.
+SEEN is a list of already-collected positions (integers) to dedup
+against; it is NOT mutated — callers should merge."
+  (let ((line-end (line-end-position))
+        (targets nil)
+        (collected nil))
+    (save-excursion
+      (goto-char (line-beginning-position))
+      (while (< (point) line-end)
+        (if-let* ((match-ov (cl-find 'next-error (overlays-at (point))
+                                     :key (lambda (o)
+                                            (overlay-get o 'face)))))
+            ;; Found overlay — collect, then jump past its end.
+            (progn
+              (let ((pos (overlay-start match-ov)))
+                (unless (or (member pos seen) (member pos collected))
+                  (push pos collected)
+                  (push (helixel-mc--make-target
+                         pos (overlay-end match-ov))
+                        targets)))
+              (goto-char (overlay-end match-ov)))
+          (forward-char 1))))
+    (if targets
+        targets
+      ;; Fallback: single match at point.
+      (let ((pos (point)))
+        (if (member pos seen)
+            nil
+          (list (helixel-mc--make-target
+                 pos (or (cdr (helixel-search--next-error-match-bounds))
+                         (mark) pos))))))))
+
+(defun helixel-mc--expand-targets-on-lines (targets)
+  "For each target in TARGETS, add all match positions on its line.
+Mutates TARGETS in place by appending new (POINT . MARK) marker pairs.
+Reads ALL matched strings from the entire compilation buffer
+(via `helixel-search--compilation-all-matched-strings'), then
+searches each target line for those strings.
+Falls back to `symbol-at-point' text-search when no match info is
+available."
+  (let ((additional nil)
+        (seen-positions nil)
+        ;; Collect ALL matched strings from the entire compilation buffer
+        ;; (not just the current entry) so targets from different entries
+        ;; with different match strings are all expanded correctly.
+        (match-strings (helixel-search--compilation-all-matched-strings)))
+    ;; Build set of already-seen positions.
+    (dolist (tg targets)
+      (push (marker-position (car tg)) seen-positions))
+    ;; For each target, scan its line for more matches.
+    (dolist (tg targets)
+      (let* ((pos (marker-position (car tg)))
+             (buf (marker-buffer (car tg))))
+        (when (buffer-live-p buf)
+          (with-current-buffer buf
+            (goto-char pos)
+            (if match-strings
+                ;; Use strings from grep buffer highlight info.
+                (dolist (str match-strings)
+                  (save-excursion
+                    (goto-char (line-beginning-position))
+                    (let ((line-end (line-end-position)))
+                      (while (search-forward str line-end t)
+                        (let ((start (match-beginning 0))
+                              (end (match-end 0)))
+                          (unless (member start seen-positions)
+                            (push start seen-positions)
+                            (push (helixel-mc--make-target start end)
+                                  additional)))))))
+              ;; Fallback: use symbol at point.
+              (when-let* ((search-text
+                           (helixel-search--compilation-match-text))
+                          ((> (length search-text) 0)))
+                (let ((candidates
+                       (helixel-search--collect-highlight-matches
+                        (regexp-quote search-text) nil nil)))
+                  (dolist (cand candidates)
+                    (let ((start (car cand))
+                          (end (cdr cand)))
+                      (unless (member start seen-positions)
+                        (push start seen-positions)
+                        (push (helixel-mc--make-target start end)
+                              additional)))))))))))
+    ;; Append additional targets.
+    (setcdr (last targets) additional)))
+
+(defun helixel-mc--spawn-from-next-error (_sel)
+  "Spawn fake cursors at all `next-error' match positions in current buffer.
+Supports `compilation-mode' buffers only.
+
+Only includes positions within the current buffer and
+its narrowing (if any)."
+  (unless (with-current-buffer next-error-last-buffer
+            (derived-mode-p 'compilation-mode))
+    (user-error "Only compilation/grep buffers are supported for next-error spawn"))
+  (let* ((cur-buf (current-buffer))
+         (targets
+          (with-current-buffer next-error-last-buffer
+            (helixel-mc--collect-compilation-targets-dynamic
+             cur-buf))))
+    (unless targets
+      (user-error "No next-error matches in current buffer"))
+    ;; For compilation/grep: expand each target to include all
+    ;; matches on the same line (entries may be consolidated).
+    (helixel-mc--expand-targets-on-lines targets)
+    targets))
+
 ;; ── Kind registrations: hook spawn fns into existing kinds ──
 
 (defun helixel-mc--register-default-spawn-fns ()
@@ -1872,6 +2098,10 @@ Mutates the `helixel-kind' struct entries in-place via
   ;; visit from origin so we need a buffer-wide scan).
   (when-let* ((k (gethash 'find-char helixel--kind-registry)))
     (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-find-char))
+  ;; next-error → scan compilation markers in current buffer.
+  (when-let* ((k (gethash 'next-error helixel--kind-registry)))
+    (setf (helixel-kind-mc-spawn-fn k)
+          #'helixel-mc--spawn-from-next-error))
   ;; search / textobj / movement inherit the advance-walk fallback
   ;; automatically (no entry needed).
   )

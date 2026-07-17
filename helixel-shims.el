@@ -489,6 +489,19 @@ arguments (usually a prompt string)."
 Guards the `after-load-functions' handler so deferred advice
 setup is only re-tried when the mode is on.")
 
+(defvar helixel-shims--deferred-features
+  '((wdired  . helixel-shims--setup-wdired)
+    (grep    . helixel-shims--setup-grep-edit)
+    (replace . helixel-shims--setup-occur-edit)
+    (wgrep   . helixel-shims--setup-wgrep)
+    (xref    . helixel-shims--setup-xref-edit)
+    (completion-preview . helixel-mc--setup-completion-preview)
+    (consult . helixel-shims--setup-consult))
+  "Alist of (FEATURE . SETUP-FN) for deferred advice setup.
+When `helixel-shims--enabled' is non-nil, `after-load-functions'
+re-runs the setup function when FEATURE's defining file loads.
+FEATURE keys should match the file's base name (e.g. wgrep.el → wgrep).")
+
 (defun helixel-shims--enable ()
   "Enable all integration shims."
   ;; State-transition shims
@@ -538,27 +551,22 @@ setup is only re-tried when the mode is on.")
 ;; exist, so we re-run the full setup when the package loads.
 ;; The `helixel-shims--enabled' flag prevents setup when
 ;; `helixel-shims-global-mode' is off.
+;;
+;; `after-load-functions' passes a file-name STRING.  We extract
+;; the base name, intern it to a symbol, and look it up in
+;; `helixel-shims--deferred-features'.
 
-(defvar helixel-shims--deferred-features
-  '((wdired  . helixel-shims--setup-wdired)
-    (grep    . helixel-shims--setup-grep-edit)
-    (replace . helixel-shims--setup-occur-edit)
-    (wgrep   . helixel-shims--setup-wgrep)
-    (xref    . helixel-shims--setup-xref-edit)
-    (completion-preview . helixel-mc--setup-completion-preview)
-    (consult . helixel-shims--setup-consult))
-  "Alist of (FEATURE . SETUP-FN) for deferred advice setup.
-Setup functions are called from `after-load-functions' when
-FEATURE is loaded, but only when `helixel-shims--enabled' is non-nil.")
-
-(defun helixel-shims--after-load (feature)
-  "Re-try shim setup when FEATURE is loaded.
-Calls the associated setup function from
-`helixel-shims--deferred-features' if `helixel-shims--enabled'
-is non-nil.  Intended for `after-load-functions'."
+(defun helixel-shims--after-load (file)
+  "Re-try shim setup when file FILE is loaded.
+FILE is the absolute file name passed by `after-load-functions'.
+Derives a feature name from the file's base name and looks it up
+in `helixel-shims--deferred-features'."
   (when helixel-shims--enabled
-    (when-let* ((fn (cdr (assq feature helixel-shims--deferred-features))))
-      (funcall fn))))
+    (when-let* ((feature-name (file-name-base file))
+                (feature (intern-soft feature-name))
+                (setup-fn (cdr (assq feature
+                                     helixel-shims--deferred-features))))
+      (funcall setup-fn))))
 
 ;;;###autoload
 (define-minor-mode helixel-shims-global-mode

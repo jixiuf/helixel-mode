@@ -90,6 +90,11 @@
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"
                   (raw-prefix))
 
+(declare-function helixel-ne--targets "helixel-next-error" (&optional force))
+(declare-function helixel-ne--targets-for-file
+                  "helixel-next-error" (filename &optional targets))
+(declare-function helixel-ne--target-bounds "helixel-next-error" (tgt))
+
 ;; Third-party undo packages — declared for the undo-tree timer
 ;; defence in `helixel-mc--undo-step-begin' / `-finish'.
 (defvar undo-tree-timer)
@@ -1857,6 +1862,28 @@ motion or operator."
         (user-error "No find-char matches in buffer"))
       result)))
 
+;; ── next-error spawn: direct from snapshot ──
+
+(defun helixel-mc--spawn-from-next-error (_sel)
+  "Spawn fake cursors at all \=`next-error' match positions in this buffer.
+Reads targets from the snapshot (`helixel-ne--targets'), filtered to
+the current buffer's file via `helixel-ne--targets-for-file', and
+creates one (POINT . MARK) marker pair per target.
+Works for compilation, grep, and any \=`next-error' source whose
+snapshot covers the current file."
+  (unless (buffer-file-name)
+    (user-error "Current buffer has no file name"))
+  (unless (helixel-ne--targets)
+    (user-error "No next-error targets available"))
+  (let ((targets nil))
+    (dolist (tgt (helixel-ne--targets-for-file (buffer-file-name)))
+      (let ((bounds (helixel-ne--target-bounds tgt)))
+        (push (helixel-mc--make-target (car bounds) (cdr bounds))
+              targets)))
+    (unless targets
+      (user-error "No next-error matches in current buffer"))
+    (nreverse targets)))
+
 ;; ── Kind registrations: hook spawn fns into existing kinds ──
 
 (defun helixel-mc--register-default-spawn-fns ()
@@ -1872,6 +1899,10 @@ Mutates the `helixel-kind' struct entries in-place via
   ;; visit from origin so we need a buffer-wide scan).
   (when-let* ((k (gethash 'find-char helixel--kind-registry)))
     (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-find-char))
+  ;; next-error → direct from targets snapshot.
+  (when-let* ((k (gethash 'next-error helixel--kind-registry)))
+    (setf (helixel-kind-mc-spawn-fn k)
+          #'helixel-mc--spawn-from-next-error))
   ;; search / textobj / movement inherit the advance-walk fallback
   ;; automatically (no entry needed).
   )

@@ -278,6 +278,111 @@ only exact-case 'Hello' matches, not lower-case 'hello'."
       (should (use-region-p)))))
 
 
+;; ── n prefix arg dispatch ──
+
+(ert-deftest helixel-test-search-repeat-next-negative-flips-dir ()
+  "- n (M--) permanently flips direction and repeats once (find-char)."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'forward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at positions 2, 5, 8, 11, 14.
+      ;; Start at pos 5 (b).  - n flips to backward, repeat 1:
+      ;; backward from 5 → b at 2, point → 2.
+      (goto-char 5)
+      (helixel-search-repeat-next '-)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'backward))
+      (should (eql (point) 2)))))
+
+(ert-deftest helixel-test-search-repeat-next-negative-count ()
+  "-3 n flips direction and repeats |N| times (find-char)."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'forward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at positions 2, 5, 8, 11, 14.
+      ;; Start at pos 11 (b).  -3 n flips to backward, repeat 3:
+      ;; backward ×3: 11→8→5→2, point → 2.
+      (goto-char 11)
+      (helixel-search-repeat-next -3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'backward))
+      (should (eql (point) 2)))))
+
+(ert-deftest helixel-test-search-repeat-next-numeric-count ()
+  "3 n repeats 3 times in current direction without flipping (find-char)."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'forward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at positions 2, 5, 8, 11, 14.
+      ;; Start at pos 1 (a).  3 n forward: 1→2→5→8, point → 9.
+      (goto-char 1)
+      (helixel-search-repeat-next 3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'forward))
+      (should (eql (point) 9)))))
+
+;; ── N prefix arg dispatch (all use backward active-search, so N's
+;;    default flip backward→forward sends us forward) ──
+
+(ert-deftest helixel-test-search-repeat-reverse-negative-no-flip ()
+  "- N does NOT flip direction — it undoes N's default flip."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'backward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at 2, 5, 8, 11, 14.  Active-search dir = backward.
+      ;; - N: no flip → stays backward.
+      ;; exchange (11↔14) puts point at 14, then backward×1:
+      ;;   from 14 → pos 13 → b at 11, point → 11.
+      (goto-char 11)
+      (push-mark 14 t nil)
+      (helixel-search-repeat-reverse '-)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'backward))
+      (should (eql (point) 11)))))
+
+(ert-deftest helixel-test-search-repeat-reverse-negative-count ()
+  "-3 N flips direction and repeats |N| times."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'backward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at 2, 5, 8, 11, 14.  Active-search dir = backward.
+      ;; -3 N: still flips dir (only bare - cancels the flip),
+      ;;   so backward→forward, exchange (8↔1) puts point at 1,
+      ;;   forward×3: 1→2→5→8, point → 9.
+      (goto-char 8)
+      (push-mark 1 t nil)
+      (helixel-search-repeat-reverse -3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'forward))
+      (should (eql (point) 9)))))
+
+(ert-deftest helixel-test-search-repeat-reverse-numeric-count ()
+  "3 N flips direction and repeats 3 times."
+  (let ((helixel--action-ring nil) (helixel--live-action nil)
+        (helixel--active-search
+         (make-helixel--last-motion :category 'find-char :type 'next
+                                    :char ?b :dir 'backward)))
+    (helixel-test-with-buffer "ab ab ab ab ab"
+      ;; b's at 2, 5, 8, 11, 14.  Active-search dir = backward.
+      ;; 3 N: flip backward→forward, exchange (8↔1) puts point at 1,
+      ;;   forward×3: 1→2→5→8, point → 9.
+      (goto-char 8)
+      (push-mark 1 t nil)
+      (helixel-search-repeat-reverse 3)
+      (should (eq (helixel--last-motion-dir helixel--active-search)
+                  'forward))
+      (should (eql (point) 9)))))
+
 (ert-deftest helixel-test-history-from-history-find-next ()
   "Test C-u n selecting a find-char entry from history replays it."
   (let ((helixel--action-ring nil)

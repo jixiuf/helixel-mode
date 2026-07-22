@@ -75,6 +75,9 @@
 (declare-function Man-previous-manpage "man")
 (declare-function WoMan-next-manpage "woman")
 (declare-function WoMan-previous-manpage "woman")
+
+(declare-function helixel-ne--after-jump "helixel-next-error" ())
+
 (declare-function eww-back-url "eww")
 (declare-function eww-forward-url "eww")
 (declare-function eww-reload "eww")
@@ -158,9 +161,11 @@ Entering grep-edit → normal.  Saving → motion."
 (defun helixel-shims--occur-1-set-search (orig-fun regexp &rest args)
   "Around-advice for `occur-1': push REGEXP to `helixel--active-search'.
 After any occur command runs, stores REGEXP in the source buffer's
-search state so that `n' / `N' can repeat the pattern there.
-Covers `occur', `multi-occur', `multi-occur-in-matching-buffers',
-and `occur-revert' — all call `occur-1' internally.
+search state so that
+\\[helixel-search-repeat-next\\]/\\[helixel-search-repeat-reverse\\]
+can repeat the pattern there.  Covers `occur', `multi-occur',
+`multi-occur-in-matching-buffers', and `occur-revert' — all call `occur-1'
+internally.
 ORIG-FUN is the original `occur-1'; REGEXP is the search pattern;
 ARGS are the remaining arguments (nlines bufs &optional buf-name)."
   (let ((source-buf (current-buffer)))
@@ -391,14 +396,16 @@ Unset `l' from `help-mode-map' so it falls through to the
 ;; ── Deferred setup: compile ──
 
 (defun helixel-shims--setup-compile ()
-  "Add invisible-text hook to `compilation-mode-hook'."
+  "Add invisible-text hook and \=`next-error-hook'."
   (helixel-define-key 'motion "l" #'helixel-forward-char 'compilation-minor-mode-map)
   (helixel-define-key 'motion "\C-l" #'recenter-current-error 'compilation-minor-mode-map)
-  (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil))
+  (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil)
+  (add-hook 'next-error-hook #'helixel-ne--after-jump))
 
 (defun helixel-shims--teardown-compile ()
-  "Remove invisible-text hook from `compilation-mode-hook'."
-  (remove-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil))
+  "Remove invisible-text hook and \=`next-error-hook'."
+  (remove-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil)
+  (remove-hook 'next-error-hook #'helixel-ne--after-jump))
 
 ;; ── Multi-cursor shims ──
 ;;

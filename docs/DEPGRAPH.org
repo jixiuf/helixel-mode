@@ -39,6 +39,8 @@ graph TD
   helixel-mc-spawn --> helixel-search
   helixel-move --> helixel-state
   helixel-move --> helixel-macros
+  helixel-next-error --> helixel-core
+  helixel-next-error --> helixel-search
   helixel-repeat --> helixel-core
   helixel-repeat --> helixel-ring
   helixel-ring --> helixel-core
@@ -74,6 +76,11 @@ graph TD
   helixel-textobj --> helixel-textobj-pair
   helixel-textobj --> helixel-textobj-block
   helixel-textobj --> helixel-textobj-marks
+  helixel-treesit-commands --> helixel-treesit-core
+  helixel-treesit-commands --> helixel-macros
+  helixel-treesit-core --> helixel-core
+  helixel-treesit --> helixel-treesit-core
+  helixel-treesit --> helixel-treesit-commands
   helixel --> helixel-core
   helixel --> helixel-ring
   helixel --> helixel-macros
@@ -81,6 +88,7 @@ graph TD
   helixel --> helixel-chain
   helixel --> helixel-state
   helixel --> helixel-search
+  helixel --> helixel-next-error
   helixel --> helixel-editing
   helixel --> helixel-textobj-engine
   helixel --> helixel-textobj-pair
@@ -94,4 +102,5 @@ graph TD
   helixel --> helixel-mc-spawn
   helixel --> helixel-mc-integrate
   helixel --> helixel-shims
+  helixel --> helixel-treesit
 #+END_SRC

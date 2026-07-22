@@ -52,6 +52,9 @@
 (declare-function helixel-ts--next-after "helixel-treesit-core" t t)
 (declare-function helixel-ts--prev-before "helixel-treesit-core" t t)
 
+(declare-function helixel-ne--step-in-file "helixel-next-error" (dir))
+(declare-function helixel-search--safe-category "helixel-search" ())
+
 ;; Special vars from helixel-repeat — must be `defvar' so the `let'
 ;; bindings below are treated as dynamic, not lexical.
 (defvar helixel--pending-sel)
@@ -357,6 +360,44 @@ same (BASE . PART) type."
     (goto-char (car target))
     (helixel--recreate-selection sel)))
 
+;; ── next-error dispatch helpers ──
+
+(defun helixel-mc--next-error-context-p ()
+  "Return non-nil when currently in a \=`next-error' repeat context.
+True when `helixel--active-search' category is \=`next-error'."
+  (eq (helixel-search--safe-category) 'next-error))
+
+(defun helixel-mc--mark-like-this-next-error (dir)
+  "Next-error variant: move to next match, leave fake at old position.
+DIR is 1 (forward) or -1 (backward)."
+  (let* ((dir-sym (if (> dir 0) 'forward 'backward))
+         (old-point (point))
+         (old-mark (and (use-region-p) (mark t)))
+         (had-region (use-region-p))
+         (found (helixel-ne--step-in-file dir-sym)))
+    (unless found
+      (user-error "No more next-error matches in current buffer"))
+    ;; Create fake at old position if not already there.
+    (unless (cl-find-if
+             (lambda (ov)
+               (= old-point (marker-position
+                             (helixel-mc-cursor-point ov))))
+             (helixel-mc-all-cursors))
+      (helixel-mc--create-fake-cursor old-point
+                                      (and had-region old-mark)))
+    (message "Marked next-error at line %d (%d cursor%s)"
+             (line-number-at-pos)
+             (helixel-mc-num-cursors)
+             (if (> (helixel-mc-num-cursors) 1) "s" ""))))
+
+(defun helixel-mc--skip-in-dir-next-error (dir)
+  "Next-error variant: jump to next match without adding a cursor.
+DIR is 1 (forward) or -1 (backward)."
+  (let ((dir-sym (if (> dir 0) 'forward 'backward)))
+    (unless (helixel-ne--step-in-file dir-sym)
+      (user-error "No more next-error matches in current buffer"))
+    (message "Skipped to line %d" (line-number-at-pos))))
+
 (defun helixel-mc--mark-like-this (dir)
   "Move real cursor to the next occurrence, leaving a fake at its old position.
 DIR is 1 (forward) or -1 (backward).
@@ -370,11 +411,16 @@ fakes accumulate at all previously visited positions.  The search
 anchor is the farthest edge among ALL cursors (real + fakes) to
 guarantee no two cursors share a position.
 
-When the active selection is a treesit object, delegates to
-`helixel-mc--mark-like-this-treesit' for semantic advance
-instead of literal text search."
-  (if (helixel-mc--treesit-selection-p)
-      (helixel-mc--mark-like-this-treesit dir)
+Dispatch:
+  - treesit selection → `helixel-mc--mark-like-this-treesit'
+  - `next-error' context → `helixel-mc--mark-like-this-next-error'
+  - default → literal text search"
+  (cond
+   ((helixel-mc--treesit-selection-p)
+    (helixel-mc--mark-like-this-treesit dir))
+   ((helixel-mc--next-error-context-p)
+    (helixel-mc--mark-like-this-next-error dir))
+   (t
     (let* ((text (helixel-mc--region-text))
            ;; Collect farthest edge among ALL cursors (real + fakes).
            (farthest
@@ -422,7 +468,7 @@ instead of literal text search."
       (helixel-mc--free-targets (list target))
       (let ((n (helixel-mc-num-cursors)))
         (message "Marked \"%s\" at line %d (%d cursor%s)"
-                 text (line-number-at-pos) n (if (> n 1) "s" ""))))))
+                 text (line-number-at-pos) n (if (> n 1) "s" "")))))))
 
 ;;;###autoload
 (defun helixel-mc-mark-next-like-this ()
@@ -478,10 +524,16 @@ Skips past positions that already have a fake cursor, so the real
 cursor never lands on an existing fake.  Preserves the original
 point/mark direction (forward-p).
 
-When the active selection is a treesit object, delegates to
-`helixel-mc--skip-in-dir-treesit' for semantic skip."
-  (if (helixel-mc--treesit-selection-p)
-      (helixel-mc--skip-in-dir-treesit dir)
+Dispatch:
+  - treesit selection → `helixel-mc--skip-in-dir-treesit'
+  - `next-error' context → `helixel-mc--skip-in-dir-next-error'
+  - default → literal text search"
+  (cond
+   ((helixel-mc--treesit-selection-p)
+    (helixel-mc--skip-in-dir-treesit dir))
+   ((helixel-mc--next-error-context-p)
+    (helixel-mc--skip-in-dir-next-error dir))
+   (t
     (let* ((text (helixel-mc--region-text))
            (start (if (> dir 0) (region-end) (region-beginning)))
            (target nil)
@@ -522,7 +574,7 @@ When the active selection is a treesit object, delegates to
           (goto-char tb) (set-mark te))
         (activate-mark))
       (helixel-mc--free-targets (list target))
-      (message "Skipped to line %d" (line-number-at-pos)))))
+      (message "Skipped to line %d" (line-number-at-pos))))))
 
 ;;;###autoload
 (defun helixel-mc-skip-next ()

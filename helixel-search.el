@@ -54,15 +54,16 @@
   "Search and find-char for `helixel-mode'."
   :group 'helixel)
 
-(defcustom helixel-search-repeat-categories '(search find-char)
+(defcustom helixel-search-repeat-categories '(search find-char next-error)
   "Action :category symbols that `helixel-search-repeat-next' can repeat.
-Supported values: `search' and `find-char'."
+Supported values: `search', `find-char', and `next-error'."
   :type '(repeat (choice
                   (const :tag "Search (/ ? * #)" search)
-                  (const :tag "Find-char (f F t T)" find-char)))
+                  (const :tag "Find-char (f F t T)" find-char)
+                  (const :tag "Compilation next-error" next-error)))
   :set (lambda (sym val)
          (dolist (cat val)
-           (unless (memq cat '(search find-char))
+           (unless (memq cat '(search find-char next-error))
              (display-warning 'helixel-search
                               (format "Unsupported repeat category: %s" cat))))
          (set-default sym val))
@@ -1054,35 +1055,101 @@ consultation needed."
 ;; Direction lives in `helixel--repeat-dir', never in the event.
 ;; The event `:dir' is a historical record set at creation.
 
+;; ── Internal: single-step repeat ──
+
+(defun helixel-search--repeat-step ()
+  "Execute one step of search/find-char/next-error repeat.
+Reads category and direction from `helixel--active-search'.
+Does NOT flip direction — callers handle direction changes."
+  (let ((cat (helixel-search--safe-category))
+        (dir (helixel-search--current-dir)))
+    (pcase cat
+      ('find-char (helixel-search--repeat-find-char))
+      ('next-error
+       (helixel-ne--step dir))
+      (_ (helixel-search--isearch-repeat
+          (if (eq dir 'forward) 1 -1))))))
+
 ;; ── n ──
 
 (defun helixel-search-repeat-next (&optional arg)
   "Repeat last repeatable action in current direction.
-With prefix ARG (\\[universal-argument]), pick from history."
+ARG is the raw prefix argument.
+
+Without prefix: repeat 1 time in current direction.
+\\[negative-argument] (M--): flip direction permanently, repeat 1 time.
+\\[negative-argument] N: flip direction, repeat |N| times.
+Numeric prefix N: repeat N times in current direction.
+\\[universal-argument]: pick from search history (stored direction)."
   (interactive "P")
-  (if arg
-      (helixel-search--from-history t)
-    (let ((cat (helixel-search--safe-category))
-          (dir (helixel-search--current-dir)))
-      (pcase cat
-        ('find-char (helixel-search--repeat-find-char))
-        (_ (helixel-search--isearch-repeat
-            (if (eq dir 'forward) 1 -1)))))))
+  (cond
+   ;; \\[universal-argument\\] → history
+   ((consp arg)
+    (helixel-search--from-history t))
+   ;; \\[negative-argument\\] → flip direction permanently
+   ((or (eq arg '-)
+        (and (integerp arg) (< arg 0)))
+    (helixel-search--flip-dir)
+    (dotimes (_ (if (eq arg '-) 1 (abs arg)))
+      (helixel-search--repeat-step)))
+   ;; Numeric prefix → repeat N times
+   ((integerp arg)
+    (dotimes (_ arg)
+      (helixel-search--repeat-step)))
+   ;; No prefix → single repeat
+   ((null arg)
+    (helixel-search--repeat-step))
+   ;; Any other non-nil (e.g. `t' for programmatic callers) → history
+   (t
+    (helixel-search--from-history t))))
 
 ;; ── N ──
 
 (defun helixel-search-repeat-reverse (&optional arg)
   "Toggle direction, go back to start, then repeat.
-With prefix ARG (\\[universal-argument]), pick from history."
+ARG is the raw prefix argument.
+
+Without prefix: flip direction, exchange point and mark, repeat 1.
+\\[negative-argument] (M--): cancel the flip (i.e. repeat in
+  current direction, undoing N's default flip), repeat 1.
+\\[negative-argument] N: flip direction, repeat |N| times.
+Numeric prefix N: flip direction, repeat N times.
+\\[universal-argument]: pick from search history (opposite direction).
+
+For kinds with `:skip-reverse-exchange' in the kind registry,
+skips `exchange-point-and-mark' since those kinds manage
+point and mark independently."
   (interactive "P")
-  (if arg
-      ;; \\[universal-argument\\] \\[helixel-search-repeat-reverse\\]:
-      ;; from-history with forwardp=nil already toggles the stored
-      ;; direction — no pre-flip needed.
-      (helixel-search--from-history nil)
-    (helixel-search--flip-dir)
-    (exchange-point-and-mark)
-    (helixel-search-repeat-next)))
+  (let ((keep-mark (helixel--kind-skip-reverse-exchange-p
+                    (helixel-search--safe-category))))
+    (cond
+     ;; \\[universal-argument\\] → history
+     ((consp arg)
+      (helixel-search--from-history nil))
+     ;; \\[negative-argument\\] alone: undo N's default flip
+     ((eq arg '-)
+      (unless keep-mark (exchange-point-and-mark))
+      (helixel-search--repeat-step))
+     ;; \\[negative-argument\\] N → flip dir + repeat |N|
+     ((and (integerp arg) (< arg 0))
+      (helixel-search--flip-dir)
+      (unless keep-mark (exchange-point-and-mark))
+      (dotimes (_ (abs arg))
+        (helixel-search--repeat-step)))
+     ;; Numeric prefix → flip dir + repeat N
+     ((integerp arg)
+      (helixel-search--flip-dir)
+      (unless keep-mark (exchange-point-and-mark))
+      (dotimes (_ arg)
+        (helixel-search--repeat-step)))
+     ;; No prefix → single repeat with flip
+     ((null arg)
+      (helixel-search--flip-dir)
+      (unless keep-mark (exchange-point-and-mark))
+      (helixel-search--repeat-step))
+     ;; Any other non-nil (e.g. `t' for programmatic callers) → history
+     (t
+      (helixel-search--from-history nil)))))
 
 ;; ── \\[universal-argument\\] \\[helixel-search-repeat-next\\] /
 ;;     \\[universal-argument\\] \\[helixel-search-repeat-reverse\\]
@@ -1495,6 +1562,8 @@ Also clears isearch lazy-highlight so stale highlights don't persist."
   (add-hook 'helixel-mode-on-hook #'helixel-search-setup)
   (add-hook 'helixel-mode-off-hook #'helixel-search-teardown))
 (helixel-search--init)
+
+(declare-function helixel-ne--step "helixel-next-error" (dir))
 
 (provide 'helixel-search)
 ;;; helixel-search.el ends here

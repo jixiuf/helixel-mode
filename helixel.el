@@ -42,6 +42,7 @@
 (require 'helixel-chain)
 (require 'helixel-state)
 (require 'helixel-search)
+(require 'helixel-next-error)
 (require 'helixel-editing)
 (require 'helixel-textobj-engine)
 (require 'helixel-textobj-pair)

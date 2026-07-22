@@ -17,6 +17,7 @@
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
 | `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. 7 `declare-function` for flymake/eglot (third-party only). |
 | `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state. |
+| `helixel-next-error.el` | **Next-error (grep/compile) snapshot**: pure-data `helixel-ne--target` vector, tick-invalidated cache, index navigation (`helixel-ne--step` / `--step-in-file` over shared `helixel-ne--step-index`), grep face-run column extraction, `next-error` kind registration, `next-error-hook` integration (`helixel-ne--after-jump`; every visited target buffer is seeded with buffer-local repeat state via `helixel-ne--seed-repeat-state`). |
 | `helixel-textobj-engine.el` | Forward primitives (forward-word/WORD/symbol/sentence/paragraph/function), generic select-inner/a-object + restricted variants, range struct, type-properties, motion-loop / with-restriction macros, activate-textobj-range, recreate-textobj + advance-textobj. Pure primitives, no per-textobj-type code. |
 | `helixel-textobj-pair.el` | Paren / quote / xml-tag selection (the matched-pair families): get-block-range, select-block, up-paren, select-paren, forward-quote, select-quote, select-xml-tag, tag-* helpers, make-pair-delimiter, make-tag-delimiter. |
 | `helixel-textobj-block.el` | Regex / fenced block text objects: up-regex-block, select-regex-block, up-block-at-point, select-block-at-point, block-textobj-alist (customs), block-spec-at-point, block-adjust-for-jump, regex-adjust-for-jump, make-block-delimiter, make-regex-delimiter. |
@@ -43,6 +44,7 @@
 | `test/helixel-test-repeat.el` | Line selection auto-advance, flip-dir, movement, textobj, find-char dot-repeat |
 | `test/helixel-test-chain.el` | Chain dot/comma tests |
 | `test/helixel-test-search.el` | Search, search history, n/N repeat |
+| `test/helixel-test-next-error.el` | Next-error snapshot: grep face-run extraction, targets-for-file, build+cache, step/step-in-file across files, after-jump sync, cross-buffer n/N |
 | `test/helixel-test-move.el` | Movement/word/symbol/find-char |
 | `test/helixel-test-keymap.el` | Keymap and define-key |
 | `test/helixel-test-line.el` | Line-wise editing |
@@ -99,6 +101,7 @@ helixel-core (cl-lib only, zero helixel deps)
         │           │
         │           ├── helixel-search (→ state + core + macros
         │           │                   + repeat + move)
+        │           │     └── helixel-next-error (→ core + search)
         │           │
         │           ├── helixel-swap (→ state + macros + editing)
         │           │
@@ -125,7 +128,8 @@ Notes:
   - `helixel-textobj-block.el`: 0
   - `helixel-textobj-marks.el`: 0
   - `helixel-treesit.el`: 18 (15 internal cross-module + 3 third-party evil-textobj-tree-sitter)
-  - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww)
+  - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww) + 1 internal (next-error hook)
+  - `helixel-mc-core.el`: 3 internal (next-error snapshot)
 
 ## Key Structs
 

@@ -290,7 +290,8 @@ Slots map 1:1 to the keyword properties documented for
   recreate advance display
   all-buffer-fn all-dir-fn flip-dir-fn mc-spawn-fn
   ctx-schema
-  sel-type)
+  sel-type
+  skip-reverse-exchange)
 
 ;; ── Registered kinds (single source of truth) ──
 ;;
@@ -318,6 +319,9 @@ PROPS is a keyword plist supporting:
   :all-buffer-fn :all-dir-fn :flip-dir-fn :mc-spawn-fn
   :sel-type SYMBOL — maps this kind to a `helixel--sel-type' value
                      (e.g. \='line→\='line, nil for movement).
+  :skip-reverse-exchange BOOL — non-nil for kinds that manage
+                     point/mark themselves; the N reverse command
+                     then skips `exchange-point-and-mark'.
   :ctx-schema (:required (...) :optional (...))"
   (declare (indent 1))
   `(puthash ',kind (helixel--make-kind ,@props) helixel--kind-registry))
@@ -379,6 +383,12 @@ The sel-type determines the return value of `helixel--sel-type'
 for this kind — e.g. \='line→\='line, nil for movement."
   (when-let* ((k (gethash kind helixel--kind-registry)))
     (helixel-kind-sel-type k)))
+
+(defsubst helixel--kind-skip-reverse-exchange-p (kind)
+  "Return non-nil if KIND skips `exchange-point-and-mark' on N reverse.
+Returns nil for unknown kinds."
+  (when-let* ((k (gethash kind helixel--kind-registry)))
+    (helixel-kind-skip-reverse-exchange k)))
 
 (defun helixel--validate-ctx (kind ctx-plist)
   "Validate CTX-PLIST against the schema registered for KIND.
@@ -1065,7 +1075,7 @@ Slots:
     (movement . comment) (movement . loop)
     (movement . conditional) (movement . sibling)
     (movement . grow-shrink)
-    search find-char mc-spawn textobj)
+    search find-char next-error mc-spawn textobj)
   "Motion categories that \\[helixel-repeat-last-motion] can repeat.
 Each element is either a plain category symbol (matches all
 subcats) or a cons (CATEGORY . SUBCAT) for precise matching —

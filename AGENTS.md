@@ -308,6 +308,14 @@ these side effects in tests, call the underlying function directly instead.
 ### helixel-action-create payload argument
 `helixel-action-create` takes the payload as ONE explicit positional argument (a plist), with `:runner`/`:display` as keyword-only arguments. Payload entries named `:runner` or `:display` are safe. Never pass payload keys inline as `&rest` pairs — collect them in a `(list ...)` form first, or use `helixel-action-shallow-copy` + `setf`.
 
+### Marker ownership (action structs)
+Every `helixel-action` owns 2-3 markers (`mark-region` cons + `start-point`). Ownership rules:
+- **Ring entries** are owned by `helixel--action-ring`; released at cap eviction (`helixel--action--ring-cap`) only.
+- **Live action** is owned by `helixel--live-action`; released by commit (after deep-copy) and by every cancel path (`helixel--cancel-action`, search cancel).
+- **Dedup path**: on a dedup hit the fresh deep copy is released immediately and the ring-front entry is reused as the canonical object — never release a struct that sits in the ring.
+- `helixel-last-action` is a REFERENCE, never an owner (it points at a ring entry, or transiently at a reconstructed tx whose markers are GC'd on overwrite).
+- **mc fake cursor rings SHARE action structs with the real ring** (`:fresh (copy-sequence ...)` copies only the list spine). Do NOT release their markers in `helixel-mc--pcs-release` — that would corrupt the real ring. Fake-owned entries pushed during dispatch are GC'd when the fake is destroyed.
+
 ### Never trust match-data in helixel-insert / helixel-insert-after
 Search hooks invalidate `match-data`. Use `(region-beginning)` / `(region-end)` instead.
 

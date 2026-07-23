@@ -327,11 +327,18 @@ Returns the committed entry or nil."
                        helixel--current-command)))
           (when cmd
             (setf (helixel-action-by-command entry) cmd))))
-      (unless (and (car helixel--action-ring)
-                   (helixel-action--same-content-p
-                    entry (car helixel--action-ring)))
-        (push entry helixel--action-ring)
-        (helixel-action--ring-cap))
+      (let ((front (car helixel--action-ring)))
+        (if (and front
+                 (helixel-action--same-content-p entry front))
+            ;; Dedup hit: the fresh deep copy is redundant.  Release
+            ;; its markers (they would otherwise stay anchored in the
+            ;; buffer until GC) and reuse the ring-front entry as the
+            ;; canonical object for last-action / hooks / jump-log.
+            (progn
+              (helixel-action--release-markers entry)
+              (setq entry front))
+          (push entry helixel--action-ring)
+          (helixel-action--ring-cap)))
       ;; `helixel-last-action' tracks the most recent EDIT for
       ;; \\[helixel-repeat-edit] replay.
       ;; Movement txs (op = nil, runner-only) participate in mc dispatch

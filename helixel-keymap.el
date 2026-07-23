@@ -43,7 +43,6 @@
 (require 'helixel-move)
 (require 'helixel-editing)
 (require 'helixel-surround)
-(require 'helixel-swap)
 (require 'helixel-search)
 (require 'helixel-mc-core)
 (require 'helixel-mc-spawn)

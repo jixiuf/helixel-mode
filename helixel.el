@@ -52,7 +52,6 @@
 (require 'helixel-textobj-marks)
 (require 'helixel-textobj)
 (require 'helixel-surround)
-(require 'helixel-swap)
 (require 'helixel-keymap)
 (require 'helixel-mc-core)
 (require 'helixel-mc-spawn)

@@ -45,7 +45,6 @@
 (require 'helixel-core)
 (require 'helixel-mc-core)
 (require 'helixel-repeat)
-(require 'helixel-chain)
 
 (defvar helixel-last-action)
 ;; defined in helixel-last-edit.el (loaded transitively via

@@ -42,7 +42,6 @@
 (require 'helixel-ring)
 (require 'helixel-macros)
 (require 'helixel-repeat)
-(require 'helixel-chain)
 (require 'helixel-state)
 (require 'helixel-search)
 (require 'helixel-next-error)

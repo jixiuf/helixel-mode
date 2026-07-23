@@ -42,7 +42,6 @@
 (require 'helixel-state)
 (require 'helixel-move)
 (require 'helixel-editing)
-(require 'helixel-chain)
 (require 'helixel-surround)
 (require 'helixel-swap)
 (require 'helixel-search)

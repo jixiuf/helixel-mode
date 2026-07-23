@@ -28,7 +28,7 @@
 
 (require 'ert)
 (require 'helixel)
-(require 'helixel-chain)
+(require 'helixel-repeat)
 
 (defmacro helixel-chain-inv-with-buffer (content &rest body)
   "Execute BODY in a temp buffer with CONTENT.

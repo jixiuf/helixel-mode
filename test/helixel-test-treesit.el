@@ -557,7 +557,7 @@ should return nil without signaling an error."
           (helixel-ts-mark-a-function 1)
           (let* ((sel helixel--pending-sel)
                  (first-beg (region-beginning))
-                 (tx (helixel-action-create 'insert-text sel :text "X")))
+                 (tx (helixel-action-create 'insert-text sel (list :text "X"))))
             ;; Verify advance moves past current function
             (let ((result (helixel-ts--advance-by-recreate tx)))
               (should result)
@@ -577,7 +577,7 @@ should return nil without signaling an error."
           (helixel-ts-mark-a-parameter 1)
           (let* ((sel helixel--pending-sel)
                  (first-beg (region-beginning))
-                 (tx (helixel-action-create 'insert-text sel :text "X")))
+                 (tx (helixel-action-create 'insert-text sel (list :text "X"))))
             ;; First advance -> b
             (should (helixel-ts--advance-by-recreate tx))
             (should (use-region-p))

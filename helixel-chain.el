@@ -453,9 +453,9 @@ by the initial selection context snapshotted at chain-start."
     (when had-content
       (let ((tx (helixel-action-create
                  'chain init-ctx
+                 (list :action-list action-list)
                  :runner #'helixel--repeat-chain-runner
-                 :display (format "chain(%d)" (length action-list))
-                 :action-list action-list)))
+                 :display (format "chain(%d)" (length action-list)))))
         (setq helixel-last-action (helixel-action-shallow-copy tx))
         (helixel-with-action-tracking
             (:op 'chain :category 'edit :subcat 'chain)

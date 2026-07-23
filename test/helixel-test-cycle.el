@@ -115,7 +115,9 @@
 					 (save-excursion (goto-char 5) (point))))
 				  (let ((old-mr (helixel-action-mark-region helixel--live-action)))
 				    (let* ((tx (helixel-action-create 'paste-after nil
-								      :runner (lambda (_) nil))))
+                                                                      nil
+                                                                      :runner
+                                                                      (lambda (_) nil))))
 				      (helixel--live-action-set tx))
 				    (let ((mr (helixel-action-mark-region helixel--live-action)))
 				      (should mr)
@@ -355,7 +357,9 @@
 				  (helixel-test--mock-sel-type nil)
 				  (helixel--tracking-open 'edit 'kill)
 				  (let* ((tx (helixel-action-create 'kill nil
-								    :runner (lambda (_) nil))))
+                                                                    nil
+                                                                    :runner
+                                                                    (lambda (_) nil))))
 				    (helixel--live-action-set tx)
 				    (helixel--action-commit))
 				  (should helixel--action-ring)

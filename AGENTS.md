@@ -198,8 +198,8 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel--sel-pop)                  → sel|nil  ; edit cmds pop
 
 ;; ── Transaction ──
-(helixel-action-create op sel &rest kv) → struct  ;; returns helixel-action
-  ;; Special kv: :runner fn, :display str|fn — rest becomes :payload
+(helixel-action-create op sel payload &key runner display) → struct  ;; returns helixel-action
+  ;; payload: one explicit plist (:text :keys :action-list ...), never parsed
   ;; Common payload keys: :keys, :text, :char
 (helixel-action-op tx)
 (helixel-action-sel tx)
@@ -305,8 +305,8 @@ these side effects in tests, call the underlying function directly instead.
 ### helixel-last-action is buffer-local
 `. ` replays the last edit from the current buffer only.
 
-### helixel-action-create keyword handling
-`helixel-action-create` extracts `:runner` and `:display` as special keys. All other keywords form the `:payload` plist. Never pass `:payload` as a keyword — spread payload keys individually, or use `helixel-action-copy` + `setf`.
+### helixel-action-create payload argument
+`helixel-action-create` takes the payload as ONE explicit positional argument (a plist), with `:runner`/`:display` as keyword-only arguments. Payload entries named `:runner` or `:display` are safe. Never pass payload keys inline as `&rest` pairs — collect them in a `(list ...)` form first, or use `helixel-action-shallow-copy` + `setf`.
 
 ### Never trust match-data in helixel-insert / helixel-insert-after
 Search hooks invalidate `match-data`. Use `(region-beginning)` / `(region-end)` instead.

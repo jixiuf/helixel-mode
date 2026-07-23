@@ -1011,8 +1011,7 @@ Verifies plist-member awareness — absent vs present-nil are distinct."
   "helixel-search--mc-runner with :regexp nil in payload uses literal search."
   (helixel-test-with-buffer "hello. world"
     (goto-char 1)
-    (let ((tx (helixel-action-create nil nil
-                :pattern "hello." :dir 'forward :regexp nil)))
+    (let ((tx (helixel-action-create nil nil (list :pattern "hello." :dir 'forward :regexp nil))))
       (helixel-search--mc-runner tx)
       (should (= (region-beginning) 1))
       (should (= (region-end) 7))
@@ -1024,8 +1023,7 @@ Verifies plist-member awareness — absent vs present-nil are distinct."
   "helixel-search--mc-runner with :regexp t in payload uses regexp search."
   (helixel-test-with-buffer "hellox world"
     (goto-char 1)
-    (let ((tx (helixel-action-create nil nil
-                :pattern "hello." :dir 'forward :regexp t)))
+    (let ((tx (helixel-action-create nil nil (list :pattern "hello." :dir 'forward :regexp t))))
       (helixel-search--mc-runner tx)
       (should (= (region-beginning) 1))
       (should (= (region-end) 7))
@@ -1232,7 +1230,7 @@ stops cleanly at buffer end."
     (transient-mark-mode 1)
     (insert "abc def ghi")
     (let* ((sel (helixel-sel-create 'search '(:pattern "\\b" :dir forward)))
-           (tx (helixel-action-create nil sel)))
+           (tx (helixel-action-create nil sel nil)))
       (goto-char 1)
       (helixel-with-replay-as 'dot
         (should (helixel--repeat-advance-search tx)) ; advance 1

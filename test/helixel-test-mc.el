@@ -247,9 +247,12 @@ be re-invoked by the advice (recording already broadcast)."
     ;; Fake a chain entry whose runner would `error' if called.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (entry (helixel-action-create 'chain sel
-                    :runner (lambda (_tx) (error "REAPPLIED"))
-                    :action-list (list (helixel-action-create 'noop nil
-                                                      :runner #'ignore)))))
+                                         (list :action-list (list (helixel-action-create 'noop nil
+                                                                                         nil
+                                                                                         :runner
+                                                                                         #'ignore)))
+                                         :runner
+                                         (lambda (_tx) (error "REAPPLIED")))))
       (setf (helixel-action-by-command entry) 'helixel-repeat-chain-end)
       (setf (helixel-action-buffer entry) (current-buffer))
       (setq helixel-last-action entry)
@@ -296,7 +299,7 @@ chain-end / chain-cancel / normal-escape."
           (make-helixel-chain-session
            :active-p t :action-list nil))
     ;; Build an action stamped with `helixel-normal-escape' as by-cmd.
-    (let ((entry (helixel-action-create 'noop nil :runner #'ignore)))
+    (let ((entry (helixel-action-create 'noop nil nil :runner #'ignore)))
       (setf (helixel-action-category entry) 'state
             (helixel-action-subcat entry) 'escape
             (helixel-action-by-command entry) 'helixel-normal-escape)
@@ -485,8 +488,9 @@ the real cursor's event."
     ;; directly to the overlay snapshots.
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-action-create 'insert-text sel
-                 :runner (lambda (_tx) (insert "X"))
-                 :text "X")))
+                                      (list :text "X")
+                                      :runner
+                                      (lambda (_tx) (insert "X")))))
       (setq helixel-last-action tx)
       (dolist (ov (helixel-mc-all-cursors))
         (setf (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)) tx)))
@@ -518,7 +522,7 @@ property must be updated by `leave-cursor' — otherwise a later
         (helixel-mc-with-each-cursor
           (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
             (setq helixel-last-action
-                  (helixel-action-create 'noop sel))))
+                  (helixel-action-create 'noop sel nil))))
         (should (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)))))
     (helixel-mc-clear-all)))
 
@@ -531,8 +535,7 @@ fires only when fakes exist."
     ;; Stub last-event with a counter.
     (let* ((called 0)
            (sel (helixel-sel-create 'line '(:dir forward :count 1)))
-           (tx (helixel-action-create 'noop sel
-                 :runner (lambda (_tx) (cl-incf called)))))
+           (tx (helixel-action-create 'noop sel nil :runner (lambda (_tx) (cl-incf called)))))
       (setq helixel-last-action tx)
       ;; Direct call to advised \\[helixel-repeat-edit]:
       (helixel-repeat-edit)
@@ -551,8 +554,12 @@ fake then replays the chain TX (not the pre-chain edit)."
     (helixel-mc--create-fake-cursor 2)
     (let* ((sel (helixel-sel-create 'line '(:dir forward :count 1)))
            (tx (helixel-action-create 'chain sel
-                 :runner (lambda (_tx) (ignore))
-                 :action-list (list (helixel-action-create 'noop nil :runner #'ignore)))))
+                                      (list :action-list (list (helixel-action-create 'noop nil
+                                                                                      nil
+                                                                                      :runner
+                                                                                      #'ignore)))
+                                      :runner
+                                      (lambda (_tx) (ignore)))))
       (setq helixel-last-action tx)
       (helixel-mc--broadcast-last-event)
       ;; Every fake's overlay holds the chain TX as last-event.
@@ -3254,10 +3261,10 @@ in mc-fake context (undo amalgamation already isolates each fake)."
     (should (= (helixel-mc-num-cursors) 3))
     ;; Build a change tx simulating `cXXX<ESC>' that inserts "XXX"
     ;; after deleting each line's content.
-    (let* ((tx (helixel-action-create
-                'change nil
-                :runner (helixel--op-runner 'change)
-                :inserted-text "XXX")))
+    (let* ((tx (helixel-action-create 'change nil
+                                      (list :inserted-text "XXX")
+                                      :runner
+                                      (helixel--op-runner 'change))))
       (should tx)
       (should (helixel-action-runner tx))
       ;; Replay at each fake cursor inside mc-fake replay context

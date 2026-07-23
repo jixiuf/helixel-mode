@@ -382,18 +382,21 @@ the event ring.
 Create a ~helixel-action~ struct manually (for testing or custom use).
 
 #+begin_src elisp
-(helixel-action-create OP SEL &rest KV)
+(helixel-action-create OP SEL PAYLOAD &key RUNNER DISPLAY)
 #+end_src
 
-Special keys extracted from KV: ~:runner~, ~:display~, ~:preposition~.
-All other keys become the payload.
+PAYLOAD is one explicit plist argument holding operator-specific data
+(~:text~, ~:keys~, ~:char~, ~:action-list~ ...).  It is never parsed
+for special keys, so payload entries named ~:runner~ or ~:display~ are
+safe.  RUNNER and DISPLAY are keyword-only arguments stored in their
+struct slots.
 
 #+begin_src elisp
 ;; Typically you don't call this directly — use `helixel-record-action' instead.
 ;; For testing, build an action manually:
 (let ((tx (helixel-action-create 'kill (helixel-sel-create 'line '(:count 1))
-            :category 'edit :subcat 'kill
-            :runner (lambda (_tx) (helixel-delete-selection)))))
+                                 nil
+                                 :runner (lambda (_tx) (helixel-delete-selection)))))
   (helixel-action-replay tx))
 #+end_src
 

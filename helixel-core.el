@@ -692,41 +692,29 @@ History slots (used by ring + jump-log):
   buffer
   by-command)
 
-(defun helixel-action-create (op sel-ctx &rest payload-kv)
+(cl-defun helixel-action-create (op sel-ctx payload &key runner display)
   "Create a `helixel-action' carrying replay data for dot-repeat.
 OP is a registered operator symbol.
 SEL-CTX is a `helixel-sel' descriptor or nil.
-PAYLOAD-KV are keyword/value pairs.  Special keys:
-  :runner  FUNCTION       — stored in RUNNER slot.
-  :display STRING|FUNCTION — stored in DISPLAY slot.
-All other keys form the :payload plist.
+PAYLOAD is a plist of operator-specific data (:text :keys ...), passed
+as ONE explicit argument — it is never parsed for special keys, so
+payload entries named :runner or :display are safe.
+RUNNER is a function (EVENT) -> nil stored in the RUNNER slot.
+DISPLAY is a string or function (EVENT) -> string for the DISPLAY slot.
 MARK-REGION is initialised from `point' at call time.
 START-POINT is intentionally left nil — it is set at
 `tracking-open' time by `helixel--live-action-set' which
 captures the pre-motion cursor position.  For edit events
 where start-point is nil, \\[helixel-action-cycle-mark-start] falls back to the
 mark-region car (which is the pre-edit point)."
-  (let (runner display-field rest)
-    (while payload-kv
-      (pcase (car payload-kv)
-        (:runner
-         (setq runner (cadr payload-kv))
-         (setq payload-kv (cddr payload-kv)))
-        (:display
-         (setq display-field (cadr payload-kv))
-         (setq payload-kv (cddr payload-kv)))
-        (_
-         (push (car payload-kv) rest)
-         (push (cadr payload-kv) rest)
-         (setq payload-kv (cddr payload-kv)))))
-    (make-helixel-action
-     :op op
-     :sel sel-ctx
-     :payload (nreverse rest)
-     :runner runner
-     :display display-field
-     :mark-region (let ((pm (point-marker)))
-                    (cons pm (copy-marker pm t))))))
+  (make-helixel-action
+   :op op
+   :sel sel-ctx
+   :payload payload
+   :runner runner
+   :display display
+   :mark-region (let ((pm (point-marker)))
+                  (cons pm (copy-marker pm t)))))
 
 (defsubst helixel-action-shallow-copy (event)
   "Return a shallow copy of EVENT (alias-friendly name)."

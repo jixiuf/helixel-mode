@@ -566,10 +566,8 @@ The `helixel-define-command' macro handles this automatically."
            ;; helixel--live-action-set already preserves the existing
            ;; preposition from a prior `:preposition' clause (mc prepos).
            ;; No explicit inheritence needed.
-           (tx (apply #'helixel-action-create operator
-                      pop-sel
-                      :runner runner
-                      extra)))
+           (tx (helixel-action-create operator pop-sel extra
+                                      :runner runner)))
       (let ((new-action (helixel-action-shallow-copy tx)))
         ;; Pre-compute and stash display on the live action (tx-replay
         ;; itself doesn't need display, but the action ring formatter does).
@@ -944,12 +942,12 @@ The chosen event's edit data becomes the new `helixel-last-action'."
         ;; which only copies the payload, leaving op/sel/runner stale).
         (setq helixel-last-action
               (helixel-action-shallow-copy
-               (apply #'helixel-action-create
-                      (helixel-action-op event)
-                      (helixel-action-sel event)
-                      :display (helixel--action-display-format event)
-                      :runner (helixel-action-runner event)
-                      (helixel-action-payload event))))
+               (helixel-action-create
+                (helixel-action-op event)
+                (helixel-action-sel event)
+                (helixel-action-payload event)
+                :display (helixel--action-display-format event)
+                :runner (helixel-action-runner event))))
         (helixel-repeat-edit)))))
 
 (defun helixel-repeat-debug ()

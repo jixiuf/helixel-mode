@@ -47,6 +47,7 @@
 
 (require 'cl-lib)
 (require 'helixel-core)
+(require 'helixel-motion)
 (require 'helixel-search)
 
 (eval-when-compile

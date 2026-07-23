@@ -36,6 +36,9 @@
 ;;; Code:
 
 (require 'helixel-core)
+(require 'helixel-debug)
+(require 'helixel-motion)
+(require 'helixel-register)
 (require 'helixel-ring)
 (require 'helixel-macros)
 (require 'helixel-repeat)

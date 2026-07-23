@@ -40,6 +40,7 @@
 (require 'helixel-state)
 
 (require 'helixel-macros)
+(require 'helixel-motion)
 
 (defvar helixel-block-textobj-alist)
 
@@ -570,7 +571,7 @@ In treesit buffers, delegates via `helixel-forward-inner-comment-function'."
                            (helixel--motion-select-category-p 'movement 'comment))))
 
 ;; `helixel--generic-bounds-at' / `helixel--generic-bounds-next'
-;; are defined in helixel-core.el.
+;; are defined in helixel-textobj-pair.el.
 
 ;; ── Paragraph / sentence / function movement commands ──
 ;; All twelve commands here use :side :a (verbatim from originals).

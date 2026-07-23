@@ -47,6 +47,7 @@
 (require 'helixel-core)
 (require 'helixel-mc-core)
 (require 'helixel-search)
+(require 'helixel-motion)
 
 ;; ── Forward declarations for treesit integration ──
 (declare-function helixel-ts--next-after "helixel-treesit-core" t t)

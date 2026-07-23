@@ -41,6 +41,18 @@
 (require 'helixel-macros)
 (defvar helixel-chain-insert-entry-functions)
 (require 'helixel-search)
+(require 'helixel-register)
+
+(defsubst helixel--swap-source-type ()
+  "Return the swap-source type for the current selection.
+Returns nil (char), \=`line', or \=`rect'.
+More permissive than `helixel--region-type' — detects
+`rectangle-mark-mode' directly."
+  (cond
+   ((eq (helixel--sel-type) 'rect) 'rect)
+   ((eq (helixel--sel-type) 'line) 'line)
+   ((bound-and-true-p rectangle-mark-mode) 'rect)
+   (t nil)))
 
 ;; ── Insert-entry prepositioner helpers ──
 ;;

@@ -46,6 +46,60 @@
 (require 'helixel-macros)
 (require 'helixel-repeat)
 (require 'helixel-move)
+(require 'helixel-motion)
+(require 'helixel-register)
+
+;; ── Search filter loop ──
+
+(defun helixel--open-invisible-at (beg end)
+  "Open invisible overlays covering BEG..END.
+
+Calls `isearch-open-overlay-temporary' on each overlay that has an
+`invisible' property and is not already opened (no `isearch-invisible'
+flag).  This temporarily reveals hidden text (e.g. folded sections in
+`org-mode') when a search or find-char match lands inside it, matching
+the `search-invisible' = \='open behavior."
+  (dolist (ov (overlays-in beg end))
+    (when (and (overlay-get ov 'invisible)
+               (not (overlay-get ov 'isearch-invisible)))
+      (isearch-open-overlay-temporary ov))))
+
+(defsubst helixel--search-advance-one (forwardp)
+  "Advance one char past a zero-width match, or throw done.
+FORWARDP is t for forward, nil for backward."
+  (if forwardp
+      (if (eobp) (throw 'search-filter-done nil)
+        (forward-char 1))
+    (if (bobp) (throw 'search-filter-done nil)
+      (forward-char -1))))
+
+(defsubst helixel--search-filter-loop (search-fn forwardp)
+  "Call SEARCH-FN (zero-arg) repeatedly, skipping invisible matches.
+SEARCH-FN must move point and set `match-data' on success; it should
+return non-nil on success.  FORWARDP determines the direction for
+skipping empty matches.  Returns the match position or nil.
+
+Uses `isearch-filter-predicate' to check whether a match is visible,
+respecting custom predicates (e.g. org-fold) and `search-invisible'.
+The caller should bind `search-invisible' appropriately."
+  (catch 'search-filter-done
+    (while t
+      (if (helixel--with-debug-log search-filter
+            (funcall search-fn)
+            (search-failed nil))
+          (if (or (helixel--invisible-effective)
+                  (funcall isearch-filter-predicate
+                           (match-beginning 0) (match-end 0)))
+              (progn
+                (when (eq (helixel--invisible-effective) 'open)
+                  (helixel--open-invisible-at (match-beginning 0)
+                                              (match-end 0)))
+                (throw 'search-filter-done (match-beginning 0)))
+            ;; Invisible — advance past match and retry.
+            (if (= (match-beginning 0) (match-end 0))
+                (helixel--search-advance-one forwardp)
+              (goto-char (match-end 0))))
+        (throw 'search-filter-done nil)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Groups and customs

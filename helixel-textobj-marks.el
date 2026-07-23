@@ -35,6 +35,7 @@
 (require 'helixel-textobj-engine)
 (require 'helixel-textobj-pair)
 (require 'helixel-textobj-block)
+(require 'helixel-motion)
 
 (declare-function helixel--comment-bounds-next "helixel-move")
 (declare-function helixel--comment-bounds-previous "helixel-move")

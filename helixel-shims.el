@@ -38,6 +38,7 @@
 
 (require 'helixel-state)
 (require 'helixel-keymap)
+(require 'helixel-motion)
 (eval-when-compile (require 'helixel-mc-core))
 (eval-when-compile (require 'helixel-mc-integrate))
 

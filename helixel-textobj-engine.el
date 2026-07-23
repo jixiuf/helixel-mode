@@ -29,6 +29,16 @@
 (require 'cl-lib)
 (require 'thingatpt)
 (require 'helixel-core)
+(require 'helixel-motion)
+
+(defvar helixel--single-line-things
+  '(helixel-word helixel-WORD helixel-symbol)
+  "List of thing symbols that do not naturally span multiple lines.
+Line-crossing trim and newline-skip logic in
+\=`helixel--forward-beginning', \=`helixel--forward-end', and
+\=`helixel--def-thing-move' only apply to these things.
+Multi-line things (paragraph, sentence, function) are unaffected.")
+
 
 (declare-function helixel--set-mark-region "helixel-ring")
 
@@ -681,7 +691,7 @@ textobj motion for \\[helixel-repeat-last-motion]."
        helixel-textobj-visual-state-p-function
        (funcall helixel-textobj-visual-state-p-function)))
 
-(defvar helixel--block-chosen-spec)  ; defined in helixel-core.el
+(defvar helixel--block-chosen-spec)  ; defined in helixel-textobj-pair.el
 
 ;; ── Surround / hook plumbing + textobj kind protocol ──
 

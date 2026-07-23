@@ -35,6 +35,7 @@
 
 (require 'helixel-treesit-core)
 (require 'helixel-macros)
+(require 'helixel-motion)
 
 ;; Cross-module declarations
 (declare-function helixel--track-visual-move "helixel-move" t t)

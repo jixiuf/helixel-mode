@@ -8,8 +8,11 @@
 
 | Module | Role |
 |--------+------|
-| ~helixel-core.el~ | Pure data layer: structs, registries, delimiter protocol, tx helpers, replay context, named registers |
-| ~helixel-ring.el~ | Event storage: ring + jump-log + tracking-open + live-event |
+| ~helixel-debug.el~ | Error capture: debug toggle, error ring with backtraces, ~helixel--with-debug-log~ (cl-lib only) |
+| ~helixel-core.el~ | Pure data layer: structs, registries, tx helpers, replay context (→ debug) |
+| ~helixel-motion.el~ | Motion recording/repeat: last-motion struct, motion repeater registry (→ core) |
+| ~helixel-register.el~ | Named registers: backends, current-register, delete-register rotation (→ core) |
+| ~helixel-ring.el~ | Event storage: ring + jump-log + tracking-open + live-event + grouped-ring queries |
 | ~helixel-macros.el~ | Command/operator definition macros |
 
 -----
@@ -283,7 +286,9 @@ For self-contained commands (chain).  Wraps body in
 ** File Dependency Graph
 
 #+begin_src
-helixel-core (cl-lib only; includes replay context + named registers)
+helixel-core (→ helixel-debug; includes replay context)
+  ├── helixel-motion (→ core)     ; consumed by move/search/engine/mc/...
+  ├── helixel-register (→ core)   ; consumed by search/editing
   ├── helixel-ring (→ core)
   │     ├── helixel-macros (→ core + ring)
   │     └── helixel-action (→ core + ring)

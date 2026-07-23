@@ -69,22 +69,23 @@
 (defvar helixel--current-state)           ; from `helixel-state'
 ;; Per-cursor state variables that the generated clone / swap-in / swap-out
 ;; functions read and write.  Defined in helixel-core / helixel-ring /
-;; helixel-state — declared here so the byte compiler doesn't flag them
+;; helixel-state / helixel-motion / helixel-register / helixel-textobj-pair
+;; — declared here so the byte compiler doesn't flag them
 ;; when this file is built before those modules are loaded.
 ;;
 ;; KEEP IN SYNC with `helixel-mc--state-spec' below.
 (defvar helixel--pending-sel)             ; from `helixel-core'
 (defvar helixel-last-action)             ; from `helixel-core'
-(defvar helixel--yank-register-source)    ; from `helixel-core'
-(defvar helixel--current-register)        ; from `helixel-core'
+(defvar helixel--yank-register-source)    ; from `helixel-register'
+(defvar helixel--current-register)        ; from `helixel-register'
 (defvar helixel--active-search)           ; from `helixel-state'
 (defvar helixel--action-ring)              ; from `helixel-ring'
 (defvar helixel--live-action)             ; from `helixel-ring'
 (defvar helixel--action-pos)              ; from `helixel-ring'
 (defvar helixel--mark-cycle-pos)          ; from `helixel-ring'
-(defvar helixel--last-motion-cmd)         ; from `helixel-core'
-(defvar helixel--motion-permanent-flip)   ; from `helixel-core'
-(defvar helixel--block-chosen-spec)       ; from `helixel-core'
+(defvar helixel--last-motion-cmd)         ; from `helixel-motion'
+(defvar helixel--motion-permanent-flip)   ; from `helixel-motion'
+(defvar helixel--block-chosen-spec)       ; from `helixel-textobj-pair'
 (declare-function helixel-enter-normal-state "helixel-state" (&rest _))
 (declare-function helixel-visual-exit "helixel-state")
 (declare-function helixel-mc--repeat-edit-apply-only "helixel-mc-integrate"

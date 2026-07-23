@@ -47,6 +47,27 @@
 (require 'cl-lib)
 (require 'helixel-core)
 (require 'helixel-ring)
+(defsubst helixel--repeat-echo (count)
+  "Echo COUNT of repeated iterations."
+  (unless (zerop count)
+    (message "Repeated %d time%s" count (if (> count 1) "s" "")))
+  nil)
+
+;; ----------------------------------------------------------------------
+;; Shared key-sequence recording utilities
+;; ----------------------------------------------------------------------
+;;
+;; Tiny utility shared by insert-mode recording
+;; (`helixel-repeat.el').
+
+(defsubst helixel--keyrec-capture ()
+  "Return the current single-command key sequence for hook capture.
+
+A semantic alias for `this-single-command-keys'.  The insert
+recorder pushes the return value of this function onto its
+accumulator inside `pre-command-hook'."
+  (this-single-command-keys))
+
 
 ;; ----------------------------------------------------------------------
 ;; Insert-mode key + text recording

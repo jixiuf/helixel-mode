@@ -7,19 +7,22 @@
 
 | File | Role |
 |------|------|
-| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel-last-action`, kind registry, op registry, delimiter protocol, transaction helpers, swap-source type, keyrec utilities. Zero helixel deps (cl-lib only). |
-| `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, `;' action-cycle, C-o/C-i jump commands. |
+| `helixel-debug.el` | **Error capture**: `helixel-debug` toggle, per-buffer error ring with backtraces, `helixel--with-debug-log` macro, debug-log viewer mode. Zero helixel deps (cl-lib only); required by core. |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel-last-action`, kind registry, op registry, surround-pair entry queries, category matcher, selection-type helpers, replay context. Depends only on `helixel-debug`. |
+| `helixel-motion.el` | **Motion recording + repeat**: `helixel--last-motion` struct, `helixel-record-motion`, motion repeater registry, command-reverse property, motion repeat/select category defcustoms. Depends only on core. |
+| `helixel-register.el` | **Named registers**: `helixel-register-backends` (kill-ring/clipboard/primary/register-alist), `helixel--current-register`, numbered delete registers, `helixel--kill-new`, swap-source register. Depends only on core. |
+| `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, generic grouped-ring queries (`helixel--gr-*`), `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel-record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel-record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions + `helixel--keyrec-capture`) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts both segment lists and raw key vectors. |
 | `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload.  Replay iterates the list and `helixel-action-replay`s each entry.  No more kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
-| `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection`. |
+| `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection` + `helixel--swap-source-type`. |
 | `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. 7 `declare-function` for flymake/eglot (third-party only). |
-| `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state. |
+| `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state + invisible-text search filter loop. |
 | `helixel-next-error.el` | **Next-error (grep/compile) snapshot**: pure-data `helixel-ne--target` vector, tick-invalidated cache, index navigation (`helixel-ne--step` / `--step-in-file` over shared `helixel-ne--step-index`), grep face-run column extraction, `next-error` kind registration, `next-error-hook` integration (`helixel-ne--after-jump`; every visited target buffer is seeded with buffer-local repeat state via `helixel-ne--seed-repeat-state`). |
 | `helixel-textobj-engine.el` | Forward primitives (forward-word/WORD/symbol/sentence/paragraph/function), generic select-inner/a-object + restricted variants, range struct, type-properties, motion-loop / with-restriction macros, activate-textobj-range, recreate-textobj + advance-textobj. Pure primitives, no per-textobj-type code. |
-| `helixel-textobj-pair.el` | Paren / quote / xml-tag selection (the matched-pair families): get-block-range, select-block, up-paren, select-paren, forward-quote, select-quote, select-xml-tag, tag-* helpers, make-pair-delimiter, make-tag-delimiter. |
+| `helixel-textobj-pair.el` | **Delimiter protocol** (`helixel-delimiter` struct, `helixel-delimiter-bounds`, `helixel--generic-bounds-next/-previous` navigation) + paren / quote / xml-tag selection (the matched-pair families): get-block-range, select-block, up-paren, select-paren, forward-quote, select-quote, select-xml-tag, tag-* helpers, make-pair-delimiter, make-tag-delimiter. |
 | `helixel-textobj-block.el` | Regex / fenced block text objects: up-regex-block, select-regex-block, up-block-at-point, select-block-at-point, block-textobj-alist (customs), block-spec-at-point, block-adjust-for-jump, regex-adjust-for-jump, make-block-delimiter, make-regex-delimiter. |
 | `helixel-textobj-marks.el` | User-facing surface: define-mark-pair/-quote/-object/-regex-textobj macros, mark-inner-*/mark-a-* commands (including tag and block), tree-sitter helper, all default registrations, `textobj' kind registration. |
 | `helixel-textobj.el` | Facade: requires engine, pair, block, marks. |
@@ -66,58 +69,69 @@
 ## Deps (one-way, compile-time — actual `require` graph)
 
 ```
-helixel-core (cl-lib only, zero helixel deps)
+helixel-debug (cl-lib only, zero helixel deps)
   │
-  ├── helixel-ring (→ core)
-  │     └── helixel-macros (→ core + ring)
-  │           └── helixel-treesit-core (→ core)
-  │     └── helixel-treesit-commands (→ core + treesit-core + macros)
-  │           └── helixel-treesit (facade: requires core + commands)
-  │
-  ├── helixel-textobj-engine (→ core)
-  │     ├── helixel-textobj-pair (→ core + textobj-engine)
-  │     │     └── helixel-textobj-block (→ core + textobj-engine
-  │     │                              + textobj-pair)
-  │     │           └── helixel-textobj-marks (→ core + textobj-engine
-  │     │                                    + textobj-pair
-  │     │                                    + textobj-block)
-  │     └── helixel-textobj (facade: requires the four above)
-  │     └── helixel-surround (→ core + ring + repeat + textobj)
-  │
-  ├── helixel-repeat (→ core + ring)
-  │     └── helixel-chain (→ core + ring + macros + repeat)
-  │
-  ├── helixel-mc-core (→ core + ring)
-  │     └── helixel-mc-spawn (→ core + mc-core)
-  │     └── helixel-mc-integrate (→ core + mc-core + repeat + chain)
-  │
-  └── helixel-state (→ core + ring + macros + repeat
-                      + textobj + surround)
+  └── helixel-core (→ debug)
         │
-        ├── helixel-move (→ state + macros)
-        │     │
-        │     └── helixel-editing (→ state + move + core + macros
-        │                          + search)
-        │           │
-        │           ├── helixel-search (→ state + core + macros
-        │           │                   + repeat + move)
-        │           │     └── helixel-next-error (→ core + search)
-        │           │
-        │           ├── helixel-swap (→ state + macros + editing)
-        │           │
-        │           └── helixel-keymap (→ state + move + editing
-                                          + chain + surround + swap
-                                          + search + mc-core + mc-spawn
-                                          + mc-integrate)
+        ├── helixel-motion (→ core)
+        │     └── consumed by: move, search, next-error, engine,
+        │         marks, treesit-commands, mc-spawn, shims
+        ├── helixel-register (→ core)
+        │     └── consumed by: search, editing
+        ├── helixel-ring (→ core)
+        │     └── helixel-macros (→ core + ring)
+        │           └── helixel-treesit-core (→ core)
+        │     └── helixel-treesit-commands (→ treesit-core + macros
+        │                                 + motion)
+        │           └── helixel-treesit (facade: requires core + commands)
         │
-        └── helixel-shims (→ state + keymap)
+        ├── helixel-textobj-engine (→ core + motion)
+        │     ├── helixel-textobj-pair (→ textobj-engine)
+        │     │     └── helixel-textobj-block (→ core + textobj-engine
+        │     │                              + textobj-pair)
+        │     │           └── helixel-textobj-marks (→ textobj-engine
+        │     │                                    + textobj-pair
+        │     │                                    + textobj-block
+        │     │                                    + motion)
+        │     └── helixel-textobj (facade: requires the four above)
+        │     └── helixel-surround (→ core + ring + repeat + textobj)
+        │
+        ├── helixel-repeat (→ core + ring)
+        │     └── helixel-chain (→ core + ring + macros + repeat)
+        │
+        ├── helixel-mc-core (→ core + ring)
+        │     └── helixel-mc-spawn (→ core + mc-core + search + motion)
+        │     └── helixel-mc-integrate (→ core + mc-core + repeat + chain)
+        │
+        └── helixel-state (→ core + ring + macros + repeat
+                            + textobj + surround)
+              │
+              ├── helixel-move (→ state + macros + motion)
+              │     │
+              │     └── helixel-editing (→ state + move + core + macros
+              │                          + search + register)
+              │           │
+              │           ├── helixel-search (→ state + core + macros
+              │           │                   + repeat + move + motion
+              │           │                   + register)
+              │           │     └── helixel-next-error (→ core + search
+              │           │                           + motion)
+              │           │
+              │           ├── helixel-swap (→ state + macros + editing)
+              │           │
+              │           └── helixel-keymap (→ state + move + editing
+                                                + chain + surround + swap
+                                                + search + mc-core + mc-spawn
+                                                + mc-integrate)
+              │
+              └── helixel-shims (→ state + keymap + motion)
 ```
 
 Notes:
 - **Zero circular deps.** `swap→editing` is one-way (editing does NOT require swap).
 - `helixel--replace-region` lives in `helixel-editing.el`.
 - `helixel--delete-selection` lives in `helixel-editing.el`.
-- `helixel--swap-source-type` lives in `helixel-core.el`.
+- `helixel--swap-source-type` lives in `helixel-editing.el`.
 - `helixel-last-action` lives in `helixel-core.el` (buffer-local).
   Every module that requires `helixel-core` can read/write the most recent transaction.
 - `declare-function` counts are minimal and only for third-party packages:

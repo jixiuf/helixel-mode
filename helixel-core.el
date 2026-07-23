@@ -24,208 +24,34 @@
 ;; Core data layer for helixel-mode — the single foundation module.
 ;;
 ;; This file defines the core data types and registries consumed by
-;; all helixel modules.  It has ZERO dependencies on other helixel
-;; modules and NO side effects.
+;; all helixel modules.  It depends only on `helixel-debug' (error
+;; capture) and has NO side effects.
 ;;
 ;; Contents:
-;;   Part 1 — helixel-sel          : selection descriptor + pending-sel
-;;   Part 2 — Delimiter Protocol   : delimiter plist accessors
-;;   Part 3 — Kind Registry        : centralised kind protocol
-;;   Part 4 — helixel-action      : unified event struct
-;;   Part 5 — Helpers              : create, copy, display, etc.
-;;   Part 6 — Operator Registry    : hash-table based op registration
-;;   Part 7 — Swap-source type     : helper for editing and swap modules
+;;   — helixel-sel          : selection descriptor + pending-sel
+;;   — Kind Registry        : centralised kind protocol
+;;   — Surround-pair entry  : shared surround/delimiter-char queries
+;;   — Category matcher     : (CAT . SUBCAT) checklist matching
+;;   — helixel-action       : unified replay + history event struct
+;;   — Operator Registry    : hash-table based op registration
+;;   — Selection type       : `helixel--sel-type' / `helixel--region-type'
+;;   — Invisible-text mode  : `helixel-invisible' defcustom
+;;   — Replay context       : `helixel-replay' struct + `helixel-with-replay'
+;;   — Last-action pointer  : `helixel-last-action' (buffer-local)
+;;
+;; Domain code that used to live here moved to honest modules in the
+;; 2026 core split (see plan.md Phase 1):
+;;   debug infra       -> helixel-debug.el
+;;   motion recording  -> helixel-motion.el
+;;   named registers   -> helixel-register.el
+;;   delimiter bounds  -> helixel-textobj-pair.el
+;;   search filter     -> helixel-search.el
+;;   grouped-ring fns  -> helixel-ring.el
 
 ;;; Code:
 
 (require 'cl-lib)
-
-;; ── Debug infrastructure ──
-;; Centralized error-capture system.  When `helixel-debug' is non-nil,
-;; errors that are normally silently swallowed (via `condition-case nil'
-;; or `ignore-errors') are captured with full backtraces into a per-buffer
-;; ring buffer.  Use `helixel-debug-show-log' to inspect them.
-
-(defcustom helixel-debug nil
-  "When non-nil, capture silently-swallowed errors into `helixel--debug-log'.
-When nil, error-handling is identical to the undebugged version — zero
-overhead.  Enabling this preserves error messages and backtraces for
-pattern-matched `condition-case' sites throughout `helixel-mode'.
-\<helixel-debug-log-mode-map>
-Use \\[helixel-debug-show-log] to open the debug-log buffer."
-  :type 'boolean
-  :group 'helixel)
-
-(defvar-local helixel--debug-log nil
-  "Circular buffer of captured error entries.
-Each entry is a plist:
-  (:context STR :error ERR :backtrace STR :timestamp FLOAT :buffer BUFFER).
-Max `helixel-debug-log-max' entries, newest first.")
-
-(defcustom helixel-debug-log-max 200
-  "Maximum number of error entries in `helixel--debug-log'."
-  :type 'natnum
-  :group 'helixel)
-
-(defun helixel--debug-log-error (context err)
-  "Record ERR with CONTEXT string into `helixel--debug-log'.
-Captures the full backtrace for inspection.  No-op when `helixel-debug'
-is nil or when called from within the debug-log buffer itself.
-ERR must be a condition object (the second argument to `condition-case')."
-  (when (and helixel-debug
-             (not (derived-mode-p 'helixel-debug-log-mode))
-             ;; Don't fill up the log with its own errors.
-             (not (eq context 'helixel-debug-log)))
-    (unless helixel--debug-log
-      (setq helixel--debug-log nil))
-    (push (list :context context
-                :error err
-                :backtrace (helixel--debug--capture-backtrace)
-                :timestamp (float-time)
-                :buffer (current-buffer))
-          helixel--debug-log)
-    ;; Cap the ring.
-    (when (> (length helixel--debug-log) helixel-debug-log-max)
-      (setq helixel--debug-log
-            (cl-subseq helixel--debug-log 0 helixel-debug-log-max)))))
-
-(defun helixel--debug--capture-backtrace ()
-  "Return a string with the full backtrace at point of call."
-  (let ((standard-output (generate-new-buffer " *helixel-debug-bt*")))
-    (unwind-protect
-        (progn
-          (backtrace)
-          (with-current-buffer standard-output
-            (buffer-string)))
-      (kill-buffer standard-output))))
-
-(defmacro helixel--with-debug-log (context &rest condition-case-clauses)
-  "Like `condition-case' but captures errors into `helixel--debug-log'.
-
-CONTEXT is a short string label identifying the error site (e.g.
-\"delimiter-bounds\", \"mc-replay\").
-
-CONDITION-CASE-CLAUSES are one or more `condition-case' clauses:
-  BODY
-  (CONDITION HANDLER...)
-  ...
-
-The first element is the body form; subsequent elements are condition
-handlers.  When `helixel-debug' is nil, this expands to a standard
-`condition-case' — zero overhead.
-
-When `helixel-debug' is non-nil, any non-`user-error' signal that is
-caught also logs the error with full backtrace to
-`helixel--debug-log'.
-
-Example:
-  ;; Before (silent swallow):
-  (condition-case nil
-      (risky-operation)
-    (error nil))
-  ;; After (debuggable):
-  (helixel--with-debug-log \"risky-op\"
-    (risky-operation)
-    (error nil))"
-  (declare (indent 1) (debug (sexp &rest (sexp body))))
-  (let* ((body (car condition-case-clauses))
-         (handlers (cdr condition-case-clauses))
-         (ctx context))
-    (if (and (not (eq ctx 'helixel-debug-log))
-             (symbolp ctx))
-        `(condition-case helixel--debug-err
-             ,body
-           ,@handlers
-           (user-error nil)
-           (error
-            (helixel--debug-log-error ,(symbol-name ctx)
-                                      helixel--debug-err)
-            nil))
-      `(condition-case nil ,body ,@handlers))))
-
-;;;###autoload
-(defun helixel-debug-show-log ()
-  "Display the helixel debug-log buffer.
-Shows captured errors with context labels, error messages,
-and full backtraces.  Each entry includes a timestamp and
-source buffer.  Press \\[helixel-debug-clear-log] to clear.
-
-When `helixel-debug' is nil, the log is always empty — enable
-`helixel-debug' first to capture errors."
-  (interactive)
-  (let ((buf (get-buffer-create "*helixel-debug-log*")))
-    (with-current-buffer buf
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (helixel-debug-log-mode)
-        (if (not helixel--debug-log)
-            (insert (propertize
-                     (if helixel-debug
-                         (concat "No errors captured yet."
-                                 "  Errors appear here as they happen.\n")
-                       (concat "helixel-debug is nil —"
-                               " enable it to capture errors.\n"))
-                     'face 'font-lock-comment-face))
-          (dolist (entry (reverse helixel--debug-log))
-            (let ((ctx (plist-get entry :context))
-                  (err (plist-get entry :error))
-                  (bt  (plist-get entry :backtrace))
-                  (ts  (plist-get entry :timestamp))
-                  (buf-name (buffer-name (plist-get entry :buffer))))
-              (insert (propertize
-                       (format "[%s] %s  —  %s\n"
-                               (format-time-string "%T" ts)
-                               ctx
-                               (error-message-string err))
-                       'face 'font-lock-warning-face))
-              (insert (propertize
-                       (format "  buffer: %s\n" buf-name)
-                       'face 'font-lock-comment-face))
-              (when bt
-                (insert (propertize bt 'face 'font-lock-doc-face)))
-              (insert "\n")))))
-      (goto-char (point-min))
-      (pop-to-buffer buf))))
-
-(defun helixel-debug-clear-log ()
-  "Clear the helixel debug-log."
-  (interactive)
-  (setq helixel--debug-log nil)
-  (when-let* ((buf (get-buffer "*helixel-debug-log*")))
-    (when (buffer-live-p buf)
-      (with-current-buffer buf
-        (let ((inhibit-read-only t))
-          (erase-buffer)
-          (insert (propertize "Log cleared.\n"
-                              'face 'font-lock-comment-face))
-          (goto-char (point-min))))))
-  (message "helixel debug-log cleared"))
-
-(defvar helixel-debug-log-mode-map
-  (let ((map (make-sparse-keymap)))
-    (set-keymap-parent map special-mode-map)
-    (define-key map (kbd "q") #'quit-window)
-    (define-key map (kbd "g") #'helixel-debug-show-log)
-    (define-key map (kbd "C") #'helixel-debug-clear-log)
-    map)
-  "Keymap for `helixel-debug-log-mode'.")
-
-(define-derived-mode helixel-debug-log-mode special-mode "Helixel-Debug-Log"
-  "Major mode for viewing helixel debug-log entries.
-\\<helixel-debug-log-mode-map>
-\\[helixel-debug-clear-log] — clear the log.
-\\[helixel-debug-show-log] — refresh the display.
-\\[quit-window] — quit."
-  (setq-local buffer-read-only t)
-  (setq-local truncate-lines t))
-
-(defvar helixel--single-line-things
-  '(helixel-word helixel-WORD helixel-symbol)
-  "List of thing symbols that do not naturally span multiple lines.
-Line-crossing trim and newline-skip logic in
-\=`helixel--forward-beginning', \=`helixel--forward-end', and
-\=`helixel--def-thing-move' only apply to these things.
-Multi-line things (paragraph, sentence, function) are unaffected.")
+(require 'helixel-debug)
 
 ;; ----------------------------------------------------------------------
 ;; helixel-sel: Selection Descriptor
@@ -268,7 +94,7 @@ Enabled during `make lint' and in test suites.
 Never set in production — ctx are validated at author time only.")
 
 ;; ----------------------------------------------------------------------
-;; Part 3 — Kind Registry (centralised kind protocol)
+;; Kind Registry (centralised kind protocol)
 ;; ----------------------------------------------------------------------
 ;;
 ;; Each selection kind registers four protocol methods:
@@ -678,285 +504,6 @@ must be discarded so it doesn't leak into dot-repeat."
     (setq helixel--pending-sel nil)))
 
 
-;; ----------------------------------------------------------------------
-;; Part 2 — Delimiter Protocol
-;; ----------------------------------------------------------------------
-;;
-;; A `helixel-delimiter' struct describes a delimited region (pair of
-;; brackets, a quoted string, XML tags, mode-specific blocks, or
-;; regex-defined blocks).  It carries enough information for both
-;; text-object selection and surround add/delete/replace.
-;;
-;; Builder functions live in helixel-textobj-pair.el and
-;; helixel-textobj-block.el (they reference textobj-engine functions
-;; via closures).
-
-(cl-defstruct (helixel-delimiter (:constructor helixel--make-delimiter-raw)
-                                 (:copier nil))
-  "Descriptor for a delimited region.
-Slots shared by all delimiter types:
-  TYPE           — :pair, :tag, or :regex.
-  FINDER         — function (DIR) → 0|N; moves point, sets match-data.
-  OPEN           — character or string; the opening delimiter.
-  CLOSE          — character or string; the closing delimiter.
-                   Unused (nil) for tag delimiters.
-  MATCH-CLOSE    — function (TAG-NAME) → 0, for tag delimiters only.
-                   Returns 0 on success, non-zero on failure.
-                   Always nil for pair and block delimiters.
-  ADJUST-FOR-JUMP — function () → nil, called before jump-to-match to
-                    move point inside the pair.  Nil for quote pairs
-                    (open == close) where no adjustment is needed.
-  BEGIN-RE       — string; regex for block opening delimiter.
-                   Set only by `helixel-make-regex-delimiter'.
-  END-RE         — string; regex for block closing delimiter.
-  NAME-GROUP     — integer or nil; match group index for block name.
-
-NL-P behaviour is derived from TYPE — tag and regex delimiters
-handle adjacent newlines; pair delimiters do not."
-  type
-  finder
-  open
-  close
-  match-close
-  adjust-for-jump
-  begin-re
-  end-re
-  name-group)
-
-;; Generic accessors are auto-generated by `cl-defstruct' with
-;; `:conc-name helixel-delimiter-':
-;;   helixel-delimiter-type, helixel-delimiter-finder,
-;;   helixel-delimiter-open, helixel-delimiter-close,
-;;   helixel-delimiter-match-close, helixel-delimiter-adjust-for-jump,
-;;   helixel-delimiter-begin-re, helixel-delimiter-end-re,
-;;   helixel-delimiter-name-group.
-
-(defsubst helixel-delimiter-nl-p (d)
-  "Return non-nil if delimiter D uses newline handling.
-Derived from TYPE — tag (:tag) and regex (:regex) delimiters
-handle adjacent newlines; pair (:pair) delimiters do not."
-  (memq (helixel-delimiter-type d) '(:tag :regex)))
-
-;; ── Delimiter operations (stateless, no external deps) ──
-
-(defvar-local helixel--block-chosen-spec nil
-  "Internal: stores the spec chosen by block-finder at resolve time.
-Set by block finder functions during `helixel-delimiter-bounds'.
-Consumed by callers that need to know which block spec was matched.")
-
-(defsubst helixel-delimiter-find (d dir)
-  "Find delimiter D in DIR (+1 forward, -1 backward).
-Returns 0 on success, non-zero on failure.  Moves point and sets `match-data'."
-  (funcall (helixel-delimiter-finder d) dir))
-
-(defun helixel-delimiter-bounds (d &optional no-close-backoff)
-  "Return ((OB . OE) . (CB . CE)) for the innermost delimiter D at point.
-OB, OE: open delimiter beg/end.  CB, CE: close delimiter beg/end.
-When NO-CLOSE-BACKOFF is non-nil, skip stepping back before a
-closing delimiter.  Callers that just moved inside from the
-opening delimiter (e.g. `helixel--generic-bounds-next' step 2)
-should set this to avoid a false match for equal open/close chars."
-  (let ((close (helixel-delimiter-close d)))
-    (when (eobp) (skip-chars-backward " \t\n\r"))
-    (when (and (not no-close-backoff)
-               (characterp close) (> (point) 1)
-               (= (char-before) close)
-               (not (eq (char-after) close)))
-      (backward-char))
-    ;; String-based close backoff: if point is right after a string
-    ;; close delimiter, step back to before it so the backward finder
-    ;; can locate the opener without the close thwarting the counter.
-    ;; Only apply when close differs from open (toggle-based delimiters
-    ;; don't need backoff) and only when the matched close ends at point.
-    (when (and (not no-close-backoff)
-               (stringp close)
-               (not (string= close (helixel-delimiter-open d))))
-      (let ((orig (point)))
-        (if (and (re-search-backward close nil t)
-                 (= (match-end 0) orig))
-            (goto-char (match-beginning 0))
-          (goto-char orig))))
-    (unwind-protect
-        (progn
-          (unless (zerop (helixel-delimiter-find d -1))
-            (user-error "No enclosing delimiter"))
-          (let ((ob (match-beginning 0)) (oe (match-end 0)))
-            (goto-char oe)
-            ;; For delimiters with a :match-close method (tags), use
-            ;; targeted search so nested different-name pairs don't
-            ;; steal the match.
-            (if-let* ((mc (helixel-delimiter-match-close d))
-                      (tag (match-string 1)))
-                (funcall mc tag)
-              (unless (zerop (helixel-delimiter-find d 1))
-                (user-error "No enclosing delimiter")))
-            (let ((cb (match-beginning 0)) (ce (match-end 0)))
-              (cons (cons ob oe) (cons cb ce)))))
-      (setq helixel--block-chosen-spec nil))))
-
-(defsubst helixel-delimiter-bounds-flat (d &optional no-close-backoff)
-  "Return (OB OE CB CE) for the innermost delimiter D at point.
-OB, OE: open delimiter beg/end.  CB, CE: close delimiter beg/end.
-Like `helixel-delimiter-bounds' but returns a flat list instead
-of nested cons cells for easier destructuring.
-Optional NO-CLOSE-BACKOFF is passed through to `helixel-delimiter-bounds'."
-  (pcase-let* ((`((,ob . ,oe) . (,cb . ,ce))
-                (helixel-delimiter-bounds d no-close-backoff)))
-    (list ob oe cb ce)))
-
-(defsubst helixel--generic-bounds-at (d &optional inner-p no-close-backoff)
-  "Return (BEG . END) of enclosing delimiter D.
-If INNER-P is non-nil, exclude delimiters from bounds.
-When NO-CLOSE-BACKOFF is non-nil, skip the `backward-char' heuristic
-in `helixel-delimiter-bounds' for the case where point is right
-after the closing delimiter."
-  (pcase-let* ((`(,ob ,oe ,cb ,ce)
-                (helixel-delimiter-bounds-flat d no-close-backoff)))
-    (if inner-p (cons oe cb) (cons ob ce))))
-
-(defsubst helixel--strip-adjacent-newlines (open-end close-beg)
-  "Adjust OPEN-END and CLOSE-BEG to exclude adjacent newlines.
-Returns (OPEN-END . CLOSE-BEG)."
-  (cons (if (eq (char-after open-end) ?\n) (1+ open-end) open-end)
-        (if (eq (char-before close-beg) ?\n) (1- close-beg) close-beg)))
-
-(defsubst helixel--delimiter-open-str (d)
-  "Return the open delimiter of D as a string.
-Converts character open to single-char string."
-  (let ((open (helixel-delimiter-open d)))
-    (and open (if (characterp open) (char-to-string open) open))))
-
-(defun helixel--generic-bounds-just-exited-p (d orig-pt cur-bounds inner-p)
-  "Return non-nil if we just exited an inner pair and landed on parent's cb.
-Detects the case where adjacent closing delimiters like \=`))\='
-would cause a false climb outward.  Only applies to outer-p
-\(non-INNER-P) with character-type close delimiters.
-D is the delimiter, ORIG-PT the starting point,
-CUR-BOUNDS the current enclosing pair's bounds, INNER-P the inner flag."
-  (and (not inner-p)
-       (characterp (helixel-delimiter-close d))
-       cur-bounds
-       (let ((cb cur-bounds))
-         (save-excursion
-           (goto-char orig-pt)
-           (catch 'helixel--just-exited
-             (while (and (> (point) 1)
-                         (= (char-before) (helixel-delimiter-close d)))
-               (backward-char)
-               (let ((bnds (save-excursion
-                             (helixel--with-debug-log
-                                 generic-bounds-next-just-exited
-                               (helixel-delimiter-bounds-flat d)
-                               (error nil)))))
-                 (when (and bnds
-                            (= orig-pt (nth 3 bnds))
-                            (not (equal cb (cons (nth 0 bnds)
-                                                 (nth 3 bnds)))))
-                   (throw 'helixel--just-exited t))))
-             nil)))))
-
-(defun helixel--generic-bounds-next (d &optional inner-p)
-  "Skip past current delimiter D, find next, return (BEG . END).
-If INNER-P is non-nil, exclude delimiters from bounds.
-If no next opening delimiter exists, falls back to the current
-pair's bounds so callers can still move to that closing."
-  (save-excursion
-    (let* ((orig-pt (point))
-           (cur-bounds (save-excursion
-                         (helixel--with-debug-log generic-bounds-next
-                           (helixel--generic-bounds-at d inner-p)
-                           (error nil))))
-           (open-str (helixel--delimiter-open-str d))
-           (tag-p (eq (helixel-delimiter-type d) :tag))
-           (just-exited (helixel--generic-bounds-just-exited-p
-                         d orig-pt cur-bounds inner-p)))
-      ;; Step 1: skip past current enclosing pair (or climb outward
-      ;; if already at its closing edge).
-      (when cur-bounds
-        (setq cur-bounds
-              (helixel--with-debug-log generic-bounds-next-step1
-                (pcase-let* ((`(,_ob ,_oe ,cb ,ce)
-                              (helixel-delimiter-bounds-flat d))
-                             (at-closing
-                              (and (>= orig-pt cb)
-                                   (not just-exited))))
-                  (if at-closing
-                      (save-excursion
-                        (goto-char ce)
-                        (helixel--generic-bounds-at d inner-p t))
-                    ;; NOT at-closing (or just-exited inner pair):
-                    ;; go to the closer.
-                    (goto-char ce)
-                    cur-bounds))
-                (error nil))))
-      ;; Step 2: return enclosing pair's bounds, or search forward
-      ;; for the first opening delimiter if not inside any pair.
-      (or cur-bounds
-          (when open-str
-            (when (search-forward open-str nil t)
-              (goto-char (1+ (match-beginning 0)))
-              (when tag-p (search-forward ">" nil t))
-              (helixel--generic-bounds-at d inner-p t)))))))
-
-(defun helixel--generic-bounds-previous (d &optional inner-p)
-  "Skip backward past current delimiter D, find previous opener.
-If INNER-P is non-nil, return inner bounds (open-end . close-begin).
-Otherwise return outer bounds (open-begin . close-end).
-This is the backward mirror of `helixel--generic-bounds-next'.
-
-Step 1: if inside a pair, go to its opener (ob for outer,
-oe for inner).  If already at the opener, climb outward to the
-parent pair's opener.
-
-Step 2: if not inside any pair, search backward for the first
-opening delimiter and return its bounds.
-
-No `just-entered' check is needed (unlike `-next's `just-exited').
-For backward direction, adjacent open chars like \=`((\=' have
-ob(parent) < ob(child) always, so \=`(<= orig-pt ob)' is never
-true when orig-pt sits at the child opener and bounds-at finds
-the parent pair — the at-opening check correctly stays false.
-For forward, the symmetric issue exists because cb(parent) can
-equal ce(child) when \=`))\=' are adjacent."
-  (save-excursion
-    (let* ((orig-pt (point))
-           (cur-bounds (save-excursion
-                         (helixel--with-debug-log generic-bounds-previous
-                           (helixel--generic-bounds-at d inner-p)
-                           (error nil))))
-           (open-str (helixel--delimiter-open-str d))
-           (tag-p (eq (helixel-delimiter-type d) :tag)))
-      ;; Step 1: skip backward to current enclosing pair's opener
-      ;; (or climb outward if already at its opening edge).
-      (when cur-bounds
-        (setq cur-bounds
-              (helixel--with-debug-log generic-bounds-previous-step1
-                (pcase-let* ((`(,ob ,oe ,_cb ,_ce)
-                              (helixel-delimiter-bounds-flat d))
-                             (at-opening
-                              (if inner-p
-                                  (= orig-pt oe)
-                                (<= orig-pt ob))))
-                  (if at-opening
-                      ;; Already at the opener: go to its beginning
-                      ;; and re-find bounds — this finds the parent
-                      ;; pair because at ob we haven't crossed the
-                      ;; opener yet.
-                      (save-excursion
-                        (goto-char ob)
-                        (helixel--generic-bounds-at d inner-p))
-                    ;; NOT at opener: go to current pair's opener.
-                    (goto-char (if inner-p oe ob))
-                    cur-bounds))
-                (error cur-bounds))))
-      ;; Step 2: search backward for first opening delimiter
-      ;; if not inside any pair.
-      (or cur-bounds
-          (when open-str
-            (when (search-backward open-str nil t)
-              (when tag-p (search-backward "<" nil t))
-              (helixel--generic-bounds-at d inner-p t)))))))
-
 ;; ── Surround-pair entry struct ──
 ;;
 ;; Each entry in `helixel--surround-pairs' is a `helixel--surround-entry'
@@ -1022,93 +569,6 @@ and `helixel--jump-to-match-core' delegate here."
   (<= open close))
 
 
-;; ── Last-Motion Struct (unified motion + search state) ──
-;;
-;; The single struct for the last repeatable motion — consumed by both
-;; \\[helixel-repeat-last-motion\\] (motion repeat) and
-;; \\[helixel-search-repeat-next\\]/\\[helixel-search-repeat-reverse\\]
-;; (search repeat).
-;;
-;; Two buffer-local variables hold this struct with different update
-;; policies:
-;;   helixel--last-motion-cmd — updated by EVERY motion (for
-;;   \\[helixel-repeat-last-motion\\] repeat)
-;;   helixel--active-search   — updated only by search/find-char
-;;                                (for \\[helixel-search-repeat-next\\]/
-;;                                \\[helixel-search-repeat-reverse\\],
-;;                                survives intervening movements)
-;;
-(cl-defstruct (helixel--last-motion (:copier nil))
-  "Self-contained record of the last repeatable motion.
-Slots:
-  CATEGORY    — 'movement, 'search, or 'find-char.
-  SUBCAT      — 'pair, 'match, 'paragraph, 'sentence, 'function, or nil.
-  DIR         — 'forward or 'backward.
-  COMMAND     — command symbol (nil for search).
-  PREFIX-ARG  — raw `current-prefix-arg' at record time.
-  CHAR        — (find-char) the searched character.
-  TYPE        — (find-char) 'next or 'till.
-  PATTERN     — (search) the regexp string.
-  ENTRY-KIND  — (search) 'insert, 'append, or nil.
-  REGEXP      — (search) non-nil when search is regexp-based.
-  DELIM-OPEN  — (pair) opener character.
-  DELIM-CLOSE — (pair) closer character.
-  DELIM         — (pair) function () → delimiter struct.
-                  Captured at macro-expansion time; call at repeat
-                  time to rebuild the delimiter for bounds queries.
-  DELIM-INNER-P — (pair) non-nil for inner.
-  DELIM-FORWARD-P — (pair) non-nil for forward.
-  LAST-MATCH-DELIMITER — (match) delimiter plist from % jump.
-  REVERSE-COMMAND — (movement) the opposite-direction command for
-                     \=`-,' permanent flip, or nil."
-  category subcat dir command prefix-arg
-  char type pattern entry-kind
-  (regexp t)
-  delim delim-inner-p delim-forward-p
-  last-match-delimiter
-  reverse-command)
-
-(defcustom helixel-motion-repeat-categories
-  '((movement . pair) (movement . match) (movement . paragraph)
-    (movement . sentence) (movement . function) (movement . scroll)
-    (movement . class) (movement . parameter)
-    (movement . comment) (movement . loop)
-    (movement . conditional) (movement . sibling)
-    (movement . grow-shrink)
-    search find-char next-error mc-spawn textobj)
-  "Motion categories that \\[helixel-repeat-last-motion] can repeat.
-Each element is either a plain category symbol (matches all
-subcats) or a cons (CATEGORY . SUBCAT) for precise matching —
-the same format as `helixel-action-cycle-categories'.
-
-Plain symbols \='search, \='find-char, and \='mc-spawn match
-their respective commands.  Cons entries like (movement . pair)
-match only the specified subcat under that category.
-
-Set to nil to disable motion repeat entirely."
-  :type '(repeat (choice symbol (cons symbol symbol)))
-  :group 'helixel)
-
-(defcustom helixel-motion-select-categories
-  '((movement . word) (movement . WORD) (movement . symbol)
-    (movement . pair)
-    (movement . function) (movement . class)
-    (movement . parameter) (movement . comment)
-    (movement . loop) (movement . conditional)
-    (movement . sibling) (movement . grow-shrink))
-  "Motion subcats that auto-activate visual selection.
-When a motion's (CATEGORY . SUBCAT) or plain CATEGORY appears in
-this list, the movement creates a visible region (selection).
-Otherwise it only moves point without activating the mark.
-
-Used by thing-move commands and treesit sibling/mark-* commands.
-Set to nil to disable selection for all motions."
-  :type '(repeat (choice symbol (cons symbol symbol)))
-  :group 'helixel)
-
-(defun helixel--motion-select-category-p (category subcat)
-  "Return t if (CATEGORY . SUBCAT) appears in `helixel-motion-select-categories'."
-  (helixel--category-match-p category subcat helixel-motion-select-categories))
 
 (defun helixel--category-match-p (category subcat checklist)
   "Return non-nil if (CATEGORY . SUBCAT) matches CHECKLIST.
@@ -1130,124 +590,6 @@ matching."
        (eq category entry)))
    checklist))
 
-(defvar-local helixel--last-motion-cmd nil
-  "The last motion, nil or a `helixel--last-motion' struct.
-Set by eligible movement commands (pair, match, paragraph,
-sentence, function subcats) and find-char / search commands.
-Read by `helixel-repeat-last-motion' and its accessors.")
-
-(defvar-local helixel--motion-permanent-flip nil
-  "When non-nil, reverses the motion repeat direction.
-\\[helixel-repeat-last-motion] repeats the last motion in
-reversed direction.  Toggled by \\=`-,'.
-Analogous to `helixel--repeat-permanent-flip' for
-\\[helixel-repeat-edit].")
-
-(defun helixel-record-motion (cmd &rest extra-kv)
-  "Record CMD as the last motion, with EXTRA-KV as keyword arguments.
-
-EXTRA-KV accepts: :category :subcat :dir :char :type :pattern
-:entry-kind :delim :delim-inner-p :delim-forward-p
-:last-match-delimiter :reverse-command.
-
-Respects `helixel-motion-repeat-categories': when :category and
-:subcat don't match, recording is silently skipped.
-
-Resets `helixel--motion-permanent-flip' so a fresh motion starts
-with its recorded direction."
-  (let ((cat (plist-get extra-kv :category))
-        (sub (plist-get extra-kv :subcat)))
-    (when (or (not cat)
-              (helixel--category-match-p
-               cat sub helixel-motion-repeat-categories))
-      (setq helixel--last-motion-cmd
-            (apply #'make-helixel--last-motion
-                   :command cmd :prefix-arg current-prefix-arg
-                   extra-kv))
-      ;; New motion resets the permanent direction flip.
-      (setq helixel--motion-permanent-flip nil))))
-
-(defun helixel--record-movement-motion
-    (cmd subcat origin &optional motion-extra)
-  "Record CMD as the last motion for movement SUBCAT.
-Determines :dir from (point) vs ORIGIN — captures direction
-from actual cursor movement.  MOTION-EXTRA is an optional plist
-of extra keys passed directly by the caller.
-Keys commonly found in MOTION-EXTRA:
-  :reverse-command    — opposite-direction command for \=`-,' flip.
-  Other pair-specific keys for delimiter movements.
-
-Called from the code injected by `helixel-define-command'
-for :category movement commands."
-  (let* ((dir (if (> (point) origin) 'forward 'backward)))
-    (apply #'helixel-record-motion cmd
-           :category 'movement :subcat subcat :dir dir
-           motion-extra)))
-
-;; ── Motion Repeater Registry ──
-;;
-;; Extensible dispatch for `helixel-repeat-last-motion'.
-;; ── Motion Repeater Registry ──
-;;
-;; Motion repeaters are stored in a private hash table (same pattern
-;; as kind/op registries).  Third-party packages register repeater
-;; functions for custom categories via `helixel-register-motion-repeater'.
-
-(defvar helixel--motion-repeater-registry (make-hash-table :test #'eq)
-  "Hash table: category symbol → subcat→fn alist for motion replay.
-Used by `helixel-register-motion-repeater' and
-`helixel--lookup-motion-repeater'.")
-
-(defun helixel-register-motion-repeater (category subcat fn)
-  "Store FN as the motion repeater for (CATEGORY . SUBCAT).
-CATEGORY is a symbol like \='movement, \='search, or \='find-char.
-SUBCAT is a symbol like \='pair, \='match, or nil for \='any subcat\='.
-FN receives the `helixel--last-motion' struct and should replay it.
-
-Stored in `helixel--motion-repeater-registry' as a subcat→fn alist
-per category.  Later registrations (specific subcat) push to the
-front; `assq' finds the first match, so specific entries take priority
-over nil-subcat fallbacks."
-  (let* ((alist (gethash category helixel--motion-repeater-registry))
-         (entry (cons subcat fn)))
-    (puthash category (cons entry alist)
-             helixel--motion-repeater-registry)))
-
-(defsubst helixel--lookup-motion-repeater (rec)
-  "Return the repeater function for motion REC, or nil.
-Looks up SUBCAT first (specific), then falls back to nil (any)."
-  (let* ((cat (helixel--last-motion-category rec))
-         (sub (helixel--last-motion-subcat rec))
-         (alist (gethash cat helixel--motion-repeater-registry)))
-    (cdr (or (assq sub alist)
-             (assq nil alist)))))
-
-;; ── Command-reverse property ──
-;;
-;; When \=`-,', permanently flips the direction, the movement
-;; motion repeater reads the `helixel-command-reverse' property
-;; on each command to find its opposite-direction counterpart.
-;; Only movement commands carry this property — it is set by the
-;; movement-definition macros alongside `helixel-command'.
-;; Search, find-char, and match repeater functions already read
-;; direction from the struct and don't need reverse commands.
-;;
-;; For motion-repeat (\[helixel-repeat-last-motion]), the reverse
-;; command is carried directly on `helixel--last-motion' as the
-;; `:reverse-command' slot — no lookup needed.
-;; For dot-repeat flip-dir, the `flip-dir-fn' lambda reads
-;; `(get cmd 'helixel-command-reverse)' from each movement command.
-
-(defun helixel-register-motion-reverse (cmd reverse-cmd)
-  "Store REVERSE-CMD as the direction-flipped counterpart of CMD.
-Both are command symbols.  Called by movement definition macros.
-Sets the `helixel-command-reverse' symbol property on CMD."
-  (put cmd 'helixel-command-reverse reverse-cmd))
-
-(defsubst helixel--motion-reverse-lookup (cmd)
-  "Return the reverse command for CMD, or nil if not registered.
-Reads the `helixel-command-reverse' symbol property."
-  (get cmd 'helixel-command-reverse))
 
 ;; ── Unified delimiter-char query ──
 ;; All delimiter-char enumeration uses this single function.
@@ -1283,7 +625,7 @@ entries (e.g. block fences) are excluded from char-based queries."
 
 
 ;; ----------------------------------------------------------------------
-;; Part 4 — helixel-action: unified replay + history event struct
+;; helixel-action: unified replay + history event struct
 ;; ----------------------------------------------------------------------
 ;;
 ;; ONE struct serves two roles:
@@ -1510,7 +852,7 @@ falls through to `helixel--op-display'."
 
 ;; ----------------------------------------------------------------------
 ;; ----------------------------------------------------------------------
-;; Part 6 — Operator Registry
+;; Operator Registry
 ;; ----------------------------------------------------------------------
 ;;
 ;; Operators are registered in a module-private hash table — no symbol
@@ -1619,7 +961,7 @@ Shows operator name, display label, and `self-advancing' flag."
 
 
 ;; ----------------------------------------------------------------------
-;; Part 7 — Swap-source type (used by helixel-editing and helixel-swap)
+;; Selection type (used by helixel-editing and helixel-swap)
 ;; ----------------------------------------------------------------------
 
 (defvar rectangle-mark-mode)            ; defined in rect.el
@@ -1664,83 +1006,6 @@ Otherwise return `helixel-invisible' as-is (explicit user choice)."
   (if (eq helixel-invisible 'auto)
       search-invisible
     helixel-invisible))
-
-;; ── Search filter loop ──
-
-(defun helixel--open-invisible-at (beg end)
-  "Open invisible overlays covering BEG..END.
-
-Calls `isearch-open-overlay-temporary' on each overlay that has an
-`invisible' property and is not already opened (no `isearch-invisible'
-flag).  This temporarily reveals hidden text (e.g. folded sections in
-`org-mode') when a search or find-char match lands inside it, matching
-the `search-invisible' = \='open behavior."
-  (dolist (ov (overlays-in beg end))
-    (when (and (overlay-get ov 'invisible)
-               (not (overlay-get ov 'isearch-invisible)))
-      (isearch-open-overlay-temporary ov))))
-
-(defsubst helixel--search-advance-one (forwardp)
-  "Advance one char past a zero-width match, or throw done.
-FORWARDP is t for forward, nil for backward."
-  (if forwardp
-      (if (eobp) (throw 'search-filter-done nil)
-        (forward-char 1))
-    (if (bobp) (throw 'search-filter-done nil)
-      (forward-char -1))))
-
-(defsubst helixel--search-filter-loop (search-fn forwardp)
-  "Call SEARCH-FN (zero-arg) repeatedly, skipping invisible matches.
-SEARCH-FN must move point and set `match-data' on success; it should
-return non-nil on success.  FORWARDP determines the direction for
-skipping empty matches.  Returns the match position or nil.
-
-Uses `isearch-filter-predicate' to check whether a match is visible,
-respecting custom predicates (e.g. org-fold) and `search-invisible'.
-The caller should bind `search-invisible' appropriately."
-  (catch 'search-filter-done
-    (while t
-      (if (helixel--with-debug-log search-filter
-            (funcall search-fn)
-            (search-failed nil))
-          (if (or (helixel--invisible-effective)
-                  (funcall isearch-filter-predicate
-                           (match-beginning 0) (match-end 0)))
-              (progn
-                (when (eq (helixel--invisible-effective) 'open)
-                  (helixel--open-invisible-at (match-beginning 0)
-                                              (match-end 0)))
-                (throw 'search-filter-done (match-beginning 0)))
-            ;; Invisible — advance past match and retry.
-            (if (= (match-beginning 0) (match-end 0))
-                (helixel--search-advance-one forwardp)
-              (goto-char (match-end 0))))
-        (throw 'search-filter-done nil)))))
-
-(defconst helixel--yank-register ?Y
-  "Dedicated register for swap-source from yank/copy.
-Set only by copy (\"y\") at the real cursor.  In multi-cursor mode
-fake cursors write to `helixel--yank-register-source' instead.
-Read by swap (\"S\") — falls back to this register when the
-per-cursor variable is nil (real cursor, non-mc mode).
-Contains (:beg MARKER :end MARKER :buffer BUFFER :type TYPE).")
-
-(defvar-local helixel--yank-register-source nil
-  "Per-cursor swap-source plist for multi-cursor mode.
-Set by copy (`y') only when running inside a fake cursor body.
-Saved/restored by `helixel-pc-state' along with other per-cursor vars.
-Format: (:beg MARKER :end MARKER :buffer BUFFER :type TYPE).")
-
-(defsubst helixel--swap-source-type ()
-  "Return the swap-source type for the current selection.
-Returns nil (char), \=`line', or \=`rect'.
-More permissive than `helixel--region-type' — detects
-`rectangle-mark-mode' directly."
-  (cond
-   ((eq (helixel--sel-type) 'rect) 'rect)
-   ((eq (helixel--sel-type) 'line) 'line)
-   ((bound-and-true-p rectangle-mark-mode) 'rect)
-   (t nil)))
 
 
 ;; ----------------------------------------------------------------------
@@ -1794,12 +1059,6 @@ as they did during recording (when `helixel--pending-sel' was set)."
     (when runner
       (funcall runner event))))
 
-(defsubst helixel--repeat-echo (count)
-  "Echo COUNT of repeated iterations."
-  (unless (zerop count)
-    (message "Repeated %d time%s" count (if (> count 1) "s" "")))
-  nil)
-
 (defsubst helixel--flip-dir (dir)
   "Return the opposite direction of DIR.  `forward' <-> `backward'."
   (if (eq dir 'forward) 'backward 'forward))
@@ -1834,7 +1093,7 @@ direct detection of `rectangle-mark-mode'."
      ((bound-and-true-p rectangle-mark-mode) 'rect))))
 
 ;; ----------------------------------------------------------------------
-;; Part 7b — helixel-sel deep copy (used by tx deep-copy)
+;; helixel-sel deep copy (used by tx deep-copy)
 ;; ----------------------------------------------------------------------
 
 (defun helixel-sel--copy (sel)
@@ -1855,7 +1114,7 @@ track-visual-move) so the copy is fully independent."
 
 
 ;; ----------------------------------------------------------------------
-;; Part 8 — Most-recent-action pointer (single source of truth)
+;; Most-recent-action pointer (single source of truth)
 ;; ----------------------------------------------------------------------
 ;;
 ;; `helixel-last-action' is the pointer that `.` (dot-repeat) and
@@ -1900,96 +1159,6 @@ already committed."
   (when (and helixel-last-action (helixel-action-p helixel-last-action))
     (setf (helixel-action-payload helixel-last-action)
           (helixel-action-payload new-action))))
-
-
-;; ----------------------------------------------------------------------
-;; Part 9 — Shared key-sequence recording utilities
-;; ----------------------------------------------------------------------
-;;
-;; Tiny utility shared by insert-mode recording
-;; (`helixel-repeat.el').
-
-(defsubst helixel--keyrec-capture ()
-  "Return the current single-command key sequence for hook capture.
-
-A semantic alias for `this-single-command-keys'.  The insert
-recorder pushes the return value of this function onto its
-accumulator inside `pre-command-hook'."
-  (this-single-command-keys))
-
-;; ----------------------------------------------------------------------
-;; Part 10 — Generic grouped-ring queries
-;; ----------------------------------------------------------------------
-;;
-;; Pure data primitives: an ordered list of entries with two query
-;; axes — visibility (skip entries the caller wants hidden) and
-;; grouping (consecutive entries that should be treated as one
-;; navigation step).  Consumed by both \\[helixel-action-cycle\\] cycling
-;; and \\[helixel-jump-backward\\]/\\[helixel-jump-forward\\].
-;;
-;; The "ring" is a plain list, NEWEST FIRST.  The caller owns
-;; mutation (push / pop / cap); this section only provides query
-;; primitives parameterised by predicates:
-;;
-;;   visible-pred  : (entry) -> non-nil if entry counts
-;;   same-group-p  : (a b)   -> non-nil if a and b belong to same group
-
-;; ── Group navigation ──
-
-(defun helixel--gr-group-start (list pos same-group-p)
-  "Return the oldest (largest) index in LIST of the group containing POS.
-SAME-GROUP-P is a predicate of two adjacent entries."
-  (let ((len (length list)))
-    (while (and (< (1+ pos) len)
-                (funcall same-group-p
-                         (nth pos list) (nth (1+ pos) list)))
-      (cl-incf pos))
-    pos))
-
-(defun helixel--gr-group-newest (list pos same-group-p)
-  "Return the newest (smallest) index in LIST of the group containing POS.
-SAME-GROUP-P is a predicate of two adjacent entries."
-  (let ((i pos))
-    (while (and (> i 0)
-                (funcall same-group-p
-                         (nth i list) (nth (1- i) list)))
-      (cl-decf i))
-    i))
-
-;; ── Visibility queries ──
-
-(defun helixel--gr-visible-index (list pos visible-p)
-  "Return index of first visible entry at or after POS in LIST, or nil.
-VISIBLE-P is a predicate on entries."
-  (cl-loop for i from pos below (length list)
-           when (funcall visible-p (nth i list))
-           return i))
-
-(defun helixel--gr-visible-count (list visible-p)
-  "Count entries in LIST for which VISIBLE-P returns non-nil."
-  (cl-loop for a in list
-           when (funcall visible-p a)
-           count 1))
-
-(defun helixel--gr-find (list pos direction visible-p)
-  "Find next visible entry index from POS in DIRECTION (+1 or -1).
-LIST is the ring, VISIBLE-P the visibility predicate.  Returns nil
-if no further visible entry exists in that direction."
-  (let ((len (length list)))
-    (cl-loop for i from (+ pos direction) by direction
-             while (if (> direction 0) (< i len) (>= i 0))
-             when (funcall visible-p (nth i list))
-             return i)))
-
-(defun helixel--gr-step-prev-group (list pos same-group-p visible-p)
-  "Return index of first visible entry before the group containing POS.
-Finds the newest entry in POS's group, then returns the first visible
-entry at or after (1- newest).  Returns nil when at the newest group
-\(newest = 0).
-LIST is the ring, SAME-GROUP-P and VISIBLE-P are the usual predicates."
-  (let ((newest (helixel--gr-group-newest list pos same-group-p)))
-    (and (> newest 0)
-         (helixel--gr-visible-index list (1- newest) visible-p))))
 
 
 ;; ── Replay context ──
@@ -2079,206 +1248,6 @@ form to evaluate."
   `(if helixel--replay
        (progn ,@body)
      (helixel-with-replay ,origin ,@body)))
-
-;; ── Named registers ──
-
-(defcustom helixel-register-backends
-  '((?\" . kill-ring)
-    (?+ . clipboard)
-    (?* . primary))
-  "Alist mapping register characters to storage backends.
-Each entry is (CHAR . BACKEND) where BACKEND is a keyword:
-- :kill-ring: Emacs kill ring (default for \\=\").
-- :clipboard: System clipboard (CLIPBOARD selection).
-- :primary: Primary selection (PRIMARY selection).
-Characters not listed here use Emacs `register-alist' (via
-`get-register'/`set-register'), which supports a-z, 0-9, and
-any other character Emacs registers accept."
-  :type '(alist :key-type character
-                :value-type (choice (const :tag "Kill Ring" kill-ring)
-                                    (const :tag "Clipboard" clipboard)
-                                    (const :tag "Primary Selection" primary)))
-  :group 'helixel)
-
-(defcustom helixel-default-register ?\"
-  "Character for the default (unnamed) register.
-When `helixel--current-register' is nil or this character,
-operators use the kill ring directly rather than a named
-register.  Pressing \\\"\\\" in normal mode selects this register."
-  :type 'character
-  :group 'helixel)
-
-(defcustom helixel-register-yank-char ?0
-  "Register character for the last yank (copy) operation.
-Set by `helixel--kill-new' with :copy kind.  Users can paste
-from it with \"0p."
-  :type 'character
-  :group 'helixel)
-
-(defcustom helixel-register-small-delete-char ?-
-  "Register character for small deletes (no newline).
-Set by `helixel--kill-new' when the deleted text does not
-contain a newline."
-  :type 'character
-  :group 'helixel)
-
-(defcustom helixel-register-delete-registers
-  '(?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9)
-  "List of characters identifying numbered delete registers.
-These form a rotating ring: each delete shifts older entries
-right (losing the last) and stores the new text in the first
-register (car of the list).  Default is registers 1 through 9.
-
-Example for d e f g:
-  (setq helixel-register-delete-registers
-        \='(?d ?e ?f ?g))"
-  :type '(repeat character)
-  :group 'helixel)
-
-(defvar helixel--current-register nil
-  "Character identifying the register for the next operator.
-Set by `helixel-select-register' (bound to `\\\"' in normal mode).
-Consumed and cleared by each operator that uses it.
-When nil or equal to `helixel-default-register', the `kill-ring'
-is used directly.")
-
-(defun helixel-select-register ()
-  "Read a register name for the next operator.
-Valid register names: a-z (named), \" (unnamed/`kill-ring'),
-+ (system clipboard), * (primary selection).
-Users can customize these via `helixel-register-backends'.
-Press \\[keyboard-quit] to cancel."
-  (interactive)
-  (let ((char (read-char "Register: ")))
-    (when (= char helixel--yank-register)
-      (user-error "Register %c is reserved" helixel--yank-register))
-    (if (= char ?\e)
-        (progn
-          (setq helixel--current-register nil)
-          (message "Register cancelled"))
-      (setq helixel--current-register char)
-      (message "\"%c" char))))
-
-(defsubst helixel--register-backend (char)
-  "Return the storage backend keyword for register CHAR.
-Looks up CHAR in `helixel-register-backends'.  Returns nil when
-CHAR is not in the alist (meaning it uses `register-alist')."
-  (cdr (assq char helixel-register-backends)))
-
-(defun helixel--register-get (char)
-  "Return text contents of register CHAR, or nil if empty.
-Dispatch is determined by `helixel-register-backends':
-- `kill-ring' → top of `kill-ring'.
-- `clipboard' → system clipboard (CLIPBOARD selection).
-- `primary' → primary selection.
-- nil (unlisted) → Emacs `register-alist' via `get-register'."
-  (cl-case (helixel--register-backend char)
-    (kill-ring (and kill-ring (current-kill 0 t)))
-    (clipboard (and (display-graphic-p)
-                    (gui-get-selection 'CLIPBOARD)))
-    (primary   (and (display-graphic-p)
-                    (gui-get-selection 'PRIMARY)))
-    (t (get-register char))))
-
-(defun helixel--register-set (char text)
-  "Store TEXT in register CHAR.
-Dispatch is determined by `helixel-register-backends':
-- `kill-ring' → push to `kill-ring' via `kill-new'.
-- `clipboard' → system clipboard via `gui-set-selection'.
-- `primary' → primary selection via `gui-set-selection'.
-- nil (unlisted) → Emacs `register-alist' via `set-register'.
-TEXT is a string preserving any yank-handler properties."
-  (cl-case (helixel--register-backend char)
-    (kill-ring (kill-new text))
-    (clipboard (gui-set-selection 'CLIPBOARD text))
-    (primary   (gui-set-selection 'PRIMARY text))
-    (t (set-register char text))))
-
-(defsubst helixel--register-active-p ()
-  "Return non-nil when a non-default named register is selected.
-A register is considered active when `helixel--current-register'
-is non-nil and not equal to `helixel-default-register'."
-  (and helixel--current-register
-       (not (eq helixel--current-register helixel-default-register))))
-
-(defun helixel--register-consume ()
-  "Return and clear `helixel--current-register'.
-When multi-cursor mode is active the real cursor runs first and
-would consume the register before fake cursors can replay.  We
-suppress the clear here; `helixel-mc--post-command' clears it
-after all cursors have run."
-  (prog1 helixel--current-register
-    (unless (bound-and-true-p helixel-mc-mode)
-      (setq helixel--current-register nil))))
-
-(defun helixel--register-rotate-delete (text)
-  "Rotate numbered delete registers and store TEXT in the first slot.
-Uses `helixel-register-delete-registers' to define the ring.
-Old registers shift right: each register's content moves to the next
-register in the list; the last register's content is discarded."
-  (let ((regs helixel-register-delete-registers))
-    (when (cdr regs)                    ; more than one register
-      (cl-loop for i from (- (length regs) 2) downto 0
-               do (set-register (nth (1+ i) regs)
-                                (get-register (nth i regs)))))
-    (set-register (car regs) text)))
-
-(defun helixel--register-store-delete (text)
-  "Store TEXT in numbered-delete and small-delete registers.
-Rotates `helixel-register-delete-registers' and sets
-`helixel-register-small-delete-char' when TEXT has no newline.
-Does NOT push to `kill-ring'.  Named register is also populated
-when `helixel--current-register' is active."
-  (helixel--register-rotate-delete text)
-  (when (and text (not (string-match-p "\n" text)))
-    (set-register helixel-register-small-delete-char text))
-  (when (helixel--register-active-p)
-    (helixel--register-set helixel--current-register text)))
-
-(defun helixel--kill-new (text &optional kind)
-  "Like `kill-new', but also populates numbered registers.
-TEXT is a string with optional yank-handler text properties.
-KIND is :copy for yank operations (sets register 0), otherwise
-a delete (rotates the numbered delete registers,
-sets register - for small deletes).
-When a named register is active, TEXT is also stored there.
-Does NOT clear the register -- callers should call
-`helixel--register-consume' separately when done."
-  (unless (eq kind :copy)
-    (when interprogram-paste-function
-      (let ((clip (funcall interprogram-paste-function)))
-        (when (and clip (> (length clip) 0)
-                   (or (null kill-ring)
-                       (not (string= clip (car kill-ring)))))
-          (kill-new clip)))))
-  (kill-new text)
-  (if (eq kind :copy)
-      (progn
-        (set-register helixel-register-yank-char text)
-        (when (helixel--register-active-p)
-          (helixel--register-set helixel--current-register text)))
-    (helixel--register-store-delete text)))
-
-(defun helixel--current-kill (n &optional no-move)
-  "Like `current-kill', but reads from named register when active.
-N is the `kill-ring' index (unused when reading from register).
-NO-MOVE is passed to `current-kill' as DO-NOT-MOVE when using `kill-ring'.
-Returns the text or nil.  Does NOT alter the `kill-ring' yanking-point
-when reading from a register."
-  (if (helixel--register-active-p)
-      (or (helixel--register-get helixel--current-register)
-          (current-kill 0 t))
-    (current-kill n no-move)))
-
-(defun helixel--yank (&optional arg)
-  "Like `yank', but reads from named register when active.
-ARG is passed through to `yank' when using the `kill-ring'."
-  (if (helixel--register-active-p)
-      (let ((text (helixel--register-get helixel--current-register)))
-        (if text
-            (insert-for-yank text)
-          (message "Register \"%c is empty" helixel--current-register)))
-    (yank arg)))
 
 (provide 'helixel-core)
 ;;; helixel-core.el ends here

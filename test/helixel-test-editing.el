@@ -667,17 +667,17 @@ deduplication is against the ring front by content."
 Meta keys are non-character integers; they must go through
 key-binding dispatch, not `insert-char'."
   (helixel-test-with-buffer ""
-    (helixel--execute-keys (kbd "foo"))
+    (helixel--execute-keys (list (list :keys (kbd "foo"))))
     (should (string= (buffer-string) "foo")))
   (helixel-test-with-buffer "one two three"
     (goto-char 1)
     ;; M-f goes through key-binding -> forward-word
-    (helixel--execute-keys (kbd "M-f"))
+    (helixel--execute-keys (list (list :keys (kbd "M-f"))))
     (should (= (point) 4)))
   (helixel-test-with-buffer "one two three"
     (goto-char 1)
     ;; M-f mixed with character keys
-    (helixel--execute-keys (kbd "a M-f b"))
+    (helixel--execute-keys (list (list :keys (kbd "a M-f b"))))
     (should (string= (buffer-string) "aoneb two three"))))
 
 (ert-deftest helixel-test-execute-keys-backspace ()
@@ -686,7 +686,7 @@ Key-based replay handles DEL (127) as non-printable."
   (helixel-test-with-buffer "hello"
     (goto-char 6)
     ;; A (65), DEL (127), x (120): DEL triggers delete-backward-char
-    (helixel--execute-keys [65 127 120])
+    (helixel--execute-keys (list (list :keys [65 127 120])))
     (should (string= (buffer-string) "hellox"))))
 
 (ert-deftest helixel-test-execute-keys-control-d ()
@@ -694,7 +694,7 @@ Key-based replay handles DEL (127) as non-printable."
 C-d is non-printable and dispatched through macro replay."
   (helixel-test-with-buffer "hello"
     (goto-char 1)
-    (helixel--execute-keys (kbd "C-d"))
+    (helixel--execute-keys (list (list :keys (kbd "C-d"))))
     (should (string= (buffer-string) "ello"))))
 
 (ert-deftest helixel-test-execute-keys-mixed-backspace ()
@@ -703,7 +703,7 @@ Simulates typing 'bao' then DEL (deletes 'o') then 'r'."
   (helixel-test-with-buffer "hello"
     (goto-char 6)
     ;; b, a, o, DEL (127), r: DEL triggers delete-backward-char
-    (helixel--execute-keys [98 97 111 127 114])
+    (helixel--execute-keys (list (list :keys [98 97 111 127 114])))
     (should (string= (buffer-string) "hellobar"))))
 
 (ert-deftest helixel-test-execute-keys-symbol-no-crash ()
@@ -714,7 +714,7 @@ wrong-type-argument."
   (helixel-test-with-buffer "hello"
     (goto-char 1)
     (condition-case err
-        (helixel--execute-keys [backspace])
+        (helixel--execute-keys (list (list :keys [backspace])))
       (wrong-type-argument
        (ert-fail
         (format "crashed with wrong-type-argument: %S" err)))
@@ -729,7 +729,7 @@ When electric-pair-mode is enabled, replaying \='\='(\=' via
   (helixel-test-with-buffer "hello"
     (electric-pair-mode 1)
     (goto-char 1)
-    (helixel--execute-keys [?\(])
+    (helixel--execute-keys (list (list :keys [?\(])))
     (should (string= (buffer-string) "()hello"))))
 
 (ert-deftest helixel-test-execute-keys-electric-pair-brace ()
@@ -739,7 +739,7 @@ Similar to paren test but with curly braces."
   (helixel-test-with-buffer "hello"
     (electric-pair-mode 1)
     (goto-char 1)
-    (helixel--execute-keys [?\{])
+    (helixel--execute-keys (list (list :keys [?\{])))
     (should (string= (buffer-string) "{}hello"))))
 
 (ert-deftest helixel-test-execute-keys-electric-pair-no-wrapping ()
@@ -754,7 +754,7 @@ insertion and inserts the pair without wrapping the region."
     ;; Simulate an active region (as dot-repeat advance would create)
     (push-mark (point-max) t t)
     (goto-char 1)
-    (helixel--execute-keys [?\(])
+    (helixel--execute-keys (list (list :keys [?\(])))
     ;; Should be ()hello (pair at point), NOT (hello) (wrapping)
     (should (string= (buffer-string) "()hello"))))
 
@@ -764,7 +764,7 @@ Inserting \='(' without electric-pair should only insert \='('."
   (helixel-test-with-buffer "hello"
     (electric-pair-mode -1)
     (goto-char 1)
-    (helixel--execute-keys [?\(])
+    (helixel--execute-keys (list (list :keys [?\(])))
     (should (string= (buffer-string) "(hello"))))
 
 ;; ============================================================================

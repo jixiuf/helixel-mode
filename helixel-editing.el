@@ -430,7 +430,7 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 (helixel-register-op insert-text :display "i" :self-advancing nil
                      :runner
                      (lambda (tx)
-                       (let ((keys (helixel-action-payload-get tx :keys)))
+                       (let ((keys (helixel--repeat-get-keys tx)))
                          (if keys
                              (helixel--execute-keys keys)
                            (insert (or (helixel-action-payload-get tx :text)

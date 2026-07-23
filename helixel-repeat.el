@@ -99,9 +99,9 @@ accumulator inside `pre-command-hook'."
 ;; Public API (consumed by helixel-state, helixel-editing,
 ;; helixel-repeat):
 ;;   helixel--insert-begin
-;;   helixel--insert-finish    → list of segments (replaces key-vec)
-;;   helixel--execute-keys     → accepts segment list OR raw key vec
-;;   helixel--repeat-get-keys
+;;   helixel--insert-finish    → list of segments (canonical :keys form)
+;;   helixel--repeat-get-keys  → normalizes raw vectors into segments
+;;   helixel--execute-keys     → accepts segment lists only
 
 (defvar-local helixel--insert-segments nil
   "List of insert-mode segments captured during the current insert session.
@@ -229,59 +229,48 @@ Installs pre/post-command hooks + an after-change hook."
 ;; ── Replay ──
 
 (defsubst helixel--repeat-get-keys (tx)
-  "Return the :keys payload from TX (segment list or raw key vector)."
-  (helixel-action-payload-get tx :keys))
+  "Return the :keys payload from TX as a canonical segment list.
+A raw key vector/string (programmatic callers, tests) is normalized
+into ((:keys VEC)) here — the single place that tolerates the
+degenerate form, so `helixel--execute-keys' only handles segments."
+  (let ((keys (helixel-action-payload-get tx :keys)))
+    (if (or (vectorp keys) (stringp keys))
+        (list (list :keys (if (stringp keys) (vconcat keys) keys)))
+      keys)))
 
-(defun helixel--execute-keys (keys-or-segments)
-  "Execute insert-mode replay payload KEYS-OR-SEGMENTS.
+(defun helixel--execute-keys (segments)
+  "Execute insert-mode replay payload SEGMENTS.
 
-KEYS-OR-SEGMENTS is either a segment list (produced by
-`helixel--insert-finish') where each element is \=`(:keys VEC)
-or \=`(:changes ((REL-BEG INS NDEL) ...) :rel-point R), or a
-raw key vector/string.
+SEGMENTS is the canonical segment list produced by
+`helixel--insert-finish' (via `helixel--repeat-get-keys', which
+normalizes raw key vectors into this form).  Each element is
+\=(:keys VEC) or \=(:changes ((REL-BEG INS NDEL) ...) :rel-point R).
 
 `:changes' replay: for each (REL-BEG INS NDEL), goto base+REL-BEG,
 delete NDEL chars, insert INS.  Then goto base+:rel-point.
 `post-self-insert-hook' is NOT re-fired.
 
-Raw key vectors replay char-by-char with `post-self-insert-hook'
+`:keys' segments replay char-by-char with `post-self-insert-hook'
 firing (for `electric-pair-mode')."
   (helixel-with-replay-as 'dot
-    (cond
-     ;; Empty payload.
-     ((or (null keys-or-segments)
-          (and (or (vectorp keys-or-segments)
-                   (stringp keys-or-segments))
-               (= 0 (length keys-or-segments))))
-      nil)
-     ;; Segment list (plist with keyword cars).
-     ((and (listp keys-or-segments)
-           (consp (car keys-or-segments))
-           (keywordp (caar keys-or-segments)))
-      (dolist (seg keys-or-segments)
-        (cond
-         ((plist-member seg :changes)
-          (let* ((changes (plist-get seg :changes))
-                 (rel-point (or (plist-get seg :rel-point) 0))
-                 (base (point)))
-            (dolist (ch changes)
-              (let ((rel-beg (nth 0 ch))
-                    (ins     (nth 1 ch))
-                    (ndel    (nth 2 ch)))
-                (goto-char (+ base rel-beg))
-                (when (> ndel 0)
-                  (delete-char (min ndel (- (point-max) (point)))))
-                (when (and (stringp ins) (not (string-empty-p ins)))
-                  (insert ins))))
-            (goto-char (+ base rel-point))))
-         ((plist-member seg :keys)
-          (helixel--execute-keys-vector (plist-get seg :keys))))))
-     ;; Raw key vector or key string (`kbd' returns a string).
-     ((or (vectorp keys-or-segments) (stringp keys-or-segments))
-      (helixel--execute-keys-vector
-       (if (stringp keys-or-segments)
-           (vconcat keys-or-segments)
-         keys-or-segments))))))
+    (dolist (seg segments)
+      (cond
+       ((plist-member seg :changes)
+        (let* ((changes (plist-get seg :changes))
+               (rel-point (or (plist-get seg :rel-point) 0))
+               (base (point)))
+          (dolist (ch changes)
+            (let ((rel-beg (nth 0 ch))
+                  (ins     (nth 1 ch))
+                  (ndel    (nth 2 ch)))
+              (goto-char (+ base rel-beg))
+              (when (> ndel 0)
+                (delete-char (min ndel (- (point-max) (point)))))
+              (when (and (stringp ins) (not (string-empty-p ins)))
+                (insert ins))))
+          (goto-char (+ base rel-point))))
+       ((plist-member seg :keys)
+        (helixel--execute-keys-vector (plist-get seg :keys)))))))
 
 (defun helixel--execute-keys-vector (keys)
   "Replay raw key vector KEYS char-by-char.

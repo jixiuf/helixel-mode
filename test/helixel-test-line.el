@@ -852,13 +852,13 @@ region and enables extending (Helix-like)."
     (helixel-enter-normal-state)
     (helixel-select-line)
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (helixel-enter-normal-state)
     (helixel-clear-data)
     (goto-char 5)
     (helixel-select-line-up)
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))))
+                (helixel-line-sel-dir helixel--pending-sel)))))
 
 (ert-deftest helixel-test-line-neg-prefix-flips-dir ()
   "`-x' flips `:dir' permanently like `N' for search."
@@ -866,13 +866,13 @@ region and enables extending (Helix-like)."
     (helixel-enter-normal-state)
     (helixel-select-line 2)          ; 2 lines, forward
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 2 (helixel-sel-count helixel--pending-sel)))
     ;; -x: flip backward + shrink 1
     (setq current-prefix-arg nil)
     (call-interactively (lambda () (interactive) (helixel-select-line -1)))
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 1 (helixel-sel-count helixel--pending-sel)))))
 
 (ert-deftest helixel-test-line-neg-flips-then-extend ()
@@ -885,12 +885,12 @@ region and enables extending (Helix-like)."
     (call-interactively (lambda () (interactive) (helixel-select-line -1)))
     (should (= 2 (helixel-sel-count helixel--pending-sel)))
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     ;; -x again: flip forward, extend 1 → 3 lines
     (call-interactively (lambda () (interactive) (helixel-select-line -1)))
     (should (= 3 (helixel-sel-count helixel--pending-sel)))
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))))
+                (helixel-line-sel-dir helixel--pending-sel)))))
 
 (ert-deftest helixel-test-line-shrink-boundary ()
   "At 1-line boundary, plain `x' crosses over; next `x' extends from top."
@@ -902,7 +902,7 @@ region and enables extending (Helix-like)."
     (setq current-prefix-arg nil)
     (call-interactively (lambda () (interactive) (helixel-select-line -1)))
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 1 (helixel-sel-count helixel--pending-sel)))
     ;; x at boundary: cross over, still 1 line (point moves to eol)
     (helixel-select-line 1)
@@ -923,7 +923,7 @@ region and enables extending (Helix-like)."
     (setq current-prefix-arg nil)
     (call-interactively (lambda () (interactive) (helixel-select-line -1)))
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 2 (helixel-sel-count helixel--pending-sel)))
     ;; x: backward+eolp → continue shrink → 1 line
     (helixel-select-line 1)
@@ -937,13 +937,13 @@ region and enables extending (Helix-like)."
     (forward-line -1)                ; on line4
     (helixel-select-line-up 3)       ; select 3 lines up (line2..line4)
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 3 (helixel-sel-count helixel--pending-sel)))
     ;; -X: flip forward + shrink from top → 2 lines
     (setq current-prefix-arg nil)
     (call-interactively (lambda () (interactive) (helixel-select-line-up -1)))
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 2 (helixel-sel-count helixel--pending-sel)))))
 
 (ert-deftest helixel-test-line-movement-does-not-extend ()
@@ -964,17 +964,17 @@ region and enables extending (Helix-like)."
   (helixel-test-with-buffer "aaa\nbbb\nccc\n"
     (helixel-enter-normal-state)
     (helixel-select-line 2)
-    (should (eq 'forward (helixel-sel-line-dir helixel--pending-sel)))
+    (should (eq 'forward (helixel-line-sel-dir helixel--pending-sel)))
     (let ((pt (point)) (mk (mark)))
       (helixel-visual-exchange-point-and-mark)
       (should (= pt (mark)))          ; point → mark
       (should (= mk (point)))         ; mark → point
       (should (eq 'backward
-                  (helixel-sel-line-dir helixel--pending-sel))))
+                  (helixel-line-sel-dir helixel--pending-sel))))
     ;; o again flips back
     (helixel-visual-exchange-point-and-mark)
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))))
+                (helixel-line-sel-dir helixel--pending-sel)))))
 
 (ert-deftest helixel-test-line-o-rect-no-flip ()
   "`o' for rect selection does NOT touch :dir (nonexistent)."
@@ -1001,7 +1001,7 @@ region and enables extending (Helix-like)."
     (setq current-prefix-arg nil)
     (call-interactively (lambda () (interactive) (helixel-select-line -1)))
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 1 (helixel-sel-count helixel--pending-sel)))
     ;; x at boundary: cross over, still 1 line
     (helixel-select-line 1)
@@ -1020,7 +1020,7 @@ region and enables extending (Helix-like)."
     (setq current-prefix-arg nil)
     (call-interactively (lambda () (interactive) (helixel-select-line-up -1)))
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 1 (helixel-sel-count helixel--pending-sel)))
     ;; X at boundary: cross over, still 1 line
     (helixel-select-line-up 1)
@@ -1048,13 +1048,13 @@ x x x: continue extending forward."
     (end-of-line)
     (helixel-select-line-up 3)
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 3 (helixel-sel-count helixel--pending-sel)))
     ;; -x: flip dir to forward, shrink from top → 2 lines (lines 2-3).
     (setq current-prefix-arg nil)
     (call-interactively (lambda () (interactive) (helixel-select-line -1)))
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     (should (= 2 (helixel-sel-count helixel--pending-sel)))
     ;; x: continue shrink → 1 line (line 3).
     (helixel-select-line 1)
@@ -1085,7 +1085,7 @@ x x x: continue extending forward."
     (helixel-select-line)
     (should (= 1 (helixel-sel-count helixel--pending-sel)))
     (should (eq 'forward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     ;; x: extend to 2 lines (not cross-over).
     (helixel-select-line 1)
     (should (= 2 (helixel-sel-count helixel--pending-sel)))
@@ -1102,7 +1102,7 @@ x x x: continue extending forward."
     (helixel-select-line-up)
     (should (= 1 (helixel-sel-count helixel--pending-sel)))
     (should (eq 'backward
-                (helixel-sel-line-dir helixel--pending-sel)))
+                (helixel-line-sel-dir helixel--pending-sel)))
     ;; X: extend to 2 lines (not cross-over).
     (helixel-select-line-up 1)
     (should (= 2 (helixel-sel-count helixel--pending-sel)))

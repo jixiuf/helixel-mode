@@ -1887,12 +1887,12 @@ Second paragraph." :start nil)
   "Surround clears a non-movement pending-sel."
   (helixel-test-with-buffer "hello world"
     (goto-char 1)
-    (helixel--sel-push (helixel-sel-create 'line '(:dir forward :count 1)))
+    (helixel--sel-push (make-helixel-line-sel :dir 'forward :count 1))
     (push-mark (point-max) t t)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'line))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-line-sel))
     (helixel-forward-word-start)
     (should helixel--pending-sel)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-movement-sel))))
 
 (ert-deftest helixel-test-movement-clears-stale-sel-type ()
   "Movement clears a stale non-movement pending-sel."
@@ -3183,12 +3183,12 @@ quux" :start nil)
 
 (ert-deftest helixel-test-clear-non-movement-pending-sel-clears-line ()
   "Clears a line pending-sel."
-  (let ((helixel--pending-sel (helixel-sel-create 'line '(:dir forward :count 1))))
+  (let ((helixel--pending-sel (make-helixel-line-sel :dir 'forward :count 1)))
     (helixel--clear-non-movement-pending-sel)
     (should-not helixel--pending-sel)))
 
 (ert-deftest helixel-test-clear-non-movement-pending-sel-keeps-movement ()
   "Keeps a movement pending-sel."
-  (let ((helixel--pending-sel (helixel-sel-create 'movement '(:moves ((forward-word . 1))))))
+  (let ((helixel--pending-sel (make-helixel-movement-sel :moves '((forward-word . 1)))))
     (helixel--clear-non-movement-pending-sel)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'movement))))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-movement-sel))))

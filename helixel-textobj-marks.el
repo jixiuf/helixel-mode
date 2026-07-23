@@ -482,35 +482,6 @@ With optional COUNT, select that many comments."
   :modes (org-mode))
 
 
-(cl-defstruct (helixel-textobj-sel (:include helixel-sel)
-                                   (:copier nil))
-  "Text-object selection.  Slots: COMMAND, COUNT, DELIMITER
-\(+ base INLINE-ADVANCE)."
-  command
-  (count 1)
-  delimiter)
-
-(cl-defmethod helixel-sel--construct ((_kind (eql textobj)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-textobj-sel
-   :command (plist-get ctx :command)
-   :count (or (plist-get ctx :count) 1)
-   :delimiter (plist-get ctx :delimiter)
-   :inline-advance (plist-get ctx :inline-advance)
-   :span (plist-get ctx :span)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-textobj-sel))
-  "Sel type method for SEL."
-  'textobj)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-textobj-sel))
-  "Sel  to plist method for SEL."
-  (list :command (helixel-textobj-sel-command sel)
-        :count (helixel-textobj-sel-count sel)
-        :delimiter (helixel-textobj-sel-delimiter sel)
-        :inline-advance (helixel-textobj-sel-inline-advance sel)
-        :span (helixel-textobj-sel-span sel)))
-
 (cl-defmethod helixel-sel-recreate ((sel helixel-textobj-sel))
   "Sel recreate method for SEL."
   (helixel--recreate-textobj sel))

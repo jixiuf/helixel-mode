@@ -101,10 +101,9 @@ Creates a minimal sel struct of the given kind so `helixel--sel-type'
 returns the corresponding type symbol."
   (setq helixel--pending-sel
         (pcase type
-          ('line (helixel-sel-create 'line '(:count 1 :dir forward)))
-          ('rect (helixel-sel-create 'rect '(:count 1)))
-          ('textobj (helixel-sel-create 'textobj
-                       '(:command 'mark-inner-word)))
+          ('line (make-helixel-line-sel :count 1 :dir 'forward))
+          ('rect (make-helixel-rect-sel :count 1))
+          ('textobj (make-helixel-textobj-sel :command ''mark-inner-word))
           ((pred null) nil))))
 
 (provide 'helixel-test-common)

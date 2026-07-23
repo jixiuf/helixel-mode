@@ -113,27 +113,24 @@ SELECT-P non-nil activates region; nil does move-only."
   "Push a treesit selection spanning BEG..END with type BASE."
   (let* ((prev helixel--pending-sel)
          (total-n (if (and prev
-                           (eq (helixel-sel-kind prev) 'treesit))
-                      (plist-get (helixel-sel-ctx prev) :level)
+                           (eq (helixel-sel-kind prev) 'helixel-treesit-sel))
+                      (helixel-treesit-sel-level prev)
                     0)))
     (helixel--sel-push
-     (helixel-sel-create
-      'treesit
-      `(:command grow
-                 :start ,beg
-                 :end ,end
-                 :level ,(1+ total-n)
-                 :base ,base)))))
+     (make-helixel-treesit-sel :command 'grow
+                               :start beg
+                               :end end
+                               :level (1+ total-n)
+                               :base base))))
 
 (defun helixel-ts--setup-nav-state (beg end base part)
   "Set up tracking state for treesit navigation at [BEG, END).
 BASE and PART identify the treesit object."
   (helixel--set-mark-region (cons beg end))
   (helixel--sel-push
-   (helixel-sel-create
-    'treesit `(:base ,base :part ,part :level 0
-                     :start ,beg :end ,end
-                     :count 1 :inline-advance t))))
+   (make-helixel-treesit-sel :base base :part part :level 0
+                             :start beg :end end
+                             :count 1 :inline-advance t)))
 
 ;; ----------------------------------------------------------------------
 ;; Shared implementation: apply nav with select-category check
@@ -174,11 +171,11 @@ FORWARD-P non-nil → forward (end of node), nil → backward (start)."
         eff-forward-p)
     (dotimes (_ n)
       (when (and helixel--pending-sel
-                 (eq (helixel-sel-kind helixel--pending-sel) 'treesit)
-                 (equal (helixel-sel-field helixel--pending-sel :base)
+                 (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel)
+                 (equal (helixel-treesit-sel-base helixel--pending-sel)
                         base))
-        (let* ((ps-start (helixel-sel-field helixel--pending-sel :start))
-               (ps-end (helixel-sel-field helixel--pending-sel :end))
+        (let* ((ps-start (helixel-treesit-sel-start helixel--pending-sel))
+               (ps-end (helixel-treesit-sel-end helixel--pending-sel))
                (outer (and ps-start ps-end
                            (helixel-ts--enclosing-node base ps-start))))
           (if forward-p
@@ -263,8 +260,8 @@ Each element is (BEG END LEVEL BASE PART).")
   (when helixel--pending-sel
     (push (list (region-beginning)
                 (region-end)
-                (or (plist-get (helixel-sel-ctx helixel--pending-sel) :level) 0)
-                (plist-get (helixel-sel-ctx helixel--pending-sel) :base)
+                (or (helixel-treesit-sel-level helixel--pending-sel) 0)
+                (helixel-treesit-sel-base helixel--pending-sel)
                 'around)
           helixel-ts--expand-stack)))
 
@@ -273,9 +270,8 @@ Each element is (BEG END LEVEL BASE PART).")
 Returns non-nil on success."
   (helixel-ts--check-ready)
   (if (and helixel--pending-sel
-           (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
-      (let* ((ctx (helixel-sel-ctx helixel--pending-sel))
-             (level (or (plist-get ctx :level) 0))
+           (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
+      (let* ((level (or (helixel-treesit-sel-level helixel--pending-sel) 0))
              (sel-beg (region-beginning))
              (sel-end (region-end)))
         (helixel-ts--push-selection)
@@ -318,10 +314,9 @@ FORWARD-P non-nil for next sibling, nil for previous."
   (helixel-ts--check-ready)
   (let ((node
          (if (and helixel--pending-sel
-                  (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
-             (let* ((ctx (helixel-sel-ctx helixel--pending-sel))
-                    (start (plist-get ctx :start))
-                    (end (plist-get ctx :end)))
+                  (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
+             (let* ((start (helixel-treesit-sel-start helixel--pending-sel))
+                    (end (helixel-treesit-sel-end helixel--pending-sel)))
                (if (and start end)
                    (helixel-ts--node-matching-bounds start end)
                  (helixel-ts--node-at-point)))

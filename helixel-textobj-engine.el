@@ -51,6 +51,19 @@ Called with no arguments.  Use this to chain operations that need
 a textobj selection to be in place (e.g. pending surround ops).")
 
 
+(cl-defstruct (helixel-textobj-sel (:include helixel-sel)
+                                   (:copier nil))
+  "Text-object selection.  Slots: COMMAND, COUNT, DELIMITER
+\(+ base INLINE-ADVANCE)."
+  command
+  (count 1)
+  delimiter)
+
+
+(cl-defmethod helixel-sel-count ((sel helixel-textobj-sel))
+  "Sel count method for SEL."
+  (or (helixel-textobj-sel-count sel) 0))
+
 ;; ── Internal Variables and Configuration ──
 
 (defvar helixel-restriction-stack nil
@@ -665,16 +678,15 @@ textobj motion for \\[helixel-repeat-last-motion]."
            (delim delimiter)
            (prev helixel--pending-sel)
            (total-n (if (and prev
-                             (eq (helixel-sel-kind prev) 'textobj)
-                             (eq (helixel-sel-textobj-command prev) cmd))
-                        (+ (helixel-sel-textobj-count prev) n)
+                             (eq (helixel-sel-kind prev) 'helixel-textobj-sel)
+                             (eq (helixel-textobj-sel-command prev) cmd))
+                        (+ (helixel-textobj-sel-count prev) n)
                       n)))
       (helixel--sel-push
-       (helixel-sel-create
-        'textobj `(:command ,cmd :count ,total-n :delimiter ,delim
-                            :inline-advance t)))
-      ;; Record motion for \[helixel-repeat-last-motion] (, repeat).
-      ;; Direction always 'forward here; -, callers override afterwards.
+       (make-helixel-textobj-sel :command cmd :count total-n :delimiter delim
+                                 :inline-advance t))
+      ;; Record motion for \[helixel-repeat-last-motion] ( repeat).
+      ;; Direction always 'forward here; - callers override afterwards.
       (when subcat
         (helixel-record-motion cmd
                                :category 'textobj
@@ -736,8 +748,8 @@ skips whitespace, then re-executes the textobj command.
 When COUNT is negative, skips backward instead of forward.
 When :span is set, extends region back to the pre-recreate origin.
 Signals errors when no more targets exist."
-  (when-let* ((command (helixel-sel-textobj-command ctx))
-              (cnt (helixel-sel-textobj-count ctx)))
+  (when-let* ((command (helixel-textobj-sel-command ctx))
+              (cnt (helixel-textobj-sel-count ctx)))
     (let ((forward-p (>= cnt 0)))
       (helixel--with-span ctx
         (unless (region-active-p)

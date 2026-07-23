@@ -292,7 +292,7 @@ to a char selection."
     (rectangle-exchange-point-and-mark))
    ((and (eq (helixel--sel-type) 'line)
          helixel--pending-sel
-         (eq (helixel-sel-kind helixel--pending-sel) 'line))
+         (eq (helixel-sel-kind helixel--pending-sel) 'helixel-line-sel))
     (exchange-point-and-mark)
     (when-let* ((flipped (helixel-sel-flip-dir helixel--pending-sel)))
       (helixel--sel-push flipped)))

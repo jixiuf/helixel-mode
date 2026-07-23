@@ -248,8 +248,7 @@ The prompt shows the old delimiter being replaced."
     (helixel--tracking-open 'edit 'surround-replace)
     (helixel-record-action 'surround-replace :new-char new-char)
     (helixel--sel-push
-     (helixel-sel-create
-      'surround `(:delimiter ,new-d)))))
+     (make-helixel-surround-sel :delimiter new-d))))
 
 (defun helixel--surround-replace-tag (new-tag-name d)
   "Replace surrounding XML tags with NEW-TAG-NAME.
@@ -295,10 +294,10 @@ D is the tag delimiter plist used to locate the tags."
       (helixel--tracking-open 'edit 'surround-add)
       (helixel-record-action 'surround-add :char char)
       (helixel--sel-push
-       (helixel-sel-create
-        'surround `(:delimiter ,(if is-block
-                                    (helixel-make-block-delimiter open close)
-                                  (helixel-make-pair-delimiter open close)))))
+       (make-helixel-surround-sel
+        :delimiter (if is-block
+                       (helixel-make-block-delimiter open close)
+                     (helixel-make-pair-delimiter open close))))
       (setq deactivate-mark nil))))
 
 (defun helixel-surround-add-tag ()
@@ -312,8 +311,7 @@ D is the tag delimiter plist used to locate the tags."
       (helixel--tracking-open 'edit 'surround-add)
       (helixel-record-action 'surround-add-tag :tag tag)
       (helixel--sel-push
-       (helixel-sel-create
-        'surround `(:delimiter ,(helixel-make-tag-delimiter))))
+       (make-helixel-surround-sel :delimiter (helixel-make-tag-delimiter)))
       (setq deactivate-mark nil))))
 
 (defun helixel--surround-prompt-target (cmd prefix)
@@ -344,7 +342,7 @@ so the user can select a target with one keypress."
   (helixel--with-command helixel-surround-delete
     (let ((sel-ctx helixel--pending-sel)
           d)
-      (if (and sel-ctx (setq d (helixel-sel-surround-delimiter sel-ctx)))
+      (if (and sel-ctx (setq d (helixel-surround-sel-delimiter sel-ctx)))
           (progn
             (when (use-region-p)
               (goto-char (/ (+ (region-beginning) (region-end)) 2)))
@@ -364,7 +362,7 @@ so the user can select a target with one keypress."
   (helixel--with-command helixel-surround-replace
     (let ((sel-ctx helixel--pending-sel)
           d)
-      (if (and sel-ctx (setq d (helixel-sel-surround-delimiter sel-ctx)))
+      (if (and sel-ctx (setq d (helixel-surround-sel-delimiter sel-ctx)))
           (let ((type (helixel-delimiter-type d)))
             (pcase type
               (:tag
@@ -376,8 +374,8 @@ so the user can select a target with one keypress."
                  (helixel-record-action 'surround-replace :tag new-tag
                                         :surround-type 'tag)
                  (helixel--sel-push
-                  (helixel-sel-create
-                   'surround `(:delimiter ,(helixel-make-tag-delimiter))))))
+                  (make-helixel-surround-sel
+                   :delimiter (helixel-make-tag-delimiter)))))
               (_ (helixel--surround-replace-generic d)))
             (setq deactivate-mark nil))
         (helixel--surround-prompt-target #'helixel-surround-replace "mr")))))
@@ -411,7 +409,7 @@ so the user can select a target with one keypress."
   :display "md"
   :runner (lambda (tx)
             (when-let*
-                ((d (helixel-sel-surround-delimiter
+                ((d (helixel-surround-sel-delimiter
                      (helixel-action-sel tx))))
               (goto-char (helixel--surround-delete-delimiter d)))))
 
@@ -424,7 +422,7 @@ so the user can select a target with one keypress."
                (if label (format "mr[%s]" label) "mr")))
   :runner (lambda (tx)
             (let* ((sel-ctx (helixel-action-sel tx))
-                   (d (helixel-sel-surround-delimiter sel-ctx))
+                   (d (helixel-surround-sel-delimiter sel-ctx))
                    (type (and d (helixel-delimiter-type d)))
                    (new-char (helixel-action-payload-get tx :new-char))
                    (tag (helixel-action-payload-get tx :tag)))
@@ -449,7 +447,7 @@ Clears `helixel--pending-surround-op' regardless."
     (let ((op helixel--pending-surround-op))
       (setq helixel--pending-surround-op nil)
       (when (and helixel--pending-sel
-                 (helixel-sel-surround-delimiter
+                 (helixel-surround-sel-delimiter
                   helixel--pending-sel))
         (funcall op)))))
 
@@ -458,17 +456,6 @@ Clears `helixel--pending-surround-op' regardless."
   "Surround selection.  Slots: DELIMITER."
   delimiter)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql surround)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-surround-sel :delimiter (plist-get ctx :delimiter)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-surround-sel))
-  "Sel type method for SEL."
-  'surround)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-surround-sel))
-  "Sel  to plist method for SEL."
-  (list :delimiter (helixel-surround-sel-delimiter sel)))
 
 (cl-defmethod helixel-sel-recreate ((_sel helixel-surround-sel))
   "Sel recreate method for SEL."

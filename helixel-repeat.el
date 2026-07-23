@@ -401,7 +401,7 @@ Dispatch:
      ;; self-advancing ops (e.g. kill, change); skipping it
      ;; would cause dot-repeat to re-select the same node
      ;; instead of advancing to the next one.
-     ((and advance-fn (eq (helixel-sel-kind sel) 'treesit))
+     ((and advance-fn (eq (helixel-sel-kind sel) 'helixel-treesit-sel))
       (funcall advance-fn effective))
      ;; Op handles its own positioning, or kind has no advance: just recreate.
      ((or (not advance-fn) (helixel--op-self-advancing-p op))
@@ -629,65 +629,6 @@ run in preview mode, so its `:self-advancing' is moot)."
                  tx sel nil start dir cnt t)))
     (helixel--repeat-echo cnt)))
 
-;; ── All-buffer / all-dir line handlers ──
-;; Registered via the kind registry in helixel-move.el.
-
-(defun helixel--all-buffer-line (edit prefix)
-  "All-buffer repeat handler for line selections, for EDIT and PREFIX.
-Forward pass then backward pass from the marker position.
-For chain ops, does a single pass from the buffer edge."
-  (let* ((sel (helixel-action-sel edit))
-         (op (helixel-action-op edit))
-         (self-advancing (helixel--op-self-advancing-p op))
-         (reverse-p (helixel-repeat-prefix-reverse-p prefix))
-         (marker (car (helixel-action-mark-region edit)))
-         (chain-p (eq op 'chain)))
-    (if chain-p
-        (let* ((dir (if reverse-p -1
-                      (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
-               (start (if (> dir 0) (point-min) (point-max)))
-               (cnt 0))
-          (save-excursion
-            (goto-char start)
-            (unless (helixel--blank-line-p)
-              (helixel-action-replay edit)))
-          ;; Chain ops use line-stepping algorithm regardless.
-          (setq cnt (helixel--repeat-line-pass
-                     edit sel nil
-                     start dir cnt))
-          (helixel--repeat-echo cnt))
-      (let* ((first-dir (if reverse-p -1
-                          (if (eq (helixel-sel-line-dir sel) 'backward) -1 1)))
-             (cnt 0)
-             (start-pos (and marker (marker-position marker))))
-        (when start-pos
-          (goto-char start-pos)
-          (beginning-of-line)
-          (setq start-pos (point)))
-        (setq cnt (helixel--repeat-line-pass
-                   edit sel self-advancing
-                   start-pos first-dir cnt))
-        (setq cnt (helixel--repeat-line-pass
-                   edit sel self-advancing
-                   start-pos (- first-dir) cnt))
-        (helixel--repeat-echo cnt)))))
-
-(defun helixel--all-dir-line (edit)
-  "All-dir repeat handler for line selections, for EDIT.
-Uses `helixel--repeat-line-pass' for proper cursor advance."
-  (let* ((sel (helixel-action-sel edit))
-         (op (helixel-action-op edit))
-         (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
-         ;; In all-dir line replay, even ops that ordinarily handle
-         ;; their own positioning (kill, change) want the simple
-         ;; line-stepping algorithm here, because the kill/change
-         ;; already happened once before we entered the loop.
-         (self-advancing (helixel--op-self-advancing-p op))
-         (cnt 0))
-    (setq cnt (helixel--repeat-line-pass
-               edit sel self-advancing (point) dir cnt))
-    (helixel--repeat-echo cnt)))
-
 ;; ── Search advance scratch ──
 ;;
 ;; The 3 former globals (`--search-advance-done', `--advance-search-last-pos',
@@ -877,7 +818,7 @@ automatically invalidates the preview."
                  (n (helixel-repeat-prefix-n prefix))
                  (sel (helixel-action-sel tx)))
             (if (and (eq mode :all-buffer)
-                     (eq (helixel-sel-kind sel) 'line))
+                     (eq (helixel-sel-kind sel) 'helixel-line-sel))
                 ;; Line needs per-line stepping via
                 ;; `helixel--repeat-line-pass' (different from generic
                 ;; advance loop due to operator advance tag handling).
@@ -1119,7 +1060,7 @@ No-op when no chain is active or the init-ctx is not a search/line sel."
   (when (and (helixel--chain-active-p)
              (helixel-chain-session-init-ctx helixel--chain-session)
              (memq (helixel-sel-kind helixel--pending-sel)
-                   '(search line)))
+                   '(helixel-search-sel helixel-line-sel)))
     (setf (helixel-chain-session-init-ctx helixel--chain-session)
           (helixel-sel-update-ctx
            (helixel-chain-session-init-ctx helixel--chain-session)
@@ -1138,8 +1079,8 @@ For other sel kinds (search, rect, etc.) the chain advance
 already positioned point and the runner handles the rest."
   (when-let* ((edit-sel (helixel-action-sel sub-action))
               (kind (helixel-sel-kind edit-sel)))
-    (when (or (eq kind 'movement)
-              (and (eq kind 'line)
+    (when (or (eq kind 'helixel-movement-sel)
+              (and (eq kind 'helixel-line-sel)
                    (helixel-sel-entry-kind edit-sel)))
       (deactivate-mark)
       (condition-case nil
@@ -1227,7 +1168,7 @@ Dispatch per entry:
          (action-list (helixel-action-payload-get tx :action-list)))
     (helixel-with-replay-as 'dot
       (when action-list
-        (when (and chain-sel (eq (helixel-sel-kind chain-sel) 'search)
+        (when (and chain-sel (eq (helixel-sel-kind chain-sel) 'helixel-search-sel)
                    (match-beginning 0))
           (goto-char (match-beginning 0)))
         (let ((skips (helixel--chain-build-skip-vector action-list chain-sel)))
@@ -1366,7 +1307,7 @@ by the initial selection context snapshotted at chain-start."
     ;; — search advance moves to the next match regardless
     ;; of cursor position.
     (when (and init-ctx init-bounds
-               (memq (helixel-sel-kind init-ctx) '(line rect))
+               (memq (helixel-sel-kind init-ctx) '(helixel-line-sel helixel-rect-sel))
                (not (and (marker-position (car init-bounds))
                          (marker-position (cdr init-bounds))
                          (>= (point) (car init-bounds))

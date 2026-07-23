@@ -373,16 +373,15 @@ LEVEL is nesting level, COUNT is selection count."
            (prev helixel--pending-sel)
            (total-n
             (if (and prev
-                     (eq (helixel-sel-kind prev) 'treesit)
-                     (equal (helixel-sel-field prev :base) base)
-                     (eq (helixel-sel-field prev :part) part))
-                (+ (helixel-sel-field prev :count) n)
+                     (eq (helixel-sel-kind prev) 'helixel-treesit-sel)
+                     (equal (helixel-treesit-sel-base prev) base)
+                     (eq (helixel-treesit-sel-part prev) part))
+                (+ (helixel-treesit-sel-count prev) n)
               n)))
       (helixel--sel-push
-       (helixel-sel-create
-        'treesit `(:base ,base :part ,part :level ,(or level 0)
-                         :start ,node-beg :end ,node-end
-                         :count ,total-n :inline-advance t))))))
+       (make-helixel-treesit-sel :base base :part part :level (or level 0)
+                                 :start node-beg :end node-end
+                                 :count total-n :inline-advance t)))))
 
 ;; ----------------------------------------------------------------------
 ;; Kind registration
@@ -394,32 +393,11 @@ LEVEL is nesting level, COUNT is selection count."
 Slots: BASE, PART, LEVEL, COUNT, QUERY, START, END, COMMAND."
   base part level count query start end command)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql treesit)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-treesit-sel
-   :base (plist-get ctx :base)
-   :part (plist-get ctx :part)
-   :level (plist-get ctx :level)
-   :count (plist-get ctx :count)
-   :query (plist-get ctx :query)
-   :start (plist-get ctx :start)
-   :end (plist-get ctx :end)
-   :command (plist-get ctx :command)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-treesit-sel))
-  "Sel type method for SEL."
-  'treesit)
+(cl-defmethod helixel-sel-count ((sel helixel-treesit-sel))
+  "Sel count method for SEL."
+  (or (helixel-treesit-sel-count sel) 0))
 
-(cl-defmethod helixel-sel--to-plist ((sel helixel-treesit-sel))
-  "Sel  to plist method for SEL."
-  (list :base (helixel-treesit-sel-base sel)
-        :part (helixel-treesit-sel-part sel)
-        :level (helixel-treesit-sel-level sel)
-        :count (helixel-treesit-sel-count sel)
-        :query (helixel-treesit-sel-query sel)
-        :start (helixel-treesit-sel-start sel)
-        :end (helixel-treesit-sel-end sel)
-        :command (helixel-treesit-sel-command sel)))
 
 (cl-defmethod helixel-sel-recreate ((sel helixel-treesit-sel))
   "Sel recreate method for SEL."
@@ -460,8 +438,8 @@ Returns t on success, nil when no more targets."
             (progn
               (goto-char (region-end))
               (skip-chars-forward " \t\n\r\f,;:"))
-          (when-let* ((base (helixel-sel-field sel :base))
-                      (part (helixel-sel-field sel :part))
+          (when-let* ((base (helixel-treesit-sel-base sel))
+                      (part (helixel-treesit-sel-part sel))
                       (range (helixel-ts--object-at
                               base part 0))
                       ;; Only skip past if point is still inside the
@@ -474,12 +452,12 @@ Returns t on success, nil when no more targets."
         ;; (e.g. after deletion left us at a position where the index
         ;; has no enclosing node), find the next capture and jump to
         ;; its start so `helixel-ts--recreate' can find it.
-        (unless (and (helixel-sel-field sel :base)
-                     (helixel-sel-field sel :part)
+        (unless (and (helixel-treesit-sel-base sel)
+                     (helixel-treesit-sel-part sel)
                      (helixel-ts--object-at
-                      (helixel-sel-field sel :base)
-                      (helixel-sel-field sel :part) 0))
-          (when-let* ((base (helixel-sel-field sel :base))
+                      (helixel-treesit-sel-base sel)
+                      (helixel-treesit-sel-part sel) 0))
+          (when-let* ((base (helixel-treesit-sel-base sel))
                       (next (helixel-ts--next-capture
                              base (point) t)))
             (goto-char (car next))))
@@ -519,9 +497,8 @@ Returns a list of (POINT . MARK) marker pairs suitable for
 `helixel-mc--realize-targets'.  Each cursor has mark at the
 object start and point at the object end — matching the
 direction that \=`maf\=' / \=`mif\=' leaves."
-  (let* ((ctx (helixel-sel-ctx sel))
-         (base (plist-get ctx :base))
-         (part (plist-get ctx :part))
+  (let* ((base (helixel-treesit-sel-base sel))
+         (part (helixel-treesit-sel-part sel))
          (min-end most-positive-fixnum)
          (targets nil))
     (unless (and base part)

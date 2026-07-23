@@ -350,9 +350,8 @@ respect toggle \\[isearch-toggle-regexp] the."
     (let* ((prev-n (helixel-sel-n-count helixel--pending-sel))
            (n-count (if prev-n (1+ prev-n) 0))
            (regexp (helixel--last-motion-regexp s)))
-      (helixel--push-selection
-       'search `(:pattern ,pat :dir ,dir :n-count ,n-count
-                          :regexp ,regexp)))))
+      (helixel--sel-push (make-helixel-search-sel :pattern pat :dir dir :n-count n-count
+                                                  :regexp regexp)))))
 
 (defun helixel-search--done-hook ()
   "Hook called at the end of isearch to mark the match.
@@ -619,13 +618,12 @@ Tracks how many times n was pressed so . repeats the full sequence."
   (let* ((prev-pending helixel--pending-sel)
          (prev-n (when (and prev-pending
                             (eq (helixel-sel-kind prev-pending)
-                                'find-char))
+                                'helixel-find-char-sel))
                    (helixel-sel-n-count prev-pending)))
          (n-count (if prev-n (1+ prev-n) 0)))
     (helixel--sel-push
-     (helixel-sel-create 'find-char
-                         `(:char ,char :type ,type :dir ,dir :inline-advance t
-                                 :n-count ,n-count)))))
+     (make-helixel-find-char-sel :char char :type type :dir dir :inline-advance t
+                                 :n-count n-count))))
 
 (defun helixel-search--find-char-jump (char type forwardp)
   "Perform the search-and-position step for find-char.
@@ -887,9 +885,9 @@ If `(helixel--search-advance-done-p)' is t, skips the internal search
 If CTX has :entry-kind (insert or append), positions the cursor
 at the appropriate offset within the match for insert-text ops.
 Uses :regexp from CTX to respect the \\=`M-r' toggle."
-  (let* ((pat (helixel-sel-search-pattern ctx))
-         (dir (helixel-sel-search-dir ctx))
-         (regexp (helixel-sel-search-regexp ctx))
+  (let* ((pat (helixel-search-sel-pattern ctx))
+         (dir (helixel-search-sel-dir ctx))
+         (regexp (helixel-search-sel-regexp ctx))
          (pre-skip-pos (point)))
     (unless pat
       (user-error "No search pattern to repeat"))
@@ -917,7 +915,7 @@ Uses :regexp from CTX to respect the \\=`M-r' toggle."
       (let* ((base (if (eq entry-kind 'append)
                        (match-end 0)
                      (match-beginning 0)))
-             (cursor-offset (or (helixel-sel-search-cursor-offset ctx) 0)))
+             (cursor-offset (or (helixel-search-sel-cursor-offset ctx) 0)))
         (goto-char (+ base cursor-offset))))))
 
 (defun helixel--recreate-find-char (ctx)
@@ -926,7 +924,7 @@ Does :n-count extra searches after finding the char, so . repeats
 the full f x n n sequence.  Extends region back to origin when
 :span is set (from ; push)."
   (let ((n (or (helixel-sel-n-count ctx) 0))
-        (dir (or (helixel-sel-find-char-dir ctx)
+        (dir (or (helixel-find-char-sel-dir ctx)
                  (helixel-search--current-dir))))
     (helixel-with-replay-as 'dot
       (helixel--with-span ctx
@@ -1177,9 +1175,8 @@ and \\[helixel-action-cycle\\] cycling."
     (pcase cat
       ('find-char
        (let* ((sel (helixel-action-sel event))
-              (ctx (and sel (helixel-sel-ctx sel)))
-              (type (helixel-sel-find-char-type ctx))
-              (char (helixel-sel-find-char-char ctx)))
+              (type (and sel (helixel-find-char-sel-type sel)))
+              (char (and sel (helixel-find-char-sel-char sel))))
          ;; Set up search state and sel BEFORE commit so the
          ;; committed entry carries its descriptor.
          (setq helixel--active-search
@@ -1206,9 +1203,9 @@ and \\[helixel-action-cycle\\] cycling."
          (helixel-search--find-char-core use-dir)))
       ('search
        (let* ((sel (helixel-action-sel event))
-              (pattern (or (and sel (helixel-sel-search-pattern sel))
+              (pattern (or (and sel (helixel-search-sel-pattern sel))
                            (helixel-action-payload-get event :pattern)))
-              (regexp (or (and sel (helixel-sel-search-regexp sel))
+              (regexp (or (and sel (helixel-search-sel-regexp sel))
                           (helixel-action-payload-get event :regexp)
                           t))
               (had-region (region-active-p))
@@ -1245,7 +1242,7 @@ FORWARDP: t = use stored direction, nil = toggle it."
              (stored-dir
               (if (eq cat 'search)
                   (when-let* ((sel (helixel-action-sel event)))
-                    (helixel-sel-search-dir sel))
+                    (helixel-search-sel-dir sel))
                 (helixel-search--current-dir)))
              (use-dir (if forwardp stored-dir
                         (if (eq stored-dir 'forward)
@@ -1320,16 +1317,16 @@ otherwise cause infinite loops at buffer edges.
 When TX's sel has no `:pattern' (e.g. `insert-selection-end' outside
 a search context), fall back to recreating the selection in-place."
   (let* ((sel (helixel-action-sel tx))
-         (pat (helixel-sel-search-pattern sel)))
+         (pat (helixel-search-sel-pattern sel)))
     (if (not pat)
         ;; Not a search-initiated insert — just recreate the
         ;; selection at point and return t (in-place repeat).
         (helixel--with-debug-log search-advance-non-search
           (progn (helixel-sel-call-recreate sel) t)
           (error nil))
-      (let* ((dir (helixel-sel-search-dir sel))
+      (let* ((dir (helixel-search-sel-dir sel))
              (entry-kind (helixel-sel-entry-kind sel))
-             (regexp (helixel-sel-search-regexp sel)))
+             (regexp (helixel-search-sel-regexp sel)))
         (helixel-search--skip-current-match pat dir entry-kind regexp)
         (unless entry-kind
           (helixel-search--backward-unstick dir))
@@ -1340,9 +1337,9 @@ a search context), fall back to recreating the selection in-place."
             (helixel--search-advance-done-set t)
             (helixel--search-advance-last-pos-set (match-beginning 0))
             (helixel-search--advance-n-count
-             (helixel-sel-ctx sel)
+             sel
              (lambda () (helixel-search--search pat dir nil nil regexp)))
-            (helixel--with-span (helixel-sel-ctx sel)
+            (helixel--with-span sel
               (helixel--recreate-selection sel))
             t)
           (search-failed nil))))))
@@ -1396,9 +1393,9 @@ For `insert-search-offset' and `insert-selection-*' entry-kinds.
 Uses :regexp from SEL to respect the \\=`M-r' toggle."
   (save-excursion
     (goto-char start-pos)
-    (let* ((pat (helixel-sel-search-pattern sel))
+    (let* ((pat (helixel-search-sel-pattern sel))
            (entry-kind (helixel-sel-entry-kind sel))
-           (regexp (helixel-sel-search-regexp sel))
+           (regexp (helixel-search-sel-regexp sel))
            (txt (or (helixel-action-payload-get tx :inserted-text)
                     (helixel-action-payload-get tx :text)
                     ""))
@@ -1492,30 +1489,6 @@ CURSOR-OFFSET, REGEXP."
   cursor-offset
   (regexp t))
 
-(cl-defmethod helixel-sel--construct ((_kind (eql search)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-search-sel
-   :pattern (plist-get ctx :pattern)
-   :dir (or (plist-get ctx :dir) 'forward)
-   :entry-kind (plist-get ctx :entry-kind)
-   :n-count (plist-get ctx :n-count)
-   :cursor-offset (plist-get ctx :cursor-offset)
-   :regexp (if (plist-member ctx :regexp) (plist-get ctx :regexp) t)
-   :span (plist-get ctx :span)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-search-sel))
-  "Sel type method for SEL."
-  'search)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-search-sel))
-  "Sel  to plist method for SEL."
-  (list :pattern (helixel-search-sel-pattern sel)
-        :dir (helixel-search-sel-dir sel)
-        :entry-kind (helixel-search-sel-entry-kind sel)
-        :n-count (helixel-search-sel-n-count sel)
-        :cursor-offset (helixel-search-sel-cursor-offset sel)
-        :regexp (helixel-search-sel-regexp sel)
-        :span (helixel-search-sel-span sel)))
 
 (cl-defstruct (helixel-find-char-sel (:include helixel-sel)
                                      (:copier nil))
@@ -1526,28 +1499,6 @@ CURSOR-OFFSET, REGEXP."
   (dir 'forward)
   n-count)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql find-char)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-find-char-sel
-   :char (plist-get ctx :char)
-   :type (or (plist-get ctx :type) 'next)
-   :dir (or (plist-get ctx :dir) 'forward)
-   :n-count (plist-get ctx :n-count)
-   :inline-advance (plist-get ctx :inline-advance)
-   :span (plist-get ctx :span)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-find-char-sel))
-  "Sel type method for SEL."
-  'find-char)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-find-char-sel))
-  "Sel  to plist method for SEL."
-  (list :char (helixel-find-char-sel-char sel)
-        :type (helixel-find-char-sel-type sel)
-        :dir (helixel-find-char-sel-dir sel)
-        :n-count (helixel-find-char-sel-n-count sel)
-        :inline-advance (helixel-find-char-sel-inline-advance sel)
-        :span (helixel-find-char-sel-span sel)))
 
 ;; ── search protocol methods ──
 
@@ -1562,6 +1513,14 @@ CURSOR-OFFSET, REGEXP."
 (cl-defmethod helixel-sel-all-buffer-fn ((_sel helixel-search-sel))
   "Sel all buffer fn method for SEL."
   #'helixel--all-buffer-search)
+
+(cl-defmethod helixel-sel-entry-kind ((sel helixel-search-sel))
+  "Return the entry-kind of SEL."
+  (helixel-search-sel-entry-kind sel))
+
+(cl-defmethod helixel-sel-n-count ((sel helixel-search-sel))
+  "Return the n-count of SEL."
+  (helixel-search-sel-n-count sel))
 
 (cl-defmethod helixel-sel-flip-dir ((sel helixel-search-sel))
   "Sel flip dir method for SEL."
@@ -1581,6 +1540,10 @@ CURSOR-OFFSET, REGEXP."
 (cl-defmethod helixel-sel-advance-fn ((_sel helixel-find-char-sel))
   "Sel advance fn method for SEL."
   #'helixel--advance-by-recreate)
+
+(cl-defmethod helixel-sel-n-count ((sel helixel-find-char-sel))
+  "Return the n-count of SEL."
+  (helixel-find-char-sel-n-count sel))
 
 (cl-defmethod helixel-mc-spawn-fn ((_sel helixel-find-char-sel))
   "Mc spawn fn method for SEL."

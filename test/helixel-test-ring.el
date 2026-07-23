@@ -86,7 +86,7 @@ Movement commits leave `helixel-last-action' unchanged."
         (helixel-last-action nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
+      (let ((sel (make-helixel-line-sel :dir 'forward :count 1)))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill)
         (setf (helixel-action-payload helixel--live-action) '(:text "x")))
@@ -94,7 +94,7 @@ Movement commits leave `helixel-last-action' unchanged."
       (should (= (length helixel--action-ring) 1))
       ;; Re-create identical live-event and commit again
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
+      (let ((sel (make-helixel-line-sel :dir 'forward :count 1)))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill)
         (setf (helixel-action-payload helixel--live-action) '(:text "x")))
@@ -119,20 +119,20 @@ Movement commits leave `helixel-last-action' unchanged."
       (should (= (length helixel--action-ring) 2)))))
 
 (ert-deftest helixel-test-ring-commit-dedup-different-sel ()
-  "Events with different sel but same op/payload are still deduped\n(sel content is compared via `helixel-sel-equal-p')."
+  "Events with different sel but same op/payload are still deduped\n(sel content is compared via `equal')."
   (let ((helixel--action-ring nil)
         (helixel--live-action nil)
         (helixel-last-action nil))
     (helixel-test-with-buffer "hello world"
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 2))))
+      (let ((sel (make-helixel-line-sel :dir 'forward :count 2)))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill))
       (helixel--action-commit)
       (should (= (length helixel--action-ring) 1))
       ;; Different sel — should NOT be deduped
       (helixel--tracking-open 'movement 'char)
-      (let ((sel (helixel-sel-create 'line '(:dir forward :count 1))))
+      (let ((sel (make-helixel-line-sel :dir 'forward :count 1)))
         (setf (helixel-action-sel helixel--live-action) sel)
         (setf (helixel-action-op helixel--live-action) 'kill))
       (helixel--action-commit)

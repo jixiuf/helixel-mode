@@ -442,16 +442,16 @@ can dispatch correctly."
     (helixel-select-rectangle 1)
     ;; Verify rect selection is established for operator dispatch.
     (should rectangle-mark-mode)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-rect-sel))
     (setq last-command 'helixel-select-rectangle)
     (call-interactively #'helixel-next-line)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-rect-sel))
     (setq last-command 'helixel-next-line)
     (call-interactively #'helixel-next-line)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-rect-sel))
     (setq last-command 'helixel-next-line)
     (call-interactively #'helixel-previous-line)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-rect-sel))))
 
 (ert-deftest helixel-test-rect-w-converts-to-char ()
   "After C-v w, sel-type becomes nil (char) not rect.
@@ -460,7 +460,7 @@ Word movements in visual rect mode convert to char selection."
     (helixel-enter-normal-state)
     (goto-char 1)
     (call-interactively #'helixel-select-rectangle)
-    (should (eq (helixel-sel-kind helixel--pending-sel) 'rect))
+    (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-rect-sel))
     (setq last-command 'helixel-select-rectangle)
     (call-interactively #'helixel-forward-word-start)
     ;; Word movement clears rect pending-sel — converts to char selection.

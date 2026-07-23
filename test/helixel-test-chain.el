@@ -135,8 +135,7 @@
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char 1)
     (setq helixel--pending-sel
-          (helixel-sel-create 'search
-            '(:pattern "foo" :dir forward)))
+          (make-helixel-search-sel :pattern "foo" :dir 'forward))
     (helixel-repeat-chain-start)
     ;; Simulate insert command calling propagate-entry-kind
     (helixel--chain-propagate-entry-kind 'insert)
@@ -205,8 +204,7 @@ tests in this section."
   ". on chain search at edge signals user-error (caught by repeat-edit)."
   (helixel-chain-test-with-buffer "foo bar\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward :entry-kind 'insert))
            (tx (helixel-chain--make-test-action ctx))
            (helixel-last-action tx)
            (helixel--inhibit-action-track t))
@@ -217,7 +215,7 @@ tests in this section."
   ". on chain line at last line operates on current line."
   (helixel-chain-test-with-buffer "aaa\n"
     (goto-char (point-max))
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
+    (let* ((ctx (make-helixel-line-sel :dir 'forward :count 1))
            (tx (helixel-chain--make-test-action ctx))
            (helixel-last-action tx)
            (helixel--inhibit-action-track t))
@@ -229,8 +227,7 @@ tests in this section."
   ", on chain search at edge signals user-error."
   (helixel-chain-test-with-buffer "foo bar\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward :entry-kind 'insert))
            (tx (helixel-chain--make-test-action ctx))
            (helixel-last-action tx)
            (helixel--inhibit-action-track t))
@@ -240,8 +237,7 @@ tests in this section."
   ". on chain search with entry-kind skips current match."
   (helixel-chain-test-with-buffer "foo bar foo baz\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward :entry-kind 'insert))
            (tx (helixel-chain--make-test-action ctx))
            (helixel-last-action tx)
            (helixel--inhibit-action-track t)
@@ -254,7 +250,7 @@ tests in this section."
   ", on chain line skips blank lines like dot does."
   (helixel-chain-test-with-buffer "aaa\n   \nbbb\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
+    (let* ((ctx (make-helixel-line-sel :dir 'forward :count 1))
            (tx (helixel-chain--make-test-action ctx))
            (helixel-last-action tx)
            (helixel--inhibit-action-track t)
@@ -267,7 +263,7 @@ tests in this section."
   "Chain tx with no advance data does not error on ."
   (helixel-chain-test-with-buffer "test\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'movement '(:moves ((forward-word . 1)))))
+    (let* ((ctx (make-helixel-movement-sel :moves '((forward-word . 1))))
             (tx (helixel-chain--make-test-action ctx))
             (helixel-last-action tx)
             (helixel--inhibit-action-track t))
@@ -288,8 +284,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "foo x foo y foo z\n"
     (goto-char 1)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -309,8 +304,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "foo a foo b foo c\n"
     (goto-char 8)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -331,8 +325,7 @@ tests in this section."
     (goto-char (point-max))
     (search-backward "foo d")
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -352,7 +345,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 1)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
+    (let* ((ctx (make-helixel-line-sel :dir 'forward :count 1))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -373,7 +366,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 10)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
+    (let* ((ctx (make-helixel-line-sel :dir 'forward :count 1))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -394,7 +387,7 @@ tests in this section."
     (goto-char (point-max))
     (forward-line -1)
     (setq helixel-chain--test-ctr 0)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
+    (let* ((ctx (make-helixel-line-sel :dir 'forward :count 1))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -419,8 +412,7 @@ tests in this section."
   "0 , on chain search previews by advancing past all remaining."
   (helixel-chain-test-with-buffer "foo x foo y foo z\n"
     (goto-char 1)
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -441,8 +433,7 @@ tests in this section."
   (helixel-chain-test-with-buffer "foo a foo b foo c foo d\n"
     (goto-char (point-max))
     (search-backward "foo d")
-    (let* ((ctx (helixel-sel-create 'search
-                  '(:pattern "foo" :dir forward :entry-kind insert)))
+    (let* ((ctx (make-helixel-search-sel :pattern "foo" :dir 'forward :entry-kind 'insert))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -464,7 +455,7 @@ tests in this section."
   "C-u , on chain line previews all lines from point-min."
   (helixel-chain-test-with-buffer "aaa\nbbb\nccc\n"
     (goto-char 10)
-    (let* ((ctx (helixel-sel-create 'line '(:dir forward :count 1)))
+    (let* ((ctx (make-helixel-line-sel :dir 'forward :count 1))
            (tx (helixel-action-create 'chain ctx
                                       (list :action-list (list (helixel-action-create 'noop nil
                                                                                       nil
@@ -755,7 +746,7 @@ advance — use distinct patterns to avoid self-matching."
       (push-mark me t t)
       (goto-char mb))
     (helixel--sel-push
-     (helixel-sel-create 'search '(:pattern "hello" :dir forward)))
+     (make-helixel-search-sel :pattern "hello" :dir 'forward))
     (helixel-repeat-chain-start)
     (helixel-insert) (insert "foo") (helixel-insert-exit)
     (helixel-forward-word-start) (helixel-insert-after)
@@ -763,8 +754,8 @@ advance — use distinct patterns to avoid self-matching."
     (helixel-repeat-chain-end)
     ;; Verify chain has search sel
     (should (eq (helixel-sel-kind (helixel-action-sel helixel-last-action))
-                'search))
-    (should (string= (helixel-sel-search-pattern
+                'helixel-search-sel))
+    (should (string= (helixel-search-sel-pattern
                       (helixel-action-sel helixel-last-action))
                      "hello"))
     ;; First dot: advance to next match and apply
@@ -792,7 +783,7 @@ PATTERN is a regexp."
       (push-mark me t t)
       (goto-char mb))
     (helixel--sel-push
-     (helixel-sel-create 'search `(:pattern ,pattern :dir ,dir)))
+     (make-helixel-search-sel :pattern pattern :dir dir))
     (point)))
 
 (ert-deftest helixel-test-chain-search-bol-forward ()
@@ -803,7 +794,7 @@ PATTERN is a regexp."
     (helixel-repeat-chain-start)
     (helixel-insert) (insert "X") (helixel-insert-exit)
     (helixel-repeat-chain-end)
-    (should (eq (helixel-sel-kind (helixel-action-sel helixel-last-action)) 'search))
+    (should (eq (helixel-sel-kind (helixel-action-sel helixel-last-action)) 'helixel-search-sel))
     ;; dot1: advance to line 2
     (helixel-repeat-edit)
     (save-excursion (goto-char 1) (forward-line 1)
@@ -830,7 +821,7 @@ PATTERN is a regexp."
       (goto-char mb)
       (push-mark me t t)
       (goto-char mb))
-    (helixel--sel-push (helixel-sel-create 'search '(:pattern "$" :dir forward)))
+    (helixel--sel-push (make-helixel-search-sel :pattern "$" :dir 'forward))
     (helixel-repeat-chain-start)
     (helixel-insert) (insert "X") (helixel-insert-exit)
     (helixel-repeat-chain-end)
@@ -877,7 +868,7 @@ PATTERN is a regexp."
       (goto-char mb)
       (push-mark me t t)
       (goto-char mb))
-    (helixel--sel-push (helixel-sel-create 'search '(:pattern "$" :dir forward)))
+    (helixel--sel-push (make-helixel-search-sel :pattern "$" :dir 'forward))
     (helixel-repeat-chain-start)
     (helixel-insert) (insert "X") (helixel-insert-exit)
     (helixel-repeat-chain-end)
@@ -1145,17 +1136,17 @@ up with ((w . 2)) instead of ((w . 1))."
     (let ((action-list (helixel-action-payload-get helixel-last-action :action-list)))
       (should (= 3 (length action-list)))
       ;; w1 should have moves=((w . 1)), NOT ((w . 2))
-      (let ((moves1 (helixel-sel-movement-moves
+      (let ((moves1 (helixel-movement-sel-moves
                      (helixel-action-sel (nth 0 action-list)))))
         (should moves1)
         (should (= 1 (cdar moves1))))
       ;; w2 should have moves=((w . 2)), accumulated
-      (let ((moves2 (helixel-sel-movement-moves
+      (let ((moves2 (helixel-movement-sel-moves
                      (helixel-action-sel (nth 1 action-list)))))
         (should moves2)
         (should (= 2 (cdar moves2))))
       ;; kill should also have moves=((w . 2))
-      (let ((moves3 (helixel-sel-movement-moves
+      (let ((moves3 (helixel-movement-sel-moves
                      (helixel-action-sel (nth 2 action-list)))))
         (should moves3)
         (should (= 2 (cdar moves3)))))))

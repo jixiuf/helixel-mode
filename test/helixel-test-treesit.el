@@ -280,10 +280,10 @@ should return nil without signaling an error."
           (should (> (point) 1))
           ;; pending-sel should be set
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
-          (should (equal (helixel-sel-field helixel--pending-sel :base)
+          (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
+          (should (equal (helixel-treesit-sel-base helixel--pending-sel)
                          "function"))
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'around)))
       (helixel--deactivate-all-hooks))))
 
@@ -297,8 +297,8 @@ should return nil without signaling an error."
           (helixel-ts-mark-inner-function 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'inside)))
       (helixel--deactivate-all-hooks))))
 
@@ -316,10 +316,10 @@ should return nil without signaling an error."
           (helixel-ts-mark-a-class 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
-          (should (equal (helixel-sel-field helixel--pending-sel :base)
+          (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
+          (should (equal (helixel-treesit-sel-base helixel--pending-sel)
                          "class"))
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'around)))
       (helixel--deactivate-all-hooks))))
 
@@ -333,7 +333,7 @@ should return nil without signaling an error."
           (helixel-ts-mark-inner-class 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'inside)))
       (helixel--deactivate-all-hooks))))
 
@@ -347,10 +347,10 @@ should return nil without signaling an error."
           (helixel-ts-mark-a-parameter 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
-          (should (equal (helixel-sel-field helixel--pending-sel :base)
+          (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
+          (should (equal (helixel-treesit-sel-base helixel--pending-sel)
                          "parameter"))
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'around))
           (should (equal (buffer-substring-no-properties
                           (region-beginning) (region-end))
@@ -381,7 +381,7 @@ should return nil without signaling an error."
           (helixel-ts-mark-inner-parameter 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'inside)))
       (helixel--deactivate-all-hooks))))
 
@@ -395,7 +395,7 @@ should return nil without signaling an error."
           (helixel-ts-mark-a-loop 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (equal (helixel-sel-field helixel--pending-sel :base)
+          (should (equal (helixel-treesit-sel-base helixel--pending-sel)
                          "loop")))
       (helixel--deactivate-all-hooks))))
 
@@ -409,7 +409,7 @@ should return nil without signaling an error."
           (helixel-ts-mark-a-conditional 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (equal (helixel-sel-field helixel--pending-sel :base)
+          (should (equal (helixel-treesit-sel-base helixel--pending-sel)
                          "conditional")))
       (helixel--deactivate-all-hooks))))
 
@@ -423,9 +423,9 @@ should return nil without signaling an error."
           (helixel-ts-mark-a-comment 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (equal (helixel-sel-field helixel--pending-sel :base)
+          (should (equal (helixel-treesit-sel-base helixel--pending-sel)
                          "comment"))
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'around))
           (should (equal (buffer-substring-no-properties
                           (region-beginning) (region-end))
@@ -442,7 +442,7 @@ should return nil without signaling an error."
           (helixel-ts-mark-inner-comment 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-field helixel--pending-sel :part)
+          (should (eq (helixel-treesit-sel-part helixel--pending-sel)
                       'inside))
           (should (equal (buffer-substring-no-properties
                           (region-beginning) (region-end))
@@ -717,7 +717,7 @@ should return nil without signaling an error."
           (helixel-ts-grow-selection 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
+          (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
           (let ((first-beg (region-beginning)))
             (helixel-ts-grow-selection 1)
             (should (use-region-p))
@@ -805,7 +805,7 @@ should return nil without signaling an error."
           (should helixel-last-action)
           (should (eq (helixel-sel-kind
                        (helixel-action-sel helixel-last-action))
-                      'treesit)))
+                      'helixel-treesit-sel)))
       (helixel--deactivate-all-hooks))))
 
 (ert-deftest helixel-treesit-action-ring--grow-edit ()
@@ -818,7 +818,7 @@ should return nil without signaling an error."
           ;; Grow to select the function block
           (helixel-ts-grow-selection 1)
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
+          (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
           ;; Simulate an edit (change) that commits
           (helixel-sel-call-recreate helixel--pending-sel)
           (should (use-region-p))
@@ -830,7 +830,7 @@ should return nil without signaling an error."
           (should helixel-last-action)
           (should (eq (helixel-sel-kind
                        (helixel-action-sel helixel-last-action))
-                      'treesit)))
+                      'helixel-treesit-sel)))
       (helixel--deactivate-all-hooks))))
 
 (ert-deftest helixel-treesit--non-ts-error ()
@@ -901,7 +901,7 @@ should return nil without signaling an error."
           (helixel-ts-forward-outer-sibling 1)
           (should (use-region-p))
           (should helixel--pending-sel)
-          (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit))
+          (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel))
           ;; Should select 'b'
           (goto-char (region-beginning))
           (should (looking-at "b")))
@@ -1079,7 +1079,7 @@ should return nil without signaling an error."
             (should (> (point) 5))
             ;; But pending-sel is still recorded for ; action cycle
             (should helixel--pending-sel)
-            (should (eq (helixel-sel-kind helixel--pending-sel) 'treesit)))
+            (should (eq (helixel-sel-kind helixel--pending-sel) 'helixel-treesit-sel)))
         (helixel--deactivate-all-hooks)))))
 
 (ert-deftest helixel-treesit-sibling--no-select-repeat ()
@@ -1110,11 +1110,10 @@ should return nil without signaling an error."
         (progn
           (goto-char 15)  ;; on 'c' parameter
           (helixel-ts-mark-a-parameter 1)
-          (let* ((sel helixel--pending-sel)
-                 (ctx (helixel-sel-ctx sel)))
+          (let ((sel helixel--pending-sel))
             ;; Verify :start and :end are stored
-            (should (plist-get ctx :start))
-            (should (plist-get ctx :end)))
+            (should (helixel-treesit-sel-start sel))
+            (should (helixel-treesit-sel-end sel)))
           ;; [o should select the previous parameter (b)
           (helixel-ts-backward-outer-sibling 1)
           (should (use-region-p))
@@ -1131,10 +1130,11 @@ should return nil without signaling an error."
           (goto-char 9)  ;; on 'a'
           (helixel-ts-mark-a-parameter 1)
           (should helixel--pending-sel)
-          (let ((ctx (helixel-sel-ctx helixel--pending-sel)))
-            (should (plist-get ctx :start))
-            (should (plist-get ctx :end))
-            (should (> (plist-get ctx :end) (plist-get ctx :start)))))
+          (let ((sel helixel--pending-sel))
+            (should (helixel-treesit-sel-start sel))
+            (should (helixel-treesit-sel-end sel))
+            (should (> (helixel-treesit-sel-end sel)
+                       (helixel-treesit-sel-start sel)))))
       (helixel--deactivate-all-hooks))))
 
 (ert-deftest helixel-treesit--pending-sel-has-start-end--nav ()
@@ -1146,9 +1146,9 @@ should return nil without signaling an error."
           (goto-char (point-min))
           (helixel-ts-forward-outer-class 1)
           (should helixel--pending-sel)
-          (let ((ctx (helixel-sel-ctx helixel--pending-sel)))
-            (should (plist-get ctx :start))
-            (should (plist-get ctx :end))))
+          (let ((sel helixel--pending-sel))
+            (should (helixel-treesit-sel-start sel))
+            (should (helixel-treesit-sel-end sel))))
       (helixel--deactivate-all-hooks))))
 
 (ert-deftest helixel-treesit-sibling--motion-select-default ()
@@ -1960,9 +1960,8 @@ next-capture-start.  The strict > would skip it; the
   (helixel-test-with-python-ts
     "def foo():\n    pass\n\ndef bar():\n    pass\n"
     (helixel-treesit-setup)
-    (let* ((sel (helixel-sel-create
-                 'treesit `(:base "function" :part around
-                                  :level 0 :count 1 :inline-advance t)))
+    (let* ((sel (make-helixel-treesit-sel :base "function" :part 'around
+                                          :level 0 :count 1 :inline-advance t))
            (targets (helixel-ts--mc-spawn sel)))
       (should (= 2 (length targets)))
       ;; First target: foo() — (point . mark) = (end . beg)
@@ -1989,9 +1988,8 @@ next-capture-start.  The strict > would skip it; the
   (helixel-test-with-python-ts
     "def foo():\n    pass\n"
     (helixel-treesit-setup)
-    (let* ((sel (helixel-sel-create
-                 'treesit `(:base "function" :part around
-                                  :level 0 :count 1 :inline-advance t)))
+    (let* ((sel (make-helixel-treesit-sel :base "function" :part 'around
+                                     :level 0 :count 1 :inline-advance t))
            (targets (helixel-ts--mc-spawn sel)))
       (should (= 1 (length targets)))
       (let ((p (car targets)))
@@ -2007,9 +2005,8 @@ next-capture-start.  The strict > would skip it; the
   (helixel-test-with-python-ts
     "def outer():\n    def inner():\n        pass\n    pass\n"
     (helixel-treesit-setup)
-    (let* ((sel (helixel-sel-create
-                 'treesit `(:base "function" :part around
-                                  :level 0 :count 1 :inline-advance t)))
+    (let* ((sel (make-helixel-treesit-sel :base "function" :part 'around
+                                     :level 0 :count 1 :inline-advance t))
            (targets (helixel-ts--mc-spawn sel)))
       ;; Both outer and inner exist in the index.  The reverse-pass
       ;; containment filter keeps only the innermost (inner) because
@@ -2032,8 +2029,7 @@ next-capture-start.  The strict > would skip it; the
   (helixel-test-with-python-ts
     "def foo(): pass\n"
     (helixel-treesit-setup)
-    (let ((sel (helixel-sel-create 'treesit
-                                   '(:part around :level 0))))
+    (let ((sel (make-helixel-treesit-sel :part 'around :level 0)))
       (should-error (helixel-ts--mc-spawn sel) :type 'user-error))))
 
 (ert-deftest helixel-ts-mc-spawn--no-such-type ()
@@ -2041,9 +2037,8 @@ next-capture-start.  The strict > would skip it; the
   (helixel-test-with-python-ts
     "x = 1\n"
     (helixel-treesit-setup)
-    (let ((sel (helixel-sel-create
-                'treesit `(:base "function" :part around
-                                 :level 0 :count 1 :inline-advance t))))
+    (let ((sel (make-helixel-treesit-sel :base "function" :part 'around
+                                     :level 0 :count 1 :inline-advance t)))
       (should-error (helixel-ts--mc-spawn sel) :type 'user-error))))
 
 (ert-deftest helixel-ts-mc-spawn--inner-vs-around ()
@@ -2051,12 +2046,10 @@ next-capture-start.  The strict > would skip it; the
   (helixel-test-with-python-ts
     "def foo(a, b):\n    return a + b\n"
     (helixel-treesit-setup)
-    (let* ((sel-a (helixel-sel-create
-                   'treesit `(:base "function" :part around
-                                    :level 0 :count 1 :inline-advance t)))
-           (sel-i (helixel-sel-create
-                   'treesit `(:base "function" :part inside
-                                    :level 0 :count 1 :inline-advance t)))
+    (let* ((sel-a (make-helixel-treesit-sel :base "function" :part 'around
+                                     :level 0 :count 1 :inline-advance t))
+           (sel-i (make-helixel-treesit-sel :base "function" :part 'inside
+                                     :level 0 :count 1 :inline-advance t))
            (targets-a (helixel-ts--mc-spawn sel-a))
            (targets-i (helixel-ts--mc-spawn sel-i)))
       (should (= 1 (length targets-a)))

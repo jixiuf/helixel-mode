@@ -13,7 +13,7 @@
 | `helixel-register.el` | **Named registers**: `helixel-register-backends` (kill-ring/clipboard/primary/register-alist), `helixel--current-register`, numbered delete registers, `helixel--kill-new`, swap-source register. Depends only on core. |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, generic grouped-ring queries (`helixel--gr-*`), `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel-record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions + `helixel--keyrec-capture`) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts canonical segment lists only; `helixel--repeat-get-keys' is the single place that normalizes a raw key vector/string into segment form.  **Chain lifecycle** (start/end/cancel): chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload; replay iterates the list and `helixel-action-replay's each entry.  No kmacro / keystroke capture. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel-record-action`), replay, unified `helixel--repeat-advance` (delegates to `helixel-sel-advance-fn' methods), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` via cl-defgeneric, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions + `helixel--keyrec-capture`) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts canonical segment lists only; `helixel--repeat-get-keys' is the single place that normalizes a raw key vector/string into segment form.  **Chain lifecycle** (start/end/cancel): chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload; replay iterates the list and `helixel-action-replay's each entry.  No kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
 | `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection` + `helixel--swap-source-type`.  **Swap commands** (same-buffer and cross-buffer) live at the end of this file. |
@@ -26,7 +26,7 @@
 | `helixel-textobj-marks.el` | User-facing surface: define-mark-pair/-quote/-object/-regex-textobj macros, mark-inner-*/mark-a-* commands (including tag and block), tree-sitter helper, all default registrations, `textobj' kind registration. |
 | `helixel-textobj.el` | Facade: requires engine, pair, block, marks. |
 | `helixel-surround.el` | Surround add/delete/replace. |
-| `helixel-mc-core.el` | **Multi-cursor core + target computation + integration**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook` / `pre-command-hook`, cursor-ID hash table, undo-step management (begin/finish + `buffer-undo-list` `apply` entry injection for cursor-position persistence across undo/redo), whitelist policy, `helixel-multi-cursor-mode`.  Target computation: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc--spawn-from-sel/-line/-rect/-find-char`, kind registry hooks.  **Integration glue** (end of file): dot-repeat / chain / insert per-cursor execution + atomic undo. |
+| `helixel-mc-core.el` | **Multi-cursor core + target computation + integration**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook` / `pre-command-hook`, cursor-ID hash table, undo-step management (begin/finish + `buffer-undo-list` `apply` entry injection for cursor-position persistence across undo/redo), whitelist policy, `helixel-multi-cursor-mode`.  Target computation: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc--spawn-from-sel/-line/-rect/-find-char`, `helixel-mc-spawn-fn' methods.  **Integration glue** (end of file): dot-repeat / chain / insert per-cursor execution + atomic undo. |
 | `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors. |
 | `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww) + multi-cursor completion-preview shim. 29 `declare-function` (all third-party). |
 | `helixel-treesit-core.el` | **Tree-sitter foundation**: readiness gates, node utilities, query provider (evil-textobj-tree-sitter integration), capture normalization, object resolution, index cache, selection activation, kind registration, type specification table. Soft-depends on `treesit` and `evil-textobj-tree-sitter-core`. |
@@ -148,16 +148,17 @@ Notes:
 ;;  -find-char-sel, -textobj-sel, -surround-sel, -insert-*-sel,
 ;;  -next-error-sel, -treesit-sel).
 ;; Protocol dispatches via cl-defgeneric (see below).
-;; Legacy ctx keys (still readable via dual-state accessors):
-;;   line          :dir (forward|backward) :count (int≥1) :entry-kind
-;;   rect          :count (int≥1)
-;;   movement      :moves ((CMD . COUNT)…) :inline-advance t
-;;   textobj       :command :count :delimiter :inline-advance t
-;;   search        :pattern :dir :entry-kind
-;;   find-char     :char :type (next|till) :dir :inline-advance t
-;;   surround      :delimiter
-;;   insert-selection-*  :cursor-offset
-;;   insert-search-offset :offset
+;; Slots per concrete struct (constructor `make-helixel-<kind>-sel'):
+;;   line          count dir entry-kind
+;;   rect          count
+;;   movement      moves ((CMD . COUNT)…)
+;;   textobj       command count delimiter
+;;   search        pattern dir n-count regexp
+;;   find-char     char type (next|till) dir n-count
+;;   surround      delimiter
+;;   insert-selection-*  (no extra slots)
+;;   insert-search-offset offset
+;;   treesit       base part level count query start end command
 
 ### helixel-action / helixel-action (unified replay + history event)
 
@@ -176,18 +177,16 @@ pure movement/search/state events (~40B per entry negligible).
 
 ```elisp
 ;; ── Selection ──
-(helixel-sel-create kind ctx)   → struct (extra args ignored)
-(helixel-sel-kind sel)          → symbol
+(make-helixel-<kind>-sel :slot v …)  ; only constructor form (no sel-create)
+(helixel-sel-kind sel)          → struct type symbol (e.g. 'helixel-line-sel)
 (helixel-sel-call-recreate sel) → recreates region via cl-defgeneric
-(helixel-sel-update-ctx sel k v)→ new sel
-(helixel-sel-count sel)         → :count or 0
-;; Kind accessors (work on struct or raw ctx plist):
-(helixel-sel-line-dir obj)          → :dir, default 'forward
-(helixel-sel-line-count obj)        → :count, default 1
-(helixel-sel-search-pattern obj)
-(helixel-sel-search-dir obj)        → :dir, default 'forward
-(helixel-sel-search-entry-kind obj)
-(helixel-sel-textobj-command obj)
+(helixel-sel-update-ctx sel k v)→ copy with slot K set (keyword→slot name)
+(helixel-sel-count sel)         → count or 0 (generic; per-struct methods)
+;; Slot accessors come from cl-defstruct: `helixel-<kind>-sel-<slot>'.
+;; Multi-kind slot concepts dispatch via generics with nil defaults:
+(helixel-sel-entry-kind obj)    → :entry-kind (line/search), else nil
+(helixel-sel-n-count obj)       → :n-count (search/find-char), else nil
+(helixel-sel-insert-cursor-offset obj)
 
 ;; ── Pending selection ──
 (helixel--sel-push sel)             ; selection cmds push
@@ -384,8 +383,8 @@ position.  `helixel-repeat-chain-end' commits a chain action whose
 chain tx to every fake cursor — so `@ ... ESC' on N cursors gives N
 parallel chain applications, all in one undo step.
 
-### Raw plist-get on ctx
-CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` on a sel or ctx — use `helixel-sel-*` accessors instead (`helixel-sel-field`, `helixel-sel-textobj-command`, etc.).  Raw `plist-get` on a struct silently returns nil (vectors are not conses) — the Phase 3.2 `helixel--with-span` regression was exactly this.  Construct methods (`helixel-sel--construct`) are the only legitimate raw-plist readers; both disappear in Phase 3.3.
+### Raw plist-get on a sel
+Sels are cl-defstruct vectors — raw `plist-get` on one silently returns nil (the Phase 3.2 `helixel--with-span` regression was exactly this).  Always use the struct slot accessors (`helixel-<kind>-sel-<slot>`) or the multi-kind generics (`helixel-sel-entry-kind`, `helixel-sel-n-count`, `helixel-sel-count`, `helixel-sel-insert-cursor-offset`).  For cross-module slot access without a compile-time struct dependency, either add a `declare-function ... t` (FILEONLY — check-declare cannot see generated accessors) or use `(cl-struct-slot-value type-var 'slot sel)` with a *variable* type (a literal unknown type triggers cl-typep optimization-failure warnings).
 
 ### Design notes
 - `:self-advancing` boolean on ops: t = op handles its own positioning, suppress auto-advance (kill, change, join-lines); nil = op leaves point alone (insert, replace, paste, indent, surround, ...).
@@ -399,17 +398,15 @@ CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use r
 
 All `helixel-sel` accessors follow a uniform pattern — no `get-` prefix:
 
-- **Struct accessors**: `helixel-sel-kind`, `helixel-sel-ctx`,
-  `helixel-sel-span`, `helixel-sel-count`
-- **Kind-specific ctx accessors**: `helixel-sel-line-dir`,
-  `helixel-sel-search-pattern`, `helixel-sel-textobj-command`, etc.
+- **Base-slot accessors**: `helixel-sel-kind`, `helixel-sel-span`,
+  `helixel-sel-inline-advance` (from the base cl-defstruct)
+- **Concrete-slot accessors**: `helixel-line-sel-dir`,
+  `helixel-search-sel-pattern`, `helixel-textobj-sel-command`, etc.
+  (generated by each cl-defstruct; take structs only, never plists)
+- **Multi-kind generics**: `helixel-sel-count`, `helixel-sel-entry-kind`,
+  `helixel-sel-n-count`, `helixel-sel-insert-cursor-offset`
 - **Closure-call accessors**: `helixel-sel-call-recreate`,
   `helixel-sel-call-display` (the `call-` prefix signals side-effect)
-- **Generic ctx key accessor**: `helixel-sel-field`
-
-The kind-specific accessors accept either a `helixel-sel` struct or a
-raw ctx plist (for use inside recreate closures).  They are the
-preferred way to read ctx fields.
 
   helixel--action-payload-* removed in favor of payload accessors.
   See `helixel-action-char`, `helixel-action-type`, `helixel-action-dir` for

@@ -47,12 +47,6 @@
 ;; Forward-declare from helixel-textobj.el (mutual deps via helixel-state).
 (declare-function helixel--block-spec-at-point "helixel-textobj-block" ())
 
-;; All-buffer/all-dir line handlers (defined in helixel-repeat.el).
-(declare-function helixel--all-buffer-line "helixel-repeat"
-                  (edit prefix))
-(declare-function helixel--all-dir-line "helixel-repeat"
-                  (edit))
-
 (defmacro helixel-define-movement (name builtin type &rest options)
   "Define a movement command NAME wrapping BUILTIN with TYPE.
 
@@ -90,7 +84,7 @@ the action carries no tx with a runner)."
          ;; selection type even after a movement (e.g. x j d).
          (unless (memq (and helixel--pending-sel
                             (helixel-sel-kind helixel--pending-sel))
-                       '(line rect textobj))
+                       '(helixel-line-sel helixel-rect-sel helixel-textobj-sel))
            (setq helixel--pending-sel nil))
          (call-interactively #',builtin))
        ,@(when rev `((helixel-register-motion-reverse ',name ',rev))))))
@@ -1423,14 +1417,14 @@ new direction."
          (current-prefix-arg nil))
     ;; Flip permanent direction on negative prefix (like N for search).
     (when (and flip-p helixel--pending-sel
-               (eq (helixel-sel-kind helixel--pending-sel) 'line))
+               (eq (helixel-sel-kind helixel--pending-sel) 'helixel-line-sel))
       (when-let* ((flipped (helixel-sel-flip-dir helixel--pending-sel)))
         (helixel--sel-push flipped)))
     (let ((extending (and (region-active-p)
                           (eq (helixel--sel-type) 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
-          (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
+          (let ((dir (helixel-line-sel-dir helixel--pending-sel)))
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (forward: point at bottom, mark at top).
@@ -1446,9 +1440,9 @@ new direction."
                                            (region-beginning)))))
                           abs-n))
              (dir (if extending
-                      (helixel-sel-line-dir helixel--pending-sel)
+                      (helixel-line-sel-dir helixel--pending-sel)
                     'forward)))
-        (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
+        (helixel--sel-push (make-helixel-line-sel :count new-count :dir dir))))))
 
 (helixel-define-command helixel-select-line-up
     (:category movement :subcat lineselect
@@ -1460,14 +1454,14 @@ new direction."
          (current-prefix-arg nil))
     ;; Flip permanent direction on negative prefix (like N for search).
     (when (and flip-p helixel--pending-sel
-               (eq (helixel-sel-kind helixel--pending-sel) 'line))
+               (eq (helixel-sel-kind helixel--pending-sel) 'helixel-line-sel))
       (when-let* ((flipped (helixel-sel-flip-dir helixel--pending-sel)))
         (helixel--sel-push flipped)))
     (let ((extending (and (region-active-p)
                           (eq (helixel--sel-type) 'line))))
       (if extending
           ;; Extend/shrink in the stored direction.
-          (let ((dir (helixel-sel-line-dir helixel--pending-sel)))
+          (let ((dir (helixel-line-sel-dir helixel--pending-sel)))
             (dotimes (_ abs-n)
               (helixel--extend-line-in-dir dir)))
         ;; New selection (backward: point at top, mark at bottom).
@@ -1483,9 +1477,9 @@ new direction."
                                            (region-beginning)))))
                           abs-n))
              (dir (if extending
-                      (helixel-sel-line-dir helixel--pending-sel)
+                      (helixel-line-sel-dir helixel--pending-sel)
                     'backward)))
-        (helixel--push-selection 'line `(:count ,new-count :dir ,dir))))))
+        (helixel--sel-push (make-helixel-line-sel :count new-count :dir dir))))))
 
 (helixel-define-command helixel-select-rectangle
     (:category movement :subcat rectselect
@@ -1509,7 +1503,7 @@ new direction."
         (rectangle--reset-point-crutches)))
     (let* ((prev-count (helixel-sel-count helixel--pending-sel))
            (new-count (if extending (+ prev-count n) n)))
-      (helixel--push-selection 'rect `(:count ,new-count)))))
+      (helixel--sel-push (make-helixel-rect-sel :count new-count)))))
 
 
 ;; ── Line / Rect recreate functions ──
@@ -1522,10 +1516,10 @@ at the appropriate offset on the selected line:
   :entry-kind insert \=`region-beginning' + cursor-offset
   :entry-kind append \=`region-end' + cursor-offset
 When :span is set, extends region back to the pre-recreate origin."
-  (let ((n (helixel-sel-line-count ctx))
+  (let ((n (helixel-line-sel-count ctx))
         (entry-kind (helixel-sel-entry-kind ctx)))
     (helixel--with-span ctx
-      (if (eq (helixel-sel-line-dir ctx) 'backward)
+      (if (eq (helixel-line-sel-dir ctx) 'backward)
           (helixel-select-line-up n)
         (helixel-select-line n))
       ;; Signal error when buffer is empty (nothing to select).
@@ -1559,8 +1553,8 @@ NOTE: Does NOT use `helixel--with-span' because `push-mark' inside
 `rectangle-mark-mode' behaves differently - we must deactivate the
 rectangle mark, push the span origin, then reactivate.  The macro's
 simple `push-mark' would interact poorly with the rect-mode mark."
-  (let ((n (helixel-sel-rect-count ctx))
-        (span-origin (when (helixel-sel-span-p ctx) (point))))
+  (let ((n (helixel-rect-sel-count ctx))
+        (span-origin (when (helixel-sel-span ctx) (point))))
     (unless rectangle-mark-mode
       (push-mark (point) t t)
       (rectangle-mark-mode 1))
@@ -1584,12 +1578,12 @@ Signals `user-error' when point does not move (no more targets)."
   ;; :span forces visual-mode accumulation regardless of :normal-mode.
   ;; Enter visual state for accumulating movements so `clear-highlights'
   ;; in the funcall'd movement commands don't deactivate the region.
-  (unless (and (helixel-sel-movement-normal-mode-p ctx)
-               (not (helixel-sel-span-p ctx)))
+  (unless (and (helixel-movement-sel-normal-mode ctx)
+               (not (helixel-sel-span ctx)))
     (setq helixel--current-state 'visual))
   (helixel--with-span ctx
     (let ((saved-pos (point)))
-      (dolist (m (reverse (helixel-sel-movement-moves ctx)))
+      (dolist (m (reverse (helixel-movement-sel-moves ctx)))
         (dotimes (_ (cdr m))
           (funcall (car m))))
       (when (= (point) saved-pos)
@@ -1607,10 +1601,10 @@ correctly (bol for insert, eol for append).  Returns nil at buffer edge.
 Deactivates any prior region so `helixel-select-line-up' starts
 fresh rather than extending a stale mark."
   (let* ((sel (helixel-action-sel tx))
-         (dir (if (eq (helixel-sel-line-dir sel) 'backward) -1 1))
+         (dir (if (eq (helixel-line-sel-dir sel) 'backward) -1 1))
          (entry-kind (helixel-sel-entry-kind sel))
          (count (if (eq entry-kind 'append) 1
-                  (helixel-sel-line-count sel)))
+                  (helixel-line-sel-count sel)))
          (lines-left count))
     (while (and (> lines-left 0) (= (forward-line dir) 0))
       (unless (helixel--blank-line-p)
@@ -1631,44 +1625,22 @@ fresh rather than extending a stale mark."
   (dir 'forward)
   entry-kind)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql line)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-line-sel
-   :count (or (plist-get ctx :count) 1)
-   :dir (or (plist-get ctx :dir) 'forward)
-   :entry-kind (plist-get ctx :entry-kind)
-   :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-line-sel))
-  "Sel type method for SEL."
-  'line)
+(cl-defmethod helixel-sel-count ((sel helixel-line-sel))
+  "Sel count method for SEL."
+  (or (helixel-line-sel-count sel) 0))
 
-(cl-defmethod helixel-sel--to-plist ((sel helixel-line-sel))
-  "Sel  to plist method for SEL."
-  (list :count (helixel-line-sel-count sel)
-        :dir (helixel-line-sel-dir sel)
-        :entry-kind (helixel-line-sel-entry-kind sel)
-        :span (helixel-line-sel-span sel)))
 
 (cl-defstruct (helixel-rect-sel (:include helixel-sel)
                                 (:copier nil))
   "Rectangle selection.  Slots: COUNT (+ base SPAN)."
   (count 1))
 
-(cl-defmethod helixel-sel--construct ((_kind (eql rect)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-rect-sel
-   :count (or (plist-get ctx :count) 1)
-   :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-rect-sel))
-  "Sel type method for SEL."
-  'rect)
+(cl-defmethod helixel-sel-count ((sel helixel-rect-sel))
+  "Sel count method for SEL."
+  (or (helixel-rect-sel-count sel) 0))
 
-(cl-defmethod helixel-sel--to-plist ((sel helixel-rect-sel))
-  "Sel  to plist method for SEL."
-  (list :count (helixel-rect-sel-count sel)
-        :span (helixel-rect-sel-span sel)))
 
 (cl-defstruct (helixel-movement-sel (:include helixel-sel)
                                     (:copier nil))
@@ -1676,24 +1648,6 @@ fresh rather than extending a stale mark."
   moves
   normal-mode)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql movement)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-movement-sel
-   :moves (plist-get ctx :moves)
-   :normal-mode (plist-get ctx :normal-mode)
-   :inline-advance (plist-get ctx :inline-advance)
-   :span (plist-get ctx :span)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-movement-sel))
-  "Sel type method for SEL."
-  'movement)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-movement-sel))
-  "Sel  to plist method for SEL."
-  (list :moves (helixel-movement-sel-moves sel)
-        :normal-mode (helixel-movement-sel-normal-mode sel)
-        :inline-advance (helixel-movement-sel-inline-advance sel)
-        :span (helixel-movement-sel-span sel)))
 
 ;; ── line protocol methods ──
 
@@ -1725,6 +1679,68 @@ fresh rather than extending a stale mark."
 (cl-defmethod helixel-sel-region-type ((_sel helixel-line-sel))
   "Sel region type method for SEL."
   'line)
+
+;; ── All-buffer / all-dir line handlers ──
+
+(defun helixel--all-buffer-line (edit prefix)
+  "All-buffer repeat handler for line selections, for EDIT and PREFIX.
+Forward pass then backward pass from the marker position.
+For chain ops, does a single pass from the buffer edge."
+  (let* ((sel (helixel-action-sel edit))
+         (op (helixel-action-op edit))
+         (self-advancing (helixel--op-self-advancing-p op))
+         (reverse-p (helixel-repeat-prefix-reverse-p prefix))
+         (marker (car (helixel-action-mark-region edit)))
+         (chain-p (eq op 'chain)))
+    (if chain-p
+        (let* ((dir (if reverse-p -1
+                      (if (eq (helixel-line-sel-dir sel) 'backward) -1 1)))
+               (start (if (> dir 0) (point-min) (point-max)))
+               (cnt 0))
+          (save-excursion
+            (goto-char start)
+            (unless (helixel--blank-line-p)
+              (helixel-action-replay edit)))
+          ;; Chain ops use line-stepping algorithm regardless.
+          (setq cnt (helixel--repeat-line-pass
+                     edit sel nil
+                     start dir cnt))
+          (helixel--repeat-echo cnt))
+      (let* ((first-dir (if reverse-p -1
+                          (if (eq (helixel-line-sel-dir sel) 'backward) -1 1)))
+             (cnt 0)
+             (start-pos (and marker (marker-position marker))))
+        (when start-pos
+          (goto-char start-pos)
+          (beginning-of-line)
+          (setq start-pos (point)))
+        (setq cnt (helixel--repeat-line-pass
+                   edit sel self-advancing
+                   start-pos first-dir cnt))
+        (setq cnt (helixel--repeat-line-pass
+                   edit sel self-advancing
+                   start-pos (- first-dir) cnt))
+        (helixel--repeat-echo cnt)))))
+
+(defun helixel--all-dir-line (edit)
+  "All-dir repeat handler for line selections, for EDIT.
+Uses `helixel--repeat-line-pass' for proper cursor advance."
+  (let* ((sel (helixel-action-sel edit))
+         (op (helixel-action-op edit))
+         (dir (if (eq (helixel-line-sel-dir sel) 'backward) -1 1))
+         ;; In all-dir line replay, even ops that ordinarily handle
+         ;; their own positioning (kill, change) want the simple
+         ;; line-stepping algorithm here, because the kill/change
+         ;; already happened once before we entered the loop.
+         (self-advancing (helixel--op-self-advancing-p op))
+         (cnt 0))
+    (setq cnt (helixel--repeat-line-pass
+               edit sel self-advancing (point) dir cnt))
+    (helixel--repeat-echo cnt)))
+
+(cl-defmethod helixel-sel-entry-kind ((sel helixel-line-sel))
+  "Return the entry-kind of SEL."
+  (helixel-line-sel-entry-kind sel))
 
 (cl-defmethod helixel-mc-spawn-fn ((_sel helixel-line-sel))
   "Mc spawn fn method for SEL."
@@ -1798,8 +1814,8 @@ non-movement sels, so nil is the only ctx possible there."
            (entry (cons cmd 1)))
       (cond
        ;; Update: extend existing movement sel.
-       ((and ctx (eq (helixel-sel-kind ctx) 'movement))
-        (let* ((moves (helixel-sel-movement-moves ctx))
+       ((and ctx (eq (helixel-sel-kind ctx) 'helixel-movement-sel))
+        (let* ((moves (helixel-movement-sel-moves ctx))
                (last (car moves)))
           (if (and last (eq (car last) cmd))
               (setcdr last (1+ (cdr last)))
@@ -1809,11 +1825,10 @@ non-movement sels, so nil is the only ctx possible there."
        ;; Create: first movement that made a region.
        ((null ctx)
         (helixel--sel-push
-         (helixel-sel-create 'movement
-                             `(:moves (,entry) :inline-advance t
-                                      :normal-mode
-                                      ,(eq helixel--current-state
-                                           'normal)))))))))
+         (make-helixel-movement-sel :moves (list entry) :inline-advance t
+                                    :normal-mode
+                                    (eq helixel--current-state
+                                        'normal))))))))
 
 (provide 'helixel-move)
 ;;; helixel-move.el ends here

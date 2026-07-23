@@ -477,7 +477,7 @@ where match content begins, or nil when not found."
 (defun helixel-ne--recreate-next-error (ctx)
   "Recreate a \=`next-error' selection from CTX at point.
 Navigates one step via the snapshot."
-  (helixel-ne--step (or (helixel-sel-field ctx :dir) 'forward)))
+  (helixel-ne--step (or (helixel-next-error-sel-dir ctx) 'forward)))
 
 (defun helixel-ne--advance-next-error (_tx)
   "Advance to the next \=`next-error' match via the snapshot."
@@ -488,17 +488,6 @@ Navigates one step via the snapshot."
   "Next-error navigation selection.  Slots: DIR."
   dir)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql next-error)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-next-error-sel :dir (plist-get ctx :dir)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-next-error-sel))
-  "Sel type method for SEL."
-  'next-error)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-next-error-sel))
-  "Sel  to plist method for SEL."
-  (list :dir (helixel-next-error-sel-dir sel)))
 
 (cl-defmethod helixel-sel-recreate ((sel helixel-next-error-sel))
   "Sel recreate method for SEL."
@@ -573,8 +562,7 @@ grep, diff, xref, etc.  Excludes occur buffers (which use the
     ;; Fresh state: after any compile-driven jump, n moves forward.
     (helixel-ne--seed-repeat-state 'forward)
     ;; Push sel so s s can spawn without needing n/N first.
-    (helixel--push-selection
-     'next-error `(:dir ,(helixel-search--current-dir)))))
+    (helixel--sel-push (make-helixel-next-error-sel :dir (helixel-search--current-dir)))))
 
 (provide 'helixel-next-error)
 ;;; helixel-next-error.el ends here

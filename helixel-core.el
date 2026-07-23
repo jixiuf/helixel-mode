@@ -65,27 +65,13 @@ Concrete per-kind structs include this base (e.g. `helixel-line-sel'
 in helixel-move.el).  SPAN and INLINE-ADVANCE are cross-kind flags
 promoted to base slots.  Protocol methods (recreate, advance,
 display) are `cl-defgeneric' dispatches on the concrete type.
-Do not construct directly — use `helixel-sel-create'."
+Construct concrete kinds with their `make-helixel-*-sel' constructors."
   (span nil)
   (inline-advance nil))
 
 (defsubst helixel-sel-p (obj)
   "Return non-nil if OBJ is a `helixel-sel' (any concrete subtype)."
   (cl-typep obj 'helixel-sel))
-
-(cl-defgeneric helixel-sel--construct (kind ctx)
-  "Build the concrete sel struct for KIND from ctx plist CTX.
-Methods are defined next to each concrete struct, keyed on
-\=(eql KIND).")
-
-(cl-defgeneric helixel-sel-type (sel)
-  "Return the kind symbol of SEL (e.g. \=`line', \=`search').")
-
-(cl-defgeneric helixel-sel--to-plist (sel)
-  "Return SEL's slots as a ctx plist.
-Transitional bridge for Phase 3.1: legacy consumers (kind-registry
-functions, ctx accessors) keep working on plists until Phase 3.2
-converts them to slot reads and deletes this generic.")
 
 ;; ----------------------------------------------------------------------
 ;; Selection protocol generics (cl-defgeneric dispatch)
@@ -122,7 +108,7 @@ Returns non-nil on success.")
 
 (cl-defmethod helixel-sel-display ((sel helixel-sel))
   "Default: display the kind symbol name of SEL."
-  (symbol-name (helixel-sel-type sel)))
+  (symbol-name (type-of sel)))
 
 (cl-defgeneric helixel-sel-flip-dir (sel)
   "Return a new sel like SEL with its direction flipped, or nil.
@@ -167,6 +153,39 @@ Kinds without a direction concept use the base method (nil).")
   "Default: kinds do not skip `exchange-point-and-mark'."
   nil)
 
+(cl-defgeneric helixel-sel-entry-kind (sel)
+  "Return the entry-kind of SEL, or nil.")
+
+(cl-defmethod helixel-sel-entry-kind ((_sel null))
+  "Nil has no entry kind."
+  nil)
+
+(cl-defmethod helixel-sel-entry-kind ((_sel helixel-sel))
+  "Default: no entry kind."
+  nil)
+
+(cl-defgeneric helixel-sel-n-count (sel)
+  "Return the n-count of SEL, or nil.")
+
+(cl-defmethod helixel-sel-n-count ((_sel null))
+  "Nil has no n-count."
+  nil)
+
+(cl-defmethod helixel-sel-n-count ((_sel helixel-sel))
+  "Default: no n-count."
+  nil)
+
+(cl-defgeneric helixel-sel-insert-cursor-offset (sel)
+  "Return the cursor offset of an insert-selection SEL, or nil.")
+
+(cl-defmethod helixel-sel-insert-cursor-offset ((_sel null))
+  "Nil has no cursor offset."
+  nil)
+
+(cl-defmethod helixel-sel-insert-cursor-offset ((_sel helixel-sel))
+  "Default: no cursor offset."
+  nil)
+
 (cl-defgeneric helixel-mc-spawn-fn (sel)
   "Return the mc spawn function (SEL) -> target list for SEL, or nil.
 Methods return a quoted function symbol (the implementations live
@@ -178,12 +197,6 @@ kind's advance function from `point-min'.")
   "Default: no spawn function; use the advance-walk fallback."
   nil)
 
-(defun helixel-sel-create (kind ctx)
-  "Create a selection struct for KIND with data CTX (a plist).
-Dispatches to the `helixel-sel--construct' method for KIND, defined
-next to the concrete struct in the owning module."
-  (helixel-sel--construct kind ctx))
-
 ;; ── Span extension helper ──
 
 (defmacro helixel--with-span (ctx &rest body)
@@ -193,7 +206,7 @@ as the span origin and extends the mark back to it after BODY.
 For \\[helixel-action-cycle] + \\[helixel-repeat-edit] repeating
 the full session-start-to-point span."
   (declare (indent 1))
-  `(let ((span-origin (when (helixel-sel-span-p ,ctx) (point))))
+  `(let ((span-origin (when (helixel-sel-span ,ctx) (point))))
      (prog1 (progn ,@body)
        (when span-origin
          (push-mark span-origin t t)))))
@@ -201,16 +214,11 @@ the full session-start-to-point span."
 ;; ── Core accessors ──
 
 (defsubst helixel-sel-kind (sel)
-  "Return the kind symbol of `helixel-sel' struct SEL."
+  "Return the concrete struct type of `helixel-sel' struct SEL.
+The result is the struct type symbol (e.g. \=`helixel-line-sel'),
+which doubles as the kind identifier."
   (when (helixel-sel-p sel)
-    (helixel-sel-type sel)))
-
-(defsubst helixel-sel-ctx (sel)
-  "Return SEL's data as a ctx plist (transitional view).
-Phase 3.2 converts remaining consumers to slot reads and removes
-this bridge."
-  (when (helixel-sel-p sel)
-    (helixel-sel--to-plist sel)))
+    (type-of sel)))
 
 (defsubst helixel-sel-call-recreate (sel)
   "Recreate selection described by SEL via `helixel-sel-recreate'."
@@ -227,157 +235,25 @@ this bridge."
   (when (helixel-sel-p sel)
     (helixel-sel-advance-fn sel)))
 
-(defsubst helixel-sel-field (sel key)
-  "Get KEY from `helixel-sel' struct SEL's ctx.
-Returns nil if SEL is nil."
-  (when sel
-    (plist-get (helixel-sel-ctx sel) key)))
+(cl-defgeneric helixel-sel-count (sel)
+  "Return the repeat count of SEL, or 0 when absent / nil.")
 
-(defsubst helixel-sel-count (sel)
-  "Return :count from `helixel-sel' struct SEL's ctx, or 0 if absent.
-Returns 0 if SEL is nil."
-  (if (null sel) 0
-    (or (plist-get (helixel-sel-ctx sel) :count) 0)))
+(cl-defmethod helixel-sel-count ((_sel null))
+  "Nil has count 0."
+  0)
 
-(defsubst helixel-sel-equal-p (s1 s2)
-  "Return non-nil if S1 and S2 represent the same selection.
-Compares kind and ctx.  Returns t when both are nil."
-  (if (or (null s1) (null s2))
-      (eq s1 s2)
-    (and (eq (helixel-sel-kind s1) (helixel-sel-kind s2))
-         (equal (helixel-sel-ctx s1) (helixel-sel-ctx s2)))))
+(cl-defmethod helixel-sel-count ((_sel helixel-sel))
+  "Default: kinds without a count slot have count 0."
+  0)
 
 (defun helixel-sel-update-ctx (sel key value)
-  "Return a new sel struct from SEL with ctx KEY set to VALUE."
-  (if (helixel-sel-p sel)
-      (helixel-sel--construct
-       (helixel-sel-kind sel)
-       (plist-put (copy-sequence (helixel-sel-ctx sel)) key value))
-    sel))
-
-;; ── Kind-specific ctx accessors ──
-;;
-;; Each accessor takes either a `helixel-sel' struct or a raw ctx
-;; plist (for use inside recreate closures).  These are the preferred
-;; way to read ctx fields; they document the valid keys per kind
-;; through their names.  See the CTX schema table above for details.
-;;
-;; All accessors share the same body shape
-;;     (or (plist-get (helixel-sel--ctx-ensure OBJ) KEY) DEFAULT)
-;; so we generate them via `helixel--def-sel-accessor'.
-
-(defsubst helixel-sel--ctx-ensure (obj)
-  "If OBJ is a `helixel-sel' struct, return its ctx plist; else return OBJ."
-  (if (helixel-sel-p obj) (helixel-sel--to-plist obj) obj))
-
-(defmacro helixel--def-sel-accessor (name key &optional default doc)
-  "Define a `defsubst' NAME that reads ctx KEY (with optional DEFAULT).
-DOC is the docstring (the OBJ/ctx-plist clarification is appended
-automatically)."
-  (let ((doc (concat (or doc (format "Return %s from ctx." key))
-                     "\nOBJ is a `helixel-sel' struct or raw ctx plist.")))
-    `(defsubst ,name (obj)
-       ,doc
-       ,(if default
-            `(or (plist-get (helixel-sel--ctx-ensure obj) ,key) ,default)
-          `(plist-get (helixel-sel--ctx-ensure obj) ,key)))))
-
-;;;; line
-(helixel--def-sel-accessor
- helixel-sel-line-dir   :dir   'forward
- "Return :dir from line ctx (`forward' or `backward'), default `forward'.")
-(helixel--def-sel-accessor helixel-sel-line-count :count 1
-                           "Return :count from line ctx, default 1.")
-
-;;;; rect
-(helixel--def-sel-accessor helixel-sel-rect-count :count 1
-                           "Return :count from rect ctx, default 1.")
-
-;;;; movement
-(helixel--def-sel-accessor
- helixel-sel-movement-moves :moves nil
- "Return :moves list from movement ctx ((CMD . COUNT) ...).")
-(helixel--def-sel-accessor
- helixel-sel-movement-inline-advance-p
- :inline-advance nil
- "Return non-nil if movement ctx has :inline-advance set.")
-(helixel--def-sel-accessor
- helixel-sel-movement-normal-mode-p
- :normal-mode nil
- "Return non-nil if movement was recorded in normal mode.
-When set, each movement command resets the selection during
-dot-repeat replay (only the final target is selected).")
-
-;;;; textobj
-(helixel--def-sel-accessor helixel-sel-textobj-command :command nil
-                           "Return :command (symbol) from textobj ctx.")
-(helixel--def-sel-accessor helixel-sel-textobj-count   :count   1
-                           "Return :count from textobj ctx, default 1.")
-(helixel--def-sel-accessor helixel-sel-textobj-delimiter :delimiter nil
-                           "Return :delimiter (plist) from textobj ctx.")
-
-;;;; search
-(helixel--def-sel-accessor helixel-sel-search-pattern :pattern nil
-                           "Return :pattern (string) from search ctx.")
-(helixel--def-sel-accessor helixel-sel-search-dir :dir 'forward
-                           "Return :dir from search ctx, default `forward'.")
-(helixel--def-sel-accessor
- helixel-sel-entry-kind :entry-kind nil
- "Return :entry-kind (insert or append) from the ctx, or nil.
-This key is shared by `line' and `search' kinds.")
-
-(helixel--def-sel-accessor
- helixel-sel-search-cursor-offset :cursor-offset nil
- "Return :cursor-offset (integer) from search ctx, or nil.")
-
-(defsubst helixel-sel-search-regexp (obj)
-  "Return :regexp from search ctx (t = regexp, nil = literal).
-When the :regexp key is absent from the ctx, defaults to t.
-OBJ is a `helixel-sel' struct or raw ctx plist."
-  (let ((ctx (helixel-sel--ctx-ensure obj)))
-    (if (plist-member ctx :regexp)
-        (plist-get ctx :regexp)
-      t)))
-
-;;;; find-char
-(helixel--def-sel-accessor
- helixel-sel-find-char-dir :dir 'forward
- "Return :dir (`forward' or `backward') from find-char ctx.")
-(helixel--def-sel-accessor
- helixel-sel-find-char-type :type 'next
- "Return :type (`next' or `till') from find-char ctx, default `next'.")
-(helixel--def-sel-accessor helixel-sel-find-char-char :char nil
-                           "Return :char (character) from find-char ctx.")
-(helixel--def-sel-accessor
- helixel-sel-find-char-n-count :n-count nil
- "Return :n-count (integer) from find-char ctx, or nil if absent.
-Callers that need a numeric default wrap with \=`(or ... 0)'.")
-
-;;;; shared keys (used by multiple kinds)
-(helixel--def-sel-accessor
- helixel-sel-n-count :n-count nil
- "Return :n-count (integer) from ctx, or nil if absent.
-This key is shared by `search' and `find-char' kinds.
-Callers that need a numeric default wrap with \=`(or ... 0)'.")
-(helixel--def-sel-accessor
- helixel-sel-span-p :span nil
- "Return non-nil if ctx has :span (from \\[helixel-action-cycle] push).
-This key is shared by `line', `rect', `movement', `search', and `find-char'.")
-
-;;;; surround
-(helixel--def-sel-accessor helixel-sel-surround-delimiter :delimiter nil
-                           "Return :delimiter (plist) from surround ctx.")
-
-;;;; insert-search-offset
-(helixel--def-sel-accessor
- helixel-sel-insert-offset :offset nil
- "Return :offset (integer) from insert-search-offset ctx.")
-
-;;;; insert-selection-start / insert-selection-end
-(helixel--def-sel-accessor
- helixel-sel-insert-cursor-offset :cursor-offset nil
- "Return :cursor-offset (integer) from insert ctx, or nil.")
-
+  "Return a copy of SEL with the slot named by KEY set to VALUE.
+KEY is a keyword whose name matches a struct slot (e.g. :dir)."
+  (when (helixel-sel-p sel)
+    (let ((new (copy-sequence sel))
+          (slot (intern (substring (symbol-name key) 1))))
+      (setf (cl-struct-slot-value (type-of sel) slot new) value)
+      new)))
 
 ;; ----------------------------------------------------------------------
 ;; Pending selection (selection-first protocol)
@@ -404,22 +280,13 @@ previous selection command."
   (prog1 helixel--pending-sel
     (setq helixel--pending-sel nil)))
 
-;; ── Convenience: push a freshly created selection ──
-
-(defsubst helixel--push-selection (kind ctx)
-  "Create a `helixel-sel' of KIND with CTX and push as pending selection.
-Returns the created sel."
-  (let ((sel (helixel-sel-create kind ctx)))
-    (helixel--sel-push sel)
-    sel))
-
 (defsubst helixel--clear-non-movement-pending-sel ()
   "Clear `helixel--pending-sel' unless it is of kind \='movement.
 When a command creates a fresh movement/visual selection, any
 stale line/rect/textobj pending-sel from a prior selection command
 must be discarded so it doesn't leak into dot-repeat."
   (when (and helixel--pending-sel
-             (not (eq (helixel-sel-kind helixel--pending-sel) 'movement)))
+             (not (eq (helixel-sel-kind helixel--pending-sel) 'helixel-movement-sel)))
     (setq helixel--pending-sel nil)))
 
 
@@ -737,8 +604,8 @@ are never the same (prevents consecutive paste amalgamation)."
                     (not (helixel-action-payload e2))
                     (not (helixel-action-sel e2)))
                (and (eq op1 op2)
-                    (helixel-sel-equal-p (helixel-action-sel e1)
-                                         (helixel-action-sel e2))
+                    (equal (helixel-action-sel e1)
+                           (helixel-action-sel e2))
                     (equal (helixel-action-payload e1)
                            (helixel-action-payload e2))))))))
 
@@ -1005,17 +872,17 @@ direct detection of `rectangle-mark-mode'."
 
 (defun helixel-sel--copy (sel)
   "Deep-copy `helixel-sel' struct SEL.
-Copies the ctx data and its mutable sub-structures (e.g. :moves
+Copies the slots and their mutable sub-structures (e.g. the moves
 list whose elements' cdrs are mutated by `setcdr' in
-track-visual-move) so the copy is fully independent."
+track-visual-move) so the copy is fully independent.  Every cons
+slot value is `copy-tree'd; only :moves is mutated in practice,
+and the rest are tiny immutable plists."
   (when (helixel-sel-p sel)
-    (let ((ctx (copy-sequence (helixel-sel-ctx sel))))
-      ;; Deep-copy :moves to prevent mutation of shared list
-      ;; structure (track-visual-move increments move counts via
-      ;; setcdr, which would corrupt previously-committed entries).
-      (when-let* ((moves (plist-get ctx :moves)))
-        (setq ctx (plist-put ctx :moves (copy-tree moves))))
-      (helixel-sel--construct (helixel-sel-kind sel) ctx))))
+    (let ((new (copy-sequence sel)))
+      (dotimes (i (length new))
+        (when (consp (aref new i))
+          (setf (aref new i) (copy-tree (aref new i)))))
+      new)))
 
 
 ;; ----------------------------------------------------------------------

@@ -142,20 +142,16 @@ are now captured for chain replay via `call-interactively'."
 When two movement entries share a :moves list via shallow copy,
 track-visual-move's setcdr mutation on the second entry corrupts
 the first entry's stored count.  The fix uses `copy-tree' on :moves."
-  (let* ((sel1 (helixel-sel-create 'movement
-                 '(:moves ((helixel-forward-word-start . 1))
-                   :inline-advance t :normal-mode t)))
+  (let* ((sel1 (make-helixel-movement-sel
+                :moves (list (cons 'helixel-forward-word-start 1))
+                :inline-advance t :normal-mode t))
          (copy1 (helixel-sel--copy sel1)))
     ;; Mutate the ORIGINAL's moves count (simulating track-visual-move)
-    (setcdr (car (helixel-sel-movement-moves
-                  (helixel-sel-ctx sel1)))
-            2)
+    (setcdr (car (helixel-movement-sel-moves sel1)) 2)
     ;; The copy MUST still have count=1 (not mutated to 2)
-    (should (= 1 (cdar (helixel-sel-movement-moves
-                        (helixel-sel-ctx copy1)))))
+    (should (= 1 (cdar (helixel-movement-sel-moves copy1))))
     ;; The original now has count=2 (mutated)
-    (should (= 2 (cdar (helixel-sel-movement-moves
-                        (helixel-sel-ctx sel1)))))))
+    (should (= 2 (cdar (helixel-movement-sel-moves sel1))))))
 
 (provide 'helixel-test-chain-invariant)
 ;;; helixel-test-chain-invariant.el ends here

@@ -84,7 +84,7 @@
             ;; Pending-sel for . repeat
             (should helixel--pending-sel)
             (should (eq (helixel-sel-kind helixel--pending-sel)
-                        'search))))
+                        'helixel-search-sel))))
       (set-register ?a nil))))
 
 (ert-deftest helixel-test-register-search--from-register-backward ()

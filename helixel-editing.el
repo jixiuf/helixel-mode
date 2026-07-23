@@ -175,7 +175,7 @@ Used by `helixel-kill' (NOYANK nil), `helixel-delete' (NOYANK t),
 
 (defun helixel--recreate-insert-search-offset (ctx)
   "Replay insert-search-offset.  CTX holds :offset (integer)."
-  (let ((offset (helixel-sel-insert-offset ctx)))
+  (let ((offset (helixel-insert-search-offset-sel-offset ctx)))
     (goto-char (+ (match-beginning 0) offset))))
 
 ;; ── Insert-entry tail helper ──
@@ -214,20 +214,6 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   cursor-offset
   entry-kind)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql insert-selection-start)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-insert-selection-start-sel
-   :cursor-offset (plist-get ctx :cursor-offset)
-   :entry-kind (plist-get ctx :entry-kind)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-insert-selection-start-sel))
-  "Sel type method for SEL."
-  'insert-selection-start)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-insert-selection-start-sel))
-  "Sel  to plist method for SEL."
-  (list :cursor-offset (helixel-insert-selection-start-sel-cursor-offset sel)
-        :entry-kind (helixel-insert-selection-start-sel-entry-kind sel)))
 
 (cl-defstruct (helixel-insert-selection-end-sel (:include helixel-sel)
                                                 (:copier nil))
@@ -235,69 +221,38 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   cursor-offset
   entry-kind)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql insert-selection-end)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-insert-selection-end-sel
-   :cursor-offset (plist-get ctx :cursor-offset)
-   :entry-kind (plist-get ctx :entry-kind)))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-insert-selection-end-sel))
-  "Sel type method for SEL."
-  'insert-selection-end)
-
-(cl-defmethod helixel-sel--to-plist ((sel helixel-insert-selection-end-sel))
-  "Sel  to plist method for SEL."
-  (list :cursor-offset (helixel-insert-selection-end-sel-cursor-offset sel)
-        :entry-kind (helixel-insert-selection-end-sel-entry-kind sel)))
 
 (cl-defstruct (helixel-insert-beginning-line-sel (:include helixel-sel)
                                                  (:copier nil))
   "Insert-at-beginning-of-line selection.  No kind-specific slots.")
 
-(cl-defmethod helixel-sel--construct ((_kind (eql insert-beginning-line)) _ctx)
-  "Construct the sel struct from ctx plist _CTX (ignored)."
-  (make-helixel-insert-beginning-line-sel))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-insert-beginning-line-sel))
-  "Sel type method for SEL."
-  'insert-beginning-line)
-
-(cl-defmethod helixel-sel--to-plist ((_sel helixel-insert-beginning-line-sel))
-  "Sel  to plist method for SEL."
-  nil)
 
 (cl-defstruct (helixel-insert-end-line-sel (:include helixel-sel)
                                            (:copier nil))
   "Insert-at-end-of-line selection.  No kind-specific slots.")
 
-(cl-defmethod helixel-sel--construct ((_kind (eql insert-end-line)) _ctx)
-  "Construct the sel struct from ctx plist _CTX (ignored)."
-  (make-helixel-insert-end-line-sel))
-
-(cl-defmethod helixel-sel-type ((_sel helixel-insert-end-line-sel))
-  "Sel type method for SEL."
-  'insert-end-line)
-
-(cl-defmethod helixel-sel--to-plist ((_sel helixel-insert-end-line-sel))
-  "Sel  to plist method for SEL."
-  nil)
 
 (cl-defstruct (helixel-insert-search-offset-sel (:include helixel-sel)
                                                 (:copier nil))
   "Insert-with-search-offset selection.  Slots: OFFSET."
   offset)
 
-(cl-defmethod helixel-sel--construct ((_kind (eql insert-search-offset)) ctx)
-  "Construct the sel struct from ctx plist CTX."
-  (make-helixel-insert-search-offset-sel :offset (plist-get ctx :offset)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-insert-search-offset-sel))
-  "Sel type method for SEL."
-  'insert-search-offset)
+(cl-defmethod helixel-sel-entry-kind ((sel helixel-insert-selection-start-sel))
+  "Return the entry-kind of SEL."
+  (helixel-insert-selection-start-sel-entry-kind sel))
 
-(cl-defmethod helixel-sel--to-plist ((sel helixel-insert-search-offset-sel))
-  "Sel  to plist method for SEL."
-  (list :offset (helixel-insert-search-offset-sel-offset sel)))
+(cl-defmethod helixel-sel-entry-kind ((sel helixel-insert-selection-end-sel))
+  "Return the entry-kind of SEL."
+  (helixel-insert-selection-end-sel-entry-kind sel))
+
+(cl-defmethod helixel-sel-insert-cursor-offset ((sel helixel-insert-selection-start-sel))
+  "Return the cursor offset of SEL."
+  (helixel-insert-selection-start-sel-cursor-offset sel))
+
+(cl-defmethod helixel-sel-insert-cursor-offset ((sel helixel-insert-selection-end-sel))
+  "Return the cursor offset of SEL."
+  (helixel-insert-selection-end-sel-cursor-offset sel))
 
 (defmacro helixel--def-insert-sel-methods (struct display recreate advance)
   "Define insert-kind methods for STRUCT: DISPLAY string, RECREATE fn, ADVANCE fn."
@@ -334,7 +289,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
     (cond
      ;; Search or line context: preserve sel (just tag entry-kind)
      ;; for `.` auto-advance.
-     ((memq kind '(search line))
+     ((memq kind '(helixel-search-sel helixel-line-sel))
       (helixel--sel-push
        (helixel-sel-update-ctx helixel--pending-sel
                                :entry-kind 'insert))
@@ -345,7 +300,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
      ;; Manual region
      ((use-region-p)
       (helixel--sel-push
-       (helixel-sel-create 'insert-selection-start nil))
+       (make-helixel-insert-selection-start-sel))
       (when mark-active
         (goto-char (region-beginning))))
      ;; No context
@@ -393,7 +348,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
     (cond
      ;; Search or line context: preserve sel (just tag entry-kind)
      ;; for `.` auto-advance.
-     ((memq kind '(search line))
+     ((memq kind '(helixel-search-sel helixel-line-sel))
       (helixel--sel-push
        (helixel-sel-update-ctx helixel--pending-sel
                                :entry-kind 'append))
@@ -404,7 +359,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
      ;; Manual region
      ((use-region-p)
       (helixel--sel-push
-       (helixel-sel-create 'insert-selection-end nil))
+       (make-helixel-insert-selection-end-sel))
       (when mark-active
         (goto-char (region-end))))
      ;; No context
@@ -419,7 +374,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                :preposition (lambda (_tx) (helixel-mc--prepos-bol)))
   (beginning-of-line)
   (helixel--sel-push
-   (helixel-sel-create 'insert-beginning-line nil))
+   (make-helixel-insert-beginning-line-sel))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-after-end-line
@@ -427,7 +382,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
                :preposition (lambda (_tx) (helixel-mc--prepos-eol)))
   (end-of-line)
   (helixel--sel-push
-   (helixel-sel-create 'insert-end-line nil))
+   (make-helixel-insert-end-line-sel))
   (helixel--prepare-insert-entry))
 
 (helixel-define-command helixel-insert-newline
@@ -1159,8 +1114,8 @@ Like `join-line' but replaces `fixup-whitespace' with
   ;; dot-repeat advance doesn't recreate a spurious line selection.
   (let* ((popped (helixel--sel-pop))
          (pending-count (and popped
-                             (eq (helixel-sel-kind popped) 'line)
-                             (helixel-sel-line-count popped)))
+                             (eq (helixel-sel-kind popped) 'helixel-line-sel)
+                             (helixel-line-sel-count popped)))
          (no-space (and (use-region-p) (consp current-prefix-arg)))
          (n (if (use-region-p)
                 ;; Region active: join all lines spanned by selection.

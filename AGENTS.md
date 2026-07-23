@@ -9,7 +9,7 @@
 |------|------|
 | `helixel-debug.el` | **Error capture**: `helixel-debug` toggle, per-buffer error ring with backtraces, `helixel--with-debug-log` macro, debug-log viewer mode. Zero helixel deps (cl-lib only); required by core. |
 | `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel-last-action`, kind registry, op registry, surround-pair entry queries, category matcher, selection-type helpers, replay context. Depends only on `helixel-debug`. |
-| `helixel-motion.el` | **Motion recording + repeat**: `helixel--last-motion` struct, `helixel-record-motion`, motion repeater registry, command-reverse property, motion repeat/select category defcustoms. Depends only on core. |
+| `helixel-motion.el` | **Motion recording + repeat**: `helixel--last-motion` struct, `helixel-record-motion`, motion repeater registry, command-reverse property, motion repeat/select category defcustoms, `helixel-repeat-last-motion` (`,`) + `helixel--motion-flip-dir` (`-,`). Depends only on core. |
 | `helixel-register.el` | **Named registers**: `helixel-register-backends` (kill-ring/clipboard/primary/register-alist), `helixel--current-register`, numbered delete registers, `helixel--kill-new`, swap-source register. Depends only on core. |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, generic grouped-ring queries (`helixel--gr-*`), `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |

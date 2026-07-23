@@ -9,7 +9,7 @@
 (require 'helixel)
 (require 'helixel-mc-core)
 (require 'helixel-mc-spawn)
-(require 'helixel-mc-integrate)
+(require 'helixel-mc-core)
 (require 'helixel-test-common)
 (require 'org)
 

@@ -47,7 +47,6 @@
 (require 'helixel-search)
 (require 'helixel-mc-core)
 (require 'helixel-mc-spawn)
-(require 'helixel-mc-integrate)
 
 ;; ── Keymap management ──
 

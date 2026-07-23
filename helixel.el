@@ -56,7 +56,6 @@
 (require 'helixel-keymap)
 (require 'helixel-mc-core)
 (require 'helixel-mc-spawn)
-(require 'helixel-mc-integrate)
 (require 'helixel-shims)
 (require 'helixel-treesit)
 

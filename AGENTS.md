@@ -8,7 +8,7 @@
 | File | Role |
 |------|------|
 | `helixel-debug.el` | **Error capture**: `helixel-debug` toggle, per-buffer error ring with backtraces, `helixel--with-debug-log` macro, debug-log viewer mode. Zero helixel deps (cl-lib only); required by core. |
-| `helixel-core.el` | **Pure data layer**: `helixel-sel`, `helixel-action` structs, `helixel-last-action`, kind registry, op registry, surround-pair entry queries, category matcher, selection-type helpers, replay context. Depends only on `helixel-debug`. |
+| `helixel-core.el` | **Pure data layer**: `helixel-sel` base struct + protocol generics, `helixel-action` struct, `helixel-last-action`, op registry, surround-pair entry queries, category matcher, selection-type helpers, replay context. Depends only on `helixel-debug`. |
 | `helixel-motion.el` | **Motion recording + repeat**: `helixel--last-motion` struct, `helixel-record-motion`, motion repeater registry, command-reverse property, motion repeat/select category defcustoms, `helixel-repeat-last-motion` (`,`) + `helixel--motion-flip-dir` (`-,`). Depends only on core. |
 | `helixel-register.el` | **Named registers**: `helixel-register-backends` (kill-ring/clipboard/primary/register-alist), `helixel--current-register`, numbered delete registers, `helixel--kill-new`, swap-source register. Depends only on core. |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, generic grouped-ring queries (`helixel--gr-*`), `;' action-cycle, C-o/C-i jump commands. |
@@ -142,10 +142,13 @@ Notes:
 
 ### helixel-sel (selection descriptor)
 ```elisp
-(cl-defstruct helixel-sel kind ctx)
-;; Protocol methods (recreate, advance, display) looked up from
-;; kind registry via helixel-register-kind.
-;; CTX keys per kind:
+(cl-defstruct (helixel-sel (:constructor nil)) span inline-advance)
+;; Abstract base; concrete per-kind structs include it
+;; (helixel-line-sel, -rect-sel, -movement-sel, -search-sel,
+;;  -find-char-sel, -textobj-sel, -surround-sel, -insert-*-sel,
+;;  -next-error-sel, -treesit-sel).
+;; Protocol dispatches via cl-defgeneric (see below).
+;; Legacy ctx keys (still readable via dual-state accessors):
 ;;   line          :dir (forward|backward) :count (int≥1) :entry-kind
 ;;   rect          :count (int≥1)
 ;;   movement      :moves ((CMD . COUNT)…) :inline-advance t
@@ -175,7 +178,7 @@ pure movement/search/state events (~40B per entry negligible).
 ;; ── Selection ──
 (helixel-sel-create kind ctx)   → struct (extra args ignored)
 (helixel-sel-kind sel)          → symbol
-(helixel-sel-call-recreate sel) → recreates region via kind registry
+(helixel-sel-call-recreate sel) → recreates region via cl-defgeneric
 (helixel-sel-update-ctx sel k v)→ new sel
 (helixel-sel-count sel)         → :count or 0
 ;; Kind accessors (work on struct or raw ctx plist):
@@ -211,15 +214,18 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel-action-category event)
 (helixel-action-subcat event)
 
-;; ── Kind Registry ──
-(helixel-register-kind kind &rest props)
-  ;; props: :recreate :advance :display :all-buffer-fn :all-dir-fn
-  ;;        :flip-dir-fn :mc-spawn-fn
-(helixel--kind-advance kind)        → fn|nil
-(helixel--kind-recreate kind)       → fn|nil
-(helixel--kind-all-buffer-fn kind)  → fn|nil
-(helixel--kind-all-dir-fn kind)     → fn|nil
-(helixel--kind-flip-dir-fn kind)    → fn|nil  ; sel → reversed sel
+;; ── Sel Protocol Generics (cl-defgeneric, methods per struct) ──
+(helixel-sel-recreate sel)          ; recreate region at point
+(helixel-sel-display sel)           → short string (default: kind name)
+(helixel-sel-flip-dir sel)          → new sel with direction flipped|nil
+(helixel-sel-advance-fn sel)        → advance fn (tx tag)|nil
+(helixel-sel-all-buffer-fn sel)     → all-buffer repeat fn|nil
+(helixel-sel-all-dir-fn sel)        → all-dir repeat fn|nil
+(helixel-sel-region-type sel)       → line|rect|textobj|nil
+(helixel-mc-spawn-fn sel)           → spawn fn symbol|nil (walk fallback)
+(helixel-sel-skip-reverse-exchange-p kind)  ; eql-dispatch, nil default
+;; Base-type methods provide nil defaults; each struct defines only
+;; the methods it supports, next to the struct in the owning module.
 
 ;; ── Op Registry ──
 (helixel-register-op op &rest props)
@@ -259,7 +265,7 @@ pure movement/search/state events (~40B per entry negligible).
 
 ```bash
 rm -f *.elc && make compile && make test   # always fresh compile before test
-make lint                                   # checkdoc + package-lint + column-check + ctx-lint
+make lint                                   # checkdoc + package-lint + column-check + check-declare
 make depgraph                               # regenerate docs/DEPGRAPH.org from `require' edges
 
 ## Refactoring Best Practices
@@ -378,23 +384,23 @@ position.  `helixel-repeat-chain-end' commits a chain action whose
 chain tx to every fake cursor — so `@ ... ESC' on N cursors gives N
 parallel chain applications, all in one undo step.
 
-### ctx-lint keys
-CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` outside `helixel-core.el`. Use `helixel-sel-*` accessors instead (`helixel-sel-field`, `helixel-sel-textobj-command`, etc.).
+### Raw plist-get on ctx
+CTX_UNIQUE keys (`:kind`, `:cursor-offset`, `:moves`, `:command`) must not use raw `plist-get` on a sel or ctx — use `helixel-sel-*` accessors instead (`helixel-sel-field`, `helixel-sel-textobj-command`, etc.).  Raw `plist-get` on a struct silently returns nil (vectors are not conses) — the Phase 3.2 `helixel--with-span` regression was exactly this.  Construct methods (`helixel-sel--construct`) are the only legitimate raw-plist readers; both disappear in Phase 3.3.
 
 ### Design notes
 - `:self-advancing` boolean on ops: t = op handles its own positioning, suppress auto-advance (kill, change, join-lines); nil = op leaves point alone (insert, replace, paste, indent, surround, ...).
 - Insert replay: `pre-command-hook` captures `this-single-command-keys` (key-based replay) with `:text` fallback. No `:commands` layer. No `start-kbd-macro` used.
 - Chain and non-chain share the same `helixel--repeat-advance` dispatch. Chain's `:action-list` runner iterates sub-actions at each advance target.
 - `helixel-repeat-selection` (`M-.`) uses the same advance + preview path (no apply).
-- Kind-specific all-buffer/all-dir logic lives in `helixel-repeat.el` via `:all-buffer-fn`/`:all-dir-fn` in the kind registry.
+- Kind-specific all-buffer/all-dir logic dispatches via `helixel-sel-all-buffer-fn`/`helixel-sel-all-dir-fn` methods (default nil in `helixel-repeat.el`).
 - `search-last-pos` and `search-edge-seen` are fields on the `helixel-replay` struct (per-session scratch), reset implicitly by each new `helixel-with-replay` binding. The repeat guard runs first so word-boundary patterns (\b, \B, \<, \>) at point-min don't trigger false edge-guard blocks.
 
 ### Naming Convention for `helixel-sel` Accessors
 
 All `helixel-sel` accessors follow a uniform pattern — no `get-` prefix:
 
-- **Struct-slot accessors**: `helixel-sel-kind`, `helixel-sel-ctx`,
-  `helixel-sel-advance`, `helixel-sel-count`
+- **Struct accessors**: `helixel-sel-kind`, `helixel-sel-ctx`,
+  `helixel-sel-span`, `helixel-sel-count`
 - **Kind-specific ctx accessors**: `helixel-sel-line-dir`,
   `helixel-sel-search-pattern`, `helixel-sel-textobj-command`, etc.
 - **Closure-call accessors**: `helixel-sel-call-recreate`,

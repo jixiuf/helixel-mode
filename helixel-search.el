@@ -1104,7 +1104,7 @@ For kinds with `:skip-reverse-exchange' in the kind registry,
 skips `exchange-point-and-mark' since those kinds manage
 point and mark independently."
   (interactive "P")
-  (let ((keep-mark (helixel--kind-skip-reverse-exchange-p
+  (let ((keep-mark (helixel-sel-skip-reverse-exchange-p
                     (helixel-search--safe-category))))
     (cond
      ;; \\[universal-argument\\] → history
@@ -1493,6 +1493,7 @@ CURSOR-OFFSET, REGEXP."
   (regexp t))
 
 (cl-defmethod helixel-sel--construct ((_kind (eql search)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-search-sel
    :pattern (plist-get ctx :pattern)
    :dir (or (plist-get ctx :dir) 'forward)
@@ -1502,9 +1503,12 @@ CURSOR-OFFSET, REGEXP."
    :regexp (if (plist-member ctx :regexp) (plist-get ctx :regexp) t)
    :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-search-sel)) 'search)
+(cl-defmethod helixel-sel-type ((_sel helixel-search-sel))
+  "Sel type method for SEL."
+  'search)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-search-sel))
+  "Sel  to plist method for SEL."
   (list :pattern (helixel-search-sel-pattern sel)
         :dir (helixel-search-sel-dir sel)
         :entry-kind (helixel-search-sel-entry-kind sel)
@@ -1523,6 +1527,7 @@ CURSOR-OFFSET, REGEXP."
   n-count)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql find-char)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-find-char-sel
    :char (plist-get ctx :char)
    :type (or (plist-get ctx :type) 'next)
@@ -1531,9 +1536,12 @@ CURSOR-OFFSET, REGEXP."
    :inline-advance (plist-get ctx :inline-advance)
    :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-find-char-sel)) 'find-char)
+(cl-defmethod helixel-sel-type ((_sel helixel-find-char-sel))
+  "Sel type method for SEL."
+  'find-char)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-find-char-sel))
+  "Sel  to plist method for SEL."
   (list :char (helixel-find-char-sel-char sel)
         :type (helixel-find-char-sel-type sel)
         :dir (helixel-find-char-sel-dir sel)
@@ -1541,36 +1549,57 @@ CURSOR-OFFSET, REGEXP."
         :inline-advance (helixel-find-char-sel-inline-advance sel)
         :span (helixel-find-char-sel-span sel)))
 
-(helixel-register-kind search
-  :ctx-schema '(:required (:pattern :dir)
-                          :optional (:entry-kind :n-count
-                                                 :cursor-offset :regexp))
-  :recreate #'helixel--recreate-search
-  :advance  #'helixel--repeat-advance-search
-  :all-buffer-fn #'helixel--all-buffer-search
-  :flip-dir-fn (lambda (sel)
-                 (helixel-sel-update-ctx
-                  sel :dir (helixel--flip-dir
-                            (helixel-sel-search-dir sel))))
-  :display  (lambda (ctx)
-              (format "/%s/" (or (helixel-sel-search-pattern ctx) "?"))))
+;; ── search protocol methods ──
 
-(helixel-register-kind find-char
-  :ctx-schema '(:required (:char :type :dir) :optional (:inline-advance))
-  :recreate #'helixel--recreate-find-char
-  :advance  #'helixel--advance-by-recreate
-  :flip-dir-fn (lambda (sel)
-                 (helixel-sel-update-ctx
-                  sel :dir (helixel--flip-dir
-                            (helixel-sel-find-char-dir sel))))
-  :display  (lambda (ctx)
-              (let* ((c (helixel-sel-find-char-char ctx))
-                     (ty (helixel-sel-find-char-type ctx))
-                     (dir (helixel-sel-find-char-dir ctx))
-                     (prefix (if (eq ty 'till)
-                                 (if (eq dir 'forward) ?t ?T)
-                               (if (eq dir 'forward) ?f ?F))))
-                (if c (format "%c→%c" prefix c) (string prefix)))))
+(cl-defmethod helixel-sel-recreate ((sel helixel-search-sel))
+  "Sel recreate method for SEL."
+  (helixel--recreate-search sel))
+
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-search-sel))
+  "Sel advance fn method for SEL."
+  #'helixel--repeat-advance-search)
+
+(cl-defmethod helixel-sel-all-buffer-fn ((_sel helixel-search-sel))
+  "Sel all buffer fn method for SEL."
+  #'helixel--all-buffer-search)
+
+(cl-defmethod helixel-sel-flip-dir ((sel helixel-search-sel))
+  "Sel flip dir method for SEL."
+  (helixel-sel-update-ctx
+   sel :dir (helixel--flip-dir (helixel-search-sel-dir sel))))
+
+(cl-defmethod helixel-sel-display ((sel helixel-search-sel))
+  "Sel display method for SEL."
+  (format "/%s/" (or (helixel-search-sel-pattern sel) "?")))
+
+;; ── find-char protocol methods ──
+
+(cl-defmethod helixel-sel-recreate ((sel helixel-find-char-sel))
+  "Sel recreate method for SEL."
+  (helixel--recreate-find-char sel))
+
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-find-char-sel))
+  "Sel advance fn method for SEL."
+  #'helixel--advance-by-recreate)
+
+(cl-defmethod helixel-mc-spawn-fn ((_sel helixel-find-char-sel))
+  "Mc spawn fn method for SEL."
+  'helixel-mc--spawn-from-find-char)
+
+(cl-defmethod helixel-sel-flip-dir ((sel helixel-find-char-sel))
+  "Sel flip dir method for SEL."
+  (helixel-sel-update-ctx
+   sel :dir (helixel--flip-dir (helixel-find-char-sel-dir sel))))
+
+(cl-defmethod helixel-sel-display ((sel helixel-find-char-sel))
+  "Sel display method for SEL."
+  (let* ((c (helixel-find-char-sel-char sel))
+         (ty (helixel-find-char-sel-type sel))
+         (dir (helixel-find-char-sel-dir sel))
+         (prefix (if (eq ty 'till)
+                     (if (eq dir 'forward) ?t ?T)
+                   (if (eq dir 'forward) ?f ?F))))
+    (if c (format "%c→%c" prefix c) (string prefix))))
 
 ;; ── Hook registrations ──
 

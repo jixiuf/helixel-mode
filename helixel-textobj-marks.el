@@ -491,6 +491,7 @@ With optional COUNT, select that many comments."
   delimiter)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql textobj)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-textobj-sel
    :command (plist-get ctx :command)
    :count (or (plist-get ctx :count) 1)
@@ -498,31 +499,42 @@ With optional COUNT, select that many comments."
    :inline-advance (plist-get ctx :inline-advance)
    :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-textobj-sel)) 'textobj)
+(cl-defmethod helixel-sel-type ((_sel helixel-textobj-sel))
+  "Sel type method for SEL."
+  'textobj)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-textobj-sel))
+  "Sel  to plist method for SEL."
   (list :command (helixel-textobj-sel-command sel)
         :count (helixel-textobj-sel-count sel)
         :delimiter (helixel-textobj-sel-delimiter sel)
         :inline-advance (helixel-textobj-sel-inline-advance sel)
         :span (helixel-textobj-sel-span sel)))
 
-(helixel-register-kind textobj
-  :sel-type 'textobj
-  :ctx-schema '(:required (:command :count :delimiter)
-                          :optional (:inline-advance))
-  :recreate #'helixel--recreate-textobj
-  :advance  #'helixel--advance-by-recreate
-  :flip-dir-fn (lambda (sel)
-                 (helixel-sel-update-ctx
-                  sel :count (- (helixel-sel-field sel :count))))
-  :display  (lambda (ctx)
-              (let ((cmd (helixel-sel-textobj-command ctx)))
-                (if cmd
-                    (let* ((name (symbol-name cmd))
-                           (pos (string-match "mark-" name)))
-                      (if pos (substring name (+ pos 5)) name))
-                  "textobj"))))
+(cl-defmethod helixel-sel-recreate ((sel helixel-textobj-sel))
+  "Sel recreate method for SEL."
+  (helixel--recreate-textobj sel))
+
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-textobj-sel))
+  "Sel advance fn method for SEL."
+  #'helixel--advance-by-recreate)
+
+(cl-defmethod helixel-sel-flip-dir ((sel helixel-textobj-sel))
+  "Sel flip dir method for SEL."
+  (helixel-sel-update-ctx sel :count (- (helixel-textobj-sel-count sel))))
+
+(cl-defmethod helixel-sel-display ((sel helixel-textobj-sel))
+  "Sel display method for SEL."
+  (let ((cmd (helixel-textobj-sel-command sel)))
+    (if cmd
+        (let* ((name (symbol-name cmd))
+               (pos (string-match "mark-" name)))
+          (if pos (substring name (+ pos 5)) name))
+      "textobj")))
+
+(cl-defmethod helixel-sel-region-type ((_sel helixel-textobj-sel))
+  "Sel region type method for SEL."
+  'textobj)
 
 
 ;; ── Motion repeater for textobj (\[helixel-repeat-last-motion] / \=',) ──

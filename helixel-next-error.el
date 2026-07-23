@@ -489,24 +489,43 @@ Navigates one step via the snapshot."
   dir)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql next-error)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-next-error-sel :dir (plist-get ctx :dir)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-next-error-sel)) 'next-error)
+(cl-defmethod helixel-sel-type ((_sel helixel-next-error-sel))
+  "Sel type method for SEL."
+  'next-error)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-next-error-sel))
+  "Sel  to plist method for SEL."
   (list :dir (helixel-next-error-sel-dir sel)))
 
-(helixel-register-kind next-error
-  :ctx-schema '(:required (:dir))
-  :recreate #'helixel-ne--recreate-next-error
-  :advance  #'helixel-ne--advance-next-error
-  :flip-dir-fn (lambda (sel)
-                 (helixel-sel-update-ctx
-                  sel :dir
-                  (let ((d (helixel-sel-field sel :dir)))
-                    (if (eq d 'forward) 'backward 'forward))))
-  :display  (lambda (_ctx) "next-error")
-  :skip-reverse-exchange t)
+(cl-defmethod helixel-sel-recreate ((sel helixel-next-error-sel))
+  "Sel recreate method for SEL."
+  (helixel-ne--recreate-next-error sel))
+
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-next-error-sel))
+  "Sel advance fn method for SEL."
+  #'helixel-ne--advance-next-error)
+
+(cl-defmethod helixel-sel-flip-dir ((sel helixel-next-error-sel))
+  "Sel flip dir method for SEL."
+  (helixel-sel-update-ctx
+   sel :dir (if (eq (helixel-next-error-sel-dir sel) 'forward)
+                'backward
+              'forward)))
+
+(cl-defmethod helixel-sel-display ((_sel helixel-next-error-sel))
+  "Sel display method for SEL."
+  "next-error")
+
+(cl-defmethod helixel-mc-spawn-fn ((_sel helixel-next-error-sel))
+  "Mc spawn fn method for SEL."
+  'helixel-mc--spawn-from-next-error)
+
+(cl-defmethod helixel-sel-skip-reverse-exchange-p ((_kind (eql next-error)))
+  "Next-error manages point/mark itself on N reverse."
+  t)
 
 (helixel-register-motion-repeater 'next-error nil
                                   #'helixel-ne--repeat-next-error-motion)

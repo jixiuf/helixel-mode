@@ -102,7 +102,7 @@ column-check:
 	done && echo "OK"
 
 
-lint: format compile checkdoc package-lint column-check ctx-lint check-declare
+lint: format compile checkdoc package-lint column-check check-declare
 
 check-declare:
 	@echo "---- check-declare"
@@ -157,44 +157,3 @@ melpazoid:
 		LOCAL_REPO=$(CURDIR) \
 		make -C "$(MELPAZOID_DIR)"
 
-# ----------------------------------------------------------------------
-# ctx-lint: forbid raw plist-get on sel/ctx — must use helixel-sel-* accessors.
-# ----------------------------------------------------------------------
-# ctx-unique keys — any plist-get on these outside helixel-core.el is forbidden
-CTX_UNIQUE = :kind :cursor-offset :moves :command
-# suspicious keys — flag for manual review (may be used in other plists)
-CTX_SUSPECT = :dir :count :pattern :offset \
-              :delim-open :delim-close :delim-type \
-              :delim-inner-p :delim-forward-p :last-match-delimiter
-
-ctx-lint:
-	@echo "---- ctx-lint: raw plist-get on sel/ctx"
-	@err=0; \
-	for file in $(FILES); do \
-	  case "$$file" in helixel-core.el) continue ;; esac; \
-	  for key in $(CTX_UNIQUE); do \
-	    if grep -qnE "plist-get.*$$key([^a-zA-Z0-9_-]|$$)" "$$file" 2>/dev/null; then \
-	      echo "$$file: FATAL — raw plist-get with ctx-unique key $$key:"; \
-	      grep -nE "plist-get.*$$key([^a-zA-Z0-9_-]|$$)" "$$file"; \
-	      err=1; \
-	    fi; \
-	  done; \
-	  for key in $(CTX_SUSPECT); do \
-	    if grep -qn "plist-get.*$$key" "$$file" 2>/dev/null; then \
-	      MATCHES=$$(grep -n "plist-get.*$$key" "$$file" \
-	                | grep -v "helixel--active-search" \
-	                | grep -v "helixel-edit-payload" \
-	                | grep -v "ctx-lint-ok"); \
-	      if [ -n "$$MATCHES" ]; then \
-	        echo "$$file: REVIEW — plist-get with key $$key (verify it is not ctx):"; \
-	        echo "$$MATCHES"; \
-	      fi; \
-	    fi; \
-	  done; \
-	  if grep -qn "plist-get (helixel-edit-payload" "$$file" 2>/dev/null; then \
-	    echo "$$file: FATAL — raw plist-get on helixel-edit-payload; use helixel-edit-payload-get:"; \
-	    grep -n "plist-get (helixel-edit-payload" "$$file"; \
-	    err=1; \
-	  fi; \
-	done; \
-	exit $$err

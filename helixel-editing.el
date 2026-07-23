@@ -215,14 +215,17 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   entry-kind)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql insert-selection-start)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-insert-selection-start-sel
    :cursor-offset (plist-get ctx :cursor-offset)
    :entry-kind (plist-get ctx :entry-kind)))
 
 (cl-defmethod helixel-sel-type ((_sel helixel-insert-selection-start-sel))
+  "Sel type method for SEL."
   'insert-selection-start)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-insert-selection-start-sel))
+  "Sel  to plist method for SEL."
   (list :cursor-offset (helixel-insert-selection-start-sel-cursor-offset sel)
         :entry-kind (helixel-insert-selection-start-sel-entry-kind sel)))
 
@@ -233,14 +236,17 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   entry-kind)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql insert-selection-end)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-insert-selection-end-sel
    :cursor-offset (plist-get ctx :cursor-offset)
    :entry-kind (plist-get ctx :entry-kind)))
 
 (cl-defmethod helixel-sel-type ((_sel helixel-insert-selection-end-sel))
+  "Sel type method for SEL."
   'insert-selection-end)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-insert-selection-end-sel))
+  "Sel  to plist method for SEL."
   (list :cursor-offset (helixel-insert-selection-end-sel-cursor-offset sel)
         :entry-kind (helixel-insert-selection-end-sel-entry-kind sel)))
 
@@ -249,12 +255,15 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   "Insert-at-beginning-of-line selection.  No kind-specific slots.")
 
 (cl-defmethod helixel-sel--construct ((_kind (eql insert-beginning-line)) _ctx)
+  "Construct the sel struct from ctx plist _CTX (ignored)."
   (make-helixel-insert-beginning-line-sel))
 
 (cl-defmethod helixel-sel-type ((_sel helixel-insert-beginning-line-sel))
+  "Sel type method for SEL."
   'insert-beginning-line)
 
 (cl-defmethod helixel-sel--to-plist ((_sel helixel-insert-beginning-line-sel))
+  "Sel  to plist method for SEL."
   nil)
 
 (cl-defstruct (helixel-insert-end-line-sel (:include helixel-sel)
@@ -262,12 +271,15 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   "Insert-at-end-of-line selection.  No kind-specific slots.")
 
 (cl-defmethod helixel-sel--construct ((_kind (eql insert-end-line)) _ctx)
+  "Construct the sel struct from ctx plist _CTX (ignored)."
   (make-helixel-insert-end-line-sel))
 
 (cl-defmethod helixel-sel-type ((_sel helixel-insert-end-line-sel))
+  "Sel type method for SEL."
   'insert-end-line)
 
 (cl-defmethod helixel-sel--to-plist ((_sel helixel-insert-end-line-sel))
+  "Sel  to plist method for SEL."
   nil)
 
 (cl-defstruct (helixel-insert-search-offset-sel (:include helixel-sel)
@@ -276,43 +288,43 @@ Otherwise RECORD-P defaults to t via the wrapper body."
   offset)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql insert-search-offset)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-insert-search-offset-sel :offset (plist-get ctx :offset)))
 
 (cl-defmethod helixel-sel-type ((_sel helixel-insert-search-offset-sel))
+  "Sel type method for SEL."
   'insert-search-offset)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-insert-search-offset-sel))
+  "Sel  to plist method for SEL."
   (list :offset (helixel-insert-search-offset-sel-offset sel)))
 
-(helixel-register-kind insert-selection-start
-  :ctx-schema '(:required () :optional (:cursor-offset :entry-kind))
-  :recreate #'helixel--recreate-insert-selection-start
-  :advance  #'helixel--repeat-advance-search
-  :display  "i")
+(defmacro helixel--def-insert-sel-methods (struct display recreate advance)
+  "Define insert-kind methods for STRUCT: DISPLAY string, RECREATE fn, ADVANCE fn."
+  `(progn
+     (cl-defmethod helixel-sel-recreate ((sel ,struct))
+       "Sel recreate method for SEL."
+       ,(if recreate `(,recreate sel) '(ignore)))
+     (cl-defmethod helixel-sel-advance-fn ((_sel ,struct))
+       "Sel advance fn method for SEL."
+       ,advance)
+     (cl-defmethod helixel-sel-display ((_sel ,struct)) ,display)))
 
-(helixel-register-kind insert-selection-end
-  :ctx-schema '(:required () :optional (:cursor-offset :entry-kind))
-  :recreate #'helixel--recreate-insert-selection-end
-  :advance  #'helixel--repeat-advance-search
-  :display  "a")
-
-(helixel-register-kind insert-beginning-line
-  :ctx-schema '(:required () :optional ())
-  :recreate #'helixel--recreate-insert-beginning-line
-  :advance  #'helixel--repeat-advance-line
-  :display  "I")
-
-(helixel-register-kind insert-end-line
-  :ctx-schema '(:required () :optional ())
-  :recreate #'helixel--recreate-insert-end-line
-  :advance  #'helixel--repeat-advance-line
-  :display  "A")
-
-(helixel-register-kind insert-search-offset
-  :ctx-schema '(:required (:offset) :optional ())
-  :recreate #'helixel--recreate-insert-search-offset
-  :advance  #'helixel--repeat-advance-search
-  :display  "s")
+(helixel--def-insert-sel-methods
+ helixel-insert-selection-start-sel "i"
+ helixel--recreate-insert-selection-start #'helixel--repeat-advance-search)
+(helixel--def-insert-sel-methods
+ helixel-insert-selection-end-sel "a"
+ helixel--recreate-insert-selection-end #'helixel--repeat-advance-search)
+(helixel--def-insert-sel-methods
+ helixel-insert-beginning-line-sel "I"
+ helixel--recreate-insert-beginning-line #'helixel--repeat-advance-line)
+(helixel--def-insert-sel-methods
+ helixel-insert-end-line-sel "A"
+ helixel--recreate-insert-end-line #'helixel--repeat-advance-line)
+(helixel--def-insert-sel-methods
+ helixel-insert-search-offset-sel "s"
+ helixel--recreate-insert-search-offset #'helixel--repeat-advance-search)
 
 (helixel-define-command helixel-insert
     (:category state :subcat insert

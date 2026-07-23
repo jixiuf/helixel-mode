@@ -395,6 +395,7 @@ Slots: BASE, PART, LEVEL, COUNT, QUERY, START, END, COMMAND."
   base part level count query start end command)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql treesit)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-treesit-sel
    :base (plist-get ctx :base)
    :part (plist-get ctx :part)
@@ -405,9 +406,12 @@ Slots: BASE, PART, LEVEL, COUNT, QUERY, START, END, COMMAND."
    :end (plist-get ctx :end)
    :command (plist-get ctx :command)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-treesit-sel)) 'treesit)
+(cl-defmethod helixel-sel-type ((_sel helixel-treesit-sel))
+  "Sel type method for SEL."
+  'treesit)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-treesit-sel))
+  "Sel  to plist method for SEL."
   (list :base (helixel-treesit-sel-base sel)
         :part (helixel-treesit-sel-part sel)
         :level (helixel-treesit-sel-level sel)
@@ -417,25 +421,28 @@ Slots: BASE, PART, LEVEL, COUNT, QUERY, START, END, COMMAND."
         :end (helixel-treesit-sel-end sel)
         :command (helixel-treesit-sel-command sel)))
 
-(helixel-register-kind treesit
-  :sel-type 'textobj
-  :ctx-schema '(:required (:base :part)
-                          :optional (:level :count :query
-                                            :start :end :command))
-  :recreate #'helixel-ts--recreate
-  :advance  #'helixel-ts--advance-by-recreate
-  :display  (lambda (ctx)
-              (let ((base (plist-get ctx :base))
-                    (part (plist-get ctx :part)))
-                (format "%s(%s)" base
-                        (if (eq part 'around) "a" "i"))))
-  :flip-dir-fn nil)
+(cl-defmethod helixel-sel-recreate ((sel helixel-treesit-sel))
+  "Sel recreate method for SEL."
+  (helixel-ts--recreate sel))
 
-(defun helixel-ts--recreate (ctx)
-  "Recreate a treesit selection from CTX (raw plist)."
-  (let* ((base (plist-get ctx :base))
-         (part (plist-get ctx :part))
-         (level (or (plist-get ctx :level) 0))
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-treesit-sel))
+  "Sel advance fn method for SEL."
+  #'helixel-ts--advance-by-recreate)
+
+(cl-defmethod helixel-sel-display ((sel helixel-treesit-sel))
+  "Sel display method for SEL."
+  (format "%s(%s)" (helixel-treesit-sel-base sel)
+          (if (eq (helixel-treesit-sel-part sel) 'around) "a" "i")))
+
+(cl-defmethod helixel-sel-region-type ((_sel helixel-treesit-sel))
+  "Sel region type method for SEL."
+  'textobj)
+
+(defun helixel-ts--recreate (sel)
+  "Recreate a treesit selection from SEL."
+  (let* ((base (helixel-treesit-sel-base sel))
+         (part (helixel-treesit-sel-part sel))
+         (level (or (helixel-treesit-sel-level sel) 0))
          (range (helixel-ts--object-at base part level)))
     (when range
       (helixel-ts--activate-selection
@@ -539,9 +546,9 @@ direction that \=`maf\=' / \=`mif\=' leaves."
       (user-error "No non-overlapping treesit targets"))
     targets))
 
-;; Register :mc-spawn-fn on the treesit kind.
-(when-let* ((k (gethash 'treesit helixel--kind-registry)))
-  (setf (helixel-kind-mc-spawn-fn k) #'helixel-ts--mc-spawn))
+(cl-defmethod helixel-mc-spawn-fn ((_sel helixel-treesit-sel))
+  "Mc spawn fn method for SEL."
+  #'helixel-ts--mc-spawn)
 
 ;; ----------------------------------------------------------------------
 ;; Type specification table

@@ -294,8 +294,8 @@ to a char selection."
          helixel--pending-sel
          (eq (helixel-sel-kind helixel--pending-sel) 'line))
     (exchange-point-and-mark)
-    (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
-      (helixel--sel-push (funcall fn helixel--pending-sel))))
+    (when-let* ((flipped (helixel-sel-flip-dir helixel--pending-sel)))
+      (helixel--sel-push flipped)))
    (t
     (exchange-point-and-mark))))
 

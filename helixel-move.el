@@ -1424,8 +1424,8 @@ new direction."
     ;; Flip permanent direction on negative prefix (like N for search).
     (when (and flip-p helixel--pending-sel
                (eq (helixel-sel-kind helixel--pending-sel) 'line))
-      (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
-        (helixel--sel-push (funcall fn helixel--pending-sel))))
+      (when-let* ((flipped (helixel-sel-flip-dir helixel--pending-sel)))
+        (helixel--sel-push flipped)))
     (let ((extending (and (region-active-p)
                           (eq (helixel--sel-type) 'line))))
       (if extending
@@ -1461,8 +1461,8 @@ new direction."
     ;; Flip permanent direction on negative prefix (like N for search).
     (when (and flip-p helixel--pending-sel
                (eq (helixel-sel-kind helixel--pending-sel) 'line))
-      (when-let* ((fn (helixel--kind-flip-dir-fn 'line)))
-        (helixel--sel-push (funcall fn helixel--pending-sel))))
+      (when-let* ((flipped (helixel-sel-flip-dir helixel--pending-sel)))
+        (helixel--sel-push flipped)))
     (let ((extending (and (region-active-p)
                           (eq (helixel--sel-type) 'line))))
       (if extending
@@ -1632,15 +1632,19 @@ fresh rather than extending a stale mark."
   entry-kind)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql line)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-line-sel
    :count (or (plist-get ctx :count) 1)
    :dir (or (plist-get ctx :dir) 'forward)
    :entry-kind (plist-get ctx :entry-kind)
    :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-line-sel)) 'line)
+(cl-defmethod helixel-sel-type ((_sel helixel-line-sel))
+  "Sel type method for SEL."
+  'line)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-line-sel))
+  "Sel  to plist method for SEL."
   (list :count (helixel-line-sel-count sel)
         :dir (helixel-line-sel-dir sel)
         :entry-kind (helixel-line-sel-entry-kind sel)
@@ -1652,13 +1656,17 @@ fresh rather than extending a stale mark."
   (count 1))
 
 (cl-defmethod helixel-sel--construct ((_kind (eql rect)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-rect-sel
    :count (or (plist-get ctx :count) 1)
    :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-rect-sel)) 'rect)
+(cl-defmethod helixel-sel-type ((_sel helixel-rect-sel))
+  "Sel type method for SEL."
+  'rect)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-rect-sel))
+  "Sel  to plist method for SEL."
   (list :count (helixel-rect-sel-count sel)
         :span (helixel-rect-sel-span sel)))
 
@@ -1669,57 +1677,103 @@ fresh rather than extending a stale mark."
   normal-mode)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql movement)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-movement-sel
    :moves (plist-get ctx :moves)
    :normal-mode (plist-get ctx :normal-mode)
    :inline-advance (plist-get ctx :inline-advance)
    :span (plist-get ctx :span)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-movement-sel)) 'movement)
+(cl-defmethod helixel-sel-type ((_sel helixel-movement-sel))
+  "Sel type method for SEL."
+  'movement)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-movement-sel))
+  "Sel  to plist method for SEL."
   (list :moves (helixel-movement-sel-moves sel)
         :normal-mode (helixel-movement-sel-normal-mode sel)
         :inline-advance (helixel-movement-sel-inline-advance sel)
         :span (helixel-movement-sel-span sel)))
 
-(helixel-register-kind line
-  :sel-type 'line
-  :ctx-schema '(:required (:count :dir) :optional (:entry-kind :span))
-  :recreate #'helixel--recreate-line
-  :advance  #'helixel--repeat-advance-line
-  :all-buffer-fn #'helixel--all-buffer-line
-  :all-dir-fn #'helixel--all-dir-line
-  :flip-dir-fn (lambda (sel)
-                 (helixel-sel-update-ctx
-                  sel :dir (helixel--flip-dir
-                            (helixel-sel-line-dir sel))))
-  :display  "L")
+;; ── line protocol methods ──
 
-(helixel-register-kind rect
-  :sel-type 'rect
-  :ctx-schema '(:required (:count) :optional ())
-  :recreate #'helixel--recreate-rect
-  :advance  nil
-  :display  "R")
+(cl-defmethod helixel-sel-recreate ((sel helixel-line-sel))
+  "Sel recreate method for SEL."
+  (helixel--recreate-line sel))
 
-(helixel-register-kind movement
-  :ctx-schema '(:required (:moves) :optional (:inline-advance :normal-mode))
-  :recreate #'helixel--recreate-movement
-  :advance  #'helixel--advance-by-recreate
-  :flip-dir-fn (lambda (sel)
-                 (helixel-sel-update-ctx
-                  sel :moves
-                  (mapcar (lambda (entry)
-                            (let* ((cmd (car entry))
-                                   (cnt (cdr entry))
-                                   (rev (helixel--motion-reverse-lookup cmd)))
-                              (cons (or rev cmd) cnt)))
-                          (helixel-sel-movement-moves sel))))
-  :display  (lambda (ctx)
-              (let ((ms (helixel-sel-movement-moves ctx)))
-                (let ((n (apply #'+ (mapcar #'cdr ms))))
-                  (format "v%d" n)))))
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-line-sel))
+  "Sel advance fn method for SEL."
+  #'helixel--repeat-advance-line)
+
+(cl-defmethod helixel-sel-all-buffer-fn ((_sel helixel-line-sel))
+  "Sel all buffer fn method for SEL."
+  #'helixel--all-buffer-line)
+
+(cl-defmethod helixel-sel-all-dir-fn ((_sel helixel-line-sel))
+  "Sel all dir fn method for SEL."
+  #'helixel--all-dir-line)
+
+(cl-defmethod helixel-sel-flip-dir ((sel helixel-line-sel))
+  "Sel flip dir method for SEL."
+  (helixel-sel-update-ctx
+   sel :dir (helixel--flip-dir (helixel-line-sel-dir sel))))
+
+(cl-defmethod helixel-sel-display ((_sel helixel-line-sel))
+  "Sel display method for SEL."
+  "L")
+
+(cl-defmethod helixel-sel-region-type ((_sel helixel-line-sel))
+  "Sel region type method for SEL."
+  'line)
+
+(cl-defmethod helixel-mc-spawn-fn ((_sel helixel-line-sel))
+  "Mc spawn fn method for SEL."
+  'helixel-mc--spawn-from-line)
+
+;; ── rect protocol methods ──
+
+(cl-defmethod helixel-sel-recreate ((sel helixel-rect-sel))
+  "Sel recreate method for SEL."
+  (helixel--recreate-rect sel))
+
+(cl-defmethod helixel-sel-display ((_sel helixel-rect-sel))
+  "Sel display method for SEL."
+  "R")
+
+(cl-defmethod helixel-sel-region-type ((_sel helixel-rect-sel))
+  "Sel region type method for SEL."
+  'rect)
+
+(cl-defmethod helixel-mc-spawn-fn ((_sel helixel-rect-sel))
+  "Mc spawn fn method for SEL."
+  'helixel-mc--spawn-from-rect)
+
+;; ── movement protocol methods ──
+
+(cl-defmethod helixel-sel-recreate ((sel helixel-movement-sel))
+  "Sel recreate method for SEL."
+  (helixel--recreate-movement sel))
+
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-movement-sel))
+  "Sel advance fn method for SEL."
+  #'helixel--advance-by-recreate)
+
+(cl-defmethod helixel-sel-flip-dir ((sel helixel-movement-sel))
+  "Sel flip dir method for SEL."
+  (helixel-sel-update-ctx
+   sel :moves
+   (mapcar (lambda (entry)
+             (let* ((cmd (car entry))
+                    (cnt (cdr entry))
+                    (rev (helixel--motion-reverse-lookup cmd)))
+               (cons (or rev cmd) cnt)))
+           (helixel-movement-sel-moves sel))))
+
+(cl-defmethod helixel-sel-display ((sel helixel-movement-sel))
+  "Sel display method for SEL."
+  (let ((ms (helixel-movement-sel-moves sel)))
+    (let ((n (apply #'+ (mapcar #'cdr ms))))
+      (format "v%d" n))))
 
 ;; ── Visual move tracking (from helixel-state.el) ──
 

@@ -459,25 +459,29 @@ Clears `helixel--pending-surround-op' regardless."
   delimiter)
 
 (cl-defmethod helixel-sel--construct ((_kind (eql surround)) ctx)
+  "Construct the sel struct from ctx plist CTX."
   (make-helixel-surround-sel :delimiter (plist-get ctx :delimiter)))
 
-(cl-defmethod helixel-sel-type ((_sel helixel-surround-sel)) 'surround)
+(cl-defmethod helixel-sel-type ((_sel helixel-surround-sel))
+  "Sel type method for SEL."
+  'surround)
 
 (cl-defmethod helixel-sel--to-plist ((sel helixel-surround-sel))
+  "Sel  to plist method for SEL."
   (list :delimiter (helixel-surround-sel-delimiter sel)))
 
-(helixel-register-kind surround
-  :ctx-schema '(:required (:delimiter) :optional ())
-  :recreate #'ignore
-  :advance  nil
-  :display  (lambda (ctx)
-              (if-let* ((d (helixel-sel-surround-delimiter ctx)))
-                  (format "@%s"
-                          (substring
-                           (symbol-name
-                            (helixel-delimiter-type d))
-                           1))
-                "surround")))
+(cl-defmethod helixel-sel-recreate ((_sel helixel-surround-sel))
+  "Sel recreate method for SEL."
+  (ignore))
+
+(cl-defmethod helixel-sel-display ((sel helixel-surround-sel))
+  "Sel display method for SEL."
+  (if-let* ((d (helixel-surround-sel-delimiter sel)))
+      (format "@%s"
+              (substring
+               (symbol-name (helixel-delimiter-type d))
+               1))
+    "surround"))
 
 (defun helixel-surround--init ()
   "Wire surround internals."

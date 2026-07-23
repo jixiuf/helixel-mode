@@ -87,197 +87,101 @@ Transitional bridge for Phase 3.1: legacy consumers (kind-registry
 functions, ctx accessors) keep working on plists until Phase 3.2
 converts them to slot reads and deletes this generic.")
 
-;; ── CTX schema ──
-;;
-;; Each selection kind uses a specific subset of ctx keys.  The
-;; schema lives in the kind registry (`helixel-register-kind') under
-;; the `:ctx-schema (:required (...) :optional (...))' key; the
-;; registry is the single source of truth.  `helixel--validate-ctx'
-;; reads it at author/lint time.
-;;
-;; All kinds accept an optional :inline-advance flag.
-;; When t, the advance function creates the region as part
-;; of its positioning (movement, textobj, find-char).
-;; The strategy reads this flag to avoid double-recreating.
-
-;; ── CTX schema validation ──
-;;
-;; Schemas are stored on each kind's registry entry (see
-;; `helixel-register-kind').  `helixel--validate-ctx' looks them up
-;; at runtime.  Gated by `helixel--ctx-validation-enabled' — it
-;; never runs in production.
-
-(defvar helixel--ctx-validation-enabled nil
-  "When non-nil, `helixel--validate-ctx' checks ctx against the schema.
-Enabled during `make lint' and in test suites.
-Never set in production — ctx are validated at author time only.")
-
 ;; ----------------------------------------------------------------------
-;; Kind Registry (centralised kind protocol)
+;; Selection protocol generics (cl-defgeneric dispatch)
 ;; ----------------------------------------------------------------------
 ;;
-;; Each selection kind registers four protocol methods:
-;;   :recreate  — function (ctx) to recreate selection at point
-;;   :advance   — function (tx tag) → boolean for next target
-;;   :display   — function (ctx) → string for history display
+;; Each concrete `helixel-sel' subtype implements the protocol by
+;; defining methods next to its struct in the owning module.
+;; Base-type methods below provide the nil/identity defaults, so a
+;; subtype only defines the methods it actually supports.
 ;;
-;; The strategy builder looks up :advance and :recreate from this
-;; registry, eliminating kind-specific cond branches.
+;;  struct                        file
+;;  ------                        ----
+;;  helixel-line-sel              helixel-move.el
+;;  helixel-rect-sel              helixel-move.el
+;;  helixel-movement-sel          helixel-move.el
+;;  helixel-search-sel            helixel-search.el
+;;  helixel-find-char-sel         helixel-search.el
+;;  helixel-textobj-sel           helixel-textobj-marks.el
+;;  helixel-surround-sel          helixel-surround.el
+;;  helixel-insert-*-sel (x5)     helixel-editing.el
+;;  helixel-next-error-sel        helixel-next-error.el
+;;  helixel-treesit-sel           helixel-treesit-core.el
 
-(defvar helixel--kind-registry (make-hash-table :test #'eq)
-  "Hash table: kind symbol → `helixel-kind' struct.")
+(cl-defgeneric helixel-sel-recreate (sel)
+  "Recreate the selection described by SEL at point.
+Returns non-nil on success.")
 
-(cl-defstruct (helixel-kind (:constructor helixel--make-kind)
-                            (:copier nil))
-  "Selection-kind protocol struct.  Lives in `helixel--kind-registry'.
-Slots map 1:1 to the keyword properties documented for
-`helixel-register-kind'."
-  recreate advance display
-  all-buffer-fn all-dir-fn flip-dir-fn mc-spawn-fn
-  ctx-schema
-  sel-type
-  skip-reverse-exchange)
+(cl-defmethod helixel-sel-recreate ((_sel helixel-sel))
+  "Default: no recreate support."
+  nil)
 
-;; ── Registered kinds (single source of truth) ──
-;;
-;;  kind                      file                   sel-type
-;;  ----                      ----                   --------
-;;  line                      helixel-move.el        line
-;;  rect                      helixel-move.el        rect
-;;  movement                  helixel-move.el        —
-;;  search                    helixel-search.el      —
-;;  find-char                 helixel-search.el      —
-;;  textobj                   helixel-textobj-marks  —
-;;  surround                  helixel-surround.el    —
-;;  insert-selection-start    helixel-editing.el     —
-;;  insert-selection-end      helixel-editing.el     —
-;;  insert-beginning-line     helixel-editing.el     —
-;;  insert-end-line           helixel-editing.el     —
-;;  insert-search-offset      helixel-editing.el     —
-;;
-;;  — = movement/selection-only kinds (no sel-type mapping)
+(cl-defgeneric helixel-sel-display (sel)
+  "Return a short display string for SEL (history/cycle messages).")
 
-(cl-defmacro helixel-register-kind (kind &rest props)
-  "Register selection KIND with protocol PROPS.
-PROPS is a keyword plist supporting:
-  :recreate :advance :display
-  :all-buffer-fn :all-dir-fn :flip-dir-fn :mc-spawn-fn
-  :sel-type SYMBOL — maps this kind to a `helixel--sel-type' value
-                     (e.g. \='line→\='line, nil for movement).
-  :skip-reverse-exchange BOOL — non-nil for kinds that manage
-                     point/mark themselves; the N reverse command
-                     then skips `exchange-point-and-mark'.
-  :ctx-schema (:required (...) :optional (...))"
-  (declare (indent 1))
-  `(puthash ',kind (helixel--make-kind ,@props) helixel--kind-registry))
+(cl-defmethod helixel-sel-display ((sel helixel-sel))
+  "Default: display the kind symbol name of SEL."
+  (symbol-name (helixel-sel-type sel)))
 
-;; Kind-registry accessors.  Thin wrappers around the struct accessors
-;; that handle the \"kind not registered\" case (gethash returns nil)
-;; by returning nil, matching the previous plist-get-on-nil semantics.
+(cl-defgeneric helixel-sel-flip-dir (sel)
+  "Return a new sel like SEL with its direction flipped, or nil.
+Kinds without a direction concept use the base method (nil).")
 
-(defsubst helixel--kind-recreate (kind)
-  "Return the :recreate function for KIND from the registry."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-recreate k)))
+(cl-defmethod helixel-sel-flip-dir ((_sel helixel-sel))
+  "Default: no direction concept."
+  nil)
 
-(defsubst helixel--kind-advance (kind)
-  "Return the :advance function for KIND from the registry."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-advance k)))
+(cl-defgeneric helixel-sel-advance-fn (sel)
+  "Return the advance function (TX TAG) -> boolean for SEL, or nil.")
 
-(defsubst helixel--kind-display (kind)
-  "Return the :display function/string for KIND from the registry."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-display k)))
+(cl-defmethod helixel-sel-advance-fn ((_sel helixel-sel))
+  "Default: no advance function."
+  nil)
 
-(defsubst helixel--kind-all-buffer-fn (kind)
-  "Return the :all-buffer-fn for KIND from the registry, or nil."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-all-buffer-fn k)))
+(cl-defgeneric helixel-sel-all-buffer-fn (sel)
+  "Return the all-buffer repeat function (EDIT PREFIX) for SEL, or nil.")
 
-(defsubst helixel--kind-mc-spawn-fn (kind)
-  "Return the :mc-spawn-fn for KIND from the registry, or nil.
-The spawn function takes one argument SEL (a `helixel-sel') and
-returns a list of (POINT . MARK) marker pairs — one fake cursor
-target per element.  When nil, the multi-cursor module falls back
-to walking the kind's :advance function from `point-min'."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-mc-spawn-fn k)))
+(cl-defmethod helixel-sel-all-buffer-fn ((_sel helixel-sel))
+  "Default: no custom all-buffer repeat."
+  nil)
 
-(defsubst helixel--kind-all-dir-fn (kind)
-  "Return the :all-dir-fn for KIND from the registry, or nil."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-all-dir-fn k)))
+(cl-defgeneric helixel-sel-all-dir-fn (sel)
+  "Return the all-dir repeat function (EDIT) for SEL, or nil.")
 
-(defsubst helixel--kind-flip-dir-fn (kind)
-  "Return the :flip-dir-fn for KIND from the registry, or nil.
-The flip-dir function takes a `helixel-sel' and returns a new
-sel with its direction reversed.  Used by \\[helixel-repeat-edit] /
-`helixel-repeat-edit' with a prefix argument or while
-`helixel--repeat-permanent-flip' is non-nil.
+(cl-defmethod helixel-sel-all-dir-fn ((_sel helixel-sel))
+  "Default: no custom all-dir repeat."
+  nil)
 
-Kinds whose selections have no notion of direction (e.g. textobj,
-rect, movement, find-char) leave this nil; the repeat engine
-then simply does not flip."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-flip-dir-fn k)))
+(cl-defgeneric helixel-sel-region-type (sel)
+  "Return SEL's region type: nil, `line', `rect', or `textobj'.")
 
-(defsubst helixel--kind-sel-type (kind)
-  "Return the :sel-type for KIND from the registry, or nil.
-The sel-type determines the return value of `helixel--sel-type'
-for this kind — e.g. \='line→\='line, nil for movement."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-sel-type k)))
+(cl-defmethod helixel-sel-region-type ((_sel helixel-sel))
+  "Default: no region type."
+  nil)
 
-(defsubst helixel--kind-skip-reverse-exchange-p (kind)
-  "Return non-nil if KIND skips `exchange-point-and-mark' on N reverse.
-Returns nil for unknown kinds."
-  (when-let* ((k (gethash kind helixel--kind-registry)))
-    (helixel-kind-skip-reverse-exchange k)))
+(cl-defgeneric helixel-sel-skip-reverse-exchange-p (kind)
+  "Return non-nil if KIND manages point/mark itself on N reverse.")
 
-(defun helixel--validate-ctx (kind ctx-plist)
-  "Validate CTX-PLIST against the schema registered for KIND.
-Returns t if valid.  When `helixel--ctx-validation-enabled' is nil,
-returns t immediately (no-op).
+(cl-defmethod helixel-sel-skip-reverse-exchange-p ((_kind t))
+  "Default: kinds do not skip `exchange-point-and-mark'."
+  nil)
 
-Reads `:ctx-schema' from the kind registry.  Kinds without a
-registered schema are accepted (no validation).
+(cl-defgeneric helixel-mc-spawn-fn (sel)
+  "Return the mc spawn function (SEL) -> target list for SEL, or nil.
+Methods return a quoted function symbol (the implementations live
+in `helixel-mc-core', which the sel-defining modules must not
+require).  When nil, multi-cursor falls back to walking the
+kind's advance function from `point-min'.")
 
-Checks:
-  1. All :required keys present in CTX-PLIST.
-  2. No keys outside the union of :required and :optional.
-Signals `helixel-ctx-error' on mismatch with details."
-  (or (not helixel--ctx-validation-enabled)
-      (let* ((entry (gethash kind helixel--kind-registry))
-             (spec (and entry (helixel-kind-ctx-schema entry))))
-        ;; Kinds with no :ctx-schema in their registration are
-        ;; permissive — useful for transient/internal kinds.
-        (or (null spec)
-            (let* ((required (plist-get spec :required))
-                   (optional (plist-get spec :optional))
-                   (allowed (append required optional)))
-              (dolist (key required)
-                (unless (plist-member ctx-plist key)
-                  (signal 'helixel-ctx-error
-                          (list (format
-                                 "Kind %s: missing required key :%s"
-                                 kind key)))))
-              (cl-loop for (k _v) on ctx-plist by #'cddr
-                       unless (memq k allowed)
-                       do (signal 'helixel-ctx-error
-                                  (list (format
-                                         "Kind %s: unknown key :%s in ctx"
-                                         kind k))))
-              t)))))
+(cl-defmethod helixel-mc-spawn-fn ((_sel helixel-sel))
+  "Default: no spawn function; use the advance-walk fallback."
+  nil)
 
 (defun helixel-sel-create (kind ctx)
   "Create a selection struct for KIND with data CTX (a plist).
 Dispatches to the `helixel-sel--construct' method for KIND, defined
-next to the concrete struct in the owning module.
-When `helixel--ctx-validation-enabled' is non-nil, validates CTX
-against the schema for KIND."
-  (when helixel--ctx-validation-enabled
-    (helixel--validate-ctx kind ctx))
+next to the concrete struct in the owning module."
   (helixel-sel--construct kind ctx))
 
 ;; ── Span extension helper ──
@@ -289,7 +193,7 @@ as the span origin and extends the mark back to it after BODY.
 For \\[helixel-action-cycle] + \\[helixel-repeat-edit] repeating
 the full session-start-to-point span."
   (declare (indent 1))
-  `(let ((span-origin (when (plist-get ,ctx :span) (point))))
+  `(let ((span-origin (when (helixel-sel-span-p ,ctx) (point))))
      (prog1 (progn ,@body)
        (when span-origin
          (push-mark span-origin t t)))))
@@ -309,23 +213,19 @@ this bridge."
     (helixel-sel--to-plist sel)))
 
 (defsubst helixel-sel-call-recreate (sel)
-  "Recreate selection described by SEL, looking up from kind registry."
+  "Recreate selection described by SEL via `helixel-sel-recreate'."
   (when (helixel-sel-p sel)
-    (when-let* ((fn (helixel--kind-recreate (helixel-sel-kind sel))))
-      (funcall fn (helixel-sel-ctx sel)))))
+    (helixel-sel-recreate sel)))
 
 (defsubst helixel-sel-call-display (sel)
-  "Return display string for SEL, from kind registry."
+  "Return display string for SEL via `helixel-sel-display'."
   (when (helixel-sel-p sel)
-    (let ((d (helixel--kind-display (helixel-sel-kind sel))))
-      (if (functionp d)
-          (funcall d (helixel-sel-ctx sel))
-        (or d (symbol-name (helixel-sel-kind sel)))))))
+    (helixel-sel-display sel)))
 
 (defsubst helixel-sel-advance (sel)
-  "Return the advance function for SEL from the kind registry."
+  "Return the advance function (TX TAG) for SEL, or nil."
   (when (helixel-sel-p sel)
-    (helixel--kind-advance (helixel-sel-kind sel))))
+    (helixel-sel-advance-fn sel)))
 
 (defsubst helixel-sel-field (sel key)
   "Get KEY from `helixel-sel' struct SEL's ctx.
@@ -983,7 +883,7 @@ operator sees the same type it saw during recording.
 Pending-sel is NOT popped until `clear-data', so this function returns
 the correct type throughout the operator body."
   (when helixel--pending-sel
-    (helixel--kind-sel-type (helixel-sel-kind helixel--pending-sel))))
+    (helixel-sel-region-type helixel--pending-sel)))
 
 (defvar-local helixel-invisible 'auto
   "How helixel handles invisible text during search and movement.

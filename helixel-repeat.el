@@ -362,11 +362,9 @@ the selection kind has a `:flip-dir-fn' registered, build a copy
 of EDIT whose sel has been flipped by that function.  Otherwise
 return EDIT unchanged."
   (let* ((sel (helixel-action-sel edit))
-         (kind (and sel (helixel-sel-kind sel)))
-         (flip-fn (and kind (helixel--kind-flip-dir-fn kind)))
          (effective-reverse (or reverse-p helixel--repeat-permanent-flip)))
-    (if (and effective-reverse sel flip-fn)
-        (let* ((reversed-sel (funcall flip-fn sel))
+    (if (and effective-reverse sel (helixel-sel-flip-dir sel))
+        (let* ((reversed-sel (helixel-sel-flip-dir sel))
                (new-edit (helixel-action-shallow-copy edit)))
           (setf (helixel-action-sel new-edit) reversed-sel)
           new-edit)
@@ -394,8 +392,7 @@ Dispatch:
   - otherwise → delegate to the kind's :advance fn."
   (let* ((op (helixel-action-op edit))
          (sel (helixel-action-sel edit))
-         (kind (and sel (helixel-sel-kind sel)))
-         (advance-fn (and kind (helixel--kind-advance kind))))
+         (advance-fn (and sel (helixel-sel-advance sel))))
     (cond
      ;; Chain edits may have no kind advance (e.g. after J / join-lines
      ;; with no selection); allow in-place repeat.
@@ -404,7 +401,7 @@ Dispatch:
      ;; self-advancing ops (e.g. kill, change); skipping it
      ;; would cause dot-repeat to re-select the same node
      ;; instead of advancing to the next one.
-     ((and advance-fn (eq kind 'treesit))
+     ((and advance-fn (eq (helixel-sel-kind sel) 'treesit))
       (funcall advance-fn effective))
      ;; Op handles its own positioning, or kind has no advance: just recreate.
      ((or (not advance-fn) (helixel--op-self-advancing-p op))
@@ -421,9 +418,8 @@ Dispatch:
 If the kind has a custom `:all-buffer-fn', delegate to it.
 Otherwise reset to recorded start and advance+apply from point-min
 \(or point-max if PREFIX is reverse)."
-  (let* ((sel (helixel-action-sel edit))
-         (kind (and sel (helixel-sel-kind sel))))
-    (if-let* ((custom-fn (helixel--kind-all-buffer-fn kind)))
+  (let* ((sel (helixel-action-sel edit)))
+    (if-let* ((custom-fn (and sel (helixel-sel-all-buffer-fn sel))))
         (funcall custom-fn edit prefix)
       (let ((effective (helixel--maybe-flip-dir-action edit reverse-p)))
         (when-let* ((m (car (helixel-action-mark-region effective))))
@@ -442,9 +438,8 @@ Otherwise reset to recorded start and advance+apply from point-min
   "Repeat EDIT over all remaining targets from current position.
 When REVERSE-P is non-nil, flip the stored direction.
 If the kind has a custom `:all-dir-fn', delegate to it."
-  (let* ((sel (helixel-action-sel edit))
-         (kind (and sel (helixel-sel-kind sel))))
-    (if-let* ((custom-fn (helixel--kind-all-dir-fn kind)))
+  (let* ((sel (helixel-action-sel edit)))
+    (if-let* ((custom-fn (and sel (helixel-sel-all-dir-fn sel))))
         (funcall custom-fn edit)
       (let ((effective (helixel--maybe-flip-dir-action edit reverse-p))
             (cnt 0))
@@ -724,8 +719,7 @@ No-op for kinds without directional state
 Returns t on success, nil otherwise."
   (when-let* ((tx helixel-last-action)
               (sel (helixel-action-sel tx))
-              (kind (helixel-sel-kind sel))
-              ((helixel--kind-flip-dir-fn kind)))
+              ((helixel-sel-flip-dir sel)))
     (setq helixel--repeat-permanent-flip
           (not helixel--repeat-permanent-flip))
     t))

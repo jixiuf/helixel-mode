@@ -2606,22 +2606,17 @@ pre-spawn cursor, the pre-spawn active region is restored."
     (helixel-enter-normal-state)
     (goto-char 4)                       ; point at end of "foo"
     (push-mark 1 t t)                   ; region: "foo" (1..4)
-    (let* ((entry (gethash 'line helixel--kind-registry))
-           (orig-fn (helixel-kind-mc-spawn-fn entry)))
-      (unwind-protect
-          (progn
-            (setf (helixel-kind-mc-spawn-fn entry)
-                  (lambda (_sel)
-                    (list (helixel-mc--make-target 4))))
-            (helixel-mc--spawn-from-sel
-             (helixel-sel-create 'line '(:count 1)))
-            ;; Realize-targets cleared mark-active (degenerate target),
-            ;; but spawn-from-sel's restore guard put it back because
-            ;; the target was at saved-pt.
-            (should mark-active)
-            (should (= 4 (point)))
-            (should (= 1 (mark t))))
-        (setf (helixel-kind-mc-spawn-fn entry) orig-fn)))))
+    (cl-letf (((symbol-function 'helixel-mc--spawn-from-line)
+               (lambda (_sel)
+                 (list (helixel-mc--make-target 4)))))
+      (helixel-mc--spawn-from-sel
+       (helixel-sel-create 'line '(:count 1)))
+      ;; Realize-targets cleared mark-active (degenerate target),
+      ;; but spawn-from-sel's restore guard put it back because
+      ;; the target was at saved-pt.
+      (should mark-active)
+      (should (= 4 (point)))
+      (should (= 1 (mark t))))))
 
 (ert-deftest helixel-test-mc-spawn-from-sel-no-restore-when-different-pt ()
   "When the chosen target is at a DIFFERENT point, the pre-spawn
@@ -2630,18 +2625,13 @@ region is NOT restored (the new target replaces it correctly)."
     (helixel-enter-normal-state)
     (goto-char 4)
     (push-mark 1 t t)                   ; region "foo" (1..4)
-    (let* ((entry (gethash 'line helixel--kind-registry))
-           (orig-fn (helixel-kind-mc-spawn-fn entry)))
-      (unwind-protect
-          (progn
-            (setf (helixel-kind-mc-spawn-fn entry)
-                  (lambda (_sel)
-                    (list (helixel-mc--make-target 8))))
-            (helixel-mc--spawn-from-sel
-             (helixel-sel-create 'line '(:count 1)))
-            (should (= 8 (point)))
-            (should-not mark-active))
-        (setf (helixel-kind-mc-spawn-fn entry) orig-fn)))))
+    (cl-letf (((symbol-function 'helixel-mc--spawn-from-line)
+               (lambda (_sel)
+                 (list (helixel-mc--make-target 8)))))
+      (helixel-mc--spawn-from-sel
+       (helixel-sel-create 'line '(:count 1)))
+      (should (= 8 (point)))
+      (should-not mark-active))))
 
 ;; ── save/restore around enter/leave cycle ──
 

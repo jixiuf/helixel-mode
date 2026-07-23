@@ -1664,7 +1664,7 @@ with a sel whose `:command' is the outer mc command (e.g.
 `helixel-mc-toggle' with an accumulated `:count' equal to the
 number of walk iterations), breaking dot-repeat at fake cursors."
   (let* ((kind (helixel-sel-kind sel))
-         (advance-fn (helixel--kind-advance kind))
+         (advance-fn (helixel-sel-advance sel))
          (limit (or helixel-mc-max-cursors 1000))
          (targets nil)
          (last-key nil))
@@ -1765,8 +1765,7 @@ for the subsequent `i' / `a' / operator to land in the same
 region-relative position as on every fake."
   (unless (helixel-sel-p sel)
     (user-error "No selection to spawn from"))
-  (let* ((kind (helixel-sel-kind sel))
-         (spawn-fn (helixel--kind-mc-spawn-fn kind))
+  (let* ((spawn-fn (helixel-mc-spawn-fn sel))
          ;; Snapshot real cursor BEFORE the walk so we can restore
          ;; the region if the chosen target ends up degenerate.
          (saved-pt (point))
@@ -1886,28 +1885,7 @@ snapshot covers the current file."
 
 ;; ── Kind registrations: hook spawn fns into existing kinds ──
 
-(defun helixel-mc--register-default-spawn-fns ()
-  "Attach :mc-spawn-fn to kinds with sane defaults.
-Mutates the `helixel-kind' struct entries in-place via
-`setf'.  Idempotent: re-running overwrites with the same fn."
-  ;; line / rect → per-line / per-row cursors with own region.
-  (when-let* ((k (gethash 'line helixel--kind-registry)))
-    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-line))
-  (when-let* ((k (gethash 'rect helixel--kind-registry)))
-    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-rect))
-  ;; find-char → scan all char occurrences (advance-walk would only
-  ;; visit from origin so we need a buffer-wide scan).
-  (when-let* ((k (gethash 'find-char helixel--kind-registry)))
-    (setf (helixel-kind-mc-spawn-fn k) #'helixel-mc--spawn-from-find-char))
-  ;; next-error → direct from targets snapshot.
-  (when-let* ((k (gethash 'next-error helixel--kind-registry)))
-    (setf (helixel-kind-mc-spawn-fn k)
-          #'helixel-mc--spawn-from-next-error))
-  ;; search / textobj / movement inherit the advance-walk fallback
-  ;; automatically (no entry needed).
-  )
 
-(helixel-mc--register-default-spawn-fns)
 
 ;; ----------------------------------------------------------------------
 ;; Multi-cursor integration: dot-repeat / chain / insert broadcast

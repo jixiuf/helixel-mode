@@ -13,11 +13,10 @@
 | `helixel-register.el` | **Named registers**: `helixel-register-backends` (kill-ring/clipboard/primary/register-alist), `helixel--current-register`, numbered delete registers, `helixel--kill-new`, swap-source register. Depends only on core. |
 | `helixel-ring.el` | **Event storage + history navigation**: `helixel--action-ring` (commit/dedup/cap), `helixel--global-jump-log`, `helixel--tracking-open`, `helixel--cancel-action`, `helixel--live-action-set`, live-event management, generic grouped-ring queries (`helixel--gr-*`), `;' action-cycle, C-o/C-i jump commands. |
 | `helixel-macros.el` | **Command definition macros**: `helixel-define-command`, `helixel-define-operator`, `helixel-with-action-tracking`. |
-| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel-record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions + `helixel--keyrec-capture`) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts canonical segment lists only; `helixel--repeat-get-keys' is the single place that normalizes a raw key vector/string into segment form. |
-| `helixel-chain.el` | Chain lifecycle: start/end/cancel.  Chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload.  Replay iterates the list and `helixel-action-replay`s each entry.  No more kmacro / keystroke capture. |
+| `helixel-repeat.el` | Dot-repeat (`.`) and selection-repeat (`M-.`): record (`helixel-record-action`), replay, unified `helixel--repeat-advance` (delegates to kind-registry advance fns), all-buffer/all-dir dispatch, kind-specific `:all-buffer-fn`/`:all-dir-fn` from kind registry, line-pass helper, interactive entry points.  Also includes insert-mode key + text recording (segment-based capture via after-change-functions + `helixel--keyrec-capture`) — each insert-mode command becomes either `(:keys VEC)` (no buffer change) or `(:text STR :delete-before N :offset O)` (any buffer change).  Replay helper `helixel--execute-keys' accepts canonical segment lists only; `helixel--repeat-get-keys' is the single place that normalizes a raw key vector/string into segment form.  **Chain lifecycle** (start/end/cancel): chain accumulates a list of `helixel-action' values committed during the chain (via `helixel-action-commit-hook') and stores it as `:action-list' payload; replay iterates the list and `helixel-action-replay's each entry.  No kmacro / keystroke capture. |
 | `helixel-state.el` | Modal state machine, pending-op system, keymap shells, insert entry/exit, visual state, minor modes, shared kill core. |
 | `helixel-move.el` | Movement/selection commands (line/rect/word), rect change/replay. |
-| `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection` + `helixel--swap-source-type`. |
+| `helixel-editing.el` | Editing commands (kill, change, copy, replace, yank) + selection recreate fns + op runners + `helixel--replace-region` + `helixel--delete-selection` + `helixel--swap-source-type`.  **Swap commands** (same-buffer and cross-buffer) live at the end of this file. |
 | `helixel-keymap.el` | All keymaps. Populates `helixel-state-map-alist`. 7 `declare-function` for flymake/eglot (third-party only). |
 | `helixel-search.el` | Search/find-char + `n`/`N` repeat + `helixel--active-search` state + invisible-text search filter loop. |
 | `helixel-next-error.el` | **Next-error (grep/compile) snapshot**: pure-data `helixel-ne--target` vector, tick-invalidated cache, index navigation (`helixel-ne--step` / `--step-in-file` over shared `helixel-ne--step-index`), grep face-run column extraction, `next-error` kind registration, `next-error-hook` integration (`helixel-ne--after-jump`; every visited target buffer is seeded with buffer-local repeat state via `helixel-ne--seed-repeat-state`). |
@@ -27,10 +26,8 @@
 | `helixel-textobj-marks.el` | User-facing surface: define-mark-pair/-quote/-object/-regex-textobj macros, mark-inner-*/mark-a-* commands (including tag and block), tree-sitter helper, all default registrations, `textobj' kind registration. |
 | `helixel-textobj.el` | Facade: requires engine, pair, block, marks. |
 | `helixel-surround.el` | Surround add/delete/replace. |
-| `helixel-swap.el` | Swap commands. Depends on `helixel-editing` for `helixel--replace-region` (one-way, no circular dep). |
-| `helixel-mc-core.el` | **Multi-cursor core + target computation**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook` / `pre-command-hook`, cursor-ID hash table, undo-step management (begin/finish + `buffer-undo-list` `apply` entry injection for cursor-position persistence across undo/redo), whitelist policy, `helixel-multi-cursor-mode`.  Target computation: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc--spawn-from-sel/-line/-rect/-find-char`, kind registry hooks. |
+| `helixel-mc-core.el` | **Multi-cursor core + target computation + integration**: fake-cursor overlays, per-cursor state vars, dispatch loop via `post-command-hook` / `pre-command-hook`, cursor-ID hash table, undo-step management (begin/finish + `buffer-undo-list` `apply` entry injection for cursor-position persistence across undo/redo), whitelist policy, `helixel-multi-cursor-mode`.  Target computation: `helixel-mc--realize-targets`, advance-walk fallback, `helixel-mc--spawn-from-sel/-line/-rect/-find-char`, kind registry hooks.  **Integration glue** (end of file): dot-repeat / chain / insert per-cursor execution + atomic undo. |
 | `helixel-mc-spawn.el` | **High-level user commands**: toggle, add-cursor-here, edit-lines, mark-next-like-this, primary/content rotation, keep/remove-matching, merge/trim/align, split-on-regex, restore-cursors. |
-| `helixel-mc-integrate.el` | Glue: dot-repeat / chain / insert per-cursor execution + atomic undo. |
 | `helixel-shims.el` | `with-eval-after-load` shims for third-party integration (info, help-mode, shortdoc, man, woman, eww) + multi-cursor completion-preview shim. 29 `declare-function` (all third-party). |
 | `helixel-treesit-core.el` | **Tree-sitter foundation**: readiness gates, node utilities, query provider (evil-textobj-tree-sitter integration), capture normalization, object resolution, index cache, selection activation, kind registration, type specification table. Soft-depends on `treesit` and `evil-textobj-tree-sitter-core`. |
 | `helixel-treesit-commands.el` | **Tree-sitter command layer**: data-driven `helixel-ts--define-type' macro generates textobj, inner-move, outer-nav commands for each semantic type. Also expand/shrink, sibling nav, comma-repeat repeater. Requires `helixel-treesit-core' + `helixel-macros'. |
@@ -96,12 +93,10 @@ helixel-debug (cl-lib only, zero helixel deps)
         │     └── helixel-textobj (facade: requires the four above)
         │     └── helixel-surround (→ core + ring + repeat + textobj)
         │
-        ├── helixel-repeat (→ core + ring)
-        │     └── helixel-chain (→ core + ring + macros + repeat)
+        ├── helixel-repeat (→ core + ring + macros; includes chain)
         │
-        ├── helixel-mc-core (→ core + ring)
+        ├── helixel-mc-core (→ core + ring + repeat; includes integrate)
         │     └── helixel-mc-spawn (→ core + mc-core + search + motion)
-        │     └── helixel-mc-integrate (→ core + mc-core + repeat + chain)
         │
         └── helixel-state (→ core + ring + macros + repeat
                             + textobj + surround)
@@ -109,7 +104,8 @@ helixel-debug (cl-lib only, zero helixel deps)
               ├── helixel-move (→ state + macros + motion)
               │     │
               │     └── helixel-editing (→ state + move + core + macros
-              │                          + search + register)
+              │                          + search + register + rect;
+              │                          includes swap)
               │           │
               │           ├── helixel-search (→ state + core + macros
               │           │                   + repeat + move + motion
@@ -117,18 +113,15 @@ helixel-debug (cl-lib only, zero helixel deps)
               │           │     └── helixel-next-error (→ core + search
               │           │                           + motion)
               │           │
-              │           ├── helixel-swap (→ state + macros + editing)
-              │           │
               │           └── helixel-keymap (→ state + move + editing
-                                                + chain + surround + swap
-                                                + search + mc-core + mc-spawn
-                                                + mc-integrate)
+                                                + surround + search
+                                                + mc-core + mc-spawn)
               │
               └── helixel-shims (→ state + keymap + motion)
 ```
 
 Notes:
-- **Zero circular deps.** `swap→editing` is one-way (editing does NOT require swap).
+- **Zero circular deps.**
 - `helixel--replace-region` lives in `helixel-editing.el`.
 - `helixel--delete-selection` lives in `helixel-editing.el`.
 - `helixel--swap-source-type` lives in `helixel-editing.el`.
@@ -143,7 +136,7 @@ Notes:
   - `helixel-textobj-marks.el`: 0
   - `helixel-treesit.el`: 18 (15 internal cross-module + 3 third-party evil-textobj-tree-sitter)
   - `helixel-shims.el`: 29 (info, help-mode, shortdoc, man, woman, eww) + 1 internal (next-error hook)
-  - `helixel-mc-core.el`: 3 internal (next-error snapshot)
+  - `helixel-mc-core.el`: 5 internal (helixel-state ×2, next-error snapshot ×3) + 1 third-party (undo-tree)
 
 ## Key Structs
 
@@ -380,7 +373,7 @@ C-o / C-i remain real-only.
 `helixel-repeat-edit' is whitelisted ON for multi-cursors: each
 cursor's snapshotted `helixel-last-action' is replayed at its own
 position.  `helixel-repeat-chain-end' commits a chain action whose
-`by-command' stamp is `helixel-repeat-chain-end'; mc-integrate's
+`by-command' stamp is `helixel-repeat-chain-end'; mc-core's
 `action-commit-hook' handler detects this and broadcasts the new
 chain tx to every fake cursor — so `@ ... ESC' on N cursors gives N
 parallel chain applications, all in one undo step.
@@ -465,7 +458,7 @@ unless the tx provides its own.
 
 Abnormal hook fired after every action commits to the ring.  Called
 with one arg — the committed `helixel-action'.  Consumers: chain
-accumulator (`helixel--chain-on-commit') and mc-integrate
+accumulator (`helixel--chain-on-commit') and mc-core
 (`helixel-mc--on-chain-end').  Extend here rather than touching
 `helixel--action-commit' or the ring.
 

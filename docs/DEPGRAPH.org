@@ -7,10 +7,6 @@ Do not edit by hand; run src_emacs-lisp[:results none]{(make depgraph)} to refre
 
 #+BEGIN_SRC mermaid :exports results
 graph TD
-  helixel-chain --> helixel-core
-  helixel-chain --> helixel-ring
-  helixel-chain --> helixel-macros
-  helixel-chain --> helixel-repeat
   helixel-core --> helixel-debug
   helixel-editing --> helixel-state
   helixel-editing --> helixel-move
@@ -21,21 +17,15 @@ graph TD
   helixel-keymap --> helixel-state
   helixel-keymap --> helixel-move
   helixel-keymap --> helixel-editing
-  helixel-keymap --> helixel-chain
   helixel-keymap --> helixel-surround
-  helixel-keymap --> helixel-swap
   helixel-keymap --> helixel-search
   helixel-keymap --> helixel-mc-core
   helixel-keymap --> helixel-mc-spawn
-  helixel-keymap --> helixel-mc-integrate
   helixel-macros --> helixel-core
   helixel-macros --> helixel-ring
   helixel-mc-core --> helixel-core
   helixel-mc-core --> helixel-ring
-  helixel-mc-integrate --> helixel-core
-  helixel-mc-integrate --> helixel-mc-core
-  helixel-mc-integrate --> helixel-repeat
-  helixel-mc-integrate --> helixel-chain
+  helixel-mc-core --> helixel-repeat
   helixel-mc-spawn --> helixel-core
   helixel-mc-spawn --> helixel-mc-core
   helixel-mc-spawn --> helixel-search
@@ -50,6 +40,7 @@ graph TD
   helixel-register --> helixel-core
   helixel-repeat --> helixel-core
   helixel-repeat --> helixel-ring
+  helixel-repeat --> helixel-macros
   helixel-ring --> helixel-core
   helixel-search --> helixel-state
   helixel-search --> helixel-core
@@ -71,9 +62,6 @@ graph TD
   helixel-surround --> helixel-ring
   helixel-surround --> helixel-repeat
   helixel-surround --> helixel-textobj
-  helixel-swap --> helixel-state
-  helixel-swap --> helixel-macros
-  helixel-swap --> helixel-editing
   helixel-textobj-block --> helixel-core
   helixel-textobj-block --> helixel-textobj-engine
   helixel-textobj-block --> helixel-textobj-pair
@@ -101,7 +89,6 @@ graph TD
   helixel --> helixel-ring
   helixel --> helixel-macros
   helixel --> helixel-repeat
-  helixel --> helixel-chain
   helixel --> helixel-state
   helixel --> helixel-search
   helixel --> helixel-next-error
@@ -112,11 +99,9 @@ graph TD
   helixel --> helixel-textobj-marks
   helixel --> helixel-textobj
   helixel --> helixel-surround
-  helixel --> helixel-swap
   helixel --> helixel-keymap
   helixel --> helixel-mc-core
   helixel --> helixel-mc-spawn
-  helixel --> helixel-mc-integrate
   helixel --> helixel-shims
   helixel --> helixel-treesit
 #+END_SRC

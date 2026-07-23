@@ -388,6 +388,35 @@ LEVEL is nesting level, COUNT is selection count."
 ;; Kind registration
 ;; ----------------------------------------------------------------------
 
+(cl-defstruct (helixel-treesit-sel (:include helixel-sel)
+                                   (:copier nil))
+  "Tree-sitter text-object selection.
+Slots: BASE, PART, LEVEL, COUNT, QUERY, START, END, COMMAND."
+  base part level count query start end command)
+
+(cl-defmethod helixel-sel--construct ((_kind (eql treesit)) ctx)
+  (make-helixel-treesit-sel
+   :base (plist-get ctx :base)
+   :part (plist-get ctx :part)
+   :level (plist-get ctx :level)
+   :count (plist-get ctx :count)
+   :query (plist-get ctx :query)
+   :start (plist-get ctx :start)
+   :end (plist-get ctx :end)
+   :command (plist-get ctx :command)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-treesit-sel)) 'treesit)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-treesit-sel))
+  (list :base (helixel-treesit-sel-base sel)
+        :part (helixel-treesit-sel-part sel)
+        :level (helixel-treesit-sel-level sel)
+        :count (helixel-treesit-sel-count sel)
+        :query (helixel-treesit-sel-query sel)
+        :start (helixel-treesit-sel-start sel)
+        :end (helixel-treesit-sel-end sel)
+        :command (helixel-treesit-sel-command sel)))
+
 (helixel-register-kind treesit
   :sel-type 'textobj
   :ctx-schema '(:required (:base :part)

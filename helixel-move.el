@@ -1622,6 +1622,67 @@ fresh rather than extending a stale mark."
 
 ;; ── Kind registrations ──
 
+;; ── Concrete selection structs (Phase 3.1) ──
+
+(cl-defstruct (helixel-line-sel (:include helixel-sel)
+                                (:copier nil))
+  "Line selection.  Slots: COUNT, DIR, ENTRY-KIND (+ base SPAN)."
+  (count 1)
+  (dir 'forward)
+  entry-kind)
+
+(cl-defmethod helixel-sel--construct ((_kind (eql line)) ctx)
+  (make-helixel-line-sel
+   :count (or (plist-get ctx :count) 1)
+   :dir (or (plist-get ctx :dir) 'forward)
+   :entry-kind (plist-get ctx :entry-kind)
+   :span (plist-get ctx :span)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-line-sel)) 'line)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-line-sel))
+  (list :count (helixel-line-sel-count sel)
+        :dir (helixel-line-sel-dir sel)
+        :entry-kind (helixel-line-sel-entry-kind sel)
+        :span (helixel-line-sel-span sel)))
+
+(cl-defstruct (helixel-rect-sel (:include helixel-sel)
+                                (:copier nil))
+  "Rectangle selection.  Slots: COUNT (+ base SPAN)."
+  (count 1))
+
+(cl-defmethod helixel-sel--construct ((_kind (eql rect)) ctx)
+  (make-helixel-rect-sel
+   :count (or (plist-get ctx :count) 1)
+   :span (plist-get ctx :span)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-rect-sel)) 'rect)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-rect-sel))
+  (list :count (helixel-rect-sel-count sel)
+        :span (helixel-rect-sel-span sel)))
+
+(cl-defstruct (helixel-movement-sel (:include helixel-sel)
+                                    (:copier nil))
+  "Movement selection.  Slots: MOVES, NORMAL-MODE (+ base INLINE-ADVANCE)."
+  moves
+  normal-mode)
+
+(cl-defmethod helixel-sel--construct ((_kind (eql movement)) ctx)
+  (make-helixel-movement-sel
+   :moves (plist-get ctx :moves)
+   :normal-mode (plist-get ctx :normal-mode)
+   :inline-advance (plist-get ctx :inline-advance)
+   :span (plist-get ctx :span)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-movement-sel)) 'movement)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-movement-sel))
+  (list :moves (helixel-movement-sel-moves sel)
+        :normal-mode (helixel-movement-sel-normal-mode sel)
+        :inline-advance (helixel-movement-sel-inline-advance sel)
+        :span (helixel-movement-sel-span sel)))
+
 (helixel-register-kind line
   :sel-type 'line
   :ctx-schema '(:required (:count :dir) :optional (:entry-kind :span))

@@ -1481,6 +1481,66 @@ using advance+apply without recursion."
 
 ;; ── Kind registrations ──
 
+(cl-defstruct (helixel-search-sel (:include helixel-sel)
+                                  (:copier nil))
+  "Search selection.  Slots: PATTERN, DIR, ENTRY-KIND, N-COUNT,
+CURSOR-OFFSET, REGEXP."
+  pattern
+  (dir 'forward)
+  entry-kind
+  n-count
+  cursor-offset
+  (regexp t))
+
+(cl-defmethod helixel-sel--construct ((_kind (eql search)) ctx)
+  (make-helixel-search-sel
+   :pattern (plist-get ctx :pattern)
+   :dir (or (plist-get ctx :dir) 'forward)
+   :entry-kind (plist-get ctx :entry-kind)
+   :n-count (plist-get ctx :n-count)
+   :cursor-offset (plist-get ctx :cursor-offset)
+   :regexp (if (plist-member ctx :regexp) (plist-get ctx :regexp) t)
+   :span (plist-get ctx :span)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-search-sel)) 'search)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-search-sel))
+  (list :pattern (helixel-search-sel-pattern sel)
+        :dir (helixel-search-sel-dir sel)
+        :entry-kind (helixel-search-sel-entry-kind sel)
+        :n-count (helixel-search-sel-n-count sel)
+        :cursor-offset (helixel-search-sel-cursor-offset sel)
+        :regexp (helixel-search-sel-regexp sel)
+        :span (helixel-search-sel-span sel)))
+
+(cl-defstruct (helixel-find-char-sel (:include helixel-sel)
+                                     (:copier nil))
+  "Find-char selection.  Slots: CHAR, TYPE, DIR, N-COUNT
+\(+ base INLINE-ADVANCE)."
+  char
+  (type 'next)
+  (dir 'forward)
+  n-count)
+
+(cl-defmethod helixel-sel--construct ((_kind (eql find-char)) ctx)
+  (make-helixel-find-char-sel
+   :char (plist-get ctx :char)
+   :type (or (plist-get ctx :type) 'next)
+   :dir (or (plist-get ctx :dir) 'forward)
+   :n-count (plist-get ctx :n-count)
+   :inline-advance (plist-get ctx :inline-advance)
+   :span (plist-get ctx :span)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-find-char-sel)) 'find-char)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-find-char-sel))
+  (list :char (helixel-find-char-sel-char sel)
+        :type (helixel-find-char-sel-type sel)
+        :dir (helixel-find-char-sel-dir sel)
+        :n-count (helixel-find-char-sel-n-count sel)
+        :inline-advance (helixel-find-char-sel-inline-advance sel)
+        :span (helixel-find-char-sel-span sel)))
+
 (helixel-register-kind search
   :ctx-schema '(:required (:pattern :dir)
                           :optional (:entry-kind :n-count

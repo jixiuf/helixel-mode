@@ -453,6 +453,19 @@ Clears `helixel--pending-surround-op' regardless."
                   helixel--pending-sel))
         (funcall op)))))
 
+(cl-defstruct (helixel-surround-sel (:include helixel-sel)
+                                    (:copier nil))
+  "Surround selection.  Slots: DELIMITER."
+  delimiter)
+
+(cl-defmethod helixel-sel--construct ((_kind (eql surround)) ctx)
+  (make-helixel-surround-sel :delimiter (plist-get ctx :delimiter)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-surround-sel)) 'surround)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-surround-sel))
+  (list :delimiter (helixel-surround-sel-delimiter sel)))
+
 (helixel-register-kind surround
   :ctx-schema '(:required (:delimiter) :optional ())
   :recreate #'ignore

@@ -38,8 +38,9 @@
   "`helixel-sel-create' builds a valid struct."
   (let ((sel (helixel-sel-create 'line '(:count 3))))
     (should (helixel-sel-p sel))
-    (should (eq (helixel-sel--kind sel) 'line))
-    (should (equal (helixel-sel--ctx sel) '(:count 3)))
+    (should (eq (helixel-sel-kind sel) 'line))
+    (should (= (helixel-sel-field sel :count) 3))
+    (should (eq (helixel-sel-field sel :dir) 'forward))
     (should (string= (helixel-sel-call-display sel) "L"))))
 
 (ert-deftest helixel-test-sel-get-kind ()
@@ -63,7 +64,7 @@
   (let ((sel (helixel-sel-create 'line '(:count 3))))
     (should (= (helixel-sel-count sel) 3)))
   (let ((sel (helixel-sel-create 'line nil)))
-    (should (= (helixel-sel-count sel) 0)))
+    (should (= (helixel-sel-count sel) 1)))
   (should (= (helixel-sel-count nil) 0))
   (should (= (helixel-sel-count (helixel-sel-create 'line '(:count 7))) 7)))
 
@@ -74,7 +75,7 @@
     (should (= (helixel-sel-field s1 :count) 3))
     (should (= (helixel-sel-field s2 :count) 5))
     (should (helixel-sel-p s2))
-    (should (eq (helixel-sel--kind s2) 'line))
+    (should (eq (helixel-sel-kind s2) 'line))
     (let ((p2 (helixel-sel-update-ctx (helixel-sel-create 'line '(:count 1)) :count 9)))
       (should (equal p2 (helixel-sel-create 'line '(:count 9)))))))
 
@@ -531,7 +532,8 @@ line and replays +2 indent-right on it."
   "`helixel-repeat-edit' does not discard `helixel-last-action' on failure."
   (helixel-test-with-buffer "hello"
     (setq helixel-last-action
-          (helixel-action-create 'kill (helixel-sel-create 'unknown-kind-no-method nil) nil))
+          (helixel-action-create 'kill (helixel-sel-create 'line '(:count 1)) nil
+                                 :runner (lambda (_tx) (error "boom"))))
     (let ((before helixel-last-action))
       (helixel-repeat-edit)
       (should (equal helixel-last-action before)))))

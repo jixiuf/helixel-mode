@@ -57,16 +57,35 @@
 ;; helixel-sel: Selection Descriptor
 ;; ----------------------------------------------------------------------
 
-(cl-defstruct (helixel-sel (:conc-name helixel-sel--)
-                           (:constructor helixel-sel--internal)
-                           (:copier helixel-sel--shallow-copy))
-  "Selection descriptor for dot-repeat.
-KIND is a symbol identifying the selection type.
-CTX is a plist of mutable extra data (:count, :dir, :moves, ...).
-Protocol methods (recreate, advance, display) are looked up from
-the kind registry via `helixel-register-kind'."
-  kind
-  ctx)
+(cl-defstruct (helixel-sel (:constructor nil)
+                           (:copier nil)
+                           (:predicate nil))
+  "Abstract base struct for selection descriptors.
+Concrete per-kind structs include this base (e.g. `helixel-line-sel'
+in helixel-move.el).  SPAN and INLINE-ADVANCE are cross-kind flags
+promoted to base slots.  Protocol methods (recreate, advance,
+display) are `cl-defgeneric' dispatches on the concrete type.
+Do not construct directly — use `helixel-sel-create'."
+  (span nil)
+  (inline-advance nil))
+
+(defsubst helixel-sel-p (obj)
+  "Return non-nil if OBJ is a `helixel-sel' (any concrete subtype)."
+  (cl-typep obj 'helixel-sel))
+
+(cl-defgeneric helixel-sel--construct (kind ctx)
+  "Build the concrete sel struct for KIND from ctx plist CTX.
+Methods are defined next to each concrete struct, keyed on
+\=(eql KIND).")
+
+(cl-defgeneric helixel-sel-type (sel)
+  "Return the kind symbol of SEL (e.g. \=`line', \=`search').")
+
+(cl-defgeneric helixel-sel--to-plist (sel)
+  "Return SEL's slots as a ctx plist.
+Transitional bridge for Phase 3.1: legacy consumers (kind-registry
+functions, ctx accessors) keep working on plists until Phase 3.2
+converts them to slot reads and deletes this generic.")
 
 ;; ── CTX schema ──
 ;;
@@ -252,14 +271,14 @@ Signals `helixel-ctx-error' on mismatch with details."
               t)))))
 
 (defun helixel-sel-create (kind ctx)
-  "Create a `helixel-sel' struct for selection KIND with data CTX.
-All protocol methods (recreate, advance, display) are looked up
-from the kind registry.
+  "Create a selection struct for KIND with data CTX (a plist).
+Dispatches to the `helixel-sel--construct' method for KIND, defined
+next to the concrete struct in the owning module.
 When `helixel--ctx-validation-enabled' is non-nil, validates CTX
 against the schema for KIND."
   (when helixel--ctx-validation-enabled
     (helixel--validate-ctx kind ctx))
-  (helixel-sel--internal :kind kind :ctx ctx))
+  (helixel-sel--construct kind ctx))
 
 ;; ── Span extension helper ──
 
@@ -277,34 +296,36 @@ the full session-start-to-point span."
 
 ;; ── Core accessors ──
 
+(defsubst helixel-sel-kind (sel)
+  "Return the kind symbol of `helixel-sel' struct SEL."
+  (when (helixel-sel-p sel)
+    (helixel-sel-type sel)))
+
+(defsubst helixel-sel-ctx (sel)
+  "Return SEL's data as a ctx plist (transitional view).
+Phase 3.2 converts remaining consumers to slot reads and removes
+this bridge."
+  (when (helixel-sel-p sel)
+    (helixel-sel--to-plist sel)))
+
 (defsubst helixel-sel-call-recreate (sel)
   "Recreate selection described by SEL, looking up from kind registry."
   (when (helixel-sel-p sel)
-    (when-let* ((fn (helixel--kind-recreate (helixel-sel--kind sel))))
-      (funcall fn (helixel-sel--ctx sel)))))
+    (when-let* ((fn (helixel--kind-recreate (helixel-sel-kind sel))))
+      (funcall fn (helixel-sel-ctx sel)))))
 
 (defsubst helixel-sel-call-display (sel)
   "Return display string for SEL, from kind registry."
   (when (helixel-sel-p sel)
-    (let ((d (helixel--kind-display (helixel-sel--kind sel))))
+    (let ((d (helixel--kind-display (helixel-sel-kind sel))))
       (if (functionp d)
-          (funcall d (helixel-sel--ctx sel))
-        (or d (symbol-name (helixel-sel--kind sel)))))))
-
-(defsubst helixel-sel-kind (sel)
-  "Return the :kind from `helixel-sel' struct SEL."
-  (when (helixel-sel-p sel)
-    (helixel-sel--kind sel)))
+          (funcall d (helixel-sel-ctx sel))
+        (or d (symbol-name (helixel-sel-kind sel)))))))
 
 (defsubst helixel-sel-advance (sel)
   "Return the advance function for SEL from the kind registry."
   (when (helixel-sel-p sel)
-    (helixel--kind-advance (helixel-sel--kind sel))))
-
-(defsubst helixel-sel-ctx (sel)
-  "Return the CTX (data plist) from `helixel-sel' struct SEL."
-  (when (helixel-sel-p sel)
-    (helixel-sel--ctx sel)))
+    (helixel--kind-advance (helixel-sel-kind sel))))
 
 (defsubst helixel-sel-field (sel key)
   "Get KEY from `helixel-sel' struct SEL's ctx.
@@ -327,13 +348,11 @@ Compares kind and ctx.  Returns t when both are nil."
          (equal (helixel-sel-ctx s1) (helixel-sel-ctx s2)))))
 
 (defun helixel-sel-update-ctx (sel key value)
-  "Return a new `helixel-sel' struct from SEL with CTX updated.
-Sets KEY to VALUE in the ctx plist."
+  "Return a new sel struct from SEL with ctx KEY set to VALUE."
   (if (helixel-sel-p sel)
-      (helixel-sel--internal
-       :kind (helixel-sel--kind sel)
-       :ctx (plist-put (copy-sequence (helixel-sel--ctx sel))
-                       key value))
+      (helixel-sel--construct
+       (helixel-sel-kind sel)
+       (plist-put (copy-sequence (helixel-sel-ctx sel)) key value))
     sel))
 
 ;; ── Kind-specific ctx accessors ──
@@ -348,8 +367,8 @@ Sets KEY to VALUE in the ctx plist."
 ;; so we generate them via `helixel--def-sel-accessor'.
 
 (defsubst helixel-sel--ctx-ensure (obj)
-  "If OBJ is a `helixel-sel' struct, return its ctx; else return OBJ."
-  (if (helixel-sel-p obj) (helixel-sel--ctx obj) obj))
+  "If OBJ is a `helixel-sel' struct, return its ctx plist; else return OBJ."
+  (if (helixel-sel-p obj) (helixel-sel--to-plist obj) obj))
 
 (defmacro helixel--def-sel-accessor (name key &optional default doc)
   "Define a `defsubst' NAME that reads ctx KEY (with optional DEFAULT).
@@ -1086,19 +1105,17 @@ direct detection of `rectangle-mark-mode'."
 
 (defun helixel-sel--copy (sel)
   "Deep-copy `helixel-sel' struct SEL.
-Copies the ctx plist and its mutable sub-structures (e.g. :moves
+Copies the ctx data and its mutable sub-structures (e.g. :moves
 list whose elements' cdrs are mutated by `setcdr' in
 track-visual-move) so the copy is fully independent."
   (when (helixel-sel-p sel)
-    (let ((ctx (copy-sequence (helixel-sel--ctx sel))))
+    (let ((ctx (copy-sequence (helixel-sel-ctx sel))))
       ;; Deep-copy :moves to prevent mutation of shared list
       ;; structure (track-visual-move increments move counts via
       ;; setcdr, which would corrupt previously-committed entries).
       (when-let* ((moves (plist-get ctx :moves)))
         (setq ctx (plist-put ctx :moves (copy-tree moves))))
-      (helixel-sel--internal
-       :kind (helixel-sel--kind sel)
-       :ctx ctx))))
+      (helixel-sel--construct (helixel-sel-kind sel) ctx))))
 
 
 ;; ----------------------------------------------------------------------

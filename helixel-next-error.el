@@ -483,6 +483,19 @@ Navigates one step via the snapshot."
   "Advance to the next \=`next-error' match via the snapshot."
   (helixel-ne--step (or (helixel-search--current-dir) 'forward)))
 
+(cl-defstruct (helixel-next-error-sel (:include helixel-sel)
+                                      (:copier nil))
+  "Next-error navigation selection.  Slots: DIR."
+  dir)
+
+(cl-defmethod helixel-sel--construct ((_kind (eql next-error)) ctx)
+  (make-helixel-next-error-sel :dir (plist-get ctx :dir)))
+
+(cl-defmethod helixel-sel-type ((_sel helixel-next-error-sel)) 'next-error)
+
+(cl-defmethod helixel-sel--to-plist ((sel helixel-next-error-sel))
+  (list :dir (helixel-next-error-sel-dir sel)))
+
 (helixel-register-kind next-error
   :ctx-schema '(:required (:dir))
   :recreate #'helixel-ne--recreate-next-error

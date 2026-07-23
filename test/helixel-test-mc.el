@@ -548,7 +548,7 @@ fires only when fakes exist."
 
 (ert-deftest helixel-test-mc-chain-broadcast-then-dot-at-fakes ()
   "After `q...ESC' the chain TX is broadcast to every fake via
-`helixel-mc--broadcast-last-event'.  A later \\[helixel-repeat-edit] dispatched at a
+`helixel-mc--broadcast-last-action'.  A later \\[helixel-repeat-edit] dispatched at a
 fake then replays the chain TX (not the pre-chain edit)."
   (helixel-test-with-buffer "abc\n"
     (helixel-mc--create-fake-cursor 2)
@@ -561,7 +561,7 @@ fake then replays the chain TX (not the pre-chain edit)."
                                       :runner
                                       (lambda (_tx) (ignore)))))
       (setq helixel-last-action tx)
-      (helixel-mc--broadcast-last-event)
+      (helixel-mc--broadcast-last-action)
       ;; Every fake's overlay holds the chain TX as last-event.
       (dolist (ov (helixel-mc-all-cursors))
         (should (eq tx (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state))))))
@@ -2701,7 +2701,7 @@ region is NOT restored (the new target replaces it correctly)."
       (setq helixel-last-action tx)
       (helixel-mc--create-fake-cursor 3)
       (helixel-mc--create-fake-cursor 5)
-      (helixel-mc--broadcast-last-event)
+      (helixel-mc--broadcast-last-action)
       ;; Every fake now has the tx.
       (dolist (ov (helixel-mc-all-cursors))
         (should (eq tx (helixel-pcs-last-action (overlay-get ov 'helixel-pc-state)))))

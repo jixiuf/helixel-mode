@@ -284,7 +284,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
             (when (memq (helixel-action-op tx) '(change change-noyank))
               (setq tx (helixel-action-with-payload tx
                                                     :inserted-text text))))
-          (helixel--update-last-event tx))))
+          (helixel--update-last-action tx))))
     (when helixel--change-track-marker
       (set-marker helixel--change-track-marker nil)
       (setq helixel--change-track-marker nil))
@@ -907,7 +907,7 @@ INDENT-SIGN is +1 (right) or -1 (left)."
         (indent-rigidly (region-beginning) (region-end) indent-sign)
         (let* ((mult (or (helixel-action-payload-get tx :multiplier) 1))
                (new-mult (if (eq tx-op op) (1+ mult) (1- mult))))
-          (helixel--update-last-event
+          (helixel--update-last-action
            (helixel-action-with-payload tx :multiplier new-mult)))
         (goto-char (region-beginning))
         (setq consecutive-p t)))

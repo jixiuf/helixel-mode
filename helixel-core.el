@@ -1136,7 +1136,7 @@ Use for plain `defun' helixel commands that don't go through
          (this-command ',name))
      ,@body))
 
-(defun helixel--update-last-event (new-action)
+(defun helixel--update-last-action (new-action)
   "Update the payload of `helixel-last-action' from NEW-ACTION.
 
 Only the payload plist is copied; the op, sel, runner, mark-region

@@ -1971,7 +1971,7 @@ the override path — mc dispatches the same edit at each fake."
 
 ;; ── Chain end: broadcast the new chain action ──
 
-(defun helixel-mc--broadcast-last-event ()
+(defun helixel-mc--broadcast-last-action ()
   "Snapshot `helixel-last-action' into every fake cursor's overlay.
 Call after building a new chain transaction so subsequent
 \\[helixel-repeat-edit] at
@@ -2002,7 +2002,7 @@ applied every keystroke at every fake cursor live."
   (when (and helixel-mc-mode
              (eq (helixel-action-by-command entry)
                  'helixel-repeat-chain-end))
-    (helixel-mc--broadcast-last-event)
+    (helixel-mc--broadcast-last-action)
     (let ((n (length (helixel-mc-all-cursors))))
       (message "helixel-mc: chain recorded for %d fake cursor%s"
                n (if (= n 1) "" "s")))))
@@ -2043,7 +2043,7 @@ Signals `user-error' when there are no fake cursors."
     (user-error "No fake cursors"))
   (unless helixel-last-action
     (user-error "No edit to apply"))
-  (helixel-mc--broadcast-last-event)
+  (helixel-mc--broadcast-last-action)
   ;; Apply at real cursor AND every fake, wrapped in one undo step.
   (helixel-mc--with-undo-step
     (helixel-with-replay-as 'dot

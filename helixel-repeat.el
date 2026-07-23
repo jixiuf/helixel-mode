@@ -928,7 +928,7 @@ The chosen event's edit data becomes the new `helixel-last-action'."
       (when event
         ;; Reconstruct tx from event and set it as `helixel-last-action'.
         ;; Must use `helixel-action-shallow-copy'
-        ;; (not `helixel--update-last-event'
+        ;; (not `helixel--update-last-action'
         ;; which only copies the payload, leaving op/sel/runner stale).
         (setq helixel-last-action
               (helixel-action-shallow-copy

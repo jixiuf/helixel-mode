@@ -815,7 +815,7 @@ data slots by ~helixel-delimiter-find~ and
 
 | Slot             | Type         | Description |
 |------------------+--------------+-------------|
-| ~type~           | symbol       | ~:pair~, ~:tag~, or ~:regex~ |
+| ~type~           | symbol       | ~:pair~, ~:tag~, ~:regex~, or ~:block~ |
 | ~open~           | char/string  | Opening delimiter |
 | ~close~          | char/string  | Closing delimiter (nil for tags) |
 | ~match-close~    | fn symbol    | ~(TAG-NAME) → 0~, tag delimiters only |
@@ -852,7 +852,7 @@ data slots by ~helixel-delimiter-find~ and
 (helixel-delimiter-bounds-flat delimiter) → (OPEN-BEG . CLOSE-END)|nil
 
 ;; Accessor functions
-(helixel-delimiter-type d)              → :pair | :tag | :regex
+(helixel-delimiter-type d)              → :pair | :tag | :regex | :block
 (helixel-delimiter-open d)              → open char/string
 (helixel-delimiter-close d)             → close char/string
 (helixel-delimiter-begin-re d)          → regex string or nil

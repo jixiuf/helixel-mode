@@ -59,14 +59,19 @@
 ;; text-object selection and surround add/delete/replace.
 ;;
 ;; Builder functions live in helixel-textobj-pair.el and
-;; helixel-textobj-block.el (they reference textobj-engine functions
-;; via closures).
+;; helixel-textobj-block.el.  They build pure-data structs — finder
+;; and adjust behavior is dispatched from TYPE + slots, never held
+;; in closures.
 
 (cl-defstruct (helixel-delimiter (:constructor helixel--make-delimiter-raw)
                                  (:copier nil))
   "Descriptor for a delimited region (pure data, no closures).
 Slots shared by all delimiter types:
-  TYPE           — :pair, :tag, or :regex.
+  TYPE           — :pair, :tag, :regex, or :block.
+                   :block is a mode-specific block resolved at call
+                   time (`helixel-make-block-delimiter'); :regex is an
+                   explicit begin/end regex pair
+                   (`helixel-make-regex-delimiter').
   OPEN           — character or string; the opening delimiter.
   CLOSE          — character or string; the closing delimiter.
                    Unused (nil) for tag delimiters.
@@ -81,8 +86,8 @@ Slots shared by all delimiter types:
 Finder and adjust-for-jump behavior is resolved from TYPE + slots by
 `helixel-delimiter-find' / `helixel--delimiter-adjust-for-jump' —
 delimiters hold no closures, so they stay printable and `equal'-able.
-NL-P behaviour is derived from TYPE — tag and regex delimiters
-handle adjacent newlines; pair delimiters do not."
+NL-P behaviour is derived from TYPE — tag, regex and block
+delimiters handle adjacent newlines; pair delimiters do not."
   type
   open
   close
@@ -100,9 +105,9 @@ handle adjacent newlines; pair delimiters do not."
 
 (defsubst helixel-delimiter-nl-p (d)
   "Return non-nil if delimiter D uses newline handling.
-Derived from TYPE — tag (:tag) and regex (:regex) delimiters
-handle adjacent newlines; pair (:pair) delimiters do not."
-  (memq (helixel-delimiter-type d) '(:tag :regex)))
+Derived from TYPE — :tag, :regex and :block delimiters handle
+adjacent newlines; :pair delimiters do not."
+  (memq (helixel-delimiter-type d) '(:tag :regex :block)))
 
 ;; ── Delimiter operations (stateless, no external deps) ──
 
@@ -125,11 +130,13 @@ Dispatches on D's type, reading parameters from D's slots (pure data)."
             (if (< dir 0)
                 (helixel--tag-find-opener-backward)
               (helixel-up-xml-tag dir)))
-      (:regex (if-let* ((begin-re (helixel-delimiter-begin-re d)))
-                  (helixel-up-regex-block
-                   begin-re (helixel-delimiter-end-re d) dir
-                   (helixel-delimiter-name-group d))
-                (helixel-up-block-at-point dir)))
+      (:regex (let ((begin-re (helixel-delimiter-begin-re d)))
+                (unless begin-re
+                  (error "Regex delimiter without begin-re: %s" d))
+                (helixel-up-regex-block
+                 begin-re (helixel-delimiter-end-re d) dir
+                 (helixel-delimiter-name-group d))))
+      (:block (helixel-up-block-at-point dir))
       (_ (error "Unknown delimiter type: %s" (helixel-delimiter-type d))))))
 
 (defun helixel--delimiter-adjust-for-jump (d)
@@ -143,10 +150,12 @@ Quote pairs (open == close) need no adjustment."
                (when (eq (char-after) open)
                  (forward-char))))
       (:tag (helixel--tag-adjust-for-jump))
-      (:regex (if-let* ((begin-re (helixel-delimiter-begin-re d)))
-                  (helixel--regex-adjust-for-jump
-                   begin-re (helixel-delimiter-end-re d))
-                (helixel--block-adjust-for-jump))))))
+      (:regex (let ((begin-re (helixel-delimiter-begin-re d)))
+                (unless begin-re
+                  (error "Regex delimiter without begin-re: %s" d))
+                (helixel--regex-adjust-for-jump
+                 begin-re (helixel-delimiter-end-re d))))
+      (:block (helixel--block-adjust-for-jump)))))
 
 (defun helixel-delimiter-bounds (d &optional no-close-backoff)
   "Return ((OB . OE) . (CB . CE)) for the innermost delimiter D at point.

@@ -267,9 +267,12 @@ Closures would make ring entries unprintable and not `equal'-able."
 (ert-deftest helixel-test-inv-ring-delimiter-printable-roundtrip ()
   "INV: delimiter structs print-read round-trip (pure data)."
   (require 'helixel-textobj-pair)
+  (require 'helixel-textobj-block)
   (dolist (d (list (helixel-make-pair-delimiter ?\( ?\))
                    (helixel-make-pair-delimiter ?\" ?\")
-                   (helixel-make-tag-delimiter)))
+                   (helixel-make-tag-delimiter)
+                   (helixel-make-regex-delimiter "BEGIN" "END")
+                   (helixel-make-block-delimiter "begin" "end")))
     (should (equal d (read (prin1-to-string d))))))
 
 (provide 'helixel-test-ring-invariant)

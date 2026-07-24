@@ -530,17 +530,17 @@ Does not mutate EVENT."
 (defsubst helixel-action-char (obj)
   "Return the :char payload from OBJ.
 Used by find-char, replace-char, and surround commands."
-  (helixel-action-payload-get obj :char)) ; ctx-lint-ok
+  (helixel-action-payload-get obj :char))
 
 (defsubst helixel-action-type (obj)
   "Return the :type payload from OBJ.
 Used by find-char (next | till)."
-  (helixel-action-payload-get obj :type)) ; ctx-lint-ok
+  (helixel-action-payload-get obj :type))
 
 (defsubst helixel-action-dir (obj)
   "Return the :dir payload from OBJ.
 Used by find-char (forward | backward)."
-  (helixel-action-payload-get obj :dir)) ; ctx-lint-ok
+  (helixel-action-payload-get obj :dir))
 
 
 (defun helixel-action--copy (event)
@@ -634,8 +634,10 @@ falls through to `helixel--op-display'."
 ;; `helixel-list-ops'.
 ;;
 ;; Each operator entry is a plist with keys:
-;;   :runner        — function (TX) -> nil for `.` replay
-;;   :display       — string or function (TX) -> string for history
+;;   :runner        — named function symbol (TX) -> nil, for `.`
+;;                    replay (never a lambda — pure-data rule)
+;;   :display       — string or named function symbol (TX) -> string
+;;                    for history
 ;;   :self-advancing — boolean.  t when the operator handles its
 ;;                    own positioning (kill, change, join-lines);
 ;;                    nil when the repeat engine must auto-advance
@@ -662,8 +664,10 @@ to their property plists (:runner :display :self-advancing).")
   "Register edit operator OP with keyword PROPS.
 
 PROPS is a plist with keys:
-  :runner           — function (TX) -> nil for `.` replay
-  :display          — string or function (TX) -> string for history
+  :runner           — named function symbol (TX) -> nil, for `.`
+                      replay (never a lambda — pure-data rule)
+  :display          — string or named function symbol (TX) -> string
+                      for history
   :self-advancing   — boolean.  t when OP handles its own
                        positioning, nil otherwise.
                        See the comment block above for full semantics.

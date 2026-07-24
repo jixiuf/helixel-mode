@@ -441,12 +441,12 @@ See `helixel-up-block-at-point' for supported modes."
 
 (defun helixel-make-block-delimiter (&optional open close)
   "Create a block delimiter for OPEN and CLOSE strings.
-Returns a `helixel-delimiter' struct with type :regex.
+Returns a `helixel-delimiter' struct with type :block.
 OPEN and CLOSE are display/accessor values; the actual finder always
 resolves the spec from `helixel-block-textobj-alist' for the current
 mode at call time (via `helixel-up-block-at-point')."
   (helixel--make-delimiter-raw
-   :type :regex
+   :type :block
    :open (or open
              (let ((specs (cl-remove-if-not
                            (lambda (e) (derived-mode-p (car e)))

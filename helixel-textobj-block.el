@@ -457,8 +457,7 @@ mode at call time (via `helixel-up-block-at-point')."
                             (lambda (e) (derived-mode-p (car e)))
                             helixel-block-textobj-alist)))
                 (when specs (nth 1 (cdr (car specs))))))
-   :finder (lambda (dir) (helixel-up-block-at-point dir))
-   :adjust-for-jump #'helixel--block-adjust-for-jump))
+))
 
 (defun helixel-make-regex-delimiter (begin-re end-re &optional name-group)
   "Create a regex delimiter for BEGIN-RE and END-RE.
@@ -468,12 +467,7 @@ Optional NAME-GROUP specifies the match group index for the name."
    :type :regex
    :open begin-re :close end-re
    :begin-re begin-re :end-re end-re
-   :name-group name-group
-   :finder `(lambda (dir)
-              (helixel-up-regex-block ,begin-re ,end-re dir ,name-group))
-   :adjust-for-jump
-   `(lambda ()
-      (helixel--regex-adjust-for-jump ,begin-re ,end-re))))
+   :name-group name-group))
 
 
 

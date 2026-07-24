@@ -707,8 +707,7 @@ When NO-CLOSE-BACKOFF is non-nil, passed through to `helixel-delimiter-bounds'.
 When MARK-THING is non-nil, stores bounds as markers in the
 live event's \=:mark-region for `\;' marking."
   (save-excursion
-    (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
-      (funcall adj))
+    (helixel--delimiter-adjust-for-jump d)
     (helixel--with-debug-log jump-to-match-core
       (pcase-let* ((`(,ob ,_oe ,_cb ,ce)
                     (helixel-delimiter-bounds-flat d no-close-backoff)))
@@ -1240,8 +1239,7 @@ the cursor."
     ;; so bounds-previous finds the previous (parent) pair.
     (unless (eq dir 'forward)
       (when-let* ((d (funcall (helixel--last-motion-delim rec))))
-        (when-let* ((adj (helixel-delimiter-adjust-for-jump d)))
-          (funcall adj))
+        (helixel--delimiter-adjust-for-jump d)
         (helixel--step-off-delimiter)
         (condition-case _err
             (let ((flat (helixel-delimiter-bounds-flat d)))

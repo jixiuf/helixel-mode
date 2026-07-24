@@ -69,15 +69,17 @@ More permissive than `helixel--region-type' — detects
 ;; forward `declare-function' is needed.  Tests still find them by
 ;; name.
 
-(defun helixel-mc--prepos-region-begin ()
+(defun helixel-mc--prepos-region-begin (_tx)
   "Move to `region-beginning' if `mark-active', else stay.
+_TX is the replayed action, ignored (kept for the preposition calling
+convention `(funcall PRE TX)').
 For `i' / `helixel-insert' semantics: enter insert with point at
 the START of any active selection."
   (when (and mark-active (mark t))
     (goto-char (min (point) (mark t))))
   (setq mark-active nil))
 
-(defun helixel-mc--prepos-region-end ()
+(defun helixel-mc--prepos-region-end (_tx)
   "Move to `region-end' if `mark-active', else `forward-char'.
 For `a' / `helixel-insert-after' semantics: enter insert with
 point AFTER the selection (or one char past point if no region)."
@@ -86,20 +88,20 @@ point AFTER the selection (or one char past point if no region)."
     (unless (eolp) (forward-char)))
   (setq mark-active nil))
 
-(defun helixel-mc--prepos-bol ()
+(defun helixel-mc--prepos-bol (_tx)
   "Move to beginning of line at this fake cursor (I semantics)."
   (beginning-of-line))
 
-(defun helixel-mc--prepos-eol ()
+(defun helixel-mc--prepos-eol (_tx)
   "Move to end of line at this fake cursor (A semantics)."
   (end-of-line))
 
-(defun helixel-mc--prepos-newline-after ()
+(defun helixel-mc--prepos-newline-after (_tx)
   "Open a new line below this fake cursor (`o' semantics)."
   (end-of-line)
   (newline-and-indent))
 
-(defun helixel-mc--prepos-newline-before ()
+(defun helixel-mc--prepos-newline-before (_tx)
   "Open a new line above this fake cursor (O semantics)."
   (beginning-of-line)
   (let ((electric-indent-mode nil))
@@ -283,7 +285,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert
     (:category state :subcat insert
-               :preposition (lambda (_tx) (helixel-mc--prepos-region-begin)))
+               :preposition #'helixel-mc--prepos-region-begin)
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -342,7 +344,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-after
     (:category state :subcat insert
-               :preposition (lambda (_tx) (helixel-mc--prepos-region-end)))
+               :preposition #'helixel-mc--prepos-region-end)
   (let ((kind (and helixel--pending-sel
                    (helixel-sel-kind helixel--pending-sel))))
     (cond
@@ -371,7 +373,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-beginning-line
     (:category state :subcat insert
-               :preposition (lambda (_tx) (helixel-mc--prepos-bol)))
+               :preposition #'helixel-mc--prepos-bol)
   (beginning-of-line)
   (helixel--sel-push
    (make-helixel-insert-beginning-line-sel))
@@ -379,7 +381,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-after-end-line
     (:category state :subcat insert
-               :preposition (lambda (_tx) (helixel-mc--prepos-eol)))
+               :preposition #'helixel-mc--prepos-eol)
   (end-of-line)
   (helixel--sel-push
    (make-helixel-insert-end-line-sel))
@@ -387,7 +389,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-newline
     (:category state :subcat insert
-               :preposition (lambda (_tx) (helixel-mc--prepos-newline-after)))
+               :preposition #'helixel-mc--prepos-newline-after)
   (helixel-record-action 'insert-text)
   (helixel-clear-data)
   (end-of-line)
@@ -396,7 +398,7 @@ Otherwise RECORD-P defaults to t via the wrapper body."
 
 (helixel-define-command helixel-insert-prevline
     (:category state :subcat insert
-               :preposition (lambda (_tx) (helixel-mc--prepos-newline-before)))
+               :preposition #'helixel-mc--prepos-newline-before)
   (helixel-record-action 'insert-text)
   (helixel-clear-data)
   (beginning-of-line)

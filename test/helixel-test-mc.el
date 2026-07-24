@@ -2083,7 +2083,7 @@ every fake cursor independently."
   (helixel-test-with-buffer "hello world\n"
     (goto-char 7)                       ; end of "world" minus offset
     (push-mark 1 t t)                   ; region: "hello "
-    (helixel-mc--prepos-region-begin)
+    (helixel-mc--prepos-region-begin nil)
     (should (= 1 (point)))
     (should-not mark-active)))
 
@@ -2092,7 +2092,7 @@ every fake cursor independently."
   (helixel-test-with-buffer "hello world\n"
     (goto-char 1)
     (push-mark 6 t t)                   ; region: "hello"
-    (helixel-mc--prepos-region-end)
+    (helixel-mc--prepos-region-end nil)
     (should (= 6 (point)))
     (should-not mark-active)))
 
@@ -2101,17 +2101,17 @@ every fake cursor independently."
   (helixel-test-with-buffer "hello world\n"
     (goto-char 3)
     (deactivate-mark)
-    (helixel-mc--prepos-region-end)
+    (helixel-mc--prepos-region-end nil)
     (should (= 4 (point)))))
 
 (ert-deftest helixel-test-mc-prepos-bol-eol ()
   "`I' → bol, `A' → eol."
   (helixel-test-with-buffer "  indented line\n"
     (goto-char 8)
-    (helixel-mc--prepos-bol)
+    (helixel-mc--prepos-bol nil)
     (should (= 1 (point)))
     (goto-char 8)
-    (helixel-mc--prepos-eol)
+    (helixel-mc--prepos-eol nil)
     (should (= (line-end-position) (point)))))
 
 (ert-deftest helixel-test-mc-prepos-newline-after-before ()
@@ -2119,14 +2119,14 @@ every fake cursor independently."
   (helixel-test-with-buffer "line one\nline two\n"
     (goto-char 3)
     (let ((before-lines (count-lines (point-min) (point-max))))
-      (helixel-mc--prepos-newline-after)
+      (helixel-mc--prepos-newline-after nil)
       (should (> (count-lines (point-min) (point-max)) before-lines))
       ;; Point sits on the new empty line.
       (should (bolp)))
     ;; Reset and test `O'.
     (erase-buffer) (insert "line one\nline two\n") (goto-char 12)
     (let ((before-lines (count-lines (point-min) (point-max))))
-      (helixel-mc--prepos-newline-before)
+      (helixel-mc--prepos-newline-before nil)
       (should (> (count-lines (point-min) (point-max)) before-lines)))))
 
 ;; ── 3. Per-cursor kill-ring isolation, end-to-end ──

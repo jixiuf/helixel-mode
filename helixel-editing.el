@@ -461,24 +461,35 @@ rectangle line via `helixel--rect-replay' — no state-switching side
 (helixel-register-op change :display "c" :self-advancing t
                      :runner #'helixel--repeat-change-core)
 
+(defun helixel--repeat-change-noyank (tx)
+  "Replay `change-noyank' from TX (named runner, pure-data op entry)."
+  (helixel--repeat-change-core tx t))
+
 (helixel-register-op change-noyank :display "C" :self-advancing t
-                     :runner (lambda (tx) (helixel--repeat-change-core tx t)))
+                     :runner #'helixel--repeat-change-noyank)
+
+(defun helixel--display-replace-char (tx)
+  "Return the display label for a `replace-char' TX (named display fn)."
+  (let ((c (helixel-action-char tx)))
+    (if c (format "R[%c]" c) "R")))
+
+(defun helixel--repeat-replace-char (tx)
+  "Replay `replace-char' from TX (named runner, pure-data op entry)."
+  (helixel-replace-char (helixel-action-char tx)))
 
 (helixel-register-op replace-char :self-advancing nil
-                     :display (lambda (tx)
-                                (let ((c (helixel-action-char tx)))
-                                  (if c (format "R[%c]" c) "R")))
-                     :runner (lambda (tx)
-                               (helixel-replace-char (helixel-action-char tx))))
+                     :display #'helixel--display-replace-char
+                     :runner #'helixel--repeat-replace-char)
+
+(defun helixel--repeat-insert-text (tx)
+  "Replay an `insert-text' TX: re-execute recorded keys, or insert :text."
+  (let ((keys (helixel--repeat-get-keys tx)))
+    (if keys
+        (helixel--execute-keys keys)
+      (insert (or (helixel-action-payload-get tx :text) "")))))
 
 (helixel-register-op insert-text :display "i" :self-advancing nil
-                     :runner
-                     (lambda (tx)
-                       (let ((keys (helixel--repeat-get-keys tx)))
-                         (if keys
-                             (helixel--execute-keys keys)
-                           (insert (or (helixel-action-payload-get tx :text)
-                                       ""))))))
+                     :runner #'helixel--repeat-insert-text)
 
 
 ;; ── Kill & Change ──
@@ -1090,20 +1101,23 @@ Like `join-line' but replaces `fixup-whitespace' with
     (delete-char 1)            ;; delete the newline
     (delete-horizontal-space))) ;; delete spaces/tabs, don't add space
 
+(defun helixel--repeat-join-lines (tx)
+  "Replay a `join-lines' TX (named runner, pure-data op entry)."
+  (let ((n (or (helixel-action-payload-get tx :count) 2))
+        (no-space (helixel-action-payload-get tx :no-space)))
+    (unwind-protect
+        (dotimes (_ (1- n))
+          (if no-space
+              (helixel--join-line-no-space)
+            (join-line 1)))
+      ;; Deactivate mark so fake cursor regions are
+      ;; cleaned up after mc dispatch (`update-fake-region'
+      ;; checks mark-active).  Harmless during dot-repeat.
+      (deactivate-mark))))
+
 (helixel-register-op join-lines
-  :display "J" :self-advancing t  :runner
-  (lambda (tx)
-    (let ((n (or (helixel-action-payload-get tx :count) 2))
-          (no-space (helixel-action-payload-get tx :no-space)))
-      (unwind-protect
-          (dotimes (_ (1- n))
-            (if no-space
-                (helixel--join-line-no-space)
-              (join-line 1)))
-        ;; Deactivate mark so fake cursor regions are
-        ;; cleaned up after mc dispatch (`update-fake-region'
-        ;; checks mark-active).  Harmless during dot-repeat.
-        (deactivate-mark)))))
+  :display "J" :self-advancing t
+  :runner #'helixel--repeat-join-lines)
 
 (helixel-define-command helixel-join-lines
     (:category edit :subcat join-lines :params (&optional count))

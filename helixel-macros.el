@@ -181,8 +181,9 @@ METADATA is a plist:
   :params PARAMS      — function parameter list
 
 Expands to:
-  1. (helixel-register-op OP :display ... :runner (lambda () (NAME)))
-  2. (helixel-define-command NAME (:category edit ...) BODY)
+  1. (defun NAME--op-runner (_tx) (NAME))
+  2. (helixel-register-op OP :display ... :runner \=#'NAME--op-runner)
+  3. (helixel-define-command NAME (:category edit ...) BODY)
 
 The command body SHOULD call (helixel-record-action OP ...) to record
 the edit for \\[helixel-repeat-edit] replay."
@@ -190,15 +191,21 @@ the edit for \\[helixel-repeat-edit] replay."
   (let* ((op (plist-get metadata :op))
          (display (plist-get metadata :display))
          (self-advancing (plist-get metadata :self-advancing))
-         (subcat (or (plist-get metadata :subcat) op)))
+         (subcat (or (plist-get metadata :subcat) op))
+         (runner (intern (format "%s--op-runner" name))))
     (unless op
       (error "helixel-define-operator: :op is required"))
     `(progn
+       ;; ── Named replay runner (pure data: symbol, not closure) ──
+       (defun ,runner (_tx)
+         ,(format "Replay `%s' for dot-repeat (auto-generated runner)."
+                  name)
+         (,name))
        ;; ── Op registration (for . replay) ──
        (helixel-register-op ,op
          :display ,display
          :self-advancing ,self-advancing
-         :runner (lambda (_tx) (,name)))
+         :runner #',runner)
        ;; ── Command definition (for action tracking) ──
        (helixel-define-command ,name
            (:category edit :subcat ,subcat

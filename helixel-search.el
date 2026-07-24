@@ -397,6 +397,18 @@ is not committed by the next command."
       (setq helixel--live-action nil)))
   (helixel-search--handle-done helixel-search--had-region))
 
+(defun helixel--find-char-runner (tx)
+  "Replay a `find-char' action TX: restore search state and re-find.
+Named runner so `find-char' ring entries stay pure data."
+  (let ((c (helixel-action-char tx))
+        (ty (helixel-action-type tx))
+        (d (helixel-action-dir tx)))
+    (setq helixel--active-search
+          (make-helixel--last-motion
+           :category 'find-char :type ty
+           :char c :dir d))
+    (helixel-search--find-char-core d)))
+
 (defun helixel-search--mc-runner (tx)
   "Replay a search TX at a fake cursor position.
 Used as the :runner attached to search actions so the unified
@@ -674,15 +686,7 @@ Signals `search-failed' if no visible match is found."
         (setf (helixel-action-payload helixel--live-action)
               (list :char char :type type :dir sym-dir))
         (setf (helixel-action-runner helixel--live-action)
-              (lambda (tx)
-                (let ((c (helixel-action-char tx))
-                      (ty (helixel-action-type tx))
-                      (d (helixel-action-dir tx)))
-                  (setq helixel--active-search
-                        (make-helixel--last-motion
-                         :category 'find-char :type ty
-                         :char c :dir d))
-                  (helixel-search--find-char-core d)))))
+              #'helixel--find-char-runner))
       (helixel--action-commit)
       (helixel-search--set-dir sym-dir)
       (setq helixel--active-search
@@ -959,15 +963,7 @@ replay this repeat at every fake cursor without re-entering `n'."
       (setf (helixel-action-payload helixel--live-action)
             (list :char char :type type :dir dir))
       (setf (helixel-action-runner helixel--live-action)
-            (lambda (tx)
-              (let ((c (helixel-action-char tx))
-                    (ty (helixel-action-type tx))
-                    (d (helixel-action-dir tx)))
-                (setq helixel--active-search
-                      (make-helixel--last-motion
-                       :category 'find-char :type ty
-                       :char c :dir d))
-                (helixel-search--find-char-core d)))))
+            #'helixel--find-char-runner))
     (helixel-search--find-char-core dir char type)
     (helixel--action-commit)
     ;; Track n-count so . repeats the full n sequence.
@@ -1190,15 +1186,7 @@ and \\[helixel-action-cycle\\] cycling."
            (setf (helixel-action-payload helixel--live-action)
                  (list :char char :type type :dir use-dir))
            (setf (helixel-action-runner helixel--live-action)
-                 (lambda (tx)
-                   (let ((c (helixel-action-char tx))
-                         (ty (helixel-action-type tx))
-                         (d (helixel-action-dir tx)))
-                     (setq helixel--active-search
-                           (make-helixel--last-motion
-                            :category 'find-char :type ty
-                            :char c :dir d))
-                     (helixel-search--find-char-core d)))))
+                 #'helixel--find-char-runner))
          (helixel--action-commit)
          (helixel-search--find-char-core use-dir)))
       ('search

@@ -385,58 +385,78 @@ so the user can select a target with one keypress."
 ;; ---------------------------------------------------------------------------
 ;; Edit-op runners (registry consumers — see `helixel-register-op')
 
+(defun helixel--display-surround-add (tx)
+  "Return the display label for a `surround-add' TX (named display fn)."
+  (let ((c (helixel-action-char tx)))
+    (if c (format "ms[%c]" c) "ms")))
+
+(defun helixel--repeat-surround-add (tx)
+  "Replay a `surround-add' TX (named runner, pure-data op entry)."
+  (when-let* ((char (helixel-action-char tx))
+              (pair (helixel--surround-lookup char)))
+    (helixel--surround-add (helixel--surround-entry-open pair)
+                           (helixel--surround-entry-close pair))))
+
 (helixel-register-op surround-add
-  :display (lambda (tx)
-             (let ((c (helixel-action-char tx)))
-               (if c (format "ms[%c]" c) "ms")))
+  :display #'helixel--display-surround-add
   :self-advancing nil
-  :runner (lambda (tx)
-            (when-let* ((char (helixel-action-char tx))
-                        (pair (helixel--surround-lookup char)))
-              (helixel--surround-add (helixel--surround-entry-open pair)
-                                     (helixel--surround-entry-close pair)))))
+  :runner #'helixel--repeat-surround-add)
+
+(defun helixel--display-surround-add-tag (tx)
+  "Return the display label for a `surround-add-tag' TX (named display fn)."
+  (let ((tag (helixel-action-payload-get tx :tag)))
+    (if tag (format "mt[%s]" tag) "mt")))
+
+(defun helixel--repeat-surround-add-tag (tx)
+  "Replay a `surround-add-tag' TX (named runner, pure-data op entry)."
+  (helixel--surround-add-tag
+   (helixel-action-payload-get tx :tag)))
 
 (helixel-register-op surround-add-tag
-  :display (lambda (tx)
-             (let ((tag (helixel-action-payload-get tx :tag)))
-               (if tag (format "mt[%s]" tag) "mt")))
+  :display #'helixel--display-surround-add-tag
   :self-advancing nil
-  :runner (lambda (tx)
-            (helixel--surround-add-tag
-             (helixel-action-payload-get tx :tag))))
+  :runner #'helixel--repeat-surround-add-tag)
+
+(defun helixel--repeat-surround-delete (tx)
+  "Replay a `surround-delete' TX (named runner, pure-data op entry)."
+  (when-let* ((d (helixel-surround-sel-delimiter
+                  (helixel-action-sel tx))))
+    (goto-char (helixel--surround-delete-delimiter d))))
 
 (helixel-register-op surround-delete
   :display "md"
-  :runner (lambda (tx)
-            (when-let*
-                ((d (helixel-surround-sel-delimiter
-                     (helixel-action-sel tx))))
-              (goto-char (helixel--surround-delete-delimiter d)))))
+  :runner #'helixel--repeat-surround-delete)
+
+(defun helixel--display-surround-replace (tx)
+  "Return the display label for a `surround-replace' TX (named display fn)."
+  (let* ((p (helixel-action-payload tx))
+         (label (or (plist-get p :tag)
+                    (when-let* ((c (plist-get p :new-char)))
+                      (string c)))))
+    (if label (format "mr[%s]" label) "mr")))
+
+(defun helixel--repeat-surround-replace (tx)
+  "Replay a `surround-replace' TX (named runner, pure-data op entry)."
+  (let* ((sel-ctx (helixel-action-sel tx))
+         (d (helixel-surround-sel-delimiter sel-ctx))
+         (type (and d (helixel-delimiter-type d)))
+         (new-char (helixel-action-payload-get tx :new-char))
+         (tag (helixel-action-payload-get tx :tag)))
+    (when d
+      (pcase type
+        (:tag
+         (when tag (helixel--surround-replace-tag tag d)))
+        (_
+         (when new-char
+           (when-let* ((pair (helixel--surround-lookup new-char)))
+             (helixel--surround-delete-delimiter d)
+             (helixel--surround-add
+              (helixel--surround-entry-open pair)
+              (helixel--surround-entry-close pair)))))))))
 
 (helixel-register-op surround-replace
-  :display (lambda (tx)
-             (let* ((p (helixel-action-payload tx))
-                    (label (or (plist-get p :tag)
-                               (when-let* ((c (plist-get p :new-char)))
-                                 (string c)))))
-               (if label (format "mr[%s]" label) "mr")))
-  :runner (lambda (tx)
-            (let* ((sel-ctx (helixel-action-sel tx))
-                   (d (helixel-surround-sel-delimiter sel-ctx))
-                   (type (and d (helixel-delimiter-type d)))
-                   (new-char (helixel-action-payload-get tx :new-char))
-                   (tag (helixel-action-payload-get tx :tag)))
-              (when d
-                (pcase type
-                  (:tag
-                   (when tag (helixel--surround-replace-tag tag d)))
-                  (_
-                   (when new-char
-                     (when-let* ((pair (helixel--surround-lookup new-char)))
-                       (helixel--surround-delete-delimiter d)
-                       (helixel--surround-add
-                        (helixel--surround-entry-open pair)
-                        (helixel--surround-entry-close pair))))))))))
+  :display #'helixel--display-surround-replace
+  :runner #'helixel--repeat-surround-replace)
 
 ;; ── Pending surround op — auto-retry after textobj selection ──
 

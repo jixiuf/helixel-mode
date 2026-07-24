@@ -223,5 +223,54 @@ amalgamating into a single ring entry (Bug: ; newest-for-mark)."
         (helixel--action-commit)
         (should (null (marker-buffer sp1)))))))
 
+;; ── INV-RING-PD: ring entries are pure data (no closures) ──
+
+(ert-deftest helixel-test-inv-ring-op-registry-pure-data ()
+  "INV: every op :runner and functional :display is a named symbol.
+Closures would make ring entries unprintable and not `equal'-able."
+  (maphash
+   (lambda (op entry)
+     (let ((runner (plist-get entry :runner))
+           (display (plist-get entry :display)))
+       (when runner
+         (should (symbolp runner)))
+       (when (and display (functionp display))
+         (should (symbolp display))))
+     op)
+   helixel--op-registry))
+
+(ert-deftest helixel-test-inv-ring-insert-preposition-is-symbol ()
+  "INV: a committed insert action carries a symbol preposition."
+  (let ((helixel-last-action nil))
+    (helixel-ring-inv-with-buffer "abc"
+      (goto-char 2)
+      (setq last-command nil this-command 'helixel-insert)
+      (helixel-insert)
+      (insert "Z")
+      (helixel-insert-exit)
+      (let ((front (car helixel--action-ring)))
+        (should front)
+        (when-let* ((pre (helixel-action-preposition front)))
+          (should (symbolp pre)))))))
+
+(ert-deftest helixel-test-inv-ring-find-char-runner-is-symbol ()
+  "INV: a committed find-char action carries a symbol runner."
+  (helixel-ring-inv-with-buffer "foo bar foo"
+    (goto-char (point-min))
+    (setq last-command nil this-command 'helixel-find-next-char)
+    (helixel-find-next-char ?b)
+    (let ((front (car helixel--action-ring)))
+      (should front)
+      (when-let* ((runner (helixel-action-runner front)))
+        (should (symbolp runner))))))
+
+(ert-deftest helixel-test-inv-ring-delimiter-printable-roundtrip ()
+  "INV: delimiter structs print-read round-trip (pure data)."
+  (require 'helixel-textobj-pair)
+  (dolist (d (list (helixel-make-pair-delimiter ?\( ?\))
+                   (helixel-make-pair-delimiter ?\" ?\")
+                   (helixel-make-tag-delimiter)))
+    (should (equal d (read (prin1-to-string d))))))
+
 (provide 'helixel-test-ring-invariant)
 ;;; helixel-test-ring-invariant.el ends here

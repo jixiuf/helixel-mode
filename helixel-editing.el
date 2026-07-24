@@ -992,12 +992,13 @@ INDENT-SIGN is +1 (right) or -1 (left)."
   (interactive "p")
   (helixel--indent-body 'indent-left count -1))
 
-(helixel--op-set-runner 'indent-left
-                        (lambda (tx)
-                          (let ((helixel--replay-multiplier
-                                 (or (helixel-action-payload-get
-                                      tx :multiplier) 1)))
-                            (helixel-indent-left))))
+(defun helixel--repeat-indent-left (tx)
+  "Replay `indent-left' from TX, restoring the recorded multiplier."
+  (let ((helixel--replay-multiplier
+         (or (helixel-action-payload-get tx :multiplier) 1)))
+    (helixel-indent-left)))
+
+(helixel--op-set-runner 'indent-left #'helixel--repeat-indent-left)
 
 (helixel-define-operator helixel-indent-right
     (:op indent-right :display ">" :self-advancing nil
@@ -1005,12 +1006,13 @@ INDENT-SIGN is +1 (right) or -1 (left)."
   (interactive "p")
   (helixel--indent-body 'indent-right count 1))
 
-(helixel--op-set-runner 'indent-right
-                        (lambda (tx)
-                          (let ((helixel--replay-multiplier
-                                 (or (helixel-action-payload-get
-                                      tx :multiplier) 1)))
-                            (helixel-indent-right))))
+(defun helixel--repeat-indent-right (tx)
+  "Replay `indent-right' from TX, restoring the recorded multiplier."
+  (let ((helixel--replay-multiplier
+         (or (helixel-action-payload-get tx :multiplier) 1)))
+    (helixel-indent-right)))
+
+(helixel--op-set-runner 'indent-right #'helixel--repeat-indent-right)
 
 ;; ── Case operations ──
 

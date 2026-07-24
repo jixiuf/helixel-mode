@@ -23,7 +23,7 @@
 
 | Struct | Role | Mutable? |
 |--------+------+----------|
-| ~helixel-sel~ | Selection descriptor (kind + ctx + recreate closure) | Immutable (copy on update) |
+| ~helixel-sel~ | Selection descriptor (typed struct per kind; behavior via ~cl-defgeneric~ methods) | Immutable (copy on update) |
 | ~helixel-action~ | Unified struct for replay AND history (op + sel + payload + runner + display + category + subcat + by-command + preposition + mark-region + timestamp + buffer) | ~helixel-last-action~ is the latest action, mutable cell; ring entries are immutable after commit |
 
 The single ~helixel-action~ struct serves both replay and history.
@@ -352,7 +352,8 @@ helixel-repeat.el:helixel--repeat-advance(edit, effective)
   ├── Apply: execute edit at current position
   │     └── helixel-core.el:helixel-action-replay(action)
   │           ├── calls :preposition (if any) — mc cursor positioning
-  │           └── calls :runner — closure stored at record time
+  │           └── calls :runner — named function symbol (from the action,
+  │                 falling back to the op registry)
   │
   └── All-buffer/all-dir: scan from point-min or current position
         └── kind-specific handlers from helixel-repeat.el
@@ -365,8 +366,10 @@ Key invariants:
   ~helixel-replaying-p~ gates all record/commit side effects.
 - ~helixel-last-action~ IS buffer-local (~defvar-local~).  ~.~ replays
   the last edit in the current buffer only.
-- The runner closure stored in the event struct was captured at record time
-  from the op registry, so replay never queries the registry.
+- The runner/preposition stored in the event struct are named function
+  symbols (pure data): ring entries stay printable, ~equal~-comparable,
+  and serializable.  Replay falls back to the op registry when an
+  action's runner slot is nil.
 - All iterations within a single ~.~ press are wrapped in one undo step.
 
 -----

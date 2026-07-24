@@ -131,7 +131,7 @@ Notes:
   - `helixel-keymap.el`: 7 (flymake, eglot)
   - `helixel-repeat.el`: 0
   - `helixel-textobj-engine.el`: 0
-  - `helixel-textobj-pair.el`: 0
+  - `helixel-textobj-pair.el`: 4 (internal, block fns — pair compiles first)
   - `helixel-textobj-block.el`: 0
   - `helixel-textobj-marks.el`: 0
   - `helixel-treesit.el`: 18 (15 internal cross-module + 3 third-party evil-textobj-tree-sitter)
@@ -169,6 +169,9 @@ Notes:
 A SINGLE struct serving both replay (`.`, `M-.`, chain, mc) and history
 (`;`, C-o/C-i).  Slots op/sel/payload/runner/preposition are nil for
 pure movement/search/state events (~40B per entry negligible).
+`runner`/`preposition` hold named function SYMBOLS only (never lambdas)
+— ring entries are pure data: printable, `equal`-comparable,
+serializable.  Enforced by `helixel-test-inv-ring-*-pure-data` tests.
 
 - `helixel-action-create' constructs an `helixel-action' directly.
 - `helixel-action--copy' performs deep copies for ring storage.
@@ -202,7 +205,7 @@ pure movement/search/state events (~40B per entry negligible).
 (helixel-action-runner tx)
 (helixel-action-mark-region tx)
 (helixel-action-display tx)
-(helixel-action-preposition tx) ;; preposition function set via :preposition
+(helixel-action-preposition tx) ;; preposition fn SYMBOL set via :preposition
 (helixel-action-with-payload tx k v) → new action with payload entry added
 (helixel-action--copy action)              → deep copy
 
@@ -455,7 +458,21 @@ the undo-step management replaces it entirely.
 the main runner in `helixel-action-replay`.  Single-write invariant
 enforced by `cl-assert`.  No inheriting logic between events —
 `helixel--live-action-set` preserves the existing preposition
-unless the tx provides its own.
+unless the tx provides its own.  Value must be a named function
+symbol (never a lambda) — see pure-data rule below.
+
+### Pure-data rule for op entries and actions
+
+`:runner`, `:display` (when functional) and `:preposition` values must
+be named function SYMBOLS, never lambdas/closures.  Same for
+`helixel-delimiter` structs: behavior is dispatched from `type` + data
+slots (`helixel-delimiter-find`, `helixel--delimiter-adjust-for-jump`),
+so delimiters carry no finder/adjust closures.  This keeps every ring
+entry printable and `equal`-comparable.  New op registrations with a
+lambda runner fail `helixel-test-inv-ring-op-registry-pure-data`.
+Underscore-prefixed args (e.g. `_tx`) must NOT be wrapped in
+`(ignore ...)` — the underscore already declares intent, and `ignore`
+counts as a use ("argument not left unused" compile error).
 
 ### `helixel-action-commit-hook`
 

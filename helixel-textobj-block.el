@@ -456,8 +456,7 @@ mode at call time (via `helixel-up-block-at-point')."
               (let ((specs (cl-remove-if-not
                             (lambda (e) (derived-mode-p (car e)))
                             helixel-block-textobj-alist)))
-                (when specs (nth 1 (cdr (car specs))))))
-))
+                (when specs (nth 1 (cdr (car specs))))))))
 
 (defun helixel-make-regex-delimiter (begin-re end-re &optional name-group)
   "Create a regex delimiter for BEGIN-RE and END-RE.

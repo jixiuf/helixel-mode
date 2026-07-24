@@ -98,7 +98,7 @@ cycle), ~C-o~/~C-i~ (jump navigation), and optional motion tracking for
 | ~:clear-highlights~  | boolean       | Clear highlights before body (default ~t~ for movement) |
 | ~:params~            | list          | Function parameter list, e.g. ~(&optional count)~ |
 | ~:motion-extra~      | form          | Form for extra motion data (pair delimiter, etc.) |
-| ~:preposition~       | fn ~(TX) → nil~ | Replay-time pre-hook for mc cursor positioning |
+| ~:preposition~       | function symbol ~(TX) → nil~ | Replay-time pre-hook for mc cursor positioning (named symbol, not a lambda — ring entries must stay pure data) |
 
 The macro auto-injects tracking infrastructure at compile time:
 
@@ -806,17 +806,20 @@ Customize the register system:
 ** Delimiter Protocol
 
 The delimiter protocol is used for pair/textobj/surround operations.
-Delimiters are represented as plists with these keys:
+Delimiters are ~helixel-delimiter~ structs (pure data, no closures —
+finder and adjust behavior is resolved from the ~type~ slot plus the
+data slots by ~helixel-delimiter-find~ and
+~helixel--delimiter-adjust-for-jump~):
 
-| Key              | Type    | Description |
-|------------------+---------+-------------|
-| ~:type~          | symbol  | ~'pair~, ~'block~, ~'regex~, ~'quote~ |
-| ~:open~          | string  | Opening delimiter string |
-| ~:close~         | string  | Closing delimiter string |
-| ~:finder~        | fn      | ~(DELIMITER DIR) → bounds|nil~ |
-| ~:nl-p~          | boolean | Delimiter spans newlines (block) |
-| ~:match-close~   | fn      | ~(DELIMITER OPEN-BOUNDS) → close-bounds|nil~ |
-| ~:adjust-for-jump~ | fn    | ~(DELIMITER BOUNDS) → adjusted-bounds~ |
+| Slot             | Type         | Description |
+|------------------+--------------+-------------|
+| ~type~           | symbol       | ~:pair~, ~:tag~, or ~:regex~ |
+| ~open~           | char/string  | Opening delimiter |
+| ~close~          | char/string  | Closing delimiter (nil for tags) |
+| ~match-close~    | fn symbol    | ~(TAG-NAME) → 0~, tag delimiters only |
+| ~begin-re~       | string       | Regex for block opening delimiter |
+| ~end-re~         | string       | Regex for block closing delimiter |
+| ~name-group~     | int/nil      | Match group index for block name |
 
 *** Creating Delimiters
 
@@ -847,10 +850,11 @@ Delimiters are represented as plists with these keys:
 (helixel-delimiter-bounds-flat delimiter) → (OPEN-BEG . CLOSE-END)|nil
 
 ;; Accessor functions
-(helixel-delimiter-type d)              → :type
-(helixel-delimiter-open d)              → :open string
-(helixel-delimiter-close d)             → :close string
-(helixel-delimiter-finder d)            → :finder function
+(helixel-delimiter-type d)              → :pair | :tag | :regex
+(helixel-delimiter-open d)              → open char/string
+(helixel-delimiter-close d)             → close char/string
+(helixel-delimiter-begin-re d)          → regex string or nil
+(helixel-delimiter-name-group d)        → int or nil
 #+end_src
 
 -----

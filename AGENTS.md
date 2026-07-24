@@ -470,6 +470,12 @@ slots (`helixel-delimiter-find`, `helixel--delimiter-adjust-for-jump`),
 so delimiters carry no finder/adjust closures.  This keeps every ring
 entry printable and `equal`-comparable.  New op registrations with a
 lambda runner fail `helixel-test-inv-ring-op-registry-pure-data`.
+Known non-data residues by design: the `mark-region`/`buffer` slots
+hold live marker/buffer OBJECTS (edit-tracking and entry ownership;
+`helixel-action--same-content-p` compares `marker-position`, never
+marker identity), and the motion repeater's `helixel--last-motion-cmd`
+`delim` slot holds a rebuilding closure — but that struct lives in a
+buffer-local var, never inside a ring entry.
 Underscore-prefixed args (e.g. `_tx`) must NOT be wrapped in
 `(ignore ...)` — the underscore already declares intent, and `ignore`
 counts as a use ("argument not left unused" compile error).

@@ -81,7 +81,7 @@ Slots:
                   time to rebuild the delimiter for bounds queries.
   DELIM-INNER-P — (pair) non-nil for inner.
   DELIM-FORWARD-P — (pair) non-nil for forward.
-  LAST-MATCH-DELIMITER — (match) delimiter plist from % jump.
+  LAST-MATCH-DELIMITER — (match) `helixel-delimiter' struct from % jump.
   REVERSE-COMMAND — (movement) the opposite-direction command for
                      \=`-,' permanent flip, or nil."
   category subcat dir command prefix-arg

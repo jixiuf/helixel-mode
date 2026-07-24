@@ -409,8 +409,10 @@ struct slots.
 ;; For testing, build an action manually:
 (let ((tx (helixel-action-create 'kill (make-helixel-line-sel :count 1)
                                  nil
-                                 :runner (lambda (_tx) (helixel-delete-selection)))))
+                                 :runner #'helixel-delete-selection--op-runner)))
   (helixel-action-replay tx))
+;; Note: :runner must be a named function SYMBOL, never a lambda —
+;; ring entries must stay pure data (printable, `equal'-comparable).
 #+end_src
 
 *** ~helixel-action-replay~

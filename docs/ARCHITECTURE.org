@@ -97,9 +97,9 @@ Events are deduplicated by content: same op, category, subcat, sel, payload, and
 ** Repeat Engine
 
 Dot-repeat uses a single ~helixel--repeat-advance(edit, effective)~
-function that delegates to the kind registry's ~:advance~ fn.
+function that delegates to the kind's ~helixel-sel-advance-fn~ method.
 All-buffer and all-dir scans pull ~:all-buffer-fn~ / ~:all-dir-fn~
-directly from the kind registry.
+from the corresponding protocol methods.
 
 #+begin_src elisp
 ;; Unified advance – one function, no closures
@@ -162,9 +162,9 @@ accepts a segment list, a raw key vector, or a kbd string.
 
 *** Kind-Driven Advance
 
-Each selection kind registers an ~:advance~ fn (and optionally
-~:all-buffer-fn~ / ~:all-dir-fn~) in the kind registry.
-~helixel--repeat-advance~ delegates to the kind's ~:advance~ fn
+Each selection kind defines a ~helixel-sel-advance-fn~ method (and
+optionally ~helixel-sel-all-buffer-fn~ / ~helixel-sel-all-dir-fn~).
+~helixel--repeat-advance~ delegates to the kind's advance fn
 for positioning.  The advance fn is responsible for:
 - Moving point to the next target (line, search match, word, etc.)
 - Calling ~helixel-sel-call-recreate~ to position point appropriately
@@ -342,7 +342,7 @@ helixel-repeat.el:helixel--repeat-edit-default (with helixel-with-replay-as 'dot
   │
   ▼
 helixel-repeat.el:helixel--repeat-advance(edit, effective)
-  ├── Delegates to kind registry :advance fn
+  ├── Delegates to helixel-sel-advance-fn method
   │     ├── line: advance line(s) then recreate
   │     ├── search: find-next-match then recreate
   │     ├── movement: advance steps then recreate

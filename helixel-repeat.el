@@ -376,7 +376,7 @@ return EDIT unchanged."
 ;; strategy-builder functions (default and chain).  The 5-closure
 ;; struct existed only to bundle three per-edit closures (which all
 ;; closed over EFFECTIVE-EDIT and ignored their argument) with two
-;; raw kind-registry lookups.  Both lookups now happen inline at the
+;; raw kind lookups.  Both lookups now happen inline at the
 ;; loop level, and the per-edit advance is a single function.
 
 (defun helixel--repeat-advance (edit effective)
@@ -570,7 +570,7 @@ The `helixel-define-command' macro handles this automatically."
 
 ;; ---------------------------------------------------------------------------
 ;; Auto-advance — per-selection-kind advance for `.` replay.
-;; Registered in the kind registry via `helixel-register-kind'.
+;; Registered via `helixel-sel-advance-fn' methods next to each struct.
 ;; Each advance fn receives (TX) → boolean.
 
 ;; ── Flip-dir, all-buffer, line-pass ──

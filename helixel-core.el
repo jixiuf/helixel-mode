@@ -199,14 +199,14 @@ kind's advance function from `point-min'.")
 
 ;; ── Span extension helper ──
 
-(defmacro helixel--with-span (ctx &rest body)
-  "Execute BODY with `:span' region extension.
-If CTX plist has `:span', captures point before BODY
+(defmacro helixel--with-span (sel &rest body)
+  "Execute BODY with span region extension.
+If SEL's `span' slot is non-nil, captures point before BODY
 as the span origin and extends the mark back to it after BODY.
 For \\[helixel-action-cycle] + \\[helixel-repeat-edit] repeating
 the full session-start-to-point span."
   (declare (indent 1))
-  `(let ((span-origin (when (helixel-sel-span ,ctx) (point))))
+  `(let ((span-origin (when (helixel-sel-span ,sel) (point))))
      (prog1 (progn ,@body)
        (when span-origin
          (push-mark span-origin t t)))))

@@ -1,6 +1,6 @@
 ;;; helixel-next-error.el --- Next-error target snapshot for helixel  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2024  Free Software Foundation, Inc.
+;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf <https://github.com/jixiuf>
 ;; Keywords: convenience

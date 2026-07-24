@@ -1,6 +1,6 @@
 ;;; helixel-move.el --- Move & sel commands  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025-2026  jixiuf
+;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf <https://github.com/jixiuf>
 ;; Keywords: convenience

@@ -1,6 +1,6 @@
 ;;; helixel-shims.el --- Shims for built-in modes  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025  jixiuf
+;; Copyright (C) 2026  jixiuf
 
 ;; Author: jixiuf <https://github.com/jixiuf>
 ;; SPDX-License-Identifier: GPL-3.0-or-later

@@ -43,10 +43,10 @@
 
 (require 'cl-lib)
 (require 'helixel-textobj-engine)
-(declare-function helixel-up-block-at-point "helixel-textobj-block" (dir))
+(declare-function helixel-up-block-at-point "helixel-textobj-block" (&optional count))
 (declare-function helixel--block-adjust-for-jump "helixel-textobj-block" ())
 (declare-function helixel-up-regex-block "helixel-textobj-block"
-                  (begin-re end-re dir &optional name-group))
+                  (begin-re end-re &optional count name-group))
 (declare-function helixel--regex-adjust-for-jump "helixel-textobj-block"
                   (begin-re end-re))
 ;; ----------------------------------------------------------------------

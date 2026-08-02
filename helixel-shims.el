@@ -399,7 +399,7 @@ Unset `l' from `help-mode-map' so it falls through to the
 (defun helixel-shims--setup-compile ()
   "Add invisible-text hook and \=`next-error-hook'."
   (helixel-define-key 'motion "l" #'helixel-forward-char 'compilation-minor-mode-map)
-  (helixel-define-key 'motion "\C-l" #'recenter-current-error 'compilation-minor-mode-map)
+  (helixel-define-key 'motion "L" #'recenter-current-error 'compilation-minor-mode-map)
   (add-hook 'compilation-mode-hook #'helixel-shims--set-invisible-nil)
   (add-hook 'next-error-hook #'helixel-ne--after-jump))
 

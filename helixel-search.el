@@ -182,14 +182,24 @@ would confuse a PCRE→elisp converter."
 (defun helixel-search--pcre-isearch-search-fun-function ()
   "Value for `isearch-search-fun-function' that converts PCRE→elisp.
 When `helixel-search-pcre' is nil or pcre2el is unavailable,
-returns the default search function unchanged."
+returns the default search function unchanged.
+
+The returned search function accepts the conventional optional COUNT
+argument so that other providers can chain it safely.  Literal searches
+delegate to the global `isearch-search-fun-function' provider so that
+packages such as liberime-regexp keep working inside helixel buffers;
+PCRE conversion only applies to regexp searches."
   (if (and helixel-search-pcre (fboundp 'rxt-pcre-to-elisp))
-      (lambda (string bound noerror)
-        (funcall (isearch-search-fun-default)
-                 (if isearch-regexp
+      (lambda (string &optional bound noerror _count)
+        (if isearch-regexp
+            (funcall (isearch-search-fun-default)
                      (helixel-search--pcre-to-elisp string)
-                   string)
-                 bound noerror))
+                     bound noerror)
+          ;; Literal search: delegate to the global provider (e.g. a Rime
+          ;; code expander); fall back to the default search function.
+          (funcall (funcall (or (default-value 'isearch-search-fun-function)
+                                #'isearch-search-fun-default))
+                   string bound noerror)))
     (isearch-search-fun-default)))
 
 (defun helixel-search--buffer-setup-pcre ()

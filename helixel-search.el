@@ -185,21 +185,23 @@ When `helixel-search-pcre' is nil or pcre2el is unavailable,
 returns the default search function unchanged.
 
 The returned search function accepts the conventional optional COUNT
-argument so that other providers can chain it safely.  Literal searches
-delegate to the global `isearch-search-fun-function' provider so that
-packages such as liberime-regexp keep working inside helixel buffers;
-PCRE conversion only applies to regexp searches."
+argument so that other providers can chain it safely.  When another
+provider (such as liberime-regexp) is installed globally, searches
+delegate to it so that its expansion applies; PCRE conversion is then
+skipped because the provider already returns an elisp regexp."
   (if (and helixel-search-pcre (fboundp 'rxt-pcre-to-elisp))
       (lambda (string &optional bound noerror _count)
-        (if isearch-regexp
-            (funcall (isearch-search-fun-default)
-                     (helixel-search--pcre-to-elisp string)
-                     bound noerror)
-          ;; Literal search: delegate to the global provider (e.g. a Rime
-          ;; code expander); fall back to the default search function.
-          (funcall (funcall (or (default-value 'isearch-search-fun-function)
-                                #'isearch-search-fun-default))
-                   string bound noerror)))
+        (let ((global (or (default-value 'isearch-search-fun-function)
+                          #'isearch-search-fun-default)))
+          (if (eq global #'isearch-search-fun-default)
+              (funcall (isearch-search-fun-default)
+                       (if isearch-regexp
+                           (helixel-search--pcre-to-elisp string)
+                         string)
+                       bound noerror)
+            ;; A global provider is installed: delegate to it.  The provider
+            ;; returns an elisp regexp, so PCRE conversion must be skipped.
+            (funcall (funcall global) string bound noerror))))
     (isearch-search-fun-default)))
 
 (defun helixel-search--buffer-setup-pcre ()

@@ -51,6 +51,7 @@
 | `test/helixel-test-rect.el` | Rectangle selection and editing |
 | `test/helixel-test-operator.el` | Operators (case, comment, fill, join) |
 | `test/helixel-test-swap.el` | Swap |
+| `test/helixel-test-surround.el` | Surround (add/delete/replace, pending-op retry, textobj-sel delimiter dispatch) |
 | `test/helixel-test-textobj.el` | Text object and regex block |
 | `test/helixel-test-register.el` | Register |
 | `test/helixel-test-ring.el` | Event ring + jump log |

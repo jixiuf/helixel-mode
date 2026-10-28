@@ -175,6 +175,19 @@ Kinds without a direction concept use the base method (nil).")
   "Default: no n-count."
   nil)
 
+(cl-defgeneric helixel-sel-delimiter (sel)
+  "Return the delimiter of SEL, or nil.
+Shared by `helixel-surround-sel' and `helixel-textobj-sel' (pair,
+tag, block and regex textobj selections all carry a delimiter).")
+
+(cl-defmethod helixel-sel-delimiter ((_sel null))
+  "Nil has no delimiter."
+  nil)
+
+(cl-defmethod helixel-sel-delimiter ((_sel helixel-sel))
+  "Default: no delimiter."
+  nil)
+
 (cl-defgeneric helixel-sel-insert-cursor-offset (sel)
   "Return the cursor offset of an insert-selection SEL, or nil.")
 

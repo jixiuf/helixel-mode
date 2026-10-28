@@ -64,6 +64,10 @@ a textobj selection to be in place (e.g. pending surround ops).")
   "Sel count method for SEL."
   (or (helixel-textobj-sel-count sel) 0))
 
+(cl-defmethod helixel-sel-delimiter ((sel helixel-textobj-sel))
+  "Return the delimiter carried by SEL, or nil for non-pair textobjs."
+  (helixel-textobj-sel-delimiter sel))
+
 ;; ── Internal Variables and Configuration ──
 
 (defvar helixel-restriction-stack nil

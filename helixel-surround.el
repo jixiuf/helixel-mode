@@ -342,7 +342,7 @@ so the user can select a target with one keypress."
   (helixel--with-command helixel-surround-delete
     (let ((sel-ctx helixel--pending-sel)
           d)
-      (if (and sel-ctx (setq d (helixel-surround-sel-delimiter sel-ctx)))
+      (if (and sel-ctx (setq d (helixel-sel-delimiter sel-ctx)))
           (progn
             (when (use-region-p)
               (goto-char (/ (+ (region-beginning) (region-end)) 2)))
@@ -362,7 +362,7 @@ so the user can select a target with one keypress."
   (helixel--with-command helixel-surround-replace
     (let ((sel-ctx helixel--pending-sel)
           d)
-      (if (and sel-ctx (setq d (helixel-surround-sel-delimiter sel-ctx)))
+      (if (and sel-ctx (setq d (helixel-sel-delimiter sel-ctx)))
           (let ((type (helixel-delimiter-type d)))
             (pcase type
               (:tag
@@ -419,7 +419,7 @@ so the user can select a target with one keypress."
 
 (defun helixel--repeat-surround-delete (tx)
   "Replay a `surround-delete' TX (named runner, pure-data op entry)."
-  (when-let* ((d (helixel-surround-sel-delimiter
+  (when-let* ((d (helixel-sel-delimiter
                   (helixel-action-sel tx))))
     (goto-char (helixel--surround-delete-delimiter d))))
 
@@ -438,7 +438,7 @@ so the user can select a target with one keypress."
 (defun helixel--repeat-surround-replace (tx)
   "Replay a `surround-replace' TX (named runner, pure-data op entry)."
   (let* ((sel-ctx (helixel-action-sel tx))
-         (d (helixel-surround-sel-delimiter sel-ctx))
+         (d (helixel-sel-delimiter sel-ctx))
          (type (and d (helixel-delimiter-type d)))
          (new-char (helixel-action-payload-get tx :new-char))
          (tag (helixel-action-payload-get tx :tag)))
@@ -467,7 +467,7 @@ Clears `helixel--pending-surround-op' regardless."
     (let ((op helixel--pending-surround-op))
       (setq helixel--pending-surround-op nil)
       (when (and helixel--pending-sel
-                 (helixel-surround-sel-delimiter
+                 (helixel-sel-delimiter
                   helixel--pending-sel))
         (funcall op)))))
 
@@ -475,6 +475,10 @@ Clears `helixel--pending-surround-op' regardless."
                                     (:copier nil))
   "Surround selection.  Slots: DELIMITER."
   delimiter)
+
+(cl-defmethod helixel-sel-delimiter ((sel helixel-surround-sel))
+  "Return the delimiter carried by SEL."
+  (helixel-surround-sel-delimiter sel))
 
 
 (cl-defmethod helixel-sel-recreate ((_sel helixel-surround-sel))

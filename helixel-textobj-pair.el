@@ -998,7 +998,7 @@ failure."
                     ;; ── Forward ──
                     ;; Find next unescaped opening quote.
                     (let ((open nil))
-                      (while (and (not open) (not (eobp)))
+                      (while (and (not open) (> n 0) (not (eobp)))
                         (if (search-forward qstr nil t)
                             (let ((qpos (1- (point))))
                               (unless (helixel--preceded-by-odd-backslashes-p
@@ -1009,7 +1009,7 @@ failure."
                         ;; Find matching unescaped closing quote.
                         (goto-char (1+ open))
                         (let ((close nil))
-                          (while (and (not close) (not (eobp)))
+                          (while (and (not close) (> n 0) (not (eobp)))
                             (if (search-forward qstr nil t)
                                 (let ((qpos (1- (point))))
                                   (unless
@@ -1023,7 +1023,7 @@ failure."
                   ;; ── Backward ──
                   ;; Find previous unescaped quote (treat as closer).
                   (let ((close nil))
-                    (while (and (not close) (not (bobp)))
+                    (while (and (not close) (> n 0) (not (bobp)))
                       (if (search-backward qstr nil t)
                           (unless (helixel--preceded-by-odd-backslashes-p
                                    (point))
@@ -1032,7 +1032,7 @@ failure."
                     (when close
                       ;; Find matching opener before this closer.
                       (let ((open nil))
-                        (while (and (not open) (not (bobp)))
+                        (while (and (not open) (> n 0) (not (bobp)))
                           (if (search-backward qstr nil t)
                               (unless (helixel--preceded-by-odd-backslashes-p
                                        (point))

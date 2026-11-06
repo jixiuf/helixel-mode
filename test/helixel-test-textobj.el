@@ -346,6 +346,14 @@ world
     (should (char-equal (char-before (region-end)) 33))
 ))
 
+(ert-deftest helixel-test-textobj-quote-missing-inside-string ()
+  "A quote object absent from the string at point does not hang."
+  (helixel-test-with-buffer '(:text "\"hidden\"" :start 3)
+    (ignore-errors (call-interactively #'helixel-mark-a-single-quote))
+    (ignore-errors (call-interactively #'helixel-mark-inner-single-quote))
+    (should t)
+))
+
 ;;; Quote text object tests
 
 (ert-deftest helixel-test-textobj-single-quote-inner ()
